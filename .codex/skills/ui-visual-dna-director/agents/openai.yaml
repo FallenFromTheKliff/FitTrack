@@ -1,7 +1,0 @@
-interface:
-  display_name: "FitTrack UI Visual DNA Director"
-  short_description: "Reusable premium admin art direction before Figma concepting"
-  default_prompt: "Use $ui-visual-dna-director after structural and aesthetic references are approved to synthesize a FitTrack-specific design thesis, visual DNA, material language, typography posture, contrast and lighting model, shape policy, signature moves, disallowed generic traits, and family variant rules before Figma concepting or scaffold authoring starts."
-
-policy:
-  allow_implicit_invocation: false

@@ -55,6 +55,8 @@ type Props = {
   readOnly?: boolean;
   readOnlyBanner?: string;
   disableUnchanged?: boolean;
+  showRequiredIndicators?: boolean;
+  validateOnChange?: boolean;
   validate?: (data: Record<string, string>) => Record<string, string>;
 };
 
@@ -77,6 +79,8 @@ export default function DetailsModal({
   readOnly = false,
   readOnlyBanner,
   disableUnchanged = false,
+  showRequiredIndicators = true,
+  validateOnChange = false,
   validate
 }: Props) {
   const { colors } = useTheme();
@@ -94,22 +98,39 @@ export default function DetailsModal({
     }
   }, [isOpen, initialValues]);
 
+  const getValidationErrors = (data: Record<string, string>) => {
+    const requiredErrors: Record<string, string> = {};
+    fields.forEach((field) => {
+      if (!field.readOnly && field.required && !data[field.name]?.trim()) {
+        requiredErrors[field.name] = `${field.label} is required`;
+      }
+    });
+
+    return { ...requiredErrors, ...(validate?.(data) ?? {}) };
+  };
+
   const handleChange = (name: string, value: string) => {
     const next = { ...formData, [name]: value };
     setFormData(next);
     onChange?.(next);
+    if (validateOnChange) {
+      const validationErrors = getValidationErrors(next);
+      setErrors((prev) => {
+        const nextErrors = { ...prev };
+        if (validationErrors[name]) {
+          nextErrors[name] = validationErrors[name];
+        } else {
+          delete nextErrors[name];
+        }
+        return nextErrors;
+      });
+      return;
+    }
     if (errors[name]) setErrors((prev) => ({ ...prev, [name]: "" }));
   };
 
   const handleSubmit = () => {
-    const newErrors: Record<string, string> = {};
-    fields.forEach((field) => {
-      if (!field.readOnly && field.required && !formData[field.name]?.trim()) {
-        newErrors[field.name] = `${field.label} is required`;
-      }
-    });
-    const customErrors = validate?.(formData) ?? {};
-    const nextErrors = { ...newErrors, ...customErrors };
+    const nextErrors = getValidationErrors(formData);
     if (Object.keys(nextErrors).length > 0) { setErrors(nextErrors); return; }
     onSubmit(formData);
   };
@@ -177,7 +198,9 @@ export default function DetailsModal({
         <div key={field.name} style={s.field}>
           <FitText as="label" htmlFor={fieldId} style={s.fieldLabel}>
             {field.label}
-            {field.required && !fieldReadOnly && <FitText as="span" style={s.requiredAsterisk}>*</FitText>}
+            {showRequiredIndicators && field.required && !fieldReadOnly && (
+              <FitText as="span" style={s.requiredAsterisk}>*</FitText>
+            )}
           </FitText>
           {field.type === "select" ? (
             <FitSelect

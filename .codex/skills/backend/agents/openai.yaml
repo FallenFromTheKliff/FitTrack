@@ -1,7 +1,0 @@
-interface:
-  display_name: "FitTrack Backend"
-  short_description: "FitTrack backend contracts, services, repositories, and additive API changes"
-  default_prompt: "Use $backend to implement or refactor a FitTrack backend change with explicit contract-delta checks, Prisma-aware boundaries, and additive API behavior."
-
-policy:
-  allow_implicit_invocation: true

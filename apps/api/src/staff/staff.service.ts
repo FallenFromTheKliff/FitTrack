@@ -305,7 +305,7 @@ export class StaffService {
       where: {
         user: {
           role: UserRole.coach,
-          status: UserStatus.active,
+          status: { in: [UserStatus.active, UserStatus.pending] },
         },
       },
       include: {
@@ -359,7 +359,9 @@ export class StaffService {
         yearsExperience: null,
         hourlyRate: Number(coach.hourly_rate),
         scheduleType: coach.schedule_type,
-        isActive: coach.is_available_for_booking,
+        isActive:
+          coach.user?.status === UserStatus.active &&
+          coach.is_available_for_booking,
         availability: coach.availability_slots.map((slot) => ({
           id: slot.id,
           dayOfWeek: slot.day_of_week,

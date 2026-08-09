@@ -14,6 +14,7 @@ describe('GymLayoutService', () => {
     listActiveEquipment: jest.fn(),
     listArchivedEquipment: jest.fn(),
     createEquipment: jest.fn(),
+    findActiveVenueByIdOrThrow: jest.fn(),
     findEquipmentByIdOrThrow: jest.fn(),
     updateEquipment: jest.fn(),
     softDeleteEquipment: jest.fn(),
@@ -113,6 +114,13 @@ describe('GymLayoutService', () => {
         type: 'strength',
         position_x: 67.86,
         position_y: 35,
+        grid_width: null,
+        grid_height: null,
+        inventory_item_id: null,
+        venue_id: null,
+        image_url: null,
+        placed_quantity: 0,
+        remaining_placeable_quantity: null,
         status: EquipmentStatus.available,
         icon_key: null,
         is_active: true,
@@ -185,6 +193,13 @@ describe('GymLayoutService', () => {
         type: 'strength',
         position_x: 67.86,
         position_y: 35,
+        grid_width: null,
+        grid_height: null,
+        inventory_item_id: null,
+        venue_id: null,
+        image_url: null,
+        placed_quantity: 0,
+        remaining_placeable_quantity: null,
         status: EquipmentStatus.occupied,
         icon_key: null,
         is_active: true,
@@ -202,6 +217,13 @@ describe('GymLayoutService', () => {
   });
 
   it('creates equipment with the default available status', async () => {
+    repo.findActiveVenueByIdOrThrow.mockResolvedValue({
+      floor_id: 'floor-1',
+      grid_column: 1,
+      grid_row: 1,
+      grid_width: 20,
+      grid_height: 20,
+    });
     repo.createEquipment.mockResolvedValue({
       id: 'equipment-1',
       floor_id: 'floor-1',
@@ -226,6 +248,8 @@ describe('GymLayoutService', () => {
       grid_row: 4,
       name: 'Leg Press Station',
       type: 'strength',
+      inventory_item_id: '22222222-2222-4222-8222-222222222222',
+      venue_id: '33333333-3333-4333-8333-333333333333',
     });
 
     expect(repo.createEquipment).toHaveBeenCalledWith({
@@ -234,6 +258,14 @@ describe('GymLayoutService', () => {
       grid_row: 4,
       name: 'Leg Press Station',
       type: 'strength',
+      inventory_item: {
+        connect: { id: '22222222-2222-4222-8222-222222222222' },
+      },
+      venue: {
+        connect: { id: '33333333-3333-4333-8333-333333333333' },
+      },
+      grid_width: 1,
+      grid_height: 1,
       position_x: 67.86,
       position_y: 35,
       status: EquipmentStatus.available,

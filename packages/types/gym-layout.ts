@@ -5,41 +5,56 @@ export type GymLayoutEquipmentRecord = {
   createdAt: string;
   floorId: FacilityFloorId;
   gridColumn: number;
+  gridHeight: number | null;
   gridRow: number;
+  gridWidth: number | null;
   iconKey: string | null;
   id: string;
+  imageUrl: string | null;
+  inventoryItemId: string | null;
   isActive: boolean;
   name: string;
   positionX: number;
   positionY: number;
+  placedQuantity: number;
+  remainingPlaceableQuantity: number | null;
   status: EquipmentStatus;
   type: string;
   updatedAt: string;
+  venueId: string | null;
 };
 
 export type GymLayoutEquipmentMutationInput = {
   floorId: FacilityFloorId;
   gridColumn?: number;
+  gridHeight?: number;
   gridRow?: number;
+  gridWidth?: number;
   iconKey?: string | null;
   isActive?: boolean;
+  inventoryItemId?: string;
   name?: string;
   positionX?: number;
   positionY?: number;
   status?: EquipmentStatus;
   type?: string;
+  venueId?: string;
 };
 
 export type FacilityFloorPlanMediaRecord = {
   createdAt: string;
   floorId: FacilityFloorId;
+  gridHeight: number;
+  gridWidth: number;
   imageUrl: string | null;
   updatedAt: string;
 };
 
 export type FacilityFloorPlanMediaMutationInput = {
   floorId: FacilityFloorId;
-  imageUrl: string | null;
+  gridHeight?: number;
+  gridWidth?: number;
+  imageUrl?: string | null;
 };
 
 export type GymLayoutDeltaOperation = "remove" | "upsert";

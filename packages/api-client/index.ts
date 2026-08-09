@@ -102,11 +102,13 @@ export type {
   CreateAppointmentPayload,
 } from "./domains/appointments";
 export type {
+  BookingCheckoutResponse,
   BookingBalancePaymentProvider,
   CreateBookingPayload,
   VenueBookingListParams,
   VenueBookingRecord,
 } from "./domains/bookings";
+export { resolveAmenityId } from "./domains/venue-compat";
 export type {
   CoachReceivedReviewRecord,
   CoachAppointmentScheduleRecord,
@@ -206,6 +208,8 @@ export type {
   InventoryEquipmentDetailRecord,
   InventoryEquipmentListParams,
   InventoryEquipmentRecord,
+  InventoryEquipmentStatusCounts,
+  InventoryEquipmentStatusTransitionInput,
   InventoryEquipmentUpdateInput,
   InventoryEquipmentWriteOffInput,
   InventoryEquipmentWriteOffRecord,

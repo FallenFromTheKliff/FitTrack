@@ -24,8 +24,12 @@ export class CreateStaffVenueBookingDTO {
   @IsUUID('all', { message: 'member_id must be a valid UUID' })
   member_id: string;
 
-  @ApiProperty({ example: '22222222-2222-4222-8222-222222222222' })
-  @IsUUID('4', { message: 'amenity_id must be a valid UUID' })
+  @ApiProperty({
+    example: '7e9f96f7-8efe-5598-a978-5cd6ecf73a06',
+    description:
+      'Database venue ID. Standard and deterministic UUID versions are supported.',
+  })
+  @IsUUID('all', { message: 'amenity_id must be a valid UUID' })
   amenity_id: string;
 
   @ApiPropertyOptional({

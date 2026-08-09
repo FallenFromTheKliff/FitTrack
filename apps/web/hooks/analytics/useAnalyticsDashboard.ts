@@ -30,6 +30,7 @@ import {
   deriveAttendanceDrilldownWindow,
   formatDateTime,
   getDefaultAnalyticsDateWindow,
+  toAttendanceWindow,
   toAttendanceChartSeries,
   toRevenueChartSeries,
   type AnalyticsAggregationPeriod,
@@ -322,13 +323,24 @@ export function useAnalyticsDashboard() {
       return;
     }
 
-    setAnalyticsWindow(
-      createAnalyticsDateWindow(
-        draftStartDate,
-        draftEndDate,
-        draftAggregationPeriod,
-      ),
-    );
+    const shouldUseYearlyRange =
+      draftAggregationPeriod === "yearly" &&
+      draftStartDate === DEFAULT_ANALYTICS_WINDOW.startDate &&
+      draftEndDate === DEFAULT_ANALYTICS_WINDOW.endDate;
+    const nextWindow = shouldUseYearlyRange
+      ? toAttendanceWindow("yearly")
+      : createAnalyticsDateWindow(
+          draftStartDate,
+          draftEndDate,
+          draftAggregationPeriod,
+        );
+
+    if (shouldUseYearlyRange) {
+      setDraftStartDate(nextWindow.startDate);
+      setDraftEndDate(nextWindow.endDate);
+    }
+
+    setAnalyticsWindow(nextWindow);
     setGeneratedInsight(null);
     setSelectedDrilldown(null);
     showMessage("Analytics date range applied.");

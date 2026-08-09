@@ -355,6 +355,11 @@ export function makeGymMapStyles(colors: ThemeColors) {
       ...StyleSheet.absoluteFillObject,
       pointerEvents: "none" as const
     },
+    mapFloorPlanImage: {
+      ...StyleSheet.absoluteFillObject,
+      opacity: 0.28,
+      pointerEvents: "none" as const
+    },
     mapBlueprintTint: {
       ...StyleSheet.absoluteFillObject,
       backgroundColor: colors.brand + "0A"
@@ -493,6 +498,35 @@ export function makeGymMapStyles(colors: ThemeColors) {
     mapZoneMeta: {
       fontSize: 10,
       color: colors.textMuted,
+      textAlign: "center" as const
+    },
+    mapZoneStatusRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 4,
+      maxWidth: "100%"
+    },
+    mapStatusDot: {
+      borderRadius: 3,
+      height: 6,
+      width: 6
+    },
+    mapEquipmentNode: {
+      position: "absolute" as const,
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 1,
+      padding: 2,
+      borderRadius: R.md,
+      borderWidth: 1,
+      backgroundColor: colors.surface + "F2",
+      zIndex: 3,
+      elevation: 3,
+      overflow: "hidden"
+    },
+    mapEquipmentLabel: {
+      fontSize: 8,
+      fontWeight: "700",
       textAlign: "center" as const
     },
     legendCard: {

@@ -113,11 +113,51 @@ export function makeDetailsModalStyles(colors: ThemeColors) {
       backgroundColor: colors.surfaceRaised
     },
     imageTileLabel: { fontSize: 11, color: colors.textMuted, textAlign: "center" },
+    imagePressable: { width: "100%" },
     footer: {
       flexDirection: "row",
       gap: 10,
       padding: 16,
       borderTopWidth: 1
+    },
+    compactCard: {
+      height: "70%",
+      maxHeight: "70%"
+    },
+    imageModalBackdrop: {
+      flex: 1,
+      paddingHorizontal: 18,
+      paddingVertical: 24,
+      gap: 14
+    },
+    imageModalHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12
+    },
+    imageModalTitle: {
+      flex: 1,
+      color: colors.onBrand,
+      fontSize: 16,
+      fontWeight: "700"
+    },
+    imageModalClose: {
+      borderColor: colors.onBrand + "66",
+      borderRadius: R.md,
+      borderWidth: 1,
+      paddingHorizontal: 12,
+      paddingVertical: 8
+    },
+    imageModalCloseText: {
+      color: colors.onBrand,
+      fontSize: 12,
+      fontWeight: "700"
+    },
+    imageModalImage: {
+      flex: 1,
+      width: "100%",
+      minHeight: 260
     }
   });
 }

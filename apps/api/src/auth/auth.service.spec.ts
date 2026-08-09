@@ -1102,13 +1102,16 @@ describe('AuthService', () => {
     });
     expect(repo.createUserWithProfile).toHaveBeenCalledWith(
       expect.objectContaining({
+        coachProfile: expect.objectContaining({
+          contactEmail: 'coach@example.com',
+          displayName: 'Coach One',
+        }),
+        createCoachProfile: true,
         role: UserRole.coach,
         status: UserStatus.pending,
       }),
     );
-    expect(repo.createCoachProfile).toHaveBeenCalledWith('coach-1', {
-      displayName: 'Coach One',
-    });
+    expect(repo.createCoachProfile).not.toHaveBeenCalled();
     expect(otpService.issueOtp).not.toHaveBeenCalled();
   });
 

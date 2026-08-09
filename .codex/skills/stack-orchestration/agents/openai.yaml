@@ -1,7 +1,0 @@
-interface:
-  display_name: "FitTrack Stack Ops"
-  short_description: "FitTrack runtime-shape, watcher, seed, and health orchestration"
-  default_prompt: "Use $stack-orchestration to choose the smallest correct FitTrack stack command flow, including watcher-aware status checks, runtime shape selection, web versus native QR, with or without AI, and the right seed or health-check follow-up."
-
-policy:
-  allow_implicit_invocation: true

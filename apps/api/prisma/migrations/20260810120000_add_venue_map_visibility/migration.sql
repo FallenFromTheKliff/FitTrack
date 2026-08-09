@@ -1,0 +1,2 @@
+ALTER TABLE "amenities"
+ADD COLUMN IF NOT EXISTS "is_mapped" BOOLEAN NOT NULL DEFAULT true;

@@ -550,6 +550,48 @@ export function createAdminApi(transport: ApiTransport) {
           ...(payload.phone_no
             ? { phone: normalizePhilippineMobileNumber(payload.phone_no) }
             : {}),
+          ...(payload.coachProfile
+            ? {
+                coach_profile: {
+                  ...(payload.coachProfile.bio !== undefined
+                    ? { bio: payload.coachProfile.bio }
+                    : {}),
+                  ...(payload.coachProfile.certifications !== undefined
+                    ? {
+                        certification:
+                          payload.coachProfile.certifications.join(", "),
+                      }
+                    : {}),
+                  ...(payload.coachProfile.contactEmail !== undefined
+                    ? { contact_email: payload.coachProfile.contactEmail }
+                    : {}),
+                  ...(payload.coachProfile.contactPhone !== undefined
+                    ? { contact_phone: payload.coachProfile.contactPhone }
+                    : {}),
+                  ...(payload.coachProfile.displayName !== undefined
+                    ? { display_name: payload.coachProfile.displayName }
+                    : {}),
+                  ...(payload.coachProfile.hourlyRate !== undefined
+                    ? { hourly_rate: payload.coachProfile.hourlyRate }
+                    : {}),
+                  ...(payload.coachProfile.isAvailableForBooking !== undefined
+                    ? {
+                        is_available_for_booking:
+                          payload.coachProfile.isAvailableForBooking,
+                      }
+                    : {}),
+                  ...(payload.coachProfile.scheduleType !== undefined
+                    ? { schedule_type: payload.coachProfile.scheduleType }
+                    : {}),
+                  ...(payload.coachProfile.specialties !== undefined
+                    ? {
+                        specialization:
+                          payload.coachProfile.specialties.join(", "),
+                      }
+                    : {}),
+                },
+              }
+            : {}),
         }),
         "Unable to create user account.",
       );

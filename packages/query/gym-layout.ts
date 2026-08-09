@@ -46,8 +46,13 @@ export function gymLayoutFloorPlanMediaQueryOptions(
   });
 }
 
-async function invalidateGymLayout(queryClient: QueryClient) {
-  await invalidateGymLayoutQueries(queryClient);
+async function invalidateGymLayoutEquipment(queryClient: QueryClient) {
+  await Promise.all([
+    invalidateGymLayoutQueries(queryClient),
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.inventoryEquipment(),
+    }),
+  ]);
 }
 
 export function createGymLayoutEquipmentMutationOptions(
@@ -58,7 +63,7 @@ export function createGymLayoutEquipmentMutationOptions(
     mutationFn: (payload: GymLayoutEquipmentMutationInput) =>
       client.gymLayout.createEquipment(payload),
     onSuccess: async () => {
-      await invalidateGymLayout(queryClient);
+      await invalidateGymLayoutEquipment(queryClient);
     },
   });
 }
@@ -76,7 +81,7 @@ export function updateGymLayoutEquipmentMutationOptions(
       payload: GymLayoutEquipmentMutationInput;
     }) => client.gymLayout.updateEquipment(equipmentId, payload),
     onSuccess: async () => {
-      await invalidateGymLayout(queryClient);
+      await invalidateGymLayoutEquipment(queryClient);
     },
   });
 }
@@ -89,7 +94,7 @@ export function deleteGymLayoutEquipmentMutationOptions(
     mutationFn: (equipmentId: string) =>
       client.gymLayout.deleteEquipment(equipmentId),
     onSuccess: async () => {
-      await invalidateGymLayout(queryClient);
+      await invalidateGymLayoutEquipment(queryClient);
     },
   });
 }
@@ -102,7 +107,7 @@ export function restoreGymLayoutEquipmentMutationOptions(
     mutationFn: (equipmentId: string) =>
       client.gymLayout.restoreEquipment(equipmentId),
     onSuccess: async () => {
-      await invalidateGymLayout(queryClient);
+      await invalidateGymLayoutEquipment(queryClient);
     },
   });
 }
@@ -115,7 +120,7 @@ export function updateGymLayoutFloorPlanMediaMutationOptions(
     mutationFn: (payload: FacilityFloorPlanMediaMutationInput) =>
       client.gymLayout.updateFloorPlanMedia(payload),
     onSuccess: async () => {
-      await invalidateGymLayout(queryClient);
+      await invalidateGymLayoutQueries(queryClient);
     },
   });
 }

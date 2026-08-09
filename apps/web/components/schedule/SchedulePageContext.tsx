@@ -20,6 +20,7 @@ import type {
 } from "@fittrack/api-client";
 import type {
   CoachProfileRecord,
+  CreateUserCoachProfileInput,
   MemberRecord,
   TrainingPlanSummaryRecord,
 } from "@fittrack/types";
@@ -35,7 +36,7 @@ import {
   confirmCoachAppointmentMutationOptions,
   createStaffAppointmentMutationOptions,
   createStaffBookingMutationOptions,
-  createStaffCoachMutationOptions,
+  createUserMutationOptions,
   declineCoachAppointmentMutationOptions,
   fitnessClientPlansQueryOptions,
   markCoachPayoutPaidMutationOptions,
@@ -138,6 +139,9 @@ function useGymOperationsPageState() {
     message: string;
     tone: "danger" | "success";
   } | null>(null);
+  const [coachBookingFeedback, setCoachBookingFeedback] = useState<
+    string | null
+  >(null);
   const isAdmin = user?.role === "ADMIN";
   const isCoach = user?.role === "COACH";
   const canManageGymOperations = isAdmin || user?.role === "STAFF";
@@ -163,6 +167,16 @@ function useGymOperationsPageState() {
   ) => {
     setFeedbackModal({ message: nextMessage, tone });
   };
+
+  useEffect(() => {
+    if (!coachBookingFeedback) return;
+
+    const timeoutId = window.setTimeout(
+      () => setCoachBookingFeedback(null),
+      5000,
+    );
+    return () => window.clearTimeout(timeoutId);
+  }, [coachBookingFeedback]);
 
   const refreshGymOperationsData = async () => {
     const keys = [
@@ -195,17 +209,44 @@ function useGymOperationsPageState() {
   const [slideKey, setSlideKey] = useState(0);
   const [slideDir, setSlideDir] = useState<"left" | "right">("right");
   const [calendarOpen, setCalendarOpen] = useState(false);
-  const [activeOperationsTab, setActiveOperationsTab] =
-    useState<GymOperationsTab>(() =>
-      normalizeOperationsTab(searchParams.get("tab"), canManageGymOperations),
+  const activeOperationsTab = normalizeOperationsTab(
+    searchParams.get("tab"),
+    canManageGymOperations,
+  );
+  const activeScheduleSurfaceTab = normalizeScheduleSurfaceTab(
+    searchParams.get("schedule_view"),
+    canViewVenueBookings,
+  );
+  const replaceGymOperationsQuery = (
+    key: "tab" | "schedule_view",
+    value: string | null,
+  ) => {
+    const nextParams = new URLSearchParams(searchParams.toString());
+    if (value === null) nextParams.delete(key);
+    else nextParams.set(key, value);
+
+    const nextQuery = nextParams.toString();
+    if (nextQuery === searchParams.toString()) return;
+    router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, {
+      scroll: false,
+    });
+  };
+  const setActiveOperationsTab = (nextTab: GymOperationsTab) => {
+    replaceGymOperationsQuery(
+      "tab",
+      nextTab === "schedule" ? null : nextTab,
     );
-  const [activeScheduleSurfaceTab, setActiveScheduleSurfaceTab] =
-    useState<ScheduleSurfaceTab>(() =>
-      normalizeScheduleSurfaceTab(
-        searchParams.get("schedule_view"),
-        canViewVenueBookings,
-      ),
+  };
+  const setActiveScheduleSurfaceTab = (nextTab: ScheduleSurfaceTab) => {
+    replaceGymOperationsQuery(
+      "schedule_view",
+      nextTab === "month-calendar"
+        ? null
+        : nextTab === "coach-schedule"
+          ? "coaches"
+          : "venues",
     );
+  };
   const [scheduleRangeMode, setScheduleRangeMode] =
     useState<ScheduleRangeMode>("weekly");
   const { style: slideStyle } = usePowerSlide(slideKey, slideDir);
@@ -307,7 +348,12 @@ function useGymOperationsPageState() {
     enabled: canManageCoaching && !isCoach,
     staleTime: 60_000,
   });
-  const { data: venues = [] } = useQuery({
+  const {
+    data: venues = [],
+    error: venuesError,
+    isLoading: venuesLoading,
+    refetch: refetchVenues,
+  } = useQuery({
     ...venuesQueryOptions(webApiClient),
     enabled: canViewVenueBookings,
     staleTime: 60_000,
@@ -441,7 +487,7 @@ function useGymOperationsPageState() {
     createStaffAppointmentMutationOptions(webApiClient, queryClient),
   );
   const createCoachMutation = useMutation(
-    createStaffCoachMutationOptions(webApiClient, queryClient),
+    createUserMutationOptions(webApiClient, queryClient),
   );
   const previewRecurringPlanMutation = useMutation(
     previewRecurringCoachingPlanMutationOptions(webApiClient),
@@ -1150,38 +1196,12 @@ function useGymOperationsPageState() {
 
   const venueOptions = useMemo(
     () =>
-      Array.from(
-        new Map([
-          ...venues
-            .filter(
-              (venue) =>
-                venue.isActive !== false && venue.isReservable !== false,
-            )
-            .map(
-              (venue) =>
-                [
-                  String(venue.id),
-                  {
-                    label: venue.name,
-                    value: String(venue.id),
-                    hourlyRate: venue.hourlyRate ?? 0,
-                  },
-                ] as const,
-            ),
-          ...rawBookings.map(
-            (booking) =>
-              [
-                String(booking.venueId),
-                {
-                  label: booking.venue?.name ?? `Venue ${booking.venueId}`,
-                  value: String(booking.venueId),
-                  hourlyRate: booking.venue?.hourlyRate ?? null,
-                },
-              ] as const,
-          ),
-        ]).values(),
-      ),
-    [rawBookings, venues],
+      venues.map((venue) => ({
+        label: venue.name,
+        value: String(venue.id),
+        hourlyRate: venue.hourlyRate ?? 0,
+      })),
+    [venues],
   );
 
   const bookableVenueOptions = useMemo(
@@ -1310,101 +1330,6 @@ function useGymOperationsPageState() {
     }),
     [filteredVenueBookings],
   );
-
-  useEffect(() => {
-    const requestedTab = normalizeOperationsTab(
-      searchParams.get("tab"),
-      canManageGymOperations,
-    );
-    const requestedScheduleSurface = normalizeScheduleSurfaceTab(
-      searchParams.get("schedule_view"),
-      canViewVenueBookings,
-    );
-
-    setActiveOperationsTab((currentTab) =>
-      currentTab === requestedTab ? currentTab : requestedTab,
-    );
-    setActiveScheduleSurfaceTab((currentTab) =>
-      currentTab === requestedScheduleSurface
-        ? currentTab
-        : requestedScheduleSurface,
-    );
-  }, [canManageGymOperations, canViewVenueBookings, searchParams]);
-
-  useEffect(() => {
-    const currentQueryTab = searchParams.get("tab");
-    const normalizedTab = normalizeOperationsTab(
-      currentQueryTab,
-      canManageGymOperations,
-    );
-
-    const canonicalQueryTab =
-      activeOperationsTab === "schedule" ? null : activeOperationsTab;
-    if (
-      activeOperationsTab === normalizedTab &&
-      currentQueryTab === canonicalQueryTab
-    ) {
-      return;
-    }
-
-    const nextParams = new URLSearchParams(searchParams.toString());
-    if (canonicalQueryTab === null) {
-      nextParams.delete("tab");
-    } else {
-      nextParams.set("tab", canonicalQueryTab);
-    }
-
-    const nextQuery = nextParams.toString();
-    router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, {
-      scroll: false,
-    });
-  }, [
-    activeOperationsTab,
-    canManageGymOperations,
-    pathname,
-    router,
-    searchParams,
-  ]);
-
-  useEffect(() => {
-    const currentSurfaceParam = searchParams.get("schedule_view");
-    const normalizedSurfaceParam = normalizeScheduleSurfaceTab(
-      currentSurfaceParam,
-      canViewVenueBookings,
-    );
-
-    const canonicalSurfaceParam = !canViewVenueBookings
-      ? null
-      : activeScheduleSurfaceTab === "month-calendar"
-        ? null
-        : activeScheduleSurfaceTab === "coach-schedule"
-          ? "coaches"
-          : "venues";
-    if (
-      activeScheduleSurfaceTab === normalizedSurfaceParam &&
-      currentSurfaceParam === canonicalSurfaceParam
-    ) {
-      return;
-    }
-
-    const nextParams = new URLSearchParams(searchParams.toString());
-    if (canonicalSurfaceParam === null) {
-      nextParams.delete("schedule_view");
-    } else {
-      nextParams.set("schedule_view", canonicalSurfaceParam);
-    }
-
-    const nextQuery = nextParams.toString();
-    router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, {
-      scroll: false,
-    });
-  }, [
-    activeScheduleSurfaceTab,
-    canViewVenueBookings,
-    pathname,
-    router,
-    searchParams,
-  ]);
 
   const toggleRecurringPlanDay = (day: number) => {
     setRecurringPlanPreview(null);
@@ -2471,10 +2396,11 @@ function useGymOperationsPageState() {
     paymentStage?: "full";
     scheduledAt: string;
   }) => {
+    setCoachBookingFeedback(null);
     try {
       await createCoachBookingMutation.mutateAsync(payload);
-      showFeedback("Coach booking created.");
       setCreateCoachBookingOpen(false);
+      setCoachBookingFeedback("Coach booking created.");
     } catch (error) {
       showFeedback(
         getErrorMessage(error, "Unable to create coach booking."),
@@ -2484,19 +2410,27 @@ function useGymOperationsPageState() {
   };
 
   const handleCreateCoach = async (payload: {
-    bio?: string;
-    certifications?: string[];
-    contactEmail?: string;
-    contactPhone?: string;
-    displayName: string;
-    hourlyRate?: number;
-    isAvailableForBooking?: boolean;
-    scheduleType?: "full_time" | "part_time";
-    specialties?: string[];
+    email: string;
+    firstName: string;
+    lastName: string;
+    password: string;
+    coachProfile?: CreateUserCoachProfileInput;
+    phone_no?: string;
   }) => {
     try {
-      await createCoachMutation.mutateAsync(payload);
-      showFeedback("Coach created.");
+      await createCoachMutation.mutateAsync({
+        email: payload.email,
+        firstName: payload.firstName,
+        lastName: payload.lastName,
+        password: payload.password,
+        coachProfile: payload.coachProfile,
+        phone_no: payload.phone_no,
+        role: "coach",
+      });
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.staffCoaches(),
+      });
+      showFeedback("Coach account and profile created.");
       setCreateCoachOpen(false);
     } catch (error) {
       showFeedback(getErrorMessage(error, "Unable to create coach."), "danger");
@@ -2528,6 +2462,7 @@ function useGymOperationsPageState() {
     canManageGymOperations,
     canViewVenueBookings,
     coachAppointments,
+    coachBookingFeedback,
     coachDetailsOpen,
     coachFilterId,
     coachOptions,
@@ -2625,6 +2560,7 @@ function useGymOperationsPageState() {
     recurringTrainingPlanOptions,
     repeatableRecurringPlan,
     recurringRemainingCount,
+    refetchVenues,
     refreshGymOperationsData,
     replaceAvailabilityMutation,
     requestApproveAppointmentPayment,
@@ -2690,6 +2626,8 @@ function useGymOperationsPageState() {
     updateCoachProfilePending,
     updateRecurringSessionMutation,
     venueBookingSummary,
+    venuesLoadFailed: Boolean(venuesError),
+    venuesLoading,
     venueEndCalendarOpen,
     venueFilterId,
     venueFilterOptions,

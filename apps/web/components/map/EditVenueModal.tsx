@@ -1,7 +1,10 @@
 "use client";
+import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
+import { buildRenderableAssetUrl } from "@fittrack/utils";
 
 import { useTheme } from "@/contexts/ThemeContext";
+import { WEB_API_BASE_URL } from "@/lib/api-client";
 import { modalStyles } from "@/styles/modalStyles";
 import { VENUE_BOOKING_OPTIONS, VENUE_FLOOR_OPTIONS, VENUE_ICON_OPTIONS } from "@/data/facilities/venueFields";
 import { COLS, ROWS, type VenueRecord } from "@/data/facilities/mapTypes";
@@ -10,6 +13,10 @@ import FitButton from "@/components/fit/FitButton";
 import { FitSelect } from "@/components/fit/FitCard";
 import { FitText, FitTextInput, FitTextArea } from "@/components/fit/FitText";
 import { FacilityImageUploadCard } from "./FacilityImageUploadCard";
+
+const VenueImageCropCanvas = dynamic(() => import("./VenueImageCropCanvas"), {
+  ssr: false,
+});
 
 type Props = {
   isVisible: boolean;
@@ -26,6 +33,8 @@ type Props = {
 
 const REQUIRED_FIELDS = ["name", "capacity", "gridColumn", "gridRow", "gridWidth", "gridHeight"] as const;
 const DETAIL_REQUIRED_FIELDS = ["name", "capacity"] as const;
+type EditorStep = "details" | "placement" | "crop";
+type CropSnapshot = Pick<Record<string, string>, "imageFit" | "imageFocalX" | "imageFocalY" | "imageCropZoom">;
 
 function isVenueReservable(data: Record<string, string>) {
   return (data.isReservable ?? "true") === "true";
@@ -166,8 +175,19 @@ export function EditVenueModal({
   const s = modalStyles(colors);
   const [formData, setFormData] = useState<Record<string, string>>(initialValues);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [step, setStep] = useState<"details" | "placement">("details");
+  const [step, setStep] = useState<EditorStep>("details");
+  const [cropSnapshot, setCropSnapshot] = useState<CropSnapshot | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [cropZoomDraft, setCropZoomDraft] = useState(1);
   const isReservable = isVenueReservable(formData);
+  const cropImageUrl = useMemo(
+    () =>
+      buildRenderableAssetUrl({
+        apiBaseUrl: WEB_API_BASE_URL,
+        assetUrl: formData.imageUrl ?? null,
+      }) ?? "",
+    [formData.imageUrl],
+  );
   const panelStyle = useMemo(() => ({
     border: `1px solid ${colors.border}`,
     borderRadius: 8,
@@ -189,6 +209,8 @@ export function EditVenueModal({
     setFormData(initialValues);
     setErrors({});
     setStep("details");
+    setCropSnapshot(null);
+    setIsUploadingImage(false);
   }, [initialValues, isVisible]);
 
   const handleChange = (name: string, value: string) => {
@@ -265,18 +287,62 @@ export function EditVenueModal({
       return;
     }
 
-    const imageUrl = await onUploadImage(file);
-    if (imageUrl) {
-      handleChange("imageUrl", imageUrl);
+    setIsUploadingImage(true);
+    try {
+      const imageUrl = await onUploadImage(file);
+      if (imageUrl) {
+        handleChange("imageUrl", imageUrl);
+      }
+    } finally {
+      setIsUploadingImage(false);
     }
   };
 
   const handleBack = () => {
+    if (step === "crop") {
+      if (cropSnapshot) {
+        setFormData((current) => ({ ...current, ...cropSnapshot }));
+      }
+      setCropSnapshot(null);
+      setStep("details");
+      return;
+    }
     if (step === "placement") {
       setStep("details");
       return;
     }
     onBack?.();
+  };
+
+  const openCropEditor = () => {
+    setCropSnapshot({
+      imageFit: formData.imageFit ?? "cover",
+      imageFocalX: formData.imageFocalX ?? "0.5",
+      imageFocalY: formData.imageFocalY ?? "0.5",
+      imageCropZoom: formData.imageCropZoom ?? "1",
+    });
+    setCropZoomDraft(Number(formData.imageCropZoom ?? 1));
+    setStep("crop");
+  };
+
+  const applyCrop = () => {
+    setFormData((current) => ({
+      ...current,
+      imageCropZoom: String(cropZoomDraft),
+    }));
+    setCropSnapshot(null);
+    setStep("details");
+  };
+
+  const resetCrop = () => {
+    setCropZoomDraft(1);
+    setFormData((current) => ({
+      ...current,
+      imageFit: "cover",
+      imageFocalX: "0.5",
+      imageFocalY: "0.5",
+      imageCropZoom: "1",
+    }));
   };
 
   const handlePrimary = () => {
@@ -365,24 +431,26 @@ export function EditVenueModal({
       >
         <div style={{ display: "grid", gap: 3 }}>
           <FitText as="h3" style={{ fontSize: 18, fontWeight: 800 }}>
-            {editTarget ? "Edit Venue" : "Add Venue"}
+            {step === "crop" ? "Crop Venue Image" : editTarget ? "Edit Venue" : "Add Venue"}
           </FitText>
           <FitText style={{ fontSize: 12, color: colors.textMuted }}>
-            {step === "details"
-              ? "Set the member-facing venue profile."
-              : "Place the venue on the active facility map."}
+            {step === "crop"
+              ? "Adjust the display crop. Venue geometry is unchanged."
+              : step === "details"
+                ? "Set the member-facing venue profile."
+                : "Place the venue on the active facility map."}
           </FitText>
         </div>
         <FitButton
           variant="ghost"
-          label={step === "details" ? backLabel : "Back"}
+          label={step === "details" ? backLabel : step === "crop" ? "Cancel crop" : "Back"}
           onClick={handleBack}
           style={{ height: 32, minHeight: 32 }}
           textStyle={{ fontSize: 12, whiteSpace: "nowrap" }}
         />
       </div>
 
-      <div
+      {step !== "crop" ? <div
         style={{
           display: "grid",
           gap: 8,
@@ -398,7 +466,7 @@ export function EditVenueModal({
             <button
               key={value}
               type="button"
-              onClick={() => setStep(value as "details" | "placement")}
+              onClick={() => setStep(value as EditorStep)}
               style={{
                 border: `1px solid ${isActive ? colors.brand : colors.border}`,
                 borderRadius: 8,
@@ -414,7 +482,7 @@ export function EditVenueModal({
             </button>
           );
         })}
-      </div>
+      </div> : null}
 
       <div
         style={{
@@ -425,7 +493,64 @@ export function EditVenueModal({
           paddingRight: 4
         }}
       >
-        {step === "details" ? (
+        {step === "crop" ? (
+          <div style={{ display: "grid", gap: 14 }}>
+            <div
+              style={{
+                aspectRatio: "16 / 8",
+                backgroundColor: colors.base,
+                border: `1px solid ${colors.border}`,
+                borderRadius: 9,
+                overflow: "hidden",
+              }}
+            >
+              <VenueImageCropCanvas
+                backgroundColor={colors.base}
+                fit={(formData.imageFit ?? "cover") as "cover" | "contain"}
+                focalX={Number(formData.imageFocalX ?? 0.5)}
+                focalY={Number(formData.imageFocalY ?? 0.5)}
+                imageUrl={cropImageUrl}
+                zoom={cropZoomDraft}
+                onFocalChange={(focalX, focalY) => {
+                  setFormData((current) => ({
+                    ...current,
+                    imageFocalX: String(focalX),
+                    imageFocalY: String(focalY),
+                  }));
+                }}
+              />
+            </div>
+            <div style={{ alignItems: "center", display: "grid", gap: 10, gridTemplateColumns: "auto minmax(160px, 1fr) auto auto auto" }}>
+              <FitText style={{ color: colors.textMuted, fontSize: 12 }}>Zoom</FitText>
+              <input
+                aria-label="Venue image crop zoom"
+                type="range"
+                min="1"
+                max="3"
+                step="0.05"
+                value={cropZoomDraft}
+                onChange={(event) => setCropZoomDraft(Number(event.target.value))}
+                onPointerUp={() => handleChange("imageCropZoom", String(cropZoomDraft))}
+                onKeyUp={() => handleChange("imageCropZoom", String(cropZoomDraft))}
+                onBlur={() => handleChange("imageCropZoom", String(cropZoomDraft))}
+              />
+              <FitButton
+                variant={(formData.imageFit ?? "cover") === "cover" ? "primary" : "ghost"}
+                label="Cover"
+                onClick={() => handleChange("imageFit", "cover")}
+              />
+              <FitButton
+                variant={formData.imageFit === "contain" ? "primary" : "ghost"}
+                label="Contain"
+                onClick={() => handleChange("imageFit", "contain")}
+              />
+              <FitButton variant="ghost" label="Reset" onClick={resetCrop} />
+            </div>
+            <FitText style={{ color: colors.textMuted, fontSize: 11, lineHeight: 1.45 }}>
+              Drag the image to set its focal point. Crop settings affect only image display and never resize the venue.
+            </FitText>
+          </div>
+        ) : step === "details" ? (
           <>
             <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(116px, 0.34fr)", gap: 12 }}>
               {renderField({ name: "name", label: "Name", required: true, placeholder: "e.g., Boxing Ring" })}
@@ -440,11 +565,20 @@ export function EditVenueModal({
             <FacilityImageUploadCard
               title="Venue image"
               helperText="Used in venue details and member-facing facility surfaces."
-              buttonLabel={formData.imageUrl ? "UPLOAD NEW IMAGE" : "ADD IMAGE"}
+              buttonLabel={isUploadingImage ? "UPLOADING IMAGE" : formData.imageUrl ? "UPLOAD NEW IMAGE" : "ADD IMAGE"}
               imageUrl={formData.imageUrl ?? ""}
               onUpload={handleVenueImageUpload}
-              disabled={isLoading || !onUploadImage}
+              disabled={isLoading || isUploadingImage || !onUploadImage}
             />
+            {formData.imageUrl ? (
+              <FitButton
+                variant="ghost"
+                label="CROP IMAGE"
+                onClick={openCropEditor}
+                disabled={isLoading}
+                fullWidth
+              />
+            ) : null}
             <div style={{ display: "grid", gap: 6 }}>
               <FitText as="label" style={s.fieldLabel}>User Booking</FitText>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
@@ -469,12 +603,29 @@ export function EditVenueModal({
               {renderField({ name: "iconKey", label: "Icon", type: "select", options: VENUE_ICON_OPTIONS })}
               {renderField({ name: "floorId", label: "Floor", type: "select", options: VENUE_FLOOR_OPTIONS })}
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 10 }}>
-              {renderField({ name: "gridColumn", label: "Column", required: true, placeholder: "1-14" })}
-              {renderField({ name: "gridRow", label: "Row", required: true, placeholder: "1-10" })}
-              {renderField({ name: "gridWidth", label: "Width", required: true, placeholder: "3" })}
-              {renderField({ name: "gridHeight", label: "Height", required: true, placeholder: "2" })}
-            </div>
+            {editTarget ? (
+              <div
+                style={{
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: 9,
+                  backgroundColor: colors.surfaceRaised,
+                  color: colors.textSecondary,
+                  fontSize: 12,
+                  lineHeight: 1.5,
+                  padding: "10px 12px",
+                }}
+              >
+                Drag this venue on the Facilities canvas to reposition it. Its
+                saved grid placement remains available to the layout engine.
+              </div>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 10 }}>
+                {renderField({ name: "gridColumn", label: "Column", required: true, placeholder: "1-14" })}
+                {renderField({ name: "gridRow", label: "Row", required: true, placeholder: "1-10" })}
+                {renderField({ name: "gridWidth", label: "Width", required: true, placeholder: "3" })}
+                {renderField({ name: "gridHeight", label: "Height", required: true, placeholder: "2" })}
+              </div>
+            )}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
               {renderField({
                 name: "hourlyRate",
@@ -502,20 +653,22 @@ export function EditVenueModal({
         {editTarget && step === "placement" ? (
           <FitButton
             variant="danger"
-            label={editTarget.isSystem ? "LOCKED CORE VENUE" : "DELETE VENUE"}
+            label={editTarget.isSystem ? "LOCKED CORE VENUE" : "ARCHIVE VENUE"}
             disabled={editTarget.isSystem}
             onClick={onDelete}
             style={{ height: 34, minHeight: 34 }}
             textStyle={{ fontSize: 12 }}
           />
+        ) : step === "crop" ? (
+          <FitButton variant="ghost" label="CANCEL" onClick={handleBack} />
         ) : (
           <span />
         )}
         <FitButton
           variant="primary"
-          label={step === "details" ? "NEXT: PLACEMENT" : submitLabel}
-          loading={isLoading}
-          onClick={handlePrimary}
+          label={step === "crop" ? "APPLY CROP" : step === "details" ? "NEXT: PLACEMENT" : submitLabel}
+          loading={step === "crop" ? false : isLoading}
+          onClick={step === "crop" ? applyCrop : handlePrimary}
           style={{ height: 34, minHeight: 34, minWidth: 178 }}
           textStyle={{ fontSize: 12 }}
         />

@@ -22,8 +22,10 @@ import {
   EquipmentWriteOffResponseDTO,
   UpdateEquipmentItemDTO,
 } from './dto/equipment.dto';
+import { EquipmentStatusTransitionDTO } from './dto/equipment-status-transition.dto';
 import {
   EquipmentDetailRecord,
+  EquipmentListRecord,
   EquipmentRepository,
   EquipmentWriteOffRecord,
 } from './equipment.repository';
@@ -35,6 +37,9 @@ const EQUIPMENT_UPDATE_FIELDS = [
   'unit',
   'quantity_total',
   'quantity_current',
+  'quantity_maintenance',
+  'quantity_broken',
+  'quantity_missing',
   'is_active',
 ] as const;
 
@@ -84,7 +89,7 @@ export class EquipmentService {
     actorId: string,
     dto: CreateEquipmentItemDTO,
   ): Promise<EquipmentItemResponseDTO> {
-    this.assertInitialCurrentWithinTotal(dto);
+    this.assertInitialQuantities(dto);
 
     const item = await this.repo.createEquipmentItem(this.toCreateInput(dto));
 
@@ -107,7 +112,17 @@ export class EquipmentService {
     id: string,
     dto: UpdateEquipmentItemDTO,
   ): Promise<EquipmentItemResponseDTO> {
-    this.assertUpdatedCurrentWithinTotal(dto);
+    const quantityChanged =
+      dto.quantity_total !== undefined ||
+      dto.quantity_current !== undefined ||
+      dto.quantity_maintenance !== undefined ||
+      dto.quantity_broken !== undefined ||
+      dto.quantity_missing !== undefined;
+
+    if (quantityChanged) {
+      const existing = await this.repo.findEquipmentItemRecordByIdOrThrow(id);
+      this.assertUpdatedQuantities(existing, dto);
+    }
 
     const item = await this.repo.updateEquipmentItem(
       id,
@@ -181,6 +196,7 @@ export class EquipmentService {
       equipmentId,
       dto.quantity_set_to,
       dto.reason,
+      dto.status,
     );
 
     this.emitAudit({
@@ -211,6 +227,20 @@ export class EquipmentService {
     return this.toWriteOffResponse(writeOff);
   }
 
+  async transitionEquipmentStatus(
+    equipmentId: string,
+    dto: EquipmentStatusTransitionDTO,
+  ): Promise<EquipmentItemResponseDTO> {
+    const item = await this.repo.transitionEquipmentStatus(
+      equipmentId,
+      dto.source_status,
+      dto.destination_status,
+      dto.quantity,
+    );
+
+    return this.toEquipmentResponse(item);
+  }
+
   async getWriteOffHistory(
     equipmentId: string,
     dto: PaginationDTO,
@@ -225,7 +255,7 @@ export class EquipmentService {
     };
   }
 
-  private assertInitialCurrentWithinTotal(dto: CreateEquipmentItemDTO): void {
+  private assertInitialQuantities(dto: CreateEquipmentItemDTO): void {
     if (dto.quantity_current > dto.quantity_total) {
       throw new HttpException(
         {
@@ -238,14 +268,24 @@ export class EquipmentService {
         HttpStatus.UNPROCESSABLE_ENTITY,
       );
     }
+
+    this.assertKnownStatusCounts(
+      dto.quantity_total,
+      dto.quantity_current,
+      dto.quantity_maintenance,
+      dto.quantity_broken,
+      dto.quantity_missing,
+    );
   }
 
-  private assertUpdatedCurrentWithinTotal(dto: UpdateEquipmentItemDTO): void {
-    if (
-      dto.quantity_current !== undefined &&
-      dto.quantity_total !== undefined &&
-      dto.quantity_current > dto.quantity_total
-    ) {
+  private assertUpdatedQuantities(
+    existing: GymEquipmentItem,
+    dto: UpdateEquipmentItemDTO,
+  ): void {
+    const quantityTotal = dto.quantity_total ?? existing.quantity_total;
+    const quantityCurrent = dto.quantity_current ?? existing.quantity_current;
+
+    if (quantityCurrent > quantityTotal) {
       throw new HttpException(
         {
           type: 'BUSINESS_RULE_VIOLATION',
@@ -253,6 +293,66 @@ export class EquipmentService {
           status: 422,
           detail:
             'quantity_current cannot be greater than quantity_total when updating equipment.',
+        },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+
+    this.assertKnownStatusCounts(
+      quantityTotal,
+      quantityCurrent,
+      dto.quantity_maintenance ?? existing.quantity_maintenance,
+      dto.quantity_broken ?? existing.quantity_broken,
+      dto.quantity_missing ?? existing.quantity_missing,
+    );
+  }
+
+  private assertKnownStatusCounts(
+    quantityTotal: number,
+    quantityCurrent: number,
+    quantityMaintenance?: number | null,
+    quantityBroken?: number | null,
+    quantityMissing?: number | null,
+  ): void {
+    const knownBuckets = [
+      quantityMaintenance,
+      quantityBroken,
+      quantityMissing,
+    ].filter((value): value is number => value !== undefined && value !== null);
+
+    const knownTotal = quantityCurrent + knownBuckets.reduce((sum, value) => sum + value, 0);
+    if (knownTotal > quantityTotal) {
+      throw new HttpException(
+        {
+          type: 'BUSINESS_RULE_VIOLATION',
+          title: 'Invalid Equipment Status Counts',
+          status: 422,
+          detail: 'Available and explicit equipment condition counts cannot exceed quantity_total.',
+        },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+
+    const allBucketsKnown =
+      quantityMaintenance !== undefined &&
+      quantityMaintenance !== null &&
+      quantityBroken !== undefined &&
+      quantityBroken !== null &&
+      quantityMissing !== undefined &&
+      quantityMissing !== null;
+
+    if (
+      allBucketsKnown &&
+      quantityCurrent + quantityMaintenance + quantityBroken + quantityMissing !==
+        quantityTotal
+    ) {
+      throw new HttpException(
+        {
+          type: 'BUSINESS_RULE_VIOLATION',
+          title: 'Incomplete Equipment Status Counts',
+          status: 422,
+          detail:
+            'When all condition counts are supplied, available, maintenance, broken, and missing must equal quantity_total.',
         },
         HttpStatus.UNPROCESSABLE_ENTITY,
       );
@@ -269,6 +369,15 @@ export class EquipmentService {
       quantity_total: dto.quantity_total,
       quantity_current: dto.quantity_current,
       unit: dto.unit ?? 'units',
+      ...(dto.quantity_maintenance !== undefined
+        ? { quantity_maintenance: dto.quantity_maintenance }
+        : {}),
+      ...(dto.quantity_broken !== undefined
+        ? { quantity_broken: dto.quantity_broken }
+        : {}),
+      ...(dto.quantity_missing !== undefined
+        ? { quantity_missing: dto.quantity_missing }
+        : {}),
     };
   }
 
@@ -281,8 +390,10 @@ export class EquipmentService {
   }
 
   private toEquipmentResponse(
-    item: GymEquipmentItem,
+    item: GymEquipmentItem | EquipmentListRecord | EquipmentDetailRecord,
   ): EquipmentItemResponseDTO {
+    const placedQuantity = 'layout_nodes' in item ? item.layout_nodes.length : 0;
+
     return {
       id: item.id,
       name: item.name,
@@ -290,6 +401,17 @@ export class EquipmentService {
       image_url: item.image_url ?? null,
       quantity_total: item.quantity_total,
       quantity_current: item.quantity_current,
+      status_counts: {
+        available: item.quantity_current,
+        maintenance: item.quantity_maintenance ?? null,
+        broken: item.quantity_broken ?? null,
+        missing: item.quantity_missing ?? null,
+      },
+      placed_quantity: placedQuantity,
+      remaining_placeable_quantity: Math.max(
+        item.quantity_current - placedQuantity,
+        0,
+      ),
       unit: item.unit,
       is_active: item.is_active,
       created_at: item.created_at.toISOString(),

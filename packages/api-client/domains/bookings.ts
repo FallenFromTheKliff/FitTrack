@@ -123,10 +123,17 @@ export type CreateBookingPayload = {
   venueId: string | number;
 };
 
-type BookingCheckoutResponse = {
+type BookingCheckoutApiResponse = {
   booking_id: string;
   checkout_url?: string | null;
   payment_id?: string | null;
+  status: string;
+};
+
+export type BookingCheckoutResponse = {
+  bookingId: string;
+  checkoutUrl: string | null;
+  paymentId: string | null;
   status: string;
 };
 
@@ -216,6 +223,17 @@ function createIdempotencyKey() {
     const value = char === "x" ? rand : (rand & 0x3) | 0x8;
     return value.toString(16);
   });
+}
+
+function mapBookingCheckoutResponse(
+  record: BookingCheckoutApiResponse,
+): BookingCheckoutResponse {
+  return {
+    bookingId: record.booking_id,
+    checkoutUrl: record.checkout_url ?? null,
+    paymentId: record.payment_id ?? null,
+    status: record.status,
+  };
 }
 
 function splitMultiValue(value?: string | null) {
@@ -369,7 +387,7 @@ export function createBookingsApi(transport: ApiTransport) {
         startsAt.getTime() + payload.durationHours * 3_600_000,
       );
 
-      return unwrapResponse<BookingCheckoutResponse>(
+      return unwrapResponse<BookingCheckoutApiResponse>(
         transport.post(
           "/bookings/amenity",
           {
@@ -388,7 +406,7 @@ export function createBookingsApi(transport: ApiTransport) {
           },
         ),
         "Unable to create booking.",
-      );
+      ).then(mapBookingCheckoutResponse);
     },
     cancel(bookingId: string, cancelReason: string) {
       return unwrapVoidResponse(
@@ -406,7 +424,7 @@ export function createBookingsApi(transport: ApiTransport) {
         screenshotUrl?: string;
       },
     ) {
-      return unwrapResponse<BookingCheckoutResponse>(
+      return unwrapResponse<BookingCheckoutApiResponse>(
         transport.post(`/bookings/amenity/${bookingId}/balance`, {
           provider: payload.provider,
           ...(payload.referenceNo ? { reference_no: payload.referenceNo } : {}),

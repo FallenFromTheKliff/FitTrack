@@ -65,12 +65,25 @@ export interface MemberRecord {
 
 export type CreateUserRole = "admin" | "staff" | "member" | "coach";
 
+export type CreateUserCoachProfileInput = {
+  bio?: string;
+  certifications?: string[];
+  contactEmail?: string;
+  contactPhone?: string;
+  displayName?: string;
+  hourlyRate?: number;
+  isAvailableForBooking?: boolean;
+  scheduleType?: "full_time" | "part_time";
+  specialties?: string[];
+};
+
 export type CreateUserInput = {
   email: string;
   password: string;
   firstName: string;
   lastName: string;
   role: CreateUserRole;
+  coachProfile?: CreateUserCoachProfileInput;
   phone_no?: string;
 };
 

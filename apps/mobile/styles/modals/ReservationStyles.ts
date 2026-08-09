@@ -221,7 +221,16 @@ export function makeReservationModalStyles(colors: ThemeColors) {
       color: colors.textDisabled,
       paddingVertical: 8
     },
-    amenityGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
+    amenityScroll: {
+      maxHeight: 226,
+      marginTop: 8
+    },
+    amenityGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      paddingBottom: 2
+    },
     amenityCard: {
       width: "47.5%",
       borderRadius: R.md,
@@ -236,7 +245,31 @@ export function makeReservationModalStyles(colors: ThemeColors) {
     amenityName: { fontSize: 13, fontWeight: "500", color: colors.textPrimary, lineHeight: 17 },
     amenityPrice: { fontSize: 12, color: colors.textMuted },
     amenityCheck: { position: "absolute", top: 8, right: 8 },
-    trainerList: { gap: 8 },
+    coachPicker: {
+      gap: 8,
+      marginTop: 8
+    },
+    coachSearchField: {
+      minHeight: 42,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      paddingHorizontal: 12,
+      borderRadius: R.md,
+      borderWidth: 1,
+      borderColor: colors.fieldBorder,
+      backgroundColor: colors.fieldBg
+    },
+    coachSearchInput: {
+      flex: 1,
+      fontSize: 14,
+      color: colors.textPrimary,
+      paddingVertical: 10
+    },
+    trainerScroll: {
+      maxHeight: 228
+    },
+    trainerList: { gap: 8, paddingBottom: 2 },
     trainerRow: {
       flexDirection: "row",
       alignItems: "center",

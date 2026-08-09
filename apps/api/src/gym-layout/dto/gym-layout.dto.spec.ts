@@ -14,6 +14,9 @@ function extractMessages(
 }
 
 describe('GymLayout DTO validation', () => {
+  const seededInventoryItemId = '43f0116a-2f44-5c3c-b5cd-7b72641e84fa';
+  const seededVenueId = '80c9ad4f-3d8e-586b-8d53-bb12d74fe83f';
+
   it('requires a name for equipment creation', async () => {
     const dto = plainToInstance(CreateEquipmentDTO, {
       floor_id: 'floor-1',
@@ -56,6 +59,45 @@ describe('GymLayout DTO validation', () => {
     );
   });
 
+  it('accepts seeded UUIDv5 links for placement creation', async () => {
+    const dto = plainToInstance(CreateEquipmentDTO, {
+      floor_id: 'floor-1',
+      grid_column: 4,
+      grid_row: 3,
+      inventory_item_id: seededInventoryItemId,
+      name: 'Leg Press Station',
+      type: 'strength',
+      venue_id: seededVenueId,
+    });
+
+    expect(await validate(dto)).toHaveLength(0);
+  });
+
+  it('accepts seeded UUIDv5 links for placement updates', async () => {
+    const dto = plainToInstance(UpdateEquipmentDTO, {
+      grid_column: 5,
+      grid_row: 4,
+      inventory_item_id: seededInventoryItemId,
+      venue_id: seededVenueId,
+    });
+
+    expect(await validate(dto)).toHaveLength(0);
+  });
+
+  it('rejects malformed placement link identifiers', async () => {
+    const dto = plainToInstance(UpdateEquipmentDTO, {
+      inventory_item_id: 'inventory-item-1',
+      venue_id: 'venue-1',
+    });
+
+    expect(extractMessages(await validate(dto))).toEqual(
+      expect.arrayContaining([
+        'inventory_item_id must be a UUID',
+        'venue_id must be a UUID',
+      ]),
+    );
+  });
+
   it('accepts partial equipment updates', async () => {
     const dto = plainToInstance(UpdateEquipmentDTO, {
       status: EquipmentStatus.maintenance,
@@ -71,7 +113,7 @@ describe('GymLayout DTO validation', () => {
     });
 
     expect(extractMessages(await validate(dto))).toContain(
-      'status must be one of: available, occupied, maintenance',
+      `status must be one of: ${Object.values(EquipmentStatus).join(', ')}`,
     );
   });
 });

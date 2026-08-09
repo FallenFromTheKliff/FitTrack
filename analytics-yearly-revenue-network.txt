@@ -1,0 +1,12 @@
+[GET] http://127.0.0.1:3001/v1/users/me => [200] OK
+[GET] http://127.0.0.1:3001/v1/notifications/my?page=1&limit=8 => [200] OK
+[GET] http://127.0.0.1:3001/v1/notifications/unread-count => [200] OK
+[GET] http://127.0.0.1:3001/v1/analytics/snapshot => [500] Internal Server Error
+[GET] http://127.0.0.1:3001/v1/admin/users => [200] OK
+[GET] http://127.0.0.1:3001/v1/admin/deletion-requests => [200] OK
+[GET] http://127.0.0.1:3001/v1/analytics/overview?start_date=2026-03-01&end_date=2026-08-09&period=monthly => [200] OK
+[GET] http://127.0.0.1:3001/v1/analytics/revenue?start_date=2026-03-01&end_date=2026-08-09&period=monthly => [200] OK
+[GET] http://127.0.0.1:3001/v1/analytics/attendance?start_date=2026-03-01&end_date=2026-08-09&period=monthly => [200] OK
+[GET] http://127.0.0.1:3001/v1/business-analytics/insights?page=1&limit=1 => [200] OK
+[GET] http://127.0.0.1:3001/v1/business-analytics/insights/57124fda-8256-4a3b-92d3-c3fb677e8a4c => [200] OK
+[GET] http://127.0.0.1:3001/v1/analytics/snapshot => [500] Internal Server Error

@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import type { VenueBookingRecord } from "@fittrack/api-client";
 import {
   gymLayoutEquipmentQueryOptions,
   submitVenueFeedbackMutationOptions,
@@ -21,10 +22,14 @@ type Props = {
   venue: FloorVenueRecord | null;
   isOpen: boolean;
   onClose: () => void;
+  activeBookings?: VenueBookingRecord[];
+  onEditVenue?: (venue: FloorVenueRecord) => void;
+  onViewMap?: (venue: FloorVenueRecord) => void;
 };
 
 type VenueDetailsContentProps = {
   venue: FloorVenueRecord | null;
+  activeBookings?: VenueBookingRecord[];
   equipmentQueryEnabled?: boolean;
   variant?: "modal" | "rail";
 };
@@ -53,7 +58,14 @@ function getVenueDetailsSubtitle(venue: FloorVenueRecord) {
   }`;
 }
 
-export default function VenueDetailsModal({ venue, isOpen, onClose }: Props) {
+export default function VenueDetailsModal({
+  venue,
+  isOpen,
+  onClose,
+  activeBookings = [],
+  onEditVenue,
+  onViewMap,
+}: Props) {
   if (!venue) return null;
 
   return (
@@ -62,16 +74,43 @@ export default function VenueDetailsModal({ venue, isOpen, onClose }: Props) {
       onClose={onClose}
       title={venue.name}
       subtitle={getVenueDetailsSubtitle(venue)}
-      maxWidth={520}
+      maxWidth={620}
       closeAriaLabel="Close venue details"
+      footer={
+        onEditVenue || onViewMap ? (
+          <div style={{ display: "flex", gap: 10, width: "100%" }}>
+            {onViewMap ? (
+              <FitButton
+                variant="ghost"
+                label="VIEW ON MAP"
+                flex={1}
+                onClick={() => onViewMap(venue)}
+              />
+            ) : null}
+            {onEditVenue ? (
+              <FitButton
+                variant="primary"
+                label="EDIT VENUE"
+                flex={1}
+                onClick={() => onEditVenue(venue)}
+              />
+            ) : null}
+          </div>
+        ) : undefined
+      }
     >
-      <VenueDetailsContent venue={venue} equipmentQueryEnabled={isOpen} />
+      <VenueDetailsContent
+        venue={venue}
+        activeBookings={activeBookings}
+        equipmentQueryEnabled={isOpen}
+      />
     </FitModal>
   );
 }
 
 export function VenueDetailsContent({
   venue,
+  activeBookings = [],
   equipmentQueryEnabled = true,
   variant = "modal",
 }: VenueDetailsContentProps) {
@@ -89,14 +128,16 @@ export function VenueDetailsContent({
   });
   const [feedbackRating, setFeedbackRating] = useState(5);
   const [feedbackComment, setFeedbackComment] = useState("");
+  const [heroImageFailed, setHeroImageFailed] = useState(false);
   const [feedbackState, setFeedbackState] = useState<{
     text: string;
     tone: "danger" | "success";
   } | null>(null);
-  const { data: liveEquipment = [] } = useQuery({
+  const equipmentQuery = useQuery({
     ...gymLayoutEquipmentQueryOptions(webApiClient),
     enabled: !!venue && equipmentQueryEnabled,
   });
+  const liveEquipment = equipmentQuery.data ?? [];
 
   useEffect(() => {
     setFeedbackRating(5);
@@ -104,15 +145,37 @@ export function VenueDetailsContent({
     setFeedbackState(null);
   }, [variant, venue?.id]);
 
+  useEffect(() => {
+    setHeroImageFailed(false);
+  }, [venue?.id, venue?.imageUrl]);
+
   if (!venue) return null;
 
   const subtitle = getVenueDetailsSubtitle(venue);
-  const heroImage =
-    buildRenderableAssetUrl({
+  const fallbackHeroImage = buildHeroImage(
+    venue.name,
+    colors.brand,
+    colors.surfaceRaised,
+  );
+  const heroImage = heroImageFailed
+    ? fallbackHeroImage
+    : buildRenderableAssetUrl({
       apiBaseUrl: WEB_API_BASE_URL,
       assetUrl: venue.imageUrl ?? null,
-    }) ?? buildHeroImage(venue.name, colors.brand, colors.surfaceRaised);
+    }) ?? fallbackHeroImage;
   const assignedEquipment = listVenueEquipment(liveEquipment, venue);
+  const venueBookings = activeBookings
+    .filter(
+      (booking) =>
+        String(booking.venueId) === String(venue.sourceVenueId ?? venue.id),
+    )
+    .sort(
+      (left, right) =>
+        new Date(left.startTime).getTime() - new Date(right.startTime).getTime(),
+    );
+  const nextBooking = venueBookings.find(
+    (booking) => new Date(booking.endTime).getTime() >= Date.now(),
+  );
   const venueFeedback = feedbackQuery.data ?? [];
   const averageRating =
     venueFeedback.length > 0
@@ -124,6 +187,8 @@ export function VenueDetailsContent({
     { label: "Minimum Hours", value: `${venue.minimumHours ?? 1}` },
     { label: "Rate", value: venue.hourlyRate ? `PHP ${venue.hourlyRate}/hr` : "Facility only" },
     { label: "Grid Zone", value: `C${venue.gridColumn ?? 1} / R${venue.gridRow ?? 1}` },
+    { label: "Map Visibility", value: venue.isMapped === false ? "Hidden" : "Visible" },
+    { label: "Dimensions", value: `${venue.gridWidth ?? 1} x ${venue.gridHeight ?? 1} cells` },
   ];
 
   if (variant === "rail") {
@@ -153,11 +218,15 @@ export function VenueDetailsContent({
           <img
             src={heroImage}
             alt={`${venue.name} preview`}
+            onError={() => setHeroImageFailed(true)}
             style={{
               display: "block",
               width: "100%",
               aspectRatio: "16 / 7",
-              objectFit: "cover",
+              objectFit: venue.imageFit ?? "cover",
+              objectPosition: `${venue.imageFocalX ?? 50}% ${venue.imageFocalY ?? 50}%`,
+              transform: `scale(${venue.imageCropZoom ?? 1})`,
+              transformOrigin: `${venue.imageFocalX ?? 50}% ${venue.imageFocalY ?? 50}%`,
             }}
           />
           <div
@@ -324,10 +393,14 @@ export function VenueDetailsContent({
         <img
           src={heroImage}
           alt={`${venue.name} preview`}
+          onError={() => setHeroImageFailed(true)}
           style={{
             width: "100%",
             aspectRatio: "16 / 9",
-            objectFit: "cover",
+            objectFit: venue.imageFit ?? "cover",
+            objectPosition: `${venue.imageFocalX ?? 50}% ${venue.imageFocalY ?? 50}%`,
+            transform: `scale(${venue.imageCropZoom ?? 1})`,
+            transformOrigin: `${venue.imageFocalX ?? 50}% ${venue.imageFocalY ?? 50}%`,
             display: "block",
           }}
         />
@@ -392,11 +465,48 @@ export function VenueDetailsContent({
           backgroundColor: colors.surfaceRaised,
           padding: "14px 16px",
           display: "grid",
+          gap: 6,
+        }}
+      >
+        <FitText style={{ fontSize: 12, color: colors.textMuted, fontWeight: 700 }}>
+          Booking Summary
+        </FitText>
+        <FitText style={{ fontSize: 14, fontWeight: 700 }}>
+          {venueBookings.length} active booking{venueBookings.length === 1 ? "" : "s"}
+        </FitText>
+        <FitText style={{ fontSize: 13, color: colors.textSecondary }}>
+          {nextBooking
+            ? `Next: ${new Date(nextBooking.startTime).toLocaleString()}`
+            : "No upcoming booking."}
+        </FitText>
+      </div>
+      <div
+        style={{
+          borderRadius: 12,
+          border: `1px solid ${colors.border}`,
+          backgroundColor: colors.surfaceRaised,
+          padding: "14px 16px",
+          display: "grid",
           gap: 8,
         }}
       >
         <FitText style={{ fontSize: 12, color: colors.textMuted, fontWeight: 700 }}>Live Equipment</FitText>
-        {assignedEquipment.length > 0 ? (
+        {equipmentQuery.isPending ? (
+          <FitText style={{ fontSize: 13, color: colors.textMuted }}>
+            Loading contained equipment...
+          </FitText>
+        ) : equipmentQuery.isError ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <FitText style={{ flex: 1, fontSize: 13, color: colors.danger }}>
+              Contained equipment could not be loaded.
+            </FitText>
+            <FitButton
+              variant="ghost"
+              label="Retry"
+              onClick={() => void equipmentQuery.refetch()}
+            />
+          </div>
+        ) : assignedEquipment.length > 0 ? (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {assignedEquipment.map((item) => (
               <div
@@ -449,6 +559,22 @@ export function VenueDetailsContent({
         <FitText style={{ fontSize: 14, lineHeight: 1.55 }}>
           Tell the team what worked well or what needs attention in this facility or venue.
         </FitText>
+        {feedbackQuery.isPending ? (
+          <FitText style={{ fontSize: 13, color: colors.textMuted }}>
+            Loading venue feedback...
+          </FitText>
+        ) : feedbackQuery.isError ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <FitText style={{ flex: 1, fontSize: 13, color: colors.danger }}>
+              Venue feedback could not be loaded.
+            </FitText>
+            <FitButton
+              variant="ghost"
+              label="Retry"
+              onClick={() => void feedbackQuery.refetch()}
+            />
+          </div>
+        ) : (
         <div
           style={{
             border: `1px solid ${colors.border}`,
@@ -467,6 +593,7 @@ export function VenueDetailsContent({
             </FitText>
           ))}
         </div>
+        )}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {[1, 2, 3, 4, 5].map((rating) => (
             <button

@@ -5,6 +5,8 @@ import type {
   InventoryEquipmentDetailRecord,
   InventoryEquipmentListParams,
   InventoryEquipmentRecord,
+  InventoryEquipmentStatusCounts,
+  InventoryEquipmentStatusTransitionInput,
   InventoryEquipmentUpdateInput,
   InventoryEquipmentWriteOffInput,
   InventoryEquipmentWriteOffRecord,
@@ -33,6 +35,8 @@ export type {
   InventoryEquipmentDetailRecord,
   InventoryEquipmentListParams,
   InventoryEquipmentRecord,
+  InventoryEquipmentStatusCounts,
+  InventoryEquipmentStatusTransitionInput,
   InventoryEquipmentUpdateInput,
   InventoryEquipmentWriteOffInput,
   InventoryEquipmentWriteOffRecord,
@@ -76,6 +80,9 @@ type InventoryEquipmentApiRecord = {
   name: string;
   quantity_current: number;
   quantity_total: number;
+  status_counts?: InventoryEquipmentStatusCounts;
+  placed_quantity?: number;
+  remaining_placeable_quantity?: number;
   unit: string;
   updated_at: string;
 };
@@ -206,6 +213,13 @@ function mapProduct(record: InventoryProductApiRecord): InventoryProductRecord {
 function mapEquipment(
   record: InventoryEquipmentApiRecord
 ): InventoryEquipmentRecord {
+  const statusCounts = record.status_counts ?? {
+    available: record.quantity_current,
+    maintenance: null,
+    broken: null,
+    missing: null
+  };
+
   return {
     createdAt: record.created_at,
     description: record.description,
@@ -215,6 +229,10 @@ function mapEquipment(
     name: record.name,
     quantityCurrent: record.quantity_current,
     quantityTotal: record.quantity_total,
+    statusCounts,
+    placedQuantity: record.placed_quantity ?? 0,
+    remainingPlaceableQuantity:
+      record.remaining_placeable_quantity ?? Math.max(record.quantity_current, 0),
     unit: record.unit,
     updatedAt: record.updated_at
   };
@@ -390,6 +408,15 @@ function toEquipmentCreateInput(payload: InventoryEquipmentCreateInput) {
     name: payload.name,
     quantity_current: payload.quantityCurrent,
     quantity_total: payload.quantityTotal,
+    ...(payload.quantityMaintenance !== undefined
+      ? { quantity_maintenance: payload.quantityMaintenance }
+      : {}),
+    ...(payload.quantityBroken !== undefined
+      ? { quantity_broken: payload.quantityBroken }
+      : {}),
+    ...(payload.quantityMissing !== undefined
+      ? { quantity_missing: payload.quantityMissing }
+      : {}),
     ...(payload.unit !== undefined ? { unit: payload.unit } : {})
   };
 }
@@ -406,6 +433,15 @@ function toEquipmentUpdateInput(payload: InventoryEquipmentUpdateInput) {
     ...(payload.quantityTotal !== undefined
       ? { quantity_total: payload.quantityTotal }
       : {}),
+    ...(payload.quantityMaintenance !== undefined
+      ? { quantity_maintenance: payload.quantityMaintenance }
+      : {}),
+    ...(payload.quantityBroken !== undefined
+      ? { quantity_broken: payload.quantityBroken }
+      : {}),
+    ...(payload.quantityMissing !== undefined
+      ? { quantity_missing: payload.quantityMissing }
+      : {}),
     ...(payload.unit !== undefined ? { unit: payload.unit } : {})
   };
 }
@@ -413,7 +449,18 @@ function toEquipmentUpdateInput(payload: InventoryEquipmentUpdateInput) {
 function toEquipmentWriteOffInput(payload: InventoryEquipmentWriteOffInput) {
   return {
     quantity_set_to: payload.quantitySetTo,
-    reason: payload.reason
+    reason: payload.reason,
+    ...(payload.status !== undefined ? { status: payload.status } : {})
+  };
+}
+
+function toEquipmentStatusTransitionInput(
+  payload: InventoryEquipmentStatusTransitionInput
+) {
+  return {
+    source_status: payload.sourceStatus,
+    destination_status: payload.destinationStatus,
+    quantity: payload.quantity
   };
 }
 
@@ -534,6 +581,20 @@ export function createInventoryApi(transport: ApiTransport) {
         await unwrapResponse<InventoryEquipmentApiRecord>(
           transport.patch(`/inventory/equipment/${equipmentId}`, toEquipmentUpdateInput(payload)),
           "Unable to update inventory equipment item."
+        )
+      );
+    },
+    async transitionEquipmentStatus(
+      equipmentId: string,
+      payload: InventoryEquipmentStatusTransitionInput
+    ) {
+      return mapEquipment(
+        await unwrapResponse<InventoryEquipmentApiRecord>(
+          transport.post(
+            `/inventory/equipment/${equipmentId}/status-transition`,
+            toEquipmentStatusTransitionInput(payload)
+          ),
+          "Unable to move inventory equipment quantity."
         )
       );
     },

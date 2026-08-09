@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   GymLayoutEquipmentMutationInput,
   InventoryEquipmentRecord,
+  InventoryEquipmentUpdateInput,
   VenueMutationPayload
 } from "@fittrack/api-client";
 import { useLoadingText, useTimedMessage } from "@fittrack/hooks";
@@ -19,7 +20,9 @@ import {
   inventoryEquipmentQueryOptions,
   restoreGymLayoutEquipmentMutationOptions,
   restoreVenueMutationOptions,
+  updateGymLayoutEquipmentMutationOptions,
   updateGymLayoutFloorPlanMediaMutationOptions,
+  updateInventoryEquipmentMutationOptions,
   updateVenueMutationOptions,
   uploadImageMutationOptions,
   venuesQueryOptions
@@ -30,8 +33,11 @@ import {
   gridRowToPositionY,
   type GymLayoutEquipmentRecord,
   isEquipmentInsideVenue,
-  resolveEquipmentCatalogKey,
   resolveEquipmentGridPlacement
+} from "@fittrack/types";
+import type {
+  EquipmentStatus,
+  InventoryEquipmentStatusCounts
 } from "@fittrack/types";
 import { webApiClient } from "@/lib/api-client";
 
@@ -45,13 +51,20 @@ import {
 
 export type VenuePayload = VenueMutationPayload;
 export type FloorLayoutEquipmentDisplay = EquipmentDef & {
-  status: string;
+  imageUrl: string | null;
+  inventoryItemId: string | null;
+  status: EquipmentStatus;
+  venueId: string | null;
 };
 
 export type FacilityPaletteEquipment = EquipmentDef;
 
 type FacilityPaletteEquipmentWithPlacement = FacilityPaletteEquipment & {
+  imageUrl?: string | null;
+  placedQuantity?: number;
   placementKey?: string;
+  quantityTotal?: number;
+  statusCounts?: InventoryEquipmentStatusCounts;
 };
 
 export type QuickFloorRegionTemplate = {
@@ -118,7 +131,10 @@ function resolveDisplayEquipmentId(item: DisplayEquipmentSeed) {
 }
 
 function resolveDisplayEquipment(
-  item: Pick<GymLayoutEquipmentRecord, "iconKey" | "id" | "name" | "status" | "type">,
+  item: Pick<
+    GymLayoutEquipmentRecord,
+    "iconKey" | "id" | "imageUrl" | "inventoryItemId" | "name" | "status" | "type" | "venueId"
+  >,
   paletteById: Record<string, EquipmentDef>
 ): FloorLayoutEquipmentDisplay {
   const paletteItem =
@@ -127,8 +143,11 @@ function resolveDisplayEquipment(
   return {
     ...paletteItem,
     id: item.id,
+    imageUrl: item.imageUrl,
+    inventoryItemId: item.inventoryItemId,
     name: item.name,
-    status: item.status
+    status: item.status,
+    venueId: item.venueId
   };
 }
 
@@ -242,10 +261,12 @@ function buildEquipmentMutationPayload(
     gridColumn: placement.gridColumn,
     gridRow: placement.gridRow,
     iconKey: equipment.iconKey ?? equipment.id,
+    inventoryItemId: String(equipment.id),
     name: equipment.name,
     positionX: placement.positionX,
     positionY: placement.positionY,
     type: equipment.category.toLowerCase(),
+    venueId: String(venue.sourceVenueId ?? venue.id),
   };
 }
 
@@ -273,20 +294,16 @@ function buildInventoryPaletteEquipment(
     ...paletteMatch,
     id: item.id,
     iconKey: paletteMatch.iconKey ?? paletteMatch.id,
+    imageUrl: item.imageUrl,
     name: item.name,
-    quantityAvailable: item.quantityCurrent,
+    placedQuantity: item.placedQuantity,
+    quantityAvailable: item.remainingPlaceableQuantity,
+    quantityTotal: item.quantityTotal,
     detail: item.unit ? `${item.unit} inventory unit` : "Inventory tracked",
     sourceLabel: "inventory",
+    statusCounts: item.statusCounts,
     placementKey,
   };
-}
-
-function resolvePalettePlacementKey(
-  equipment: Pick<FacilityPaletteEquipmentWithPlacement, "iconKey" | "id" | "placementKey">,
-) {
-  return normalizeEquipmentKey(
-    equipment.placementKey ?? equipment.iconKey ?? equipment.id,
-  );
 }
 
 function venuesOverlap(
@@ -379,13 +396,19 @@ function buildVenueMutationPayloadFromRecord(
     minimumHours: venue.minimumHours ?? 1,
     iconKey: venue.iconKey ?? "gym-area",
     imageUrl: venue.imageUrl ?? undefined,
+    imageFit: venue.imageFit ?? "cover",
+    imageFocalX: venue.imageFocalX ?? 0.5,
+    imageFocalY: venue.imageFocalY ?? 0.5,
+    imageCropZoom: venue.imageCropZoom ?? 1,
     floorId: normalizeFloorId(venue.floorId),
     gridColumn: venue.gridColumn ?? 1,
     gridRow: venue.gridRow ?? 1,
     gridWidth: venue.gridWidth ?? 2,
     gridHeight: venue.gridHeight ?? 2,
+    isMapped: venue.isMapped ?? true,
     isReservable: venue.isReservable ?? false,
     displayOrder: venue.displayOrder ?? 0,
+    status: venue.status ?? undefined,
     ...overrides,
   };
 }
@@ -415,10 +438,13 @@ export function useVenueMutations() {
   const queryClient = useQueryClient();
   const { message, showMessage } = useTimedMessage(2200);
 
-  const { data: venues = [], isLoading: venuesLoading } = useQuery(venuesQueryOptions(webApiClient));
-  const { data: archivedVenues = [], isLoading: archivedVenuesLoading } = useQuery(
-    archivedVenuesQueryOptions(webApiClient)
-  );
+  const venuesQuery = useQuery(venuesQueryOptions(webApiClient));
+  const { data: venues = [], isLoading: venuesLoading } = venuesQuery;
+  const archivedVenuesQuery = useQuery(archivedVenuesQueryOptions(webApiClient));
+  const {
+    data: archivedVenues = [],
+    isLoading: archivedVenuesLoading,
+  } = archivedVenuesQuery;
 
   const createVenueMutation = useMutation(createVenueMutationOptions(webApiClient, queryClient));
 
@@ -443,6 +469,11 @@ export function useVenueMutations() {
     const displayOrder = Number(data.displayOrder ?? "");
     const floorId = (data.floorId ?? "").trim();
     const isReservable = data.isReservable !== "false";
+    const status = data.status?.trim() as EquipmentStatus | undefined;
+    const imageFit = data.imageFit === "contain" ? "contain" : "cover";
+    const imageFocalX = Number(data.imageFocalX ?? "0.5");
+    const imageFocalY = Number(data.imageFocalY ?? "0.5");
+    const imageCropZoom = Number(data.imageCropZoom ?? "1");
 
     if (!Number.isFinite(capacity) || capacity <= 0) return "Capacity must be greater than zero.";
     if (hourlyRate !== undefined && (!Number.isFinite(hourlyRate) || hourlyRate < 0)) return "Hourly rate must be zero or greater.";
@@ -452,6 +483,9 @@ export function useVenueMutations() {
     if (!Number.isFinite(gridRow) || gridRow < 1 || gridRow > ROWS) return `Grid row must be between 1 and ${ROWS}.`;
     if (!Number.isFinite(gridWidth) || gridWidth < 1 || gridColumn + gridWidth - 1 > COLS) return `Grid width must keep the venue inside the ${COLS} column layout.`;
     if (!Number.isFinite(gridHeight) || gridHeight < 1 || gridRow + gridHeight - 1 > ROWS) return `Grid height must keep the venue inside the ${ROWS} row layout.`;
+    if (!Number.isFinite(imageFocalX) || imageFocalX < 0 || imageFocalX > 1) return "Image focal X must be between 0 and 1.";
+    if (!Number.isFinite(imageFocalY) || imageFocalY < 0 || imageFocalY > 1) return "Image focal Y must be between 0 and 1.";
+    if (!Number.isFinite(imageCropZoom) || imageCropZoom < 1 || imageCropZoom > 4) return "Image crop zoom must be between 1 and 4.";
 
     const name = (data.name ?? "").trim();
     if (!name) return "Venue name is required.";
@@ -464,13 +498,18 @@ export function useVenueMutations() {
       minimumHours: Number.isFinite(minHoursRaw) && minHoursRaw > 0 ? minHoursRaw : 1,
       iconKey: (data.iconKey ?? "").trim() || "gym-area",
       imageUrl: (data.imageUrl ?? "").trim() || undefined,
+      imageFit,
+      imageFocalX,
+      imageFocalY,
+      imageCropZoom,
       floorId,
       gridColumn,
       gridRow,
       gridWidth,
       gridHeight,
       isReservable,
-      displayOrder: Number.isFinite(displayOrder) ? displayOrder : 0
+      displayOrder: Number.isFinite(displayOrder) ? displayOrder : 0,
+      ...(status ? { status } : {}),
     };
   };
 
@@ -646,7 +685,7 @@ export function useVenueMutations() {
     placement: Partial<
       Pick<
         VenueMutationPayload,
-        "floorId" | "gridColumn" | "gridRow" | "gridWidth" | "gridHeight"
+        "floorId" | "gridColumn" | "gridRow" | "gridWidth" | "gridHeight" | "isMapped"
       >
     >,
     options?: { silent?: boolean },
@@ -680,9 +719,13 @@ export function useVenueMutations() {
       gridRow,
       gridWidth,
       gridHeight,
+      isMapped: placement.isMapped ?? currentPayload.isMapped,
     });
 
-    const overlapError = checkVenueOverlap(payload, venues, venue.id);
+    const overlapError =
+      payload.isMapped === false
+        ? null
+        : checkVenueOverlap(payload, venues, venue.id);
     if (overlapError) {
       if (!options?.silent) {
         showMessage(overlapError);
@@ -704,9 +747,44 @@ export function useVenueMutations() {
     }
   };
 
+  const toggleVenueMaintenance = async (venue: VenueRecord | null) => {
+    if (!venue) return false;
+    if (
+      venue.status !== undefined &&
+      venue.status !== null &&
+      venue.status !== "available" &&
+      venue.status !== "maintenance"
+    ) {
+      showMessage("Broken, missing, and occupied venues keep their current status.");
+      return false;
+    }
+
+    try {
+      await updateVenueMutation.mutateAsync({
+        id: venue.id,
+        payload: buildVenueMutationPayloadFromRecord(venue, {
+          status: venue.status === "maintenance" ? "available" : "maintenance",
+        }),
+      });
+      showMessage(
+        venue.status === "maintenance"
+          ? `${venue.name} marked available.`
+          : `${venue.name} marked for maintenance.`,
+      );
+      return true;
+    } catch {
+      showMessage("Unable to update venue maintenance status.");
+      return false;
+    }
+  };
+
   return {
     venues,
+    venuesError: venuesQuery.isError,
+    refetchVenues: venuesQuery.refetch,
     archivedVenues,
+    archivedVenuesError: archivedVenuesQuery.isError,
+    refetchArchivedVenues: archivedVenuesQuery.refetch,
     venuesLoading,
     archivedVenuesLoading,
     isVenueSubmitting,
@@ -716,6 +794,7 @@ export function useVenueMutations() {
     message,
     showMessage,
     handleUpdateVenueLayout,
+    toggleVenueMaintenance,
     handleVenueSubmit,
     handleDeleteVenue,
     handleRestoreVenue,
@@ -739,9 +818,13 @@ export function useFloorLayout() {
   const { data: venues = [] } = useQuery(venuesQueryOptions(webApiClient));
   const { data: liveEquipment = [] } = useQuery(gymLayoutEquipmentQueryOptions(webApiClient));
   const { data: floorPlanMedia = [] } = useQuery(gymLayoutFloorPlanMediaQueryOptions(webApiClient));
-  const { data: archivedEquipment = [], isLoading: archivedEquipmentLoading } = useQuery(
-    archivedGymLayoutEquipmentQueryOptions(webApiClient)
+  const archivedEquipmentQuery = useQuery(
+    archivedGymLayoutEquipmentQueryOptions(webApiClient),
   );
+  const {
+    data: archivedEquipment = [],
+    isLoading: archivedEquipmentLoading,
+  } = archivedEquipmentQuery;
   const { data: inventoryEquipmentPage } = useQuery(
     inventoryEquipmentQueryOptions(webApiClient, { limit: 100, page: 1 })
   );
@@ -761,32 +844,10 @@ export function useFloorLayout() {
   );
   const availableEquipment = useMemo(() => {
     const activeInventoryEquipment = inventoryEquipment
-      .filter((item) => item.isActive && item.quantityCurrent > 0)
+      .filter((item) => item.isActive && item.quantityTotal > 0)
       .map((item) => buildInventoryPaletteEquipment(item, displayEquipmentCatalogById));
 
-    const aggregatedByPlacementKey = new Map<string, FacilityPaletteEquipmentWithPlacement>();
-
-    activeInventoryEquipment.forEach((item) => {
-      const placementKey = resolvePalettePlacementKey(item);
-      const existing = aggregatedByPlacementKey.get(placementKey);
-
-      if (existing) {
-        existing.quantityAvailable =
-          (existing.quantityAvailable ?? 0) + (item.quantityAvailable ?? 0);
-        return;
-      }
-
-      aggregatedByPlacementKey.set(placementKey, {
-        ...item,
-        id: placementKey,
-        iconKey: item.iconKey ?? placementKey,
-        placementKey,
-        name: item.name,
-        quantityAvailable: item.quantityAvailable ?? 0,
-      });
-    });
-
-    return Array.from(aggregatedByPlacementKey.values()).sort((left, right) =>
+    return activeInventoryEquipment.sort((left, right) =>
       left.name.localeCompare(right.name),
     );
   }, [displayEquipmentCatalogById, inventoryEquipment]);
@@ -797,32 +858,17 @@ export function useFloorLayout() {
       ) as Record<string, FacilityPaletteEquipment>,
     [availableEquipment]
   );
-  const placedEquipmentCountByKey = useMemo(() => {
-    return liveEquipment.reduce<Record<string, number>>((accumulator, item) => {
-      const placementKey = normalizeEquipmentKey(resolveEquipmentCatalogKey(item));
-      if (!placementKey) {
-        return accumulator;
-      }
-
-      accumulator[placementKey] = (accumulator[placementKey] ?? 0) + 1;
-      return accumulator;
-    }, {});
-  }, [liveEquipment]);
   const equipmentRemainingById = useMemo(() => {
     return availableEquipment.reduce<Record<string, number | null>>((accumulator, item) => {
-      if (item.quantityAvailable === undefined) {
-        accumulator[item.id] = null;
-        return accumulator;
-      }
-
-      const placementKey = resolvePalettePlacementKey(item);
-      const placedCount = placedEquipmentCountByKey[placementKey] ?? 0;
-      accumulator[item.id] = Math.max(0, item.quantityAvailable - placedCount);
+      accumulator[item.id] = item.quantityAvailable ?? null;
       return accumulator;
     }, {});
-  }, [availableEquipment, placedEquipmentCountByKey]);
+  }, [availableEquipment]);
   const createEquipmentMutation = useMutation(
     createGymLayoutEquipmentMutationOptions(webApiClient, queryClient)
+  );
+  const updateEquipmentMutation = useMutation(
+    updateGymLayoutEquipmentMutationOptions(webApiClient, queryClient)
   );
   const deleteEquipmentMutation = useMutation(
     deleteGymLayoutEquipmentMutationOptions(webApiClient, queryClient)
@@ -833,6 +879,9 @@ export function useFloorLayout() {
   const uploadImageMutation = useMutation(uploadImageMutationOptions(webApiClient));
   const updateFloorPlanMediaMutation = useMutation(
     updateGymLayoutFloorPlanMediaMutationOptions(webApiClient, queryClient)
+  );
+  const updateInventoryEquipmentMutation = useMutation(
+    updateInventoryEquipmentMutationOptions(webApiClient, queryClient)
   );
 
   const equipmentById = useMemo(
@@ -857,6 +906,13 @@ export function useFloorLayout() {
     [floorPlanMedia]
   );
   const activeFloorImageUrl = floorPlanImageByFloor[activeFloor] ?? null;
+  const activeFloorBounds = useMemo(() => {
+    const media = floorPlanMedia.find((item) => item.floorId === activeFloor);
+    return {
+      gridHeight: media?.gridHeight ?? ROWS,
+      gridWidth: media?.gridWidth ?? COLS,
+    };
+  }, [activeFloor, floorPlanMedia]);
   const assignedEquipment = useMemo(
     () =>
       buildVenueEquipmentAssignmentsFromRecords(liveEquipment, floorVenues)[activeFloor] ?? {},
@@ -879,14 +935,32 @@ export function useFloorLayout() {
     setShowUnsavedConfirm(false);
   };
 
-  const handleConfirmCellDelete = async () => {
-    if (!deleteTarget) return;
+  const handleRemoveEquipmentFromCanvas = async (equipmentId: string) => {
     try {
-      await deleteEquipmentMutation.mutateAsync(deleteTarget.equipmentId);
+      // The gym-layout endpoint removes only this placement node. The source
+      // inventory item is held separately and is never deleted by this call.
+      await deleteEquipmentMutation.mutateAsync(equipmentId);
+      await queryClient.invalidateQueries({
+        queryKey: inventoryEquipmentQueryOptions(
+          webApiClient,
+          { limit: 100, page: 1 },
+        ).queryKey,
+      });
       showMessage("Equipment removed from the floor plan.");
-      setDeleteTarget(null);
+      return true;
     } catch {
       showMessage("Unable to remove equipment from the floor plan.");
+      return false;
+    }
+  };
+
+  const handleConfirmCellDelete = async () => {
+    if (!deleteTarget) return;
+    const removed = await handleRemoveEquipmentFromCanvas(
+      deleteTarget.equipmentId,
+    );
+    if (removed) {
+      setDeleteTarget(null);
     }
   };
 
@@ -967,10 +1041,7 @@ export function useFloorLayout() {
     if (!equipment || !venue) return;
 
     if (equipment.quantityAvailable !== undefined) {
-      const placementKey = resolvePalettePlacementKey(equipment);
-      const placedCount = placedEquipmentCountByKey[placementKey] ?? 0;
-
-      if (placedCount >= equipment.quantityAvailable) {
+      if (equipment.quantityAvailable <= 0) {
         showMessage(`${equipment.name} has no remaining inventory units available to place on the floor map.`);
         return;
       }
@@ -1005,6 +1076,134 @@ export function useFloorLayout() {
     }
   };
 
+  const handleResizeFloorBounds = async (bounds: {
+    gridHeight: number;
+    gridWidth: number;
+  }) => {
+    try {
+      await updateFloorPlanMediaMutation.mutateAsync({
+        floorId: activeFloor,
+        gridHeight: Math.max(6, Math.min(20, bounds.gridHeight)),
+        gridWidth: Math.max(8, Math.min(30, bounds.gridWidth)),
+      });
+      showMessage(`${activeFloor.replace("floor-", "Floor ")} bounds updated.`);
+      return true;
+    } catch {
+      showMessage("Unable to resize the floor bounds.");
+      return false;
+    }
+  };
+
+  const handleUpdateInventoryEquipmentFromFacilities = async (
+    equipmentId: string,
+    data: Record<string, string>,
+  ) => {
+    const payload: InventoryEquipmentUpdateInput = {
+      description: data.description?.trim() || undefined,
+      name: data.name?.trim(),
+      unit: data.unit?.trim(),
+    };
+
+    try {
+      await updateInventoryEquipmentMutation.mutateAsync({ equipmentId, payload });
+      await queryClient.invalidateQueries({
+        queryKey: gymLayoutEquipmentQueryOptions(webApiClient).queryKey,
+      });
+      showMessage(`${payload.name ?? "Equipment"} updated.`);
+      return true;
+    } catch {
+      showMessage("Unable to update equipment details.");
+      return false;
+    }
+  };
+
+  const updateEquipmentPlacement = async (
+    equipmentId: string,
+    venueMapId: string,
+    preferredCell: { gridColumn: number; gridRow: number },
+  ) => {
+    const equipment = liveEquipment.find((item) => item.id === equipmentId);
+    const venue = floorVenues[activeFloor].find(
+      (candidate) => candidate.mapId === venueMapId,
+    );
+
+    if (!equipment || !venue) {
+      return false;
+    }
+
+    if (
+      !isGridCellInsideVenue(
+        venue,
+        preferredCell.gridColumn,
+        preferredCell.gridRow,
+      )
+    ) {
+      showMessage(`${equipment.name} must remain inside ${venue.name}.`);
+      return false;
+    }
+
+    if (
+      isGridCellOccupiedInVenue(
+        venue,
+        preferredCell.gridColumn,
+        preferredCell.gridRow,
+        liveEquipment.filter((item) => item.id !== equipmentId),
+      )
+    ) {
+      showMessage("That venue cell already contains equipment.");
+      return false;
+    }
+
+    try {
+      await updateEquipmentMutation.mutateAsync({
+        equipmentId,
+        payload: {
+          floorId: venue.floorId,
+          gridColumn: preferredCell.gridColumn,
+          gridRow: preferredCell.gridRow,
+          positionX: gridColumnToPositionX(preferredCell.gridColumn),
+          positionY: gridRowToPositionY(preferredCell.gridRow),
+          venueId: String(venue.sourceVenueId ?? venue.id),
+        },
+      });
+      showMessage(`${equipment.name} moved to ${venue.name}.`);
+      return true;
+    } catch {
+      showMessage("Unable to move equipment on the floor map.");
+      return false;
+    }
+  };
+
+  const toggleEquipmentMaintenance = async (
+    equipment: GymLayoutEquipmentRecord | null,
+  ) => {
+    if (!equipment) return false;
+    if (equipment.status !== "available" && equipment.status !== "maintenance") {
+      showMessage("Broken, missing, and occupied equipment keep their current status.");
+      return false;
+    }
+
+    try {
+      await updateEquipmentMutation.mutateAsync({
+        equipmentId: equipment.id,
+        payload: {
+          floorId: equipment.floorId,
+          status:
+            equipment.status === "maintenance" ? "available" : "maintenance",
+        },
+      });
+      showMessage(
+        equipment.status === "maintenance"
+          ? `${equipment.name} marked available.`
+          : `${equipment.name} marked for maintenance.`,
+      );
+      return true;
+    } catch {
+      showMessage("Unable to update equipment maintenance status.");
+      return false;
+    }
+  };
+
   return {
     activeFloor,
     setActiveFloor,
@@ -1024,24 +1223,36 @@ export function useFloorLayout() {
     setDeleteTarget,
     assignedEquipment,
     activeFloorImageUrl,
+    activeFloorBounds,
     archivedEquipment,
+    archivedEquipmentError: archivedEquipmentQuery.isError,
+    refetchArchivedEquipment: archivedEquipmentQuery.refetch,
     archivedEquipmentLoading,
     availableEquipment,
+    inventoryEquipment,
     equipmentRemainingById,
     equipmentById,
+    liveEquipment,
     assignedCount,
     deleteEquipmentMutation,
     restoreEquipmentMutation,
+    equipmentPlacementPending: updateEquipmentMutation.isPending,
+    updateEquipmentPlacement,
+    toggleEquipmentMaintenance,
     updateFloorPlanMediaMutation,
+    updateInventoryEquipmentMutation,
     message,
     handleSaveLayout,
     handleToggleEditMode,
     handleSaveAndExit,
     handleConfirmCellDelete,
+    handleRemoveEquipmentFromCanvas,
     handleRequestClearFloor,
     handleClearFloor,
     handleRestoreEquipment,
     handleUploadFloorPlanImage,
+    handleResizeFloorBounds,
+    handleUpdateInventoryEquipmentFromFacilities,
     assignEquipmentToVenue
   };
 }

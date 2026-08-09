@@ -208,7 +208,12 @@ export default function FitModal({
           element.removeAttribute("inert");
         }
       });
-      previousFocusRef.current?.focus({ preventScroll: true });
+      const previouslyFocused = previousFocusRef.current;
+      requestAnimationFrame(() => {
+        if (previouslyFocused?.isConnected) {
+          previouslyFocused.focus({ preventScroll: true });
+        }
+      });
     };
   }, [isOpen, portalRoot]);
 

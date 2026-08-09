@@ -36,7 +36,7 @@ export function InventoryKpiSidebar({
         },
         {
           icon: AlertTriangle,
-          label: "Equipments Under Maintenance",
+          label: "Equipment Needing Attention",
           value: String(inventory.equipmentAttentionCount),
           color: colors.warning
         }

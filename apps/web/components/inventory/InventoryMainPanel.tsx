@@ -85,6 +85,15 @@ function getInventoryImageUrl(assetUrl: string | null | undefined) {
   return imageUrl?.startsWith("https://fittrack.dev/") ? null : imageUrl;
 }
 
+function getEquipmentStatusRowBackground(
+  status: InventoryEquipmentTableRow["status"],
+  colors: IThemeContext["colors"]
+) {
+  if (status === "Under Maintenance") return `${colors.warning}16`;
+  if (status === "Broken" || status === "Missing") return `${colors.danger}16`;
+  return "transparent";
+}
+
 function getRetailFallbackIcon(category: string) {
   switch (category) {
     case "supplements":
@@ -376,7 +385,7 @@ function getEquipmentColumns(
     },
     {
       key: "quantityCurrent",
-      heading: "Current",
+      heading: "Status Qty",
       align: "left",
       headingStyle: { width: 96 },
       render: (equipment) => (
@@ -384,7 +393,7 @@ function getEquipmentColumns(
           className="inventory-directory-panel__emphasis-text"
           style={{ display: "block", fontSize: 14, fontWeight: 800 }}
         >
-          {equipment.quantityCurrent}
+          {equipment.statusQuantity}
         </FitText>
       ),
     },
@@ -404,7 +413,7 @@ function getEquipmentColumns(
     },
     {
       key: "missingCount",
-      heading: "Missing",
+      heading: "Placeable",
       align: "left",
       headingStyle: { width: 96 },
       render: (equipment) => (
@@ -412,7 +421,7 @@ function getEquipmentColumns(
           className="inventory-directory-panel__detail-text"
           style={{ color: colors.textMuted, display: "block", fontSize: 13 }}
         >
-          {equipment.missingCount}
+          {equipment.remainingPlaceableQuantity}
         </FitText>
       ),
     },
@@ -547,7 +556,7 @@ export function InventoryMainPanel({
           ? [
               {
                 icon: Wrench,
-                label: "Record Writeoff",
+                label: "Move Quantity",
                 onClick: () => inventory.openEquipmentWriteOff(selectedEquipment.id),
                 variant: "primary" as const,
               },
@@ -673,6 +682,52 @@ export function InventoryMainPanel({
             />
           )}
         </div>
+        {!isRetail ? (
+          <div
+            role="group"
+            aria-label="Equipment condition counts"
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 6,
+              minWidth: 0
+            }}
+          >
+            {(["Available", "Under Maintenance", "Broken", "Missing"] as const).map(
+              (status) => {
+                const tone =
+                  status === "Available"
+                    ? colors.success
+                    : status === "Under Maintenance"
+                      ? colors.warning
+                      : colors.danger;
+
+                return (
+                  <div
+                    key={status}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                      minHeight: 28,
+                      padding: "5px 8px",
+                      borderRadius: 7,
+                      border: `1px solid ${tone}44`,
+                      backgroundColor: `${tone}12`
+                    }}
+                  >
+                    <FitText style={{ fontSize: 10.5, color: colors.textPrimary }}>
+                      {status}
+                    </FitText>
+                    <FitText style={{ fontSize: 12, fontWeight: 850, color: tone }}>
+                      {inventory.equipmentStatusCounts[status]}
+                    </FitText>
+                  </div>
+                );
+              }
+            )}
+          </div>
+        ) : null}
       </div>
 
       {isCompactDetail && inspectorCommandActions.length > 0 ? (
@@ -727,7 +782,7 @@ export function InventoryMainPanel({
         />
       ) : (
         <InventoryDirectoryPanel
-          activeRowId={selectedEquipment?.id}
+          activeRowId={selectedEquipment?.rowId}
           ariaLabel="Equipment inventory"
           colors={colors}
           columns={equipmentColumns}
@@ -739,8 +794,14 @@ export function InventoryMainPanel({
           loadingMessage="Loading live equipment inventory..."
           minWidth={840}
           onPageChange={setEquipmentPage}
-          onRowClick={(equipment) => inventory.openEquipmentDetails(equipment.id)}
+          onRowClick={(equipment) =>
+            inventory.openEquipmentDetails(equipment.id, equipment.status)
+          }
           pageSize={INVENTORY_PAGE_SIZE}
+          getRowBackgroundColor={(equipment) =>
+            getEquipmentStatusRowBackground(equipment.status, colors)
+          }
+          getRowKey={(equipment) => equipment.rowId}
           renderMobileCard={(equipment, isActive) => (
             <EquipmentInventoryMobileCard
               colors={colors}
@@ -832,7 +893,7 @@ export function InventoryMainPanel({
                         ? [
                             {
                               icon: Wrench,
-                              label: "Record Writeoff",
+                              label: "Move Quantity",
                               onClick: () => inventory.openEquipmentWriteOff(selectedEquipment.id),
                               variant: "primary" as const,
                             },
@@ -938,6 +999,8 @@ function InventoryDirectoryPanel<T extends { id: string }>({
   onPageChange,
   onRowClick,
   pageSize,
+  getRowBackgroundColor,
+  getRowKey,
   renderMobileCard,
   rows,
   toolbar,
@@ -957,11 +1020,14 @@ function InventoryDirectoryPanel<T extends { id: string }>({
   onPageChange: (page: number) => void;
   onRowClick: (row: T) => void;
   pageSize: number;
+  getRowBackgroundColor?: (row: T) => string;
+  getRowKey?: (row: T) => string;
   renderMobileCard: (row: T, isActive: boolean) => ReactNode;
   rows: T[];
   toolbar: ReactNode;
   totalPages: number;
 }) {
+  const rowKeyFor = getRowKey ?? ((row: T) => row.id);
   const pageStart = filteredCount === 0 ? 0 : (currentPage - 1) * pageSize + 1;
   const pageEnd = filteredCount === 0 ? 0 : Math.min(filteredCount, currentPage * pageSize);
   const handleRowKeyDown = (event: KeyboardEvent<HTMLDivElement>, row: T) => {
@@ -1068,11 +1134,11 @@ function InventoryDirectoryPanel<T extends { id: string }>({
                   style={{ display: "grid", gap: 0, alignContent: "start", minHeight: 0, overflowY: "auto" }}
                 >
                   {rows.map((row, index) => {
-                    const isActive = row.id === activeRowId;
+                    const isActive = rowKeyFor(row) === activeRowId;
 
                     return (
                       <div
-                        key={row.id}
+                        key={rowKeyFor(row)}
                         role="button"
                         tabIndex={0}
                         aria-pressed={isActive}
@@ -1092,7 +1158,9 @@ function InventoryDirectoryPanel<T extends { id: string }>({
                           minHeight: 56,
                           padding: "7px 12px",
                           borderBottom: `1px solid ${colors.border}`,
-                          backgroundColor: isActive ? `${colors.brand}12` : "transparent",
+                          backgroundColor: isActive
+                            ? `${colors.brand}12`
+                            : getRowBackgroundColor?.(row) ?? "transparent",
                           boxShadow: isActive ? `3px 0 0 ${colors.brand} inset` : "none",
                           cursor: "pointer",
                           outline: "none",
@@ -1142,11 +1210,11 @@ function InventoryDirectoryPanel<T extends { id: string }>({
             </div>
           ) : rows.length > 0 ? (
             rows.map((row) => {
-              const isActive = row.id === activeRowId;
+              const isActive = rowKeyFor(row) === activeRowId;
 
               return (
                 <div
-                  key={row.id}
+                  key={rowKeyFor(row)}
                   role="button"
                   tabIndex={0}
                   aria-pressed={isActive}
@@ -1420,7 +1488,9 @@ function EquipmentInventoryMobileCard({
         padding: 12,
         borderRadius: 8,
         border: `1px solid ${isActive ? `${colors.brand}66` : colors.border}`,
-        backgroundColor: isActive ? `${colors.brand}10` : colors.surface,
+        backgroundColor: isActive
+          ? `${colors.brand}10`
+          : getEquipmentStatusRowBackground(equipment.status, colors),
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
@@ -1441,9 +1511,18 @@ function EquipmentInventoryMobileCard({
         <FitPill mode="status" label={equipment.status} color={EQUIPMENT_STATUS_COLOR[equipment.status]} fontSize={11} />
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
-        <InventoryMobileStat colors={colors} label="Current" value={String(equipment.quantityCurrent)} />
+        <InventoryMobileStat
+          colors={colors}
+          label="Status Qty"
+          tone={EQUIPMENT_STATUS_COLOR[equipment.status]}
+          value={String(equipment.statusQuantity)}
+        />
         <InventoryMobileStat colors={colors} label="Total" value={String(equipment.quantityTotal)} />
-        <InventoryMobileStat colors={colors} label="Missing" value={String(equipment.missingCount)} />
+        <InventoryMobileStat
+          colors={colors}
+          label="Placeable"
+          value={String(equipment.remainingPlaceableQuantity)}
+        />
         <InventoryMobileStat colors={colors} label="Unit" value={equipment.unit} />
       </div>
     </div>
@@ -1846,6 +1925,8 @@ function EquipmentDetailCard({
   equipment: InventoryEquipmentTableRow;
 }) {
   const imageUrl = getInventoryImageUrl(equipment.imageUrl);
+  const formatKnownCount = (value: number | null | undefined) =>
+    typeof value === "number" ? String(value) : "—";
 
   return (
     <DetailCardShell
@@ -1864,9 +1945,12 @@ function EquipmentDetailCard({
       <DetailMetricGrid
         colors={colors}
         items={[
-          ["Current", String(equipment.quantityCurrent)],
+          ["Status Qty", String(equipment.statusQuantity)],
+          ["Available", String(equipment.statusCounts.available ?? equipment.quantityCurrent)],
+          ["Under Maintenance", formatKnownCount(equipment.statusCounts.maintenance)],
+          ["Broken", formatKnownCount(equipment.statusCounts.broken)],
+          ["Missing", formatKnownCount(equipment.statusCounts.missing)],
           ["Total", String(equipment.quantityTotal)],
-          ["Missing", String(equipment.missingCount)],
           ["Unit", equipment.unit],
           ["Status", equipment.status],
         ]}

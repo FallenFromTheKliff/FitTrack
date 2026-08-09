@@ -21,9 +21,11 @@ export enum CreateBookingPaymentStage {
 
 export class CreateBookingDTO {
   @ApiProperty({
-    example: '11111111-1111-4111-8111-111111111111',
+    example: '7e9f96f7-8efe-5598-a978-5cd6ecf73a06',
+    description:
+      'Database amenity ID. Supports persisted UUID versions, including deterministic UUID v5 values.',
   })
-  @IsUUID('4', { message: 'amenity_id must be a valid UUID' })
+  @IsUUID('all', { message: 'amenity_id must be a valid UUID' })
   amenity_id: string;
 
   @ApiPropertyOptional({

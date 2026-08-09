@@ -190,6 +190,7 @@ export {
   inventorySalesSummaryQueryOptions,
   inventorySalesQueryOptions,
   restockInventoryProductMutationOptions,
+  transitionInventoryEquipmentMutationOptions,
   updateInventoryEquipmentMutationOptions,
   updateInventoryProductMutationOptions,
   writeOffInventoryEquipmentMutationOptions,

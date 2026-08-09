@@ -1,7 +1,0 @@
-interface:
-  display_name: "FitTrack UI Animator"
-  short_description: "Contained premium motion language, component animations, and Notion motion-bible updates"
-  default_prompt: "Use $ui-animator after scaffold fidelity and static polish are already strong to choose bold-but-appropriate component animations, capture real motion provenance, and update the FitTrack UI Motion Bible and current review page with a Motion Decision Packet."
-
-policy:
-  allow_implicit_invocation: false

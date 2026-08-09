@@ -18,17 +18,17 @@ import {
   inventorySalesSummaryQueryOptions,
   inventorySalesQueryOptions,
   restockInventoryProductMutationOptions,
+  transitionInventoryEquipmentMutationOptions,
   uploadImageMutationOptions,
   updateInventoryEquipmentMutationOptions,
-  updateInventoryProductMutationOptions,
-  writeOffInventoryEquipmentMutationOptions
+  updateInventoryProductMutationOptions
 } from "@fittrack/query";
 import type {
   InventoryEquipmentCreateInput,
   InventoryEquipmentDetailRecord,
   InventoryEquipmentRecord,
+  InventoryEquipmentStatusTransitionInput,
   InventoryEquipmentUpdateInput,
-  InventoryEquipmentWriteOffInput,
   InventoryProductCategory,
   InventoryProductMutationInput,
   InventoryProductRecord
@@ -46,7 +46,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   filterEquipmentItems,
   filterRetailProducts,
-  getEquipmentAvailabilityStatus,
+  getEquipmentMissingCount,
+  getEquipmentStatusRows,
   getRetailInventoryStatus,
 } from "@/app/(auth)/inventory/helpers";
 
@@ -109,12 +110,23 @@ export type InventoryRetailTableRow = InventoryProductRecord & {
 
 export type InventoryEquipmentTableRow = InventoryEquipmentRecord & {
   missingCount: number;
+  rowId: string;
   status: EquipmentAvailabilityStatus;
+  statusQuantity: number;
 };
+
+const EQUIPMENT_STATUS_BUCKET_BY_LABEL = {
+  Available: "available",
+  "Under Maintenance": "maintenance",
+  Broken: "broken",
+  Missing: "missing"
+} as const;
 
 export type InventoryEquipmentDetailRow = InventoryEquipmentDetailRecord & {
   missingCount: number;
+  rowId: string;
   status: EquipmentAvailabilityStatus;
+  statusQuantity: number;
 };
 
 export type InventoryRetailSaleInput = {
@@ -134,9 +146,10 @@ function parseNonNegativeInteger(
   value: string | undefined,
   label: string
 ): { error?: string; value?: number } {
-  const parsed = Number((value ?? "").trim());
+  const normalized = (value ?? "").trim();
+  const parsed = Number(normalized);
 
-  if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) {
+  if (!/^\d+$/.test(normalized) || !Number.isFinite(parsed) || !Number.isInteger(parsed)) {
     return { error: `${label} must be a whole number.` };
   }
 
@@ -151,9 +164,10 @@ function parsePositiveNumber(
   value: string | undefined,
   label: string
 ): { error?: string; value?: number } {
-  const parsed = Number((value ?? "").trim());
+  const normalized = (value ?? "").trim();
+  const parsed = Number(normalized);
 
-  if (!Number.isFinite(parsed)) {
+  if (!/^\d+(?:\.\d+)?$/.test(normalized) || !Number.isFinite(parsed)) {
     return { error: `${label} must be a number.` };
   }
 
@@ -172,51 +186,84 @@ function toRetailRow(product: InventoryProductRecord): InventoryRetailTableRow {
   };
 }
 
-function toEquipmentRow(
+function toEquipmentRows(
   equipment: InventoryEquipmentRecord
-): InventoryEquipmentTableRow {
-  const missingCount = Math.max(equipment.quantityTotal - equipment.quantityCurrent, 0);
+): InventoryEquipmentTableRow[] {
+  const missingCount = getEquipmentMissingCount(equipment);
 
-  return {
+  return getEquipmentStatusRows(equipment).map(({ quantity, status }) => ({
     ...equipment,
     missingCount,
-    status: getEquipmentAvailabilityStatus(
-      equipment.quantityCurrent,
-      equipment.quantityTotal
-    )
-  };
+    rowId: `${equipment.id}:${status}`,
+    status,
+    statusQuantity: quantity
+  }));
 }
 
 function toEquipmentDetailRow(
-  equipment: InventoryEquipmentDetailRecord
+  equipment: InventoryEquipmentDetailRecord,
+  preferredStatus?: EquipmentAvailabilityStatus | null
 ): InventoryEquipmentDetailRow {
+  const statusRows = getEquipmentStatusRows(equipment);
+  const selectedStatusRow =
+    statusRows.find((row) => row.status === preferredStatus) ?? statusRows[0];
+
   return {
     ...equipment,
-    missingCount: Math.max(equipment.quantityTotal - equipment.quantityCurrent, 0),
-    status: getEquipmentAvailabilityStatus(
-      equipment.quantityCurrent,
-      equipment.quantityTotal
-    )
+    missingCount: getEquipmentMissingCount(equipment),
+    rowId: `${equipment.id}:${selectedStatusRow.status}`,
+    status: selectedStatusRow.status,
+    statusQuantity: selectedStatusRow.quantity
   };
 }
 
-function resolveQuantityForEquipmentStatus(
+function resolveEquipmentStatusUpdate(
   status: EquipmentAvailabilityStatus,
   equipment: InventoryEquipmentTableRow | InventoryEquipmentDetailRow
-): number | string {
-  if (status === "Available") {
-    return equipment.quantityTotal;
+): Pick<
+  InventoryEquipmentUpdateInput,
+  "quantityCurrent" | "quantityMaintenance" | "quantityBroken" | "quantityMissing"
+> {
+  const total = Math.max(equipment.quantityTotal, 0);
+  const statusCounts = equipment.statusCounts;
+  const hasCanonicalCounts = ["maintenance", "broken", "missing"].every(
+    (key) => typeof statusCounts?.[key as keyof typeof statusCounts] === "number"
+  );
+
+  if (!hasCanonicalCounts) {
+    return {
+      quantityBroken: status === "Broken" ? total : 0,
+      quantityCurrent: status === "Available" ? total : 0,
+      quantityMaintenance: status === "Under Maintenance" ? total : 0,
+      quantityMissing: status === "Missing" ? total : 0
+    };
   }
 
-  if (status === "Broken") {
-    return 0;
-  }
+  const counts = {
+    available: Math.max(statusCounts.available ?? equipment.quantityCurrent, 0),
+    broken: Math.max(statusCounts.broken ?? 0, 0),
+    maintenance: Math.max(statusCounts.maintenance ?? 0, 0),
+    missing: Math.max(statusCounts.missing ?? 0, 0)
+  };
+  const statusKeys = {
+    Available: "available",
+    Broken: "broken",
+    Missing: "missing",
+    "Under Maintenance": "maintenance"
+  } as const;
+  const currentKey = statusKeys[equipment.status];
+  const nextKey = statusKeys[status];
+  const movedQuantity = Math.min(counts[currentKey], Math.max(equipment.statusQuantity, 0));
 
-  if (equipment.quantityTotal <= 1) {
-    return "Under Maintenance requires more than one total unit in this count-based inventory model.";
-  }
+  counts[currentKey] = Math.max(counts[currentKey] - movedQuantity, 0);
+  counts[nextKey] += movedQuantity;
 
-  return Math.max(1, equipment.quantityTotal - 1);
+  return {
+    quantityBroken: counts.broken,
+    quantityCurrent: counts.available,
+    quantityMaintenance: counts.maintenance,
+    quantityMissing: counts.missing
+  };
 }
 
 export function useInventoryDashboard() {
@@ -248,9 +295,13 @@ export function useInventoryDashboard() {
   const [createEquipmentOpen, setCreateEquipmentOpen] = useState(false);
   const [createEquipmentPreset, setCreateEquipmentPreset] = useState("new");
   const [selectedEquipmentId, setSelectedEquipmentId] = useState<string | null>(null);
+  const [selectedEquipmentStatus, setSelectedEquipmentStatus] =
+    useState<EquipmentAvailabilityStatus | null>(null);
   const [equipmentDetailsDeepLinkId, setEquipmentDetailsDeepLinkId] =
     useState<string | null>(null);
   const [writeOffEquipmentId, setWriteOffEquipmentId] = useState<string | null>(null);
+  const [writeOffEquipmentStatus, setWriteOffEquipmentStatus] =
+    useState<EquipmentAvailabilityStatus | null>(null);
   const [archiveEquipmentId, setArchiveEquipmentId] = useState<string | null>(null);
   const [createRetailImageUrl, setCreateRetailImageUrl] = useState("");
   const [detailRetailImageUrl, setDetailRetailImageUrl] = useState("");
@@ -309,7 +360,7 @@ export function useInventoryDashboard() {
 
   const productDetailQuery = useQuery({
     ...inventoryProductDetailQueryOptions(webApiClient, selectedRetailId ?? undefined),
-    enabled: Boolean(selectedRetailId)
+    enabled: Boolean(selectedRetailId && selectedRetailId !== archiveRetailId)
   });
 
   const restockProductDetailQuery = useQuery({
@@ -347,17 +398,21 @@ export function useInventoryDashboard() {
   const archiveEquipmentMutation = useMutation(
     archiveInventoryEquipmentMutationOptions(webApiClient, queryClient, notificationUserId)
   );
-  const writeOffEquipmentMutation = useMutation(
-    writeOffInventoryEquipmentMutationOptions(webApiClient, queryClient, notificationUserId)
+  const transitionEquipmentMutation = useMutation(
+    transitionInventoryEquipmentMutationOptions(webApiClient, queryClient, notificationUserId)
   );
 
   const retailProducts = useMemo(
     () => productsResponse.data.map(toRetailRow),
     [productsResponse.data]
   );
-  const equipmentItems = useMemo(
-    () => equipmentResponse.data.map(toEquipmentRow),
+  const equipmentRecords = useMemo(
+    () => equipmentResponse.data,
     [equipmentResponse.data]
+  );
+  const equipmentItems = useMemo(
+    () => equipmentRecords.flatMap(toEquipmentRows),
+    [equipmentRecords]
   );
   const filteredRetailProducts = useMemo(
     () =>
@@ -408,21 +463,33 @@ export function useInventoryDashboard() {
   const retailLowStockCount = retailProducts.filter(
     (product) => product.status === "Low Stock"
   ).length;
-  const equipmentAttentionCount = equipmentItems.filter(
-    (item) => item.status === "Under Maintenance" || item.status === "Broken"
-  ).length;
+  const equipmentStatusCounts = useMemo(() => {
+    const counts: Record<EquipmentAvailabilityStatus, number> = {
+      Available: 0,
+      Broken: 0,
+      Missing: 0,
+      "Under Maintenance": 0
+    };
+
+    for (const item of equipmentItems) {
+      counts[item.status] += item.statusQuantity;
+    }
+
+    return counts;
+  }, [equipmentItems]);
+  const equipmentAttentionCount =
+    equipmentStatusCounts["Under Maintenance"] +
+    equipmentStatusCounts.Broken +
+    equipmentStatusCounts.Missing;
   const equipmentCurrentUnits = useMemo(
-    () => equipmentItems.reduce((acc, item) => acc + item.quantityCurrent, 0),
-    [equipmentItems]
+    () => equipmentRecords.reduce((acc, item) => acc + item.quantityCurrent, 0),
+    [equipmentRecords]
   );
   const equipmentTotalUnits = useMemo(
-    () => equipmentItems.reduce((acc, item) => acc + item.quantityTotal, 0),
-    [equipmentItems]
+    () => equipmentRecords.reduce((acc, item) => acc + item.quantityTotal, 0),
+    [equipmentRecords]
   );
-  const equipmentMissingUnits = useMemo(
-    () => equipmentItems.reduce((acc, item) => acc + item.missingCount, 0),
-    [equipmentItems]
-  );
+  const equipmentMissingUnits = equipmentStatusCounts.Missing;
   const selectedRetail = useMemo(() => {
     if (!selectedRetailId) return null;
     if (productDetailQuery.data && productDetailQuery.data.id === selectedRetailId) {
@@ -431,12 +498,26 @@ export function useInventoryDashboard() {
 
     return retailProducts.find((product) => product.id === selectedRetailId) ?? null;
   }, [selectedRetailId, productDetailQuery.data, retailProducts]);
+  const selectedEquipmentRow = useMemo(() => {
+    if (!selectedEquipmentId) return null;
+
+    return (
+      equipmentItems.find(
+        (equipment) =>
+          equipment.id === selectedEquipmentId &&
+          (!selectedEquipmentStatus || equipment.status === selectedEquipmentStatus)
+      ) ?? equipmentItems.find((equipment) => equipment.id === selectedEquipmentId) ?? null
+    );
+  }, [equipmentItems, selectedEquipmentId, selectedEquipmentStatus]);
   const selectedEquipmentDetail = useMemo(
     () =>
       equipmentDetailQuery.data
-        ? toEquipmentDetailRow(equipmentDetailQuery.data)
+        ? toEquipmentDetailRow(
+            equipmentDetailQuery.data,
+            selectedEquipmentStatus ?? selectedEquipmentRow?.status
+          )
         : null,
-    [equipmentDetailQuery.data]
+    [equipmentDetailQuery.data, selectedEquipmentRow?.status, selectedEquipmentStatus]
   );
   const selectedEquipment = useMemo(() => {
     if (!selectedEquipmentId) return null;
@@ -447,10 +528,8 @@ export function useInventoryDashboard() {
       return selectedEquipmentDetail;
     }
 
-    return (
-      equipmentItems.find((equipment) => equipment.id === selectedEquipmentId) ?? null
-    );
-  }, [selectedEquipmentId, selectedEquipmentDetail, equipmentItems]);
+    return selectedEquipmentRow;
+  }, [selectedEquipmentId, selectedEquipmentDetail, selectedEquipmentRow]);
   const restockRetailTarget = useMemo(() => {
     if (!restockRetailId) return null;
     if (selectedRetail?.id === restockRetailId) return selectedRetail;
@@ -482,11 +561,20 @@ export function useInventoryDashboard() {
   );
   const writeOffEquipmentTarget = useMemo(() => {
     if (!writeOffEquipmentId) return null;
-    if (selectedEquipment?.id === writeOffEquipmentId) return selectedEquipment;
+    if (
+      selectedEquipment?.id === writeOffEquipmentId &&
+      (!writeOffEquipmentStatus || selectedEquipment.status === writeOffEquipmentStatus)
+    ) {
+      return selectedEquipment;
+    }
     return (
-      equipmentItems.find((equipment) => equipment.id === writeOffEquipmentId) ?? null
+      equipmentItems.find(
+        (equipment) =>
+          equipment.id === writeOffEquipmentId &&
+          (!writeOffEquipmentStatus || equipment.status === writeOffEquipmentStatus)
+      ) ?? null
     );
-  }, [writeOffEquipmentId, selectedEquipment, equipmentItems]);
+  }, [writeOffEquipmentId, writeOffEquipmentStatus, selectedEquipment, equipmentItems]);
   const archiveEquipmentTarget = useMemo(() => {
     if (!archiveEquipmentId) return null;
     if (selectedEquipment?.id === archiveEquipmentId) return selectedEquipment;
@@ -557,6 +645,7 @@ export function useInventoryDashboard() {
       setArchiveEquipmentId(null);
       setWriteOffEquipmentId(null);
       setSelectedEquipmentId(equipmentId);
+      setSelectedEquipmentStatus(null);
       setEquipmentDetailsDeepLinkId(equipmentId);
     }
 
@@ -594,14 +683,31 @@ export function useInventoryDashboard() {
     setRetailSaleOpen(true);
   };
 
-  const openEquipmentDetails = (equipmentId: string) => {
+  const openEquipmentDetails = (
+    equipmentId: string,
+    status?: EquipmentAvailabilityStatus
+  ) => {
+    const nextStatus = status ?? null;
     setSelectedEquipmentId((current) =>
-      current === equipmentId ? null : equipmentId,
+      current === equipmentId && selectedEquipmentStatus === nextStatus
+        ? null
+        : equipmentId
+    );
+    setSelectedEquipmentStatus((current) =>
+      selectedEquipmentId === equipmentId && current === nextStatus
+        ? null
+        : nextStatus
     );
   };
 
-  const openEquipmentWriteOff = (equipmentId: string) => {
+  const openEquipmentWriteOff = (
+    equipmentId: string,
+    status?: EquipmentAvailabilityStatus
+  ) => {
     setWriteOffEquipmentId(equipmentId);
+    setWriteOffEquipmentStatus(
+      status ?? (selectedEquipmentId === equipmentId ? selectedEquipmentStatus : null)
+    );
   };
 
   const openEquipmentArchive = (equipmentId: string) => {
@@ -630,6 +736,8 @@ export function useInventoryDashboard() {
   };
 
   const handleCreateRetail = async (data: Record<string, string>) => {
+    if (createProductMutation.isPending) return;
+
     const name = normalizeOptionalText(data.name);
     const category = data.category as InventoryProductCategory | undefined;
     const cost = parsePositiveNumber(data.cost, "Cost");
@@ -796,15 +904,29 @@ export function useInventoryDashboard() {
   const handleArchiveRetail = async () => {
     if (!archiveRetailTarget) return;
 
+    const archivedProductId = archiveRetailTarget.id;
+    const archivedProductDetailKey = inventoryProductDetailQueryOptions(
+      webApiClient,
+      archivedProductId
+    ).queryKey;
+
     try {
+      await queryClient.cancelQueries({
+        exact: true,
+        queryKey: archivedProductDetailKey
+      });
       await archiveProductMutation.mutateAsync({
         payload: { isActive: false },
-        productId: archiveRetailTarget.id
+        productId: archivedProductId
       });
-      setArchiveRetailId(null);
-      if (selectedRetailId === archiveRetailTarget.id) {
+      if (selectedRetailId === archivedProductId) {
         setSelectedRetailId(null);
       }
+      setArchiveRetailId(null);
+      queryClient.removeQueries({
+        exact: true,
+        queryKey: archivedProductDetailKey
+      });
       showMessage(`${archiveRetailTarget.name} archived from retail inventory.`);
     } catch {
       showMessage("Failed to archive the retail product.");
@@ -827,7 +949,7 @@ export function useInventoryDashboard() {
 
     if (presetSelection !== "new") {
       const presetName = EQUIPMENT_PRESET_NAMES[presetSelection];
-      const existingEquipment = equipmentItems.find(
+      const existingEquipment = equipmentRecords.find(
         (item) => item.name.toLowerCase() === presetName.toLowerCase()
       );
 
@@ -958,26 +1080,20 @@ export function useInventoryDashboard() {
     if (
       nextStatus !== "Available" &&
       nextStatus !== "Under Maintenance" &&
-      nextStatus !== "Broken"
+      nextStatus !== "Broken" &&
+      nextStatus !== "Missing"
     ) {
       showMessage("Choose a valid equipment status.");
       return;
     }
 
-    const nextQuantityCurrent = resolveQuantityForEquipmentStatus(
-      nextStatus,
-      selectedEquipment
-    );
-    if (typeof nextQuantityCurrent === "string") {
-      showMessage(nextQuantityCurrent);
-      return;
-    }
+    const nextStatusCounts = resolveEquipmentStatusUpdate(nextStatus, selectedEquipment);
 
     const payload: InventoryEquipmentUpdateInput = {
       description: normalizeOptionalText(data.description),
       imageUrl: normalizeOptionalText(detailEquipmentImageUrl),
       name,
-      quantityCurrent: nextQuantityCurrent,
+      ...nextStatusCounts,
       unit
     };
 
@@ -995,39 +1111,47 @@ export function useInventoryDashboard() {
   const handleWriteOffEquipment = async (data: Record<string, string>) => {
     if (!writeOffEquipmentTarget) return;
 
-    const quantitySetTo = parseNonNegativeInteger(
-      data.quantitySetTo,
-      "New current quantity"
-    );
-    const reason = normalizeOptionalText(data.reason);
+    const quantity = parseNonNegativeInteger(data.quantity, "Quantity to move");
+    const destinationStatus = data.destinationStatus as EquipmentAvailabilityStatus;
 
-    if (quantitySetTo.error) {
-      showMessage(quantitySetTo.error);
+    if (quantity.error) {
+      showMessage(quantity.error);
       return;
     }
-    if (!reason) {
-      showMessage("A write-off reason is required.");
+    if (
+      destinationStatus !== "Available" &&
+      destinationStatus !== "Under Maintenance" &&
+      destinationStatus !== "Broken" &&
+      destinationStatus !== "Missing"
+    ) {
+      showMessage("Choose a valid destination status.");
       return;
     }
-    if ((quantitySetTo.value ?? 0) > writeOffEquipmentTarget.quantityCurrent) {
-      showMessage("New current quantity cannot exceed the current quantity.");
+    if (destinationStatus === writeOffEquipmentTarget.status) {
+      showMessage("Choose a different destination status.");
+      return;
+    }
+    if ((quantity.value ?? 0) > writeOffEquipmentTarget.statusQuantity) {
+      showMessage("Quantity to move cannot exceed the selected status quantity.");
       return;
     }
 
-    const payload: InventoryEquipmentWriteOffInput = {
-      quantitySetTo: quantitySetTo.value ?? 0,
-      reason
+    const payload: InventoryEquipmentStatusTransitionInput = {
+      sourceStatus: EQUIPMENT_STATUS_BUCKET_BY_LABEL[writeOffEquipmentTarget.status],
+      destinationStatus: EQUIPMENT_STATUS_BUCKET_BY_LABEL[destinationStatus],
+      quantity: quantity.value ?? 0
     };
 
     try {
-      await writeOffEquipmentMutation.mutateAsync({
+      await transitionEquipmentMutation.mutateAsync({
         equipmentId: writeOffEquipmentTarget.id,
         payload
       });
       setWriteOffEquipmentId(null);
-      showMessage(`${writeOffEquipmentTarget.name} write-off recorded.`);
+      setWriteOffEquipmentStatus(null);
+      showMessage(`${writeOffEquipmentTarget.name}: ${quantity.value} unit(s) moved.`);
     } catch {
-      showMessage("Failed to record the equipment write-off.");
+      showMessage("Failed to move the equipment quantity.");
     }
   };
 
@@ -1086,8 +1210,14 @@ export function useInventoryDashboard() {
     createEquipmentPreset,
     createRetailImageUrl,
     closeEquipmentArchive: () => setArchiveEquipmentId(null),
-    closeEquipmentDetails: () => setSelectedEquipmentId(null),
-    closeEquipmentWriteOff: () => setWriteOffEquipmentId(null),
+    closeEquipmentDetails: () => {
+      setSelectedEquipmentId(null);
+      setSelectedEquipmentStatus(null);
+    },
+    closeEquipmentWriteOff: () => {
+      setWriteOffEquipmentId(null);
+      setWriteOffEquipmentStatus(null);
+    },
     closeRetailArchive: () => setArchiveRetailId(null),
     closeRetailDetails: () => setSelectedRetailId(null),
     closeRetailRestock: () => setRestockRetailId(null),
@@ -1102,14 +1232,15 @@ export function useInventoryDashboard() {
     detailEquipmentImageUrl,
     detailRetailImageUrl,
     equipmentAttentionCount,
-    equipmentCount: equipmentItems.length,
+    equipmentCount: equipmentRecords.length,
     equipmentCurrentUnits,
     equipmentDetailLoading: equipmentDetailQuery.isFetching,
     equipmentDetailsDeepLinkId,
     equipmentMissingUnits,
+    equipmentStatusCounts,
     equipmentStatusFilter,
     equipmentTotalUnits,
-    equipmentWriteOffPending: writeOffEquipmentMutation.isPending,
+    equipmentWriteOffPending: transitionEquipmentMutation.isPending,
     filteredEquipmentItems,
     filteredRetailProducts,
     handleArchiveEquipment,

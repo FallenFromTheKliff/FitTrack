@@ -54,6 +54,12 @@ describe('EquipmentRepository', () => {
     expect(gymEquipmentItem.findMany).toHaveBeenCalledWith({
       where: { is_active: true },
       orderBy: [{ name: 'asc' }, { created_at: 'desc' }],
+      include: {
+        layout_nodes: {
+          where: { is_active: true },
+          select: { id: true },
+        },
+      },
       skip: 10,
       take: 10,
     });
@@ -70,6 +76,10 @@ describe('EquipmentRepository', () => {
     expect(gymEquipmentItem.findUnique).toHaveBeenCalledWith({
       where: { id: 'equipment-1' },
       include: {
+        layout_nodes: {
+          where: { is_active: true },
+          select: { id: true },
+        },
         write_offs: {
           orderBy: { created_at: 'desc' },
           include: {
@@ -226,5 +236,68 @@ describe('EquipmentRepository', () => {
     ).rejects.toBeInstanceOf(ConflictException);
 
     expect(tx.equipmentWriteOff.create).not.toHaveBeenCalled();
+  });
+
+  it('moves only the requested quantity between status buckets atomically', async () => {
+    tx.gymEquipmentItem.findUnique
+      .mockResolvedValueOnce({
+        id: 'equipment-1',
+        quantity_total: 8,
+        quantity_current: 6,
+        quantity_maintenance: 1,
+        quantity_broken: 0,
+        quantity_missing: 1,
+      })
+      .mockResolvedValueOnce({
+        id: 'equipment-1',
+        quantity_total: 8,
+        quantity_current: 4,
+        quantity_maintenance: 3,
+        quantity_broken: 0,
+        quantity_missing: 1,
+        layout_nodes: [],
+      });
+    tx.gymEquipmentItem.updateMany.mockResolvedValue({ count: 1 });
+
+    await expect(
+      repo.transitionEquipmentStatus('equipment-1', 'available', 'maintenance', 2),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        quantity_current: 4,
+        quantity_maintenance: 3,
+      }),
+    );
+
+    expect(tx.gymEquipmentItem.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'equipment-1',
+        quantity_current: 6,
+        quantity_maintenance: 1,
+        quantity_broken: 0,
+        quantity_missing: 1,
+      },
+      data: {
+        quantity_current: 4,
+        quantity_maintenance: 3,
+        quantity_broken: 0,
+        quantity_missing: 1,
+      },
+    });
+  });
+
+  it('rejects a transition larger than the selected source bucket', async () => {
+    tx.gymEquipmentItem.findUnique.mockResolvedValue({
+      id: 'equipment-1',
+      quantity_total: 8,
+      quantity_current: 6,
+      quantity_maintenance: 1,
+      quantity_broken: 0,
+      quantity_missing: 1,
+    });
+
+    await expect(
+      repo.transitionEquipmentStatus('equipment-1', 'maintenance', 'broken', 2),
+    ).rejects.toBeInstanceOf(HttpException);
+    expect(tx.gymEquipmentItem.updateMany).not.toHaveBeenCalled();
   });
 });

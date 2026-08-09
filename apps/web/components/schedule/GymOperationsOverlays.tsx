@@ -8,11 +8,19 @@ import type {
   CoachAvailabilityResponse,
   VenueAvailabilityRecord,
 } from "@fittrack/api-client";
+import type { CreateUserCoachProfileInput } from "@fittrack/types";
 import {
   coachAvailabilityQueryOptions,
   venueAvailabilityQueryOptions,
 } from "@fittrack/query";
 import { expandCoachAvailabilitySlots } from "@fittrack/utils";
+import {
+  authStrongPasswordPattern,
+  composeAuthPhilippineMobileNumber,
+  formatAuthPhilippineMobileDigits,
+  isAllowedAuthEmailDomain,
+  isSupportedAuthPhilippineMobileNumber,
+} from "@fittrack/validators";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { webApiClient } from "@/lib/api-client";
@@ -29,7 +37,6 @@ import { OverlayFrame } from "./GymOperationsOverlayFrame";
 import {
   COACH_SPECIALTY_OPTIONS,
   EMAIL_PATTERN,
-  PHONE_PATTERN,
   actionPillStyle,
   formatCompactDate,
   formatDurationLabel,
@@ -79,6 +86,23 @@ function filterScheduleOptions(
   }
 
   return filteredOptions;
+}
+
+function createTemporaryCoachPassword() {
+  const randomPart =
+    typeof globalThis.crypto?.randomUUID === "function"
+      ? globalThis.crypto.randomUUID().replace(/-/g, "")
+      : Math.random().toString(36).slice(2);
+
+  return `FitTrack!${randomPart.slice(0, 24)}`;
+}
+
+function splitCoachAccountName(value: string) {
+  const parts = value.trim().split(/\s+/).filter(Boolean);
+  const firstName = parts[0] ?? "";
+  const lastName = parts.slice(1).join(" ") || firstName;
+
+  return { firstName, lastName };
 }
 
 function ScheduleOptionPicker({
@@ -271,7 +295,10 @@ export function GymOperationsCreateVenueBookingModal({
   memberOptions,
   onClose,
   onCreate,
+  onRetryVenues,
   venueOptions,
+  venuesLoadFailed = false,
+  venuesLoading = false,
 }: {
   coachOptions: SelectOption[];
   isOpen: boolean;
@@ -287,7 +314,10 @@ export function GymOperationsCreateVenueBookingModal({
     paymentStage?: "full";
     startsAt: string;
   }) => void;
+  onRetryVenues?: () => void;
   venueOptions: SelectOption[];
+  venuesLoadFailed?: boolean;
+  venuesLoading?: boolean;
 }) {
   const { colors, settings } = useTheme();
   const [memberId, setMemberId] = useState("");
@@ -322,7 +352,11 @@ export function GymOperationsCreateVenueBookingModal({
     if (!isOpen) return;
     const defaultMemberId = memberOptions[0]?.value ?? "";
     setMemberId((current) => current || defaultMemberId);
-    setVenueId((current) => current || venueOptions[0]?.value || "");
+    setVenueId((current) =>
+      venueOptions.some((option) => option.value === current)
+        ? current
+        : venueOptions[0]?.value || "",
+    );
     setCoachId("");
     setDate(getDefaultDateInput());
     setDatePickerOpen(false);
@@ -468,7 +502,7 @@ export function GymOperationsCreateVenueBookingModal({
     (date !== getDefaultDateInput() || toMinutes(startTime) > currentMinutes);
   const canSubmit =
     Boolean(memberId) &&
-    Boolean(venueId) &&
+    Boolean(selectedVenueOption) &&
     Boolean(date) &&
     Boolean(startTime) &&
     Boolean(endTime) &&
@@ -496,7 +530,7 @@ export function GymOperationsCreateVenueBookingModal({
       setErrorText("Select the member for this venue booking.");
       return;
     }
-    if (!venueId) {
+    if (!selectedVenueOption) {
       setErrorText("Select a venue before creating the booking.");
       return;
     }
@@ -606,9 +640,36 @@ export function GymOperationsCreateVenueBookingModal({
                     setEndTime("");
                   }}
                   options={venueOptions}
+                  disabled={
+                    venuesLoading || venuesLoadFailed || venueOptions.length === 0
+                  }
                   compact
                   fullWidth
                 />
+                {venuesLoading ? (
+                  <FitText style={{ color: colors.textMuted, fontSize: 12 }}>
+                    Loading venues...
+                  </FitText>
+                ) : venuesLoadFailed ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <FitText style={{ color: colors.danger, fontSize: 12 }}>
+                      Unable to load venues.
+                    </FitText>
+                    {onRetryVenues ? (
+                      <FitButton
+                        variant="ghost"
+                        label="RETRY"
+                        onClick={onRetryVenues}
+                        style={{ minHeight: 28, padding: "4px 8px" }}
+                        textStyle={{ fontSize: 10, fontWeight: 800 }}
+                      />
+                    ) : null}
+                  </div>
+                ) : venueOptions.length === 0 ? (
+                  <FitText style={{ color: colors.textMuted, fontSize: 12 }}>
+                    No reservable venues are available.
+                  </FitText>
+                ) : null}
               </div>
             </div>
 
@@ -1043,6 +1104,10 @@ export function GymOperationsCreateCoachBookingModal({
       );
       return;
     }
+    if (selectedSlot.durationMinutes > 180) {
+      setErrorText("Coach bookings cannot exceed 180 minutes.");
+      return;
+    }
 
     setCreateConfirm({
       confirmLabel: "CREATE COACH BOOKING",
@@ -1428,21 +1493,19 @@ export function GymOperationsCreateCoachModal({
   isSubmitting?: boolean;
   onClose: () => void;
   onCreate: (payload: {
-    bio?: string;
-    certifications?: string[];
-    contactEmail?: string;
-    contactPhone?: string;
-    displayName: string;
-    hourlyRate?: number;
-    isAvailableForBooking?: boolean;
-    scheduleType?: "full_time" | "part_time";
-    specialties?: string[];
+    email: string;
+    firstName: string;
+    lastName: string;
+    password: string;
+    coachProfile?: CreateUserCoachProfileInput;
+    phone_no?: string;
   }) => void;
 }) {
   const { colors, settings } = useTheme();
   const [displayName, setDisplayName] = useState("");
   const [contactEmail, setContactEmail] = useState("");
   const [contactPhone, setContactPhone] = useState("");
+  const [password, setPassword] = useState("");
   const [specialties, setSpecialties] = useState("");
   const [certifications, setCertifications] = useState("");
   const [hourlyRate, setHourlyRate] = useState("");
@@ -1463,6 +1526,7 @@ export function GymOperationsCreateCoachModal({
     setDisplayName("");
     setContactEmail("");
     setContactPhone("");
+    setPassword(createTemporaryCoachPassword());
     setSpecialties("");
     setCertifications("");
     setHourlyRate("");
@@ -1488,6 +1552,8 @@ export function GymOperationsCreateCoachModal({
   const hourlyRateValue = Number(hourlyRate);
   const canSubmit =
     displayName.trim().length > 0 &&
+    contactEmail.trim().length > 0 &&
+    password.trim().length > 0 &&
     specialtiesList.length > 0 &&
     hourlyRate.trim().length > 0 &&
     Number.isFinite(hourlyRateValue) &&
@@ -1498,21 +1564,41 @@ export function GymOperationsCreateCoachModal({
     const nextErrors: Record<string, string> = {};
     const name = displayName.trim();
     const email = contactEmail.trim();
-    const phone = contactPhone.trim();
+    const phone = contactPhone.trim()
+      ? composeAuthPhilippineMobileNumber("+63", contactPhone)
+      : "";
+    const { firstName, lastName } = splitCoachAccountName(name);
     const joinedSpecialties = specialtiesList.join(", ");
     const joinedCertifications = certificationsList.join(", ");
 
     if (!name) nextErrors.displayName = "Coach name is required.";
-    if (name.length > 160)
+    else if (name.length > 160)
       nextErrors.displayName = "Coach name must not exceed 160 characters.";
-    if (email && !EMAIL_PATTERN.test(email))
-      nextErrors.contactEmail = "Enter a valid coach contact email.";
+    else if (firstName.length < 2 || lastName.length < 2)
+      nextErrors.displayName = "Enter a coach first and last name.";
+    else if (firstName.length > 100 || lastName.length > 100)
+      nextErrors.displayName =
+        "Coach names must not exceed 100 characters per name.";
+    if (!email) nextErrors.contactEmail = "Account email is required.";
+    else if (!EMAIL_PATTERN.test(email))
+      nextErrors.contactEmail = "Enter a valid coach account email.";
+    else if (!isAllowedAuthEmailDomain(email))
+      nextErrors.contactEmail = "Use a supported account email domain.";
     if (email.length > 255)
-      nextErrors.contactEmail = "Contact email must not exceed 255 characters.";
-    if (phone && !PHONE_PATTERN.test(phone))
-      nextErrors.contactPhone = "Enter a valid contact phone number.";
-    if (phone.length > 40)
-      nextErrors.contactPhone = "Contact phone must not exceed 40 characters.";
+      nextErrors.contactEmail = "Account email must not exceed 255 characters.";
+    if (!password) nextErrors.password = "Temporary password is required.";
+    else if (password.length < 10)
+      nextErrors.password = "Temporary password must be at least 10 characters.";
+    else if (password.length > 64)
+      nextErrors.password = "Temporary password must not exceed 64 characters.";
+    else if (/\s/.test(password))
+      nextErrors.password = "Temporary password must not contain spaces.";
+    else if (!authStrongPasswordPattern.test(password))
+      nextErrors.password = "Temporary password needs upper, lower, number, and symbol.";
+    if (contactPhone.length > 10)
+      nextErrors.contactPhone = "Enter no more than 10 mobile digits after +63.";
+    else if (phone && !isSupportedAuthPhilippineMobileNumber(phone))
+      nextErrors.contactPhone = "Enter a valid Philippine mobile number.";
     if (specialtiesList.length === 0)
       nextErrors.specialties = "Enter at least one specialty.";
     if (joinedSpecialties.length > 255)
@@ -1533,18 +1619,30 @@ export function GymOperationsCreateCoachModal({
   };
 
   const submitCoach = () => {
+    const { firstName, lastName } = splitCoachAccountName(displayName);
+    const phone = contactPhone.trim()
+      ? composeAuthPhilippineMobileNumber("+63", contactPhone)
+      : "";
+
     onCreate({
-      ...(bio.trim() ? { bio: bio.trim() } : {}),
-      ...(certificationsList.length > 0
-        ? { certifications: certificationsList }
-        : {}),
-      ...(contactEmail.trim() ? { contactEmail: contactEmail.trim() } : {}),
-      ...(contactPhone.trim() ? { contactPhone: contactPhone.trim() } : {}),
-      displayName: displayName.trim(),
-      hourlyRate: hourlyRateValue,
-      isAvailableForBooking: isAvailableForBooking === "active",
-      scheduleType,
-      specialties: specialtiesList,
+      email: contactEmail.trim().toLowerCase(),
+      firstName,
+      lastName,
+      password,
+      coachProfile: {
+        ...(bio.trim() ? { bio: bio.trim() } : {}),
+        ...(certificationsList.length > 0
+          ? { certifications: certificationsList }
+          : {}),
+        contactEmail: contactEmail.trim().toLowerCase(),
+        ...(phone ? { contactPhone: phone } : {}),
+        displayName: displayName.trim(),
+        hourlyRate: hourlyRateValue,
+        isAvailableForBooking: isAvailableForBooking === "active",
+        scheduleType,
+        specialties: specialtiesList,
+      },
+      ...(phone ? { phone_no: phone } : {}),
     });
   };
 
@@ -1563,9 +1661,10 @@ export function GymOperationsCreateCoachModal({
 
     setCreateConfirm({
       confirmLabel: "CREATE COACH",
-      message: "Create this standalone coach now?",
+      message:
+        "Create this coach account and profile now? It will start as Not Verified.",
       onConfirm: submitCoach,
-      title: "Confirm coach profile",
+      title: "Confirm coach account",
     });
   };
 
@@ -1576,7 +1675,7 @@ export function GymOperationsCreateCoachModal({
         onClose={onClose}
         closeDisabled={isSubmitting}
         title="Create coach"
-        subtitle="Create a standalone coach record for Gym Operations. This does not create a mobile/member profile or login account."
+        subtitle="Create a coach-role account and profile for Gym Operations."
         footer={
           <FitButton
             variant="primary"
@@ -1706,12 +1805,43 @@ export function GymOperationsCreateCoachModal({
                 >
                   Contact phone
                 </FitText>
-                <FitTextInput
-                  value={contactPhone}
-                  onChange={(event) => setContactPhone(event.target.value)}
-                  placeholder="+639171234567"
-                  style={inputStyle}
-                />
+                <div
+                  style={{
+                    ...inputStyle,
+                    alignItems: "center",
+                    display: "flex",
+                    gap: 8,
+                  }}
+                >
+                  <FitText
+                    as="span"
+                    excludeGlobalScale
+                    aria-hidden="true"
+                    style={{ color: colors.textMuted, fontSize: 13, fontWeight: 800 }}
+                  >
+                    +63
+                  </FitText>
+                  <FitTextInput
+                    id="coach-create-phone"
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={13}
+                    value={contactPhone}
+                    onChange={(event) =>
+                      setContactPhone(
+                        formatAuthPhilippineMobileDigits(event.target.value, "+63"),
+                      )
+                    }
+                    placeholder="9171234567"
+                    aria-label="Coach account phone digits"
+                    style={{
+                      backgroundColor: "transparent",
+                      border: 0,
+                      minHeight: 0,
+                      padding: 0,
+                    }}
+                  />
+                </div>
                 {errors.contactPhone ? (
                   <FitText
                     excludeGlobalScale
@@ -1721,6 +1851,35 @@ export function GymOperationsCreateCoachModal({
                   </FitText>
                 ) : null}
               </div>
+            </div>
+
+            <div style={{ display: "grid", gap: 6 }}>
+              <FitText
+                excludeGlobalScale
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: colors.textMuted,
+                }}
+              >
+                Temporary password
+              </FitText>
+              <FitTextInput
+                type="text"
+                autoComplete="new-password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="Generated temporary password"
+                style={inputStyle}
+              />
+              {errors.password ? (
+                <FitText
+                  excludeGlobalScale
+                  style={{ fontSize: 11, color: colors.danger }}
+                >
+                  {errors.password}
+                </FitText>
+              ) : null}
             </div>
 
             <div
@@ -1915,7 +2074,7 @@ export function GymOperationsCreateCoachModal({
       </OverlayFrame>
       <ConfirmModal
         isOpen={!!createConfirm}
-        title={createConfirm?.title ?? "Confirm coach profile"}
+        title={createConfirm?.title ?? "Confirm coach account"}
         message={createConfirm?.message ?? ""}
         confirmLabel={createConfirm?.confirmLabel ?? "CREATE COACH"}
         loadingLabel={createConfirm?.confirmLabel ?? "CREATE COACH"}

@@ -1,6 +1,7 @@
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 
+import { CreateStaffVenueBookingDTO } from '../../../staff/dto/staff-schedule.dto';
 import { CreateBookingDTO, ProcessBalanceDTO } from './create-booking.dto';
 
 function extractMessages(
@@ -12,7 +13,49 @@ function extractMessages(
   ]);
 }
 
+function createStaffVenueBookingPayload(amenityId: string) {
+  return plainToInstance(CreateStaffVenueBookingDTO, {
+    member_id: '11111111-1111-4111-8111-111111111111',
+    amenity_id: amenityId,
+    starts_at: '2026-08-10T10:00:00.000Z',
+    ends_at: '2026-08-10T11:00:00.000Z',
+  });
+}
+
+describe('CreateStaffVenueBookingDTO validation', () => {
+  it('accepts a deterministic UUIDv5 amenity id', async () => {
+    const errors = await validate(
+      createStaffVenueBookingPayload(
+        '7e9f96f7-8efe-5598-a978-5cd6ecf73a06',
+      ),
+    );
+
+    expect(errors).toHaveLength(0);
+  });
+
+  it('rejects a malformed amenity id', async () => {
+    const errors = await validate(
+      createStaffVenueBookingPayload('not-a-venue-uuid'),
+    );
+
+    expect(extractMessages(errors)).toContain(
+      'amenity_id must be a valid UUID',
+    );
+  });
+});
+
 describe('CreateBookingDTO validation', () => {
+  it('accepts a deterministic UUIDv5 amenity id', async () => {
+    const dto = plainToInstance(CreateBookingDTO, {
+      amenity_id: '7e9f96f7-8efe-5598-a978-5cd6ecf73a06',
+      starts_at: '2026-03-24T10:00:00.000Z',
+      ends_at: '2026-03-24T11:00:00.000Z',
+      provider: 'paymongo',
+    });
+
+    expect(await validate(dto)).toHaveLength(0);
+  });
+
   it('requires a valid amenity id', async () => {
     const dto = plainToInstance(CreateBookingDTO, {
       amenity_id: 'bad-id',

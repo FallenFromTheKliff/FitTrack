@@ -66,4 +66,30 @@ describe('Amenity DTO validation', () => {
       'floor_id must be one of: floor-1, floor-2, floor-3',
     );
   });
+
+  it('accepts normalized venue image media settings', async () => {
+    const dto = plainToInstance(UpdateAmenityDTO, {
+      image_fit: 'contain',
+      image_focal_x: 0.25,
+      image_focal_y: 0.75,
+      image_crop_zoom: 2,
+    });
+
+    expect(await validate(dto)).toHaveLength(0);
+  });
+
+  it('rejects invalid venue image media settings', async () => {
+    const dto = plainToInstance(UpdateAmenityDTO, {
+      image_fit: 'stretch',
+      image_focal_x: -0.1,
+      image_focal_y: 1.1,
+      image_crop_zoom: 5,
+    });
+    const messages = extractMessages(await validate(dto));
+
+    expect(messages).toContain('image_fit must be cover or contain');
+    expect(messages).toContain('image_focal_x must be at least 0');
+    expect(messages).toContain('image_focal_y must be at most 1');
+    expect(messages).toContain('image_crop_zoom must be at most 4');
+  });
 });

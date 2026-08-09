@@ -13,6 +13,7 @@ import {
 } from '../../common/base-repository/base-repository';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PaginationDTO } from '../../user/dto/user-dto';
+import type { EquipmentStatusBucket } from './dto/equipment-status-transition.dto';
 
 const equipmentOrderBy: Prisma.GymEquipmentItemOrderByWithRelationInput[] = [
   { name: 'asc' },
@@ -43,7 +44,54 @@ const equipmentWriteOffInclude = {
   },
 } satisfies Prisma.EquipmentWriteOffInclude;
 
+const equipmentLayoutInclude = {
+  layout_nodes: {
+    where: { is_active: true },
+    select: { id: true },
+  },
+} satisfies Prisma.GymEquipmentItemInclude;
+
+const equipmentListInclude = equipmentLayoutInclude;
+
+const equipmentStatusField: Record<
+  EquipmentStatusBucket,
+  'quantity_current' | 'quantity_maintenance' | 'quantity_broken' | 'quantity_missing'
+> = {
+  available: 'quantity_current',
+  maintenance: 'quantity_maintenance',
+  broken: 'quantity_broken',
+  missing: 'quantity_missing',
+};
+
+type EquipmentStatusCounts = Record<EquipmentStatusBucket, number>;
+
+function normalizeEquipmentStatusCounts(
+  equipment: Pick<
+    GymEquipmentItem,
+    | 'quantity_total'
+    | 'quantity_current'
+    | 'quantity_maintenance'
+    | 'quantity_broken'
+    | 'quantity_missing'
+  >,
+): EquipmentStatusCounts {
+  const isLegacySingleStatus =
+    equipment.quantity_maintenance === null &&
+    equipment.quantity_broken === null &&
+    equipment.quantity_missing === null;
+
+  return {
+    available: equipment.quantity_current,
+    maintenance: equipment.quantity_maintenance ?? 0,
+    broken: equipment.quantity_broken ?? 0,
+    missing: isLegacySingleStatus
+      ? Math.max(equipment.quantity_total - equipment.quantity_current, 0)
+      : (equipment.quantity_missing ?? 0),
+  };
+}
+
 const equipmentDetailInclude = {
+  ...equipmentLayoutInclude,
   write_offs: {
     orderBy: { created_at: 'desc' },
     include: equipmentWriteOffInclude,
@@ -58,8 +106,12 @@ export type EquipmentDetailRecord = Prisma.GymEquipmentItemGetPayload<{
   include: typeof equipmentDetailInclude;
 }>;
 
+export type EquipmentListRecord = Prisma.GymEquipmentItemGetPayload<{
+  include: typeof equipmentListInclude;
+}>;
+
 export type ArchivedEquipmentRecord = {
-  equipment: GymEquipmentItem;
+  equipment: EquipmentListRecord;
   quantityBefore: number;
   quantitySetTo: number;
 };
@@ -72,14 +124,15 @@ export class EquipmentRepository extends BaseRepository {
 
   listEquipmentItems(
     dto: PaginationDTO,
-  ): Promise<PaginatedResult<GymEquipmentItem>> {
-    return this.paginate<GymEquipmentItem>(
+  ): Promise<PaginatedResult<EquipmentListRecord>> {
+    return this.paginate<EquipmentListRecord>(
       this.prisma.gymEquipmentItem,
       {
         where: {
           is_active: true,
         },
         orderBy: equipmentOrderBy,
+        include: equipmentListInclude,
       },
       { page: dto.page, limit: dto.limit },
     );
@@ -104,18 +157,23 @@ export class EquipmentRepository extends BaseRepository {
 
   createEquipmentItem(
     data: Prisma.GymEquipmentItemCreateInput,
-  ): Promise<GymEquipmentItem> {
-    return this.create<GymEquipmentItem>(this.prisma.gymEquipmentItem, data);
+  ): Promise<EquipmentListRecord> {
+    return this.create<EquipmentListRecord>(
+      this.prisma.gymEquipmentItem,
+      data,
+      equipmentListInclude,
+    );
   }
 
   updateEquipmentItem(
     id: string,
     data: Prisma.GymEquipmentItemUpdateInput,
-  ): Promise<GymEquipmentItem> {
-    return this.updateById<GymEquipmentItem>(
+  ): Promise<EquipmentListRecord> {
+    return this.updateById<EquipmentListRecord>(
       this.prisma.gymEquipmentItem,
       id,
       data,
+      equipmentListInclude,
     );
   }
 
@@ -141,6 +199,7 @@ export class EquipmentRepository extends BaseRepository {
     equipmentId: string,
     quantitySetTo: number,
     reason: string,
+    status: 'maintenance' | 'broken' | 'missing' = 'broken',
   ): Promise<EquipmentWriteOffRecord> {
     return this.transaction(async (tx) => {
       const equipment = await tx.gymEquipmentItem.findUnique({
@@ -171,21 +230,45 @@ export class EquipmentRepository extends BaseRepository {
 
       const quantityBefore = equipment.quantity_current;
       const quantityLost = quantityBefore - quantitySetTo;
+      const hasStatusColumns =
+        equipment.quantity_maintenance !== undefined ||
+        equipment.quantity_broken !== undefined ||
+        equipment.quantity_missing !== undefined;
+      const nextCounts = {
+        quantity_maintenance: equipment.quantity_maintenance,
+        quantity_broken: equipment.quantity_broken,
+        quantity_missing: equipment.quantity_missing,
+      };
+      const statusField = `quantity_${status}` as keyof typeof nextCounts;
+      nextCounts[statusField] = (nextCounts[statusField] ?? 0) + quantityLost;
 
       const updateResult = await tx.gymEquipmentItem.updateMany({
         where: {
           id: equipmentId,
           quantity_current: quantityBefore,
+          ...(hasStatusColumns
+            ? {
+                quantity_maintenance: equipment.quantity_maintenance,
+                quantity_broken: equipment.quantity_broken,
+                quantity_missing: equipment.quantity_missing,
+              }
+            : {}),
         },
         data: {
           quantity_current: quantitySetTo,
+          ...(hasStatusColumns ? nextCounts : {}),
         },
       });
 
       if (updateResult.count !== 1) {
         const latestEquipment = await tx.gymEquipmentItem.findUnique({
           where: { id: equipmentId },
-          select: { quantity_current: true },
+          select: {
+            quantity_current: true,
+            quantity_maintenance: true,
+            quantity_broken: true,
+            quantity_missing: true,
+          },
         });
 
         if (!latestEquipment) {
@@ -230,6 +313,122 @@ export class EquipmentRepository extends BaseRepository {
         },
         include: equipmentWriteOffInclude,
       });
+    });
+  }
+
+  transitionEquipmentStatus(
+    equipmentId: string,
+    sourceStatus: EquipmentStatusBucket,
+    destinationStatus: EquipmentStatusBucket,
+    quantity: number,
+  ): Promise<EquipmentListRecord> {
+    return this.transaction(async (tx) => {
+      const equipment = await tx.gymEquipmentItem.findUnique({
+        where: { id: equipmentId },
+      });
+
+      if (!equipment) {
+        throw new NotFoundException({
+          type: 'NOT_FOUND',
+          title: 'GymEquipmentItem Not Found',
+          status: 404,
+          detail: `GymEquipmentItem with id "${equipmentId}" does not exist.`,
+        });
+      }
+
+      if (
+        sourceStatus === destinationStatus ||
+        !Number.isInteger(quantity) ||
+        quantity < 1
+      ) {
+        throw new HttpException(
+          {
+            type: 'BUSINESS_RULE_VIOLATION',
+            title: 'Invalid Equipment Status Transition',
+            status: 422,
+            detail:
+              'A status transition must move a positive whole-unit quantity between two different states.',
+          },
+          HttpStatus.UNPROCESSABLE_ENTITY,
+        );
+      }
+
+      const counts = normalizeEquipmentStatusCounts(equipment);
+      const total = Object.values(counts).reduce((sum, value) => sum + value, 0);
+
+      if (
+        Object.values(counts).some((value) => value < 0) ||
+        total !== equipment.quantity_total
+      ) {
+        throw new HttpException(
+          {
+            type: 'BUSINESS_RULE_VIOLATION',
+            title: 'Invalid Equipment Status Counts',
+            status: 422,
+            detail:
+              'Available, maintenance, broken, and missing quantities must be non-negative and equal quantity_total.',
+          },
+          HttpStatus.UNPROCESSABLE_ENTITY,
+        );
+      }
+
+      if (counts[sourceStatus] < quantity) {
+        throw new HttpException(
+          {
+            type: 'BUSINESS_RULE_VIOLATION',
+            title: 'Insufficient Equipment Quantity',
+            status: 422,
+            detail: `Only ${counts[sourceStatus]} unit(s) are in the ${sourceStatus} state.`,
+          },
+          HttpStatus.UNPROCESSABLE_ENTITY,
+        );
+      }
+
+      const nextCounts = { ...counts };
+      nextCounts[sourceStatus] -= quantity;
+      nextCounts[destinationStatus] += quantity;
+
+      const updateResult = await tx.gymEquipmentItem.updateMany({
+        where: {
+          id: equipmentId,
+          quantity_current: equipment.quantity_current,
+          quantity_maintenance: equipment.quantity_maintenance,
+          quantity_broken: equipment.quantity_broken,
+          quantity_missing: equipment.quantity_missing,
+        },
+        data: {
+          [equipmentStatusField.available]: nextCounts.available,
+          [equipmentStatusField.maintenance]: nextCounts.maintenance,
+          [equipmentStatusField.broken]: nextCounts.broken,
+          [equipmentStatusField.missing]: nextCounts.missing,
+        },
+      });
+
+      if (updateResult.count !== 1) {
+        throw new ConflictException({
+          type: 'CONFLICT',
+          title: 'Equipment Quantity Changed',
+          status: 409,
+          detail:
+            'Equipment quantities changed before the transition could be recorded. Refresh the item and try again.',
+        });
+      }
+
+      const updatedEquipment = await tx.gymEquipmentItem.findUnique({
+        where: { id: equipmentId },
+        include: equipmentListInclude,
+      });
+
+      if (!updatedEquipment) {
+        throw new NotFoundException({
+          type: 'NOT_FOUND',
+          title: 'GymEquipmentItem Not Found',
+          status: 404,
+          detail: `GymEquipmentItem with id "${equipmentId}" does not exist.`,
+        });
+      }
+
+      return updatedEquipment;
     });
   }
 
@@ -306,6 +505,7 @@ export class EquipmentRepository extends BaseRepository {
 
       const updatedEquipment = await tx.gymEquipmentItem.findUnique({
         where: { id: equipmentId },
+        include: equipmentLayoutInclude,
       });
 
       if (!updatedEquipment) {

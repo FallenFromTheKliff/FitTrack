@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { Amenity, Prisma } from '@prisma/client';
+import { Amenity, EquipmentStatus, Prisma } from '@prisma/client';
 
 import { AmenityRepository } from './amenity.repository';
 import {
@@ -17,6 +17,10 @@ const AMENITY_UPDATE_FIELDS = [
   'minimum_hours',
   'icon_key',
   'image_url',
+  'image_fit',
+  'image_focal_x',
+  'image_focal_y',
+  'image_crop_zoom',
   'grid_column',
   'grid_row',
   'grid_width',
@@ -25,6 +29,8 @@ const AMENITY_UPDATE_FIELDS = [
   'display_order',
   'floor_id',
   'requires_subscription',
+  'status',
+  'is_mapped',
   'is_active',
 ] as const;
 
@@ -280,6 +286,10 @@ export class AmenityService {
       minimum_hours: dto.minimum_hours ?? layout.minimum_hours,
       icon_key: dto.icon_key ?? layout.icon_key,
       image_url: dto.image_url ?? null,
+      image_fit: dto.image_fit ?? 'cover',
+      image_focal_x: dto.image_focal_x ?? 0.5,
+      image_focal_y: dto.image_focal_y ?? 0.5,
+      image_crop_zoom: dto.image_crop_zoom ?? 1,
       grid_column: dto.grid_column ?? layout.grid_column,
       grid_row: dto.grid_row ?? layout.grid_row,
       grid_width: dto.grid_width ?? layout.grid_width,
@@ -288,6 +298,7 @@ export class AmenityService {
       display_order: dto.display_order ?? layout.display_order,
       floor_id: dto.floor_id ?? layout.floor_id,
       requires_subscription: dto.requires_subscription ?? false,
+      status: dto.status ?? EquipmentStatus.available,
     };
   }
 

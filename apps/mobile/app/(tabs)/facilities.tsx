@@ -1,17 +1,25 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
-import { Pressable, View } from "react-native";
+import { Image, Pressable, View } from "react-native";
 import Animated, { useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useIsFocused } from "@react-navigation/native";
 import { Dumbbell, RefreshCw, MessageCircle, CalendarPlus } from "lucide-react-native";
-import { invalidateVenueQueries, venuesQueryOptions } from "@fittrack/query";
+import {
+  gymLayoutEquipmentQueryOptions,
+  gymLayoutFloorPlanMediaQueryOptions,
+  invalidateGymLayoutQueries,
+  invalidateVenueQueries,
+  venuesQueryOptions
+} from "@fittrack/query";
 import {
   FACILITY_FLOORS,
   FACILITY_FLOOR_MAP,
   GYM_LAYOUT_GRID_COLUMNS,
   GYM_LAYOUT_GRID_ROWS,
   buildFacilityFloorVenues,
+  isEquipmentInsideVenue,
+  resolveEquipmentGridPlacement,
   type FacilityFloorId
 } from "@fittrack/types";
 
@@ -20,7 +28,9 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { type FABMenuItem, useFABState } from "@/contexts/FABStateContext";
 import { usePassageAnim } from "@/hooks/animations/screen/usePassageAnim";
 import { makeScreenStyles, makeGymMapStyles } from "@/styles/shared/ScreenStyles";
-import { mobileApiClient } from "@/lib/api-client";
+import { buildRenderableAssetUrl } from "@fittrack/utils";
+import { MOBILE_API_BASE_URL, mobileApiClient } from "@/lib/api-client";
+import { getFacilityStatusColor, getFacilityStatusLabel } from "@/utils/facilityStatus";
 import { getVenuePresentation } from "@/utils/venueBookings";
 import { getVenueIcon } from "@/utils/venueMap";
 
@@ -28,6 +38,7 @@ import FitButton from "@/components/fit/FitButton";
 import { FitText } from "@/components/fit/FitText";
 import FitSection from "@/components/fit/FitSection";
 import DetailsModal from "@/components/modals/booking/DetailsModal";
+import EquipmentDetailsModal from "@/components/modals/booking/EquipmentDetailsModal";
 
 const GRID_COLUMNS = GYM_LAYOUT_GRID_COLUMNS;
 const GRID_ROWS = GYM_LAYOUT_GRID_ROWS;
@@ -59,8 +70,8 @@ const FACILITY_BLUEPRINT_COPY: Record<
     routeLabel: "Main circulation lane",
     markers: [
       { hint: "Arrival and check-in", label: "Entry", left: 6, top: 8, tone: "muted", width: 22, height: 18 },
-      { hint: "Free movement and machine zone", label: "Training", left: 31, top: 12, tone: "primary", width: 29, height: 28 },
-      { hint: "Court-side wayfinding", label: "Courts", left: 63, top: 12, tone: "muted", width: 27, height: 34 }
+      { hint: "Built-in circulation node", label: "Path / Walkway", left: 31, top: 12, tone: "primary", width: 29, height: 28 },
+      { hint: "Court-side wayfinding", label: "Exit", left: 63, top: 12, tone: "muted", width: 27, height: 34 }
     ]
   },
   "floor-2": {
@@ -69,7 +80,7 @@ const FACILITY_BLUEPRINT_COPY: Record<
     routeLabel: "Coach access lane",
     markers: [
       { hint: "Warm-up and prep", label: "Prep", left: 12, top: 18, tone: "muted", width: 22, height: 22 },
-      { hint: "Main session zone", label: "Ring", left: 39, top: 24, tone: "primary", width: 32, height: 28 },
+      { hint: "Built-in circulation node", label: "Path / Walkway", left: 39, top: 24, tone: "primary", width: 32, height: 28 },
       { hint: "Support edge", label: "Recovery", left: 72, top: 18, tone: "muted", width: 16, height: 22 }
     ]
   },
@@ -79,7 +90,7 @@ const FACILITY_BLUEPRINT_COPY: Record<
     routeLabel: "Quiet movement lane",
     markers: [
       { hint: "Light prep zone", label: "Prep", left: 10, top: 18, tone: "muted", width: 18, height: 18 },
-      { hint: "Main studio footprint", label: "Studio", left: 31, top: 18, tone: "primary", width: 40, height: 40 },
+      { hint: "Built-in circulation node", label: "Path / Walkway", left: 31, top: 18, tone: "primary", width: 40, height: 40 },
       { hint: "Stretch edge", label: "Stretch", left: 74, top: 22, tone: "muted", width: 14, height: 22 }
     ]
   }
@@ -99,6 +110,8 @@ export default function FacilitiesScreen() {
   const [isRefreshing, setRefreshing] = useState(false);
   const [activeFloor, setActiveFloor] = useState<FacilityFloorId>("floor-1");
   const [selectedVenueMapId, setSelectedVenueMapId] = useState<string | null>(null);
+  const [selectedEquipmentId, setSelectedEquipmentId] = useState<string | null>(null);
+  const [floorImageFailed, setFloorImageFailed] = useState(false);
 
   const scrollY = useSharedValue(0);
   const scrollHandler = useAnimatedScrollHandler({
@@ -135,15 +148,68 @@ export default function FacilitiesScreen() {
     return () => unregisterFAB();
   }, [isFrozen, menuItems, registerFAB, scrollY, unregisterFAB]));
 
-  const { data: venues = [], refetch } = useQuery({
+  const { data: venues = [], refetch, isError: venuesLoadFailed, isLoading: venuesLoading } = useQuery({
     ...venuesQueryOptions(mobileApiClient, user?.id),
     enabled: isFocused && !!user?.id
+  });
+  const { data: liveEquipment = [], isError: equipmentLoadFailed } = useQuery({
+    ...gymLayoutEquipmentQueryOptions(mobileApiClient),
+    enabled: isFocused
+  });
+  const { data: floorPlanMedia = [] } = useQuery({
+    ...gymLayoutFloorPlanMediaQueryOptions(mobileApiClient),
+    enabled: isFocused
   });
 
   const floorVenues = useMemo(() => buildFacilityFloorVenues(venues), [venues]);
   const activeFloorConfig = FACILITY_FLOOR_MAP[activeFloor];
   const activeFloorVenues = floorVenues[activeFloor];
   const venueZones = useMemo(() => activeFloorVenues.map(getVenuePresentation), [activeFloorVenues]);
+  const activeFloorEquipment = useMemo(
+    () => liveEquipment.filter((item) => item.isActive && item.floorId === activeFloor),
+    [activeFloor, liveEquipment]
+  );
+  const equipmentNodes = useMemo(
+    () =>
+      activeFloorEquipment.flatMap((item) => {
+        const explicitVenue = item.venueId
+          ? activeFloorVenues.find(
+              (venue) => String(venue.sourceVenueId ?? venue.id) === String(item.venueId)
+            )
+          : null;
+        const containingVenue = activeFloorVenues.find((venue) =>
+          isEquipmentInsideVenue(item, venue)
+        );
+        const venue = explicitVenue ?? containingVenue;
+        if (!venue) return [];
+
+        const placement = resolveEquipmentGridPlacement(item);
+        const left = venue.gridColumn ?? 1;
+        const top = venue.gridRow ?? 1;
+        const right = left + (venue.gridWidth ?? 1) - 1;
+        const bottom = top + (venue.gridHeight ?? 1) - 1;
+
+        return [{
+          item,
+          venue,
+          gridColumn: Math.max(left, Math.min(right, placement.gridColumn)),
+          gridRow: Math.max(top, Math.min(bottom, placement.gridRow))
+        }];
+      }),
+    [activeFloorEquipment, activeFloorVenues]
+  );
+  const activeFloorImageUrl = useMemo(() => {
+    const imageUrl = floorPlanMedia.find((media) => media.floorId === activeFloor)?.imageUrl;
+    return buildRenderableAssetUrl({ apiBaseUrl: MOBILE_API_BASE_URL, assetUrl: imageUrl });
+  }, [activeFloor, floorPlanMedia]);
+  const equipmentCountByVenue = useMemo(
+    () =>
+      equipmentNodes.reduce<Record<string, number>>((counts, node) => {
+        counts[node.venue.mapId] = (counts[node.venue.mapId] ?? 0) + 1;
+        return counts;
+      }, {}),
+    [equipmentNodes]
+  );
   const venueZoneStacks = useMemo(() => {
     const groups = new Map<string, string[]>();
 
@@ -171,6 +237,10 @@ export default function FacilitiesScreen() {
   const activeVenue = useMemo(
       () => venueZones.find((venue) => (venue.mapId ?? venue.id) === selectedVenueMapId) ?? null,
       [selectedVenueMapId, venueZones]
+  );
+  const selectedEquipmentNode = useMemo(
+    () => equipmentNodes.find((node) => node.item.id === selectedEquipmentId) ?? null,
+    [equipmentNodes, selectedEquipmentId]
   );
   const nextMappedFloor = useMemo(
     () => FACILITY_FLOORS.find((floor) => floor.id !== activeFloor && floorVenues[floor.id].length > 0) ?? null,
@@ -209,17 +279,44 @@ export default function FacilitiesScreen() {
     if (selectedVenueMapId && !venueZones.some((venue) => (venue.mapId ?? venue.id) === selectedVenueMapId)) {
       setSelectedVenueMapId(null);
     }
-  }, [selectedVenueMapId, venueZones]);
+    if (selectedEquipmentId && !equipmentNodes.some((node) => node.item.id === selectedEquipmentId)) {
+      setSelectedEquipmentId(null);
+    }
+  }, [equipmentNodes, selectedEquipmentId, selectedVenueMapId, venueZones]);
+
+  useEffect(() => {
+    setFloorImageFailed(false);
+  }, [activeFloorImageUrl]);
 
   const doRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await invalidateVenueQueries(queryClient, user?.id);
-      await refetch();
+      await Promise.all([
+        invalidateGymLayoutQueries(queryClient),
+        invalidateVenueQueries(queryClient, user?.id),
+        refetch()
+      ]);
     } finally {
       setRefreshing(false);
     }
   }, [queryClient, refetch, user?.id]);
+
+  const handleReserveVenue = useCallback(() => {
+    setSelectedVenueMapId(null);
+    setSelectedEquipmentId(null);
+    if (!isFrozen) setReservationOpen(true);
+  }, [isFrozen, setReservationOpen]);
+
+  const emptyMapTitle = venuesLoading
+    ? "Loading live layout"
+    : venuesLoadFailed
+      ? "Live layout unavailable"
+      : "No mapped zones published";
+  const emptyMapBody = venuesLoadFailed
+    ? "The live facility layout could not be loaded. Refresh to try again."
+    : nextMappedFloor
+      ? `This level has no published zones yet. Jump to ${nextMappedFloor.label} to keep navigating the live facility map.`
+      : "This level has no published zones yet. Staff can publish the next floor layout from the admin facilities editor.";
 
   return (
       <Animated.View style={[base.screen, !isFocused && { display: "none" }]}>
@@ -251,6 +348,7 @@ export default function FacilitiesScreen() {
                   onPress={() => {
                     setActiveFloor(floor.id);
                     setSelectedVenueMapId(null);
+                    setSelectedEquipmentId(null);
                   }}
                   variant={activeFloor === floor.id ? "primary" : "ghost"}
                   style={s.floorToggleButton}
@@ -261,6 +359,15 @@ export default function FacilitiesScreen() {
           </View>
           <View style={s.mapCanvas}>
             <View style={s.mapBlueprintLayer}>
+              {activeFloorImageUrl && !floorImageFailed ? (
+                <Image
+                  accessibilityLabel={`${activeFloorConfig.label} floor plan`}
+                  source={{ uri: activeFloorImageUrl }}
+                  resizeMode="cover"
+                  onError={() => setFloorImageFailed(true)}
+                  style={s.mapFloorPlanImage}
+                />
+              ) : null}
               <View style={s.mapBlueprintTint} />
               <View style={[s.mapBlueprintRouteHorizontal, { top: "18%" as never }]} />
               <View style={[s.mapBlueprintRouteHorizontal, { top: "72%" as never }]} />
@@ -322,18 +429,17 @@ export default function FacilitiesScreen() {
             ))}
             {venueZones.length === 0 ? (
               <View style={s.mapEmptyState}>
-                <FitText style={s.mapEmptyStateTitle}>{activeFloorConfig.emptyTitle}</FitText>
+                <FitText style={s.mapEmptyStateTitle}>{emptyMapTitle}</FitText>
                 <FitText style={s.mapEmptyStateBody}>
-                  {nextMappedFloor
-                    ? `This level has no published zones yet. Jump to ${nextMappedFloor.label} to keep navigating the live facility map.`
-                    : "This level has no published zones yet. Refresh later or ask staff to publish the next floor layout."}
+                  {emptyMapBody}
                 </FitText>
-                {nextMappedFloor ? (
+                {nextMappedFloor && !venuesLoadFailed ? (
                   <FitButton
                     label={`Open ${nextMappedFloor.label}`}
                     onPress={() => {
                       setActiveFloor(nextMappedFloor.id);
                       setSelectedVenueMapId(null);
+                      setSelectedEquipmentId(null);
                     }}
                     variant="primary"
                     style={s.mapEmptyStateAction}
@@ -345,6 +451,8 @@ export default function FacilitiesScreen() {
                 const Icon = getVenueIcon(venue.iconKey);
                 const venueId = venue.mapId ?? venue.id;
                 const isSelected = selectedVenueMapId === venueId;
+                const statusColor = getFacilityStatusColor(venue.status, colors);
+                const statusLabel = getFacilityStatusLabel(venue.status);
                 const zoneStack = venueZoneStacks.get(venueId) ?? { count: 1, index: 0 };
                 const stackedGridHeight = venue.gridHeight / zoneStack.count;
                 const stackedGridRow = venue.gridRow + stackedGridHeight * zoneStack.index;
@@ -365,26 +473,75 @@ export default function FacilitiesScreen() {
                             top: `${((stackedGridRow - 1) / GRID_ROWS) * 100}%` as never,
                             width: `${(venue.gridWidth / GRID_COLUMNS) * 100}%` as never,
                             height: `${(stackedGridHeight / GRID_ROWS) * 100}%` as never,
-                            borderColor: isSelected ? colors.brand : colors.brand + "66"
+                            borderColor: isSelected ? colors.brand : statusColor,
+                            backgroundColor: statusColor + "12"
                           }
                         ]}
-                        onPress={() => setSelectedVenueMapId(venueId)}
+                        onPress={() => {
+                          setSelectedVenueMapId(venueId);
+                          setSelectedEquipmentId(null);
+                        }}
                     >
-                      <View style={s.mapZoneBackdrop} />
+                      <View style={[s.mapZoneBackdrop, { backgroundColor: statusColor + "12" }]} />
                       <View style={s.mapZoneBadge}>
                         <Icon size={20} color={colors.brand} strokeWidth={2} />
                         <FitText style={s.mapZoneLabel} numberOfLines={2}>
                           {venue.name}
                         </FitText>
-                        <FitText style={s.mapZoneMeta}>
-                          {venue.isReservable ? `${venue.price}/${venue.unit}` : "Facility zone"}
+                        <View style={s.mapZoneStatusRow}>
+                          <View style={[s.mapStatusDot, { backgroundColor: statusColor }]} />
+                          <FitText style={[s.mapZoneMeta, { color: statusColor }]} numberOfLines={1}>
+                            {statusLabel}
+                          </FitText>
+                        </View>
+                        <FitText style={s.mapZoneMeta} numberOfLines={1}>
+                          {equipmentCountByVenue[venueId]
+                            ? `${equipmentCountByVenue[venueId]} mapped unit${equipmentCountByVenue[venueId] === 1 ? "" : "s"}`
+                            : venue.isReservable ? `${venue.price}/${venue.unit}` : "Facility zone"}
                         </FitText>
                       </View>
                     </Pressable>
                 );
               })
             )}
+            {equipmentNodes.map(({ item, venue, gridColumn, gridRow }) => {
+              const statusColor = getFacilityStatusColor(item.status, colors);
+              const isSelected = selectedEquipmentId === item.id;
+              const Icon = getVenueIcon(item.iconKey);
+              return (
+                <Pressable
+                  key={item.id}
+                  accessibilityLabel={`Open ${item.name} details, ${getFacilityStatusLabel(item.status)}, in ${venue.name}`}
+                  accessibilityRole="button"
+                  hitSlop={5}
+                  style={[
+                    s.mapEquipmentNode,
+                    {
+                      left: `${((gridColumn - 1) / GRID_COLUMNS) * 100}%` as never,
+                      top: `${((gridRow - 1) / GRID_ROWS) * 100}%` as never,
+                      width: `${(1 / GRID_COLUMNS) * 100}%` as never,
+                      height: `${(1 / GRID_ROWS) * 100}%` as never,
+                      borderColor: isSelected ? colors.brand : statusColor
+                    }
+                  ]}
+                  onPress={() => {
+                    setSelectedEquipmentId(item.id);
+                    setSelectedVenueMapId(null);
+                  }}
+                >
+                  <Icon size={14} color={statusColor} strokeWidth={2.2} />
+                  <FitText style={[s.mapEquipmentLabel, { color: statusColor }]} numberOfLines={1}>
+                    {item.name}
+                  </FitText>
+                </Pressable>
+              );
+            })}
           </View>
+          {equipmentLoadFailed ? (
+            <FitText style={[s.mapLegendEmpty, { color: colors.danger, marginBottom: 12 }]}>
+              Equipment placement is temporarily unavailable. Venue layout remains visible from the last loaded source.
+            </FitText>
+          ) : null}
           <FitSection heading="Legend" cardStyle={s.legendCard}>
             {venueZones.length === 0 ? (
               <FitText style={s.mapLegendEmpty}>
@@ -430,13 +587,20 @@ export default function FacilitiesScreen() {
             </View>
           </View>
           <FitText style={s.mapTip}>
-            Tap any venue zone to view details for {activeFloorConfig.label.toLowerCase()}. The blueprint layer is only an orientation aid, so live venue cards always stay in front.
+            Tap a venue zone or mapped equipment node to view its live status and details. The blueprint layer is only an orientation aid, so persisted records always stay in front.
           </FitText>
         </Animated.ScrollView>
         <DetailsModal
             isVisible={activeVenue !== null}
             venue={activeVenue}
             onClose={() => setSelectedVenueMapId(null)}
+            onReserve={!isFrozen ? handleReserveVenue : undefined}
+        />
+        <EquipmentDetailsModal
+            equipment={selectedEquipmentNode?.item ?? null}
+            isVisible={selectedEquipmentNode !== null}
+            onClose={() => setSelectedEquipmentId(null)}
+            venueName={selectedEquipmentNode?.venue.name}
         />
       </Animated.View>
   );

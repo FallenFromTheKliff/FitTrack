@@ -151,6 +151,7 @@ function GymOperationsPageBody() {
     canManageGymOperations,
     canViewVenueBookings,
     coachAppointments,
+    coachBookingFeedback,
     coachDetailsOpen,
     coachFilterId,
     coachOptions,
@@ -247,6 +248,7 @@ function GymOperationsPageBody() {
     recurringTrainingPlanOptions,
     repeatableRecurringPlan,
     recurringRemainingCount,
+    refetchVenues,
     refreshGymOperationsData,
     replaceAvailabilityMutation,
     requestApproveAppointmentPayment,
@@ -306,6 +308,8 @@ function GymOperationsPageBody() {
     updateRecurringSessionMutation,
     venueBookingDateLabel,
     venueBookingSummary,
+    venuesLoadFailed,
+    venuesLoading,
     venueEndCalendarOpen,
     venueFilterId,
     venueFilterOptions,
@@ -528,6 +532,30 @@ function GymOperationsPageBody() {
             )}
           </div>
         </div>
+        {coachBookingFeedback ? (
+          <div
+            aria-live="polite"
+            data-ui="coach-booking-feedback"
+            role="status"
+            style={{
+              alignItems: "center",
+              backgroundColor: `${colors.success}12`,
+              border: `1px solid ${colors.success}30`,
+              borderRadius: 8,
+              display: "flex",
+              gap: 8,
+              marginBottom: 14,
+              padding: "9px 12px",
+            }}
+          >
+            <CircleCheck aria-hidden size={16} color={colors.success} />
+            <FitText
+              style={{ color: colors.success, fontSize: 13, fontWeight: 600 }}
+            >
+              {coachBookingFeedback}
+            </FitText>
+          </div>
+        ) : null}
         <div
           data-ui="gym-operations-content"
           style={{ minHeight: 180, position: "relative" }}
@@ -1875,9 +1903,14 @@ function GymOperationsPageBody() {
           isSubmitting={createVenueBookingMutation.isPending}
           onClose={() => setCreateVenueBookingOpen(false)}
           onCreate={(payload) => void handleCreateVenueBooking(payload)}
+          onRetryVenues={() => {
+            void refetchVenues();
+          }}
           memberOptions={memberOptions}
           coachOptions={coachOptions}
           venueOptions={bookableVenueOptions}
+          venuesLoadFailed={venuesLoadFailed}
+          venuesLoading={venuesLoading}
         />
         <GymOperationsCreateCoachBookingModal
           isOpen={canManageGymOperations && createCoachBookingOpen}

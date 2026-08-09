@@ -1,4 +1,7 @@
+import type { EquipmentStatus } from "./base";
+
 export type VenueEntityId = string | number;
+export type VenueImageFit = "cover" | "contain";
 
 export type VenueRecord = {
   id: VenueEntityId;
@@ -19,7 +22,13 @@ export type VenueRecord = {
   isSystem?: boolean;
   displayOrder?: number | null;
   isActive?: boolean;
+  isMapped?: boolean;
   imageUrl?: string | null;
+  imageFit?: VenueImageFit;
+  imageFocalX?: number;
+  imageFocalY?: number;
+  imageCropZoom?: number;
+  status?: EquipmentStatus | null;
 };
 
 export const VENUE_ICON_KEYS = [
@@ -286,6 +295,7 @@ export function buildFacilityFloorVenues(venues: VenueRecord[]): Record<Facility
   };
 
   [...venues]
+    .filter((venue) => venue.isMapped !== false)
     .sort(sortVenues)
     .map((venue) => toFloorVenueRecord(venue))
     .forEach((venue) => {

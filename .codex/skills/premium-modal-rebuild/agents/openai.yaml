@@ -1,7 +1,0 @@
-interface:
-  display_name: "FitTrack Premium Modal Rebuild"
-  short_description: "Contained scaffold-first rebuild packets for major FitTrack modals, drawers, and inspectors"
-  default_prompt: "Use $premium-modal-rebuild when a high-visibility FitTrack modal, drawer, or inspector needs the same scaffold-first premium treatment as a full page, including strict overlay ownership, visual-DNA synthesis, design-language handoff, master-workspace governance, divergent concepting, a pre-code art-direction gate, and downstream motion and runtime-review handoffs."
-
-policy:
-  allow_implicit_invocation: false

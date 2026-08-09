@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   buildFacilityFloorVenues,
   type FacilityFloorId,
@@ -18,8 +19,25 @@ function FacilitiesOperationsPage() {
   return <FacilitiesMapPageView controller={controller} />;
 }
 
+function FacilitiesMobilePreviewPage() {
+  const controller = useFacilitiesPageController();
+
+  return (
+    <MemberOnlyScreen>
+      <MemberFacilitiesMap
+        activeFloor={controller.activeFloor}
+        floorImageUrl={controller.activeFloorImageUrl}
+        isLoading={controller.venuesLoading}
+        onFloorChange={controller.setActiveFloor}
+        venues={controller.activeFloorVenues}
+      />
+    </MemberOnlyScreen>
+  );
+}
+
 export default function FacilitiesMapPage() {
   const { user } = useAuth();
+  const searchParams = useSearchParams();
   const memberAccess = useMemberOnlyAccess("Facilities");
   const [activeFloor, setActiveFloor] = useState<FacilityFloorId>("floor-1");
   const { floorPlanMediaQuery, venuesQuery } = useMemberOnlyFacilitiesData(user?.role === "USER" ? memberAccess.user?.id : undefined);
@@ -42,6 +60,9 @@ export default function FacilitiesMapPage() {
   }
 
   if (user?.role === "ADMIN") {
+    if (searchParams.get("preview") === "mobile") {
+      return <FacilitiesMobilePreviewPage />;
+    }
     return <FacilitiesOperationsPage />;
   }
 

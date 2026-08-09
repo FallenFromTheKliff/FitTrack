@@ -1,45 +1,24 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { ChangeEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  KeyboardSensor,
-  MouseSensor,
-  TouchSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-  type DragStartEvent,
-} from "@dnd-kit/core";
 import type { VenueBookingRecord } from "@fittrack/api-client";
-import { useDebounce, useLoadingText, useTimedMessage } from "@fittrack/hooks";
+import { useDebounce, useTimedMessage } from "@fittrack/hooks";
 import { adminBookingsQueryOptions } from "@fittrack/query";
+import {
+  isEquipmentInsideVenue,
+  resolveEquipmentGridPlacement,
+} from "@fittrack/types";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { useFadeIn } from "@/hooks/animations/useFadeIn";
 import { useSectionTransition } from "@/hooks/animations/useSectionTransition";
 import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
-import { FitText } from "@/components/fit/FitText";
 import { facilitiesMapStyles } from "@/styles/pageStyles";
 import { webApiClient } from "@/lib/api-client";
 import { getBrowserViewportState } from "@/utils/browserViewport";
-import { sleep } from "@/utils/sleep";
 import { FEEDBACK_DURATION_MS } from "@/constants/feedback";
-import type { ScheduleResource } from "@/data/facilities/resources";
-import {
-  buildVenueInitialValues,
-  createScheduleResourceId,
-  getDefaultResourceDraft,
-} from "@/app/(auth)/facilities/helpers";
-import {
-  EquipmentPanel,
-  FloorPlanPanel,
-  LayoutEditorPanel,
-  LayoutStatusPanel,
-  QuickRegionPanel,
-  QuickRegionSummaryCard,
-} from "@/components/map";
+import { buildVenueInitialValues } from "@/app/(auth)/facilities/helpers";
 import type { VenueRecord } from "@/components/map";
 import {
   useVenueMutations,
@@ -49,7 +28,6 @@ import {
 import {
   FACILITY_FLOOR_MAP,
   buildFacilityFloorVenues,
-  type FacilityFloorId,
   type FloorVenueRecord,
 } from "@/data/facilities/floorPlans";
 import { COLS, ROWS } from "@/data/facilities/mapTypes";
@@ -85,6 +63,16 @@ const QUICK_FLOOR_REGION_TEMPLATES: QuickFloorRegionTemplate[] = [
     gridHeight: 2,
     capacity: 6,
   },
+  {
+    key: "walkway",
+    name: "Path / Walkway",
+    description:
+      "Built-in circulation path for keeping equipment access clear without consuming inventory.",
+    iconKey: "gym-area",
+    gridWidth: 2,
+    gridHeight: 1,
+    capacity: 1,
+  },
 ];
 
 function clamp(value: number, min: number, max: number) {
@@ -96,9 +84,7 @@ export function useFacilitiesPageController() {
   const fs = facilitiesMapStyles(colors);
   const fadeIn = useFadeIn();
   const themeTransition = useThemeTransition();
-  const [activeTab, setActiveTab] = useState<"equipment" | "floor" | "venues">(
-    "floor",
-  );
+  const [activeTab, setActiveTab] = useState<"floor" | "venues">("floor");
   const { message, showMessage } = useTimedMessage(
     FEEDBACK_DURATION_MS.standard,
   );
@@ -112,11 +98,14 @@ export function useFacilitiesPageController() {
   const [quickPlacementTemplateKey, setQuickPlacementTemplateKey] = useState<
     string | null
   >(null);
-  const equipmentPanelRef = useRef<HTMLDivElement | null>(null);
 
   const {
     venues,
+    venuesError,
+    refetchVenues,
     archivedVenues,
+    archivedVenuesError,
+    refetchArchivedVenues,
     venuesLoading,
     archivedVenuesLoading,
     isVenueSubmitting,
@@ -132,6 +121,7 @@ export function useFacilitiesPageController() {
     handleCreateQuickFloorRegion,
     handleCreateQuickFloorRegionAt,
     handleUpdateVenueLayout,
+    toggleVenueMaintenance,
   } = useVenueMutations();
 
   const {
@@ -139,44 +129,40 @@ export function useFacilitiesPageController() {
     setActiveFloor,
     isEditMode,
     hasUnsavedChanges,
-    showUnsavedConfirm,
-    setShowUnsavedConfirm,
-    clearFloorConfirmOpen,
-    setClearFloorConfirmOpen,
-    layoutName,
-    setLayoutName,
-    layoutType,
-    setLayoutType,
-    deleteTarget,
-    setDeleteTarget,
     assignedEquipment,
     activeFloorImageUrl,
+    activeFloorBounds,
     archivedEquipment,
+    archivedEquipmentError,
+    refetchArchivedEquipment,
     archivedEquipmentLoading,
     availableEquipment,
+    inventoryEquipment,
     equipmentRemainingById,
     equipmentById,
-    assignedCount,
     deleteEquipmentMutation,
     restoreEquipmentMutation,
+    equipmentPlacementPending,
     message: layoutMessage,
-    handleSaveLayout,
     handleToggleEditMode,
-    handleSaveAndExit,
-    handleConfirmCellDelete,
-    handleRequestClearFloor,
-    handleClearFloor,
+    handleRemoveEquipmentFromCanvas,
     handleRestoreEquipment,
     handleUploadFloorPlanImage,
+    handleResizeFloorBounds,
+    handleUpdateInventoryEquipmentFromFacilities,
     updateFloorPlanMediaMutation,
+    updateInventoryEquipmentMutation,
     assignEquipmentToVenue,
+    liveEquipment,
+    updateEquipmentPlacement,
+    toggleEquipmentMaintenance,
   } = useFloorLayout();
 
   const [venueEditorMode, setVenueEditorMode] = useState<
     "create" | "edit" | null
   >(null);
   const [venueEditorReturnTab, setVenueEditorReturnTab] = useState<
-    "equipment" | "floor" | "venues"
+    "floor" | "venues"
   >("venues");
   const [venueEditTarget, setVenueEditTarget] = useState<VenueRecord | null>(
     null,
@@ -191,41 +177,6 @@ export function useFacilitiesPageController() {
     "all" | "venues" | "equipment"
   >("all");
 
-  const [resourceModalOpen, setResourceModalOpen] = useState(false);
-  const [resourceLoading, setResourceLoading] = useState(false);
-  const resourceLoadingLabel = useLoadingText(
-    "ADDING RESOURCE",
-    resourceLoading,
-  );
-  const [resourceDraft, setResourceDraft] = useState(getDefaultResourceDraft);
-  const [scheduleResources, setScheduleResources] = useState<
-    ScheduleResource[]
-  >([]);
-
-  const handleAddResource = async () => {
-    const trimmedName = resourceDraft.name.trim();
-    const resourceType = resourceDraft.type;
-    if (!trimmedName || !resourceType) {
-      showMessage("Resource name and type are required.");
-      return;
-    }
-    setResourceLoading(true);
-    await sleep(FEEDBACK_DURATION_MS.standard);
-    setScheduleResources((prev) => [
-      ...prev,
-      {
-        id: createScheduleResourceId(resourceType, trimmedName),
-        name: trimmedName,
-        type: resourceType,
-        icon: resourceDraft.icon,
-      },
-    ]);
-    setResourceLoading(false);
-    setResourceModalOpen(false);
-    setResourceDraft(getDefaultResourceDraft());
-    showMessage(`${trimmedName} added as a resource.`);
-  };
-
   const { data: activeBookings = [] } = useQuery({
     ...adminBookingsQueryOptions<VenueBookingRecord>(webApiClient),
     select: (bookings) =>
@@ -238,7 +189,6 @@ export function useFacilitiesPageController() {
   });
   const debouncedViewportMode = useDebounce(rawViewportMode, 120);
   const isCompact = debouncedViewportMode.isHamburgerMode;
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   useEffect(() => {
     const evaluate = () => {
@@ -259,59 +209,6 @@ export function useFacilitiesPageController() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!isCompact && isDrawerOpen) {
-      setIsDrawerOpen(false);
-    }
-  }, [isCompact, isDrawerOpen]);
-
-  const sensors = useSensors(
-    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor, {
-      activationConstraint: { delay: 120, tolerance: 8 },
-    }),
-    useSensor(KeyboardSensor),
-  );
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    if (!isEditMode) {
-      return;
-    }
-    const equipmentId = event.active.data.current?.equipmentId as
-      | string
-      | undefined;
-    const dropTargetId = event.over?.id as string | undefined;
-    if (!equipmentId || !dropTargetId || !dropTargetId.startsWith("venue-")) {
-      return;
-    }
-    setQuickPlacementTemplateKey(null);
-    setSelectedEquipmentId(equipmentId);
-    void assignEquipmentToVenue(
-      equipmentId,
-      dropTargetId.replace("venue-", ""),
-    );
-  };
-
-  const handleDragStart = (event: DragStartEvent) => {
-    const equipmentId = event.active.data.current?.equipmentId as
-      | string
-      | undefined;
-    if (equipmentId) {
-      setQuickPlacementTemplateKey(null);
-      setSelectedEquipmentId(equipmentId);
-    }
-    if (!isCompact) {
-      return;
-    }
-    const activeId = String(event.active.id ?? "");
-    const sourceCellId = event.active.data.current?.sourceCellId as
-      | string
-      | undefined;
-    if (activeId.startsWith("equip-") && !sourceCellId) {
-      setIsDrawerOpen(false);
-    }
-  };
-
   const handleDeleteVenueRequest = (venue: VenueRecord) => {
     const hasActive = activeBookings.some(
       (booking) => booking.venueId === venue.id,
@@ -320,26 +217,10 @@ export function useFacilitiesPageController() {
     setVenueDeleteTarget(venue);
   };
 
-  const handleToggleFloorEditMode = () => {
-    if (isEditMode) {
-      setSelectedEquipmentId(null);
-      setQuickPlacementTemplateKey(null);
-    }
-    handleToggleEditMode();
-  };
-
-  const deleteTargetEquipment = deleteTarget
-    ? equipmentById[deleteTarget.equipmentId]
-    : null;
-  const drawerButtonWidth = 44;
   const floorVenues = useMemo(() => buildFacilityFloorVenues(venues), [venues]);
   const activeFloorConfig = FACILITY_FLOOR_MAP[activeFloor];
   const activeFloorLabel = activeFloorConfig.label;
   const activeFloorVenues = floorVenues[activeFloor];
-  const authoredRegionCount = activeFloorVenues.filter(
-    (venue) => venue.isReservable === false && !venue.isSystem,
-  ).length;
-
   const quickPlacementTemplate = useMemo(
     () =>
       QUICK_FLOOR_REGION_TEMPLATES.find(
@@ -351,19 +232,19 @@ export function useFacilitiesPageController() {
   const selectedEquipmentName =
     availableEquipment.find((item) => item.id === selectedEquipmentId)?.name ??
     null;
-  const handleMoveVenueFromCanvas = (
+  const handleMoveVenueFromCanvas = async (
     venueMapId: string,
     placement: { gridColumn: number; gridRow: number },
   ) => {
     if (!isEditMode) {
-      return;
+      return false;
     }
 
     const movingVenue = activeFloorVenues.find(
       (candidate) => candidate.mapId === venueMapId,
     );
     if (!movingVenue) {
-      return;
+      return false;
     }
 
     const liveVenueId = movingVenue.sourceVenueId ?? movingVenue.id;
@@ -371,42 +252,86 @@ export function useFacilitiesPageController() {
       (candidate) => String(candidate.id) === String(liveVenueId),
     );
     if (!liveVenue || liveVenue.isSystem) {
-      return;
+      return false;
     }
 
-    setSelectedFloorVenue(movingVenue);
-    void handleUpdateVenueLayout(liveVenue, {
+    const liveVenueKey = String(movingVenue.sourceVenueId ?? movingVenue.id);
+    const hasContainedEquipment = liveEquipment.some(
+      (item) =>
+        item.venueId === liveVenueKey ||
+        isEquipmentInsideVenue(item, movingVenue),
+    );
+    if (hasContainedEquipment) {
+      showVenueMessage(
+        "Move equipment out of this venue before moving the venue itself.",
+      );
+      return false;
+    }
+
+    const moved = await handleUpdateVenueLayout(liveVenue, {
       floorId: activeFloor,
       gridColumn: placement.gridColumn,
       gridRow: placement.gridRow,
     });
+    if (!moved) return false;
+
+    setSelectedFloorVenue({
+      ...movingVenue,
+      gridColumn: placement.gridColumn,
+      gridRow: placement.gridRow,
+    });
+    return true;
   };
 
   const handleAssignEquipmentFromCanvas = (
     equipmentId: string,
     venueMapId: string,
+    preferredCell?: { gridColumn: number; gridRow: number },
   ) => {
     setQuickPlacementTemplateKey(null);
     setSelectedEquipmentId(equipmentId);
-    void assignEquipmentToVenue(equipmentId, venueMapId);
+    void assignEquipmentToVenue(equipmentId, venueMapId, preferredCell);
+  };
+
+  const handleMoveEquipmentFromCanvas = (
+    equipmentId: string,
+    venueMapId: string,
+    placement: { gridColumn: number; gridRow: number },
+  ) => {
+    if (!isEditMode) {
+      return;
+    }
+
+    void updateEquipmentPlacement(equipmentId, venueMapId, placement);
   };
 
   const handleCreateQuickFloorRegionAtFromCanvas = (
     template: QuickFloorRegionTemplate,
     placement: { gridColumn: number; gridRow: number },
   ) => {
-    void handleCreateQuickFloorRegionAt(template, activeFloor, placement);
+    void handleCreateQuickFloorRegionAt(template, activeFloor, placement).then(
+      (created) => {
+        if (created) setQuickPlacementTemplateKey(null);
+      },
+    );
   };
 
-  const handleNudgeRegionByMapId = (
+  const handleResizeRegionByMapId = async (
     venueMapId: string,
-    delta: { column: number; row: number },
+    resize:
+      | { width: number; height: number }
+      | {
+          gridColumn: number;
+          gridHeight: number;
+          gridRow: number;
+          gridWidth: number;
+        },
   ) => {
     const targetVenue = activeFloorVenues.find(
       (candidate) => candidate.mapId === venueMapId,
     );
     if (!targetVenue) {
-      return;
+      return false;
     }
 
     const liveVenueId = targetVenue.sourceVenueId ?? targetVenue.id;
@@ -414,7 +339,7 @@ export function useFacilitiesPageController() {
       (candidate) => String(candidate.id) === String(liveVenueId),
     );
     if (!liveVenue || liveVenue.isSystem) {
-      return;
+      return false;
     }
 
     const currentGridWidth = Math.max(
@@ -429,67 +354,55 @@ export function useFacilitiesPageController() {
       targetVenue.gridColumn ?? liveVenue.gridColumn ?? 1;
     const currentGridRow = targetVenue.gridRow ?? liveVenue.gridRow ?? 1;
 
+    const isAbsoluteLayout = "gridWidth" in resize;
+    const nextGridWidth = clamp(
+      isAbsoluteLayout ? resize.gridWidth : currentGridWidth + resize.width,
+      2,
+      COLS,
+    );
+    const nextGridHeight = clamp(
+      isAbsoluteLayout ? resize.gridHeight : currentGridHeight + resize.height,
+      2,
+      ROWS,
+    );
     const nextGridColumn = clamp(
-      currentGridColumn + delta.column,
-      1,
-      COLS - currentGridWidth + 1,
-    );
-    const nextGridRow = clamp(
-      currentGridRow + delta.row,
-      1,
-      ROWS - currentGridHeight + 1,
-    );
-
-    setSelectedFloorVenue(targetVenue);
-    void handleUpdateVenueLayout(liveVenue, {
-      floorId: activeFloor,
-      gridColumn: nextGridColumn,
-      gridRow: nextGridRow,
-    });
-  };
-
-  const handleResizeRegionByMapId = (
-    venueMapId: string,
-    delta: { width: number; height: number },
-  ) => {
-    const targetVenue = activeFloorVenues.find(
-      (candidate) => candidate.mapId === venueMapId,
-    );
-    if (!targetVenue) {
-      return;
-    }
-
-    const liveVenueId = targetVenue.sourceVenueId ?? targetVenue.id;
-    const liveVenue = venues.find(
-      (candidate) => String(candidate.id) === String(liveVenueId),
-    );
-    if (!liveVenue || liveVenue.isSystem) {
-      return;
-    }
-
-    const currentGridWidth = Math.max(
-      1,
-      targetVenue.gridWidth ?? liveVenue.gridWidth ?? 2,
-    );
-    const currentGridHeight = Math.max(
-      1,
-      targetVenue.gridHeight ?? liveVenue.gridHeight ?? 2,
-    );
-    const currentGridColumn =
-      targetVenue.gridColumn ?? liveVenue.gridColumn ?? 1;
-    const currentGridRow = targetVenue.gridRow ?? liveVenue.gridRow ?? 1;
-
-    const nextGridWidth = clamp(currentGridWidth + delta.width, 1, COLS);
-    const nextGridHeight = clamp(currentGridHeight + delta.height, 1, ROWS);
-    const nextGridColumn = clamp(
-      currentGridColumn,
+      isAbsoluteLayout ? resize.gridColumn : currentGridColumn,
       1,
       COLS - nextGridWidth + 1,
     );
-    const nextGridRow = clamp(currentGridRow, 1, ROWS - nextGridHeight + 1);
+    const nextGridRow = clamp(
+      isAbsoluteLayout ? resize.gridRow : currentGridRow,
+      1,
+      ROWS - nextGridHeight + 1,
+    );
 
-    setSelectedFloorVenue(targetVenue);
-    void handleUpdateVenueLayout(liveVenue, {
+    const nextVenueBounds: FloorVenueRecord = {
+      ...targetVenue,
+      gridColumn: nextGridColumn,
+      gridHeight: nextGridHeight,
+      gridRow: nextGridRow,
+      gridWidth: nextGridWidth,
+    };
+    const liveVenueKey = String(targetVenue.sourceVenueId ?? targetVenue.id);
+    const equipmentOutsideNextBounds = liveEquipment.some((item) => {
+      const belongsToVenue =
+        item.venueId === liveVenueKey || isEquipmentInsideVenue(item, targetVenue);
+      if (!belongsToVenue) return false;
+      const placement = resolveEquipmentGridPlacement(item);
+      return !isEquipmentInsideVenue(
+        { ...item, gridColumn: placement.gridColumn, gridRow: placement.gridRow },
+        nextVenueBounds,
+      );
+    });
+    if (equipmentOutsideNextBounds) {
+      showVenueMessage(
+        "Move mapped equipment inside the proposed venue bounds before shrinking it.",
+      );
+      return false;
+    }
+
+    setSelectedFloorVenue(nextVenueBounds);
+    return handleUpdateVenueLayout(liveVenue, {
       floorId: activeFloor,
       gridColumn: nextGridColumn,
       gridRow: nextGridRow,
@@ -514,70 +427,46 @@ export function useFacilitiesPageController() {
     );
   };
 
-  const handleSubmitVenueFromCanvas = async (
-    venueMapId: string,
-    data: Record<string, string>,
-  ) => {
+  const handleRemoveVenueFromCanvas = async (venueMapId: string) => {
     const liveVenue = resolveLiveVenueByMapId(venueMapId);
     if (!liveVenue) {
-      showVenueMessage("Unable to resolve this venue for editing.");
+      showVenueMessage("This venue is no longer available on the map.");
+      return false;
+    }
+    if (liveVenue.isSystem) {
+      showVenueMessage("Core floor-plan regions cannot be removed.");
       return false;
     }
 
-    return handleVenueSubmit(data, liveVenue, () => {
-      const updatedFloorVenue = activeFloorVenues.find(
-        (candidate) => candidate.mapId === venueMapId,
-      );
-      if (updatedFloorVenue) {
-        setSelectedFloorVenue(updatedFloorVenue);
-      }
-    });
-  };
-
-  const handleRequestVenueDeleteFromCanvas = (venueMapId: string) => {
-    const liveVenue = resolveLiveVenueByMapId(venueMapId);
-    if (!liveVenue) {
-      showVenueMessage("Unable to resolve this venue for deletion.");
-      return;
+    const removed = await handleUpdateVenueLayout(
+      liveVenue,
+      { isMapped: false },
+      { silent: true },
+    );
+    if (!removed) {
+      showVenueMessage("Unable to remove this venue from the map.");
+      return false;
     }
-    handleDeleteVenueRequest(liveVenue);
-  };
 
-  const equipmentPanelNode = (
-    <div ref={equipmentPanelRef}>
-      <EquipmentPanel
-        equipment={availableEquipment}
-        equipmentRemainingById={equipmentRemainingById}
-        colors={colors}
-        isEditMode={isEditMode}
-        panelPadding={isCompact ? 12 : 14}
-        equipmentCardPadding={isCompact ? "8px 9px" : "10px 10px"}
-        selectedEquipmentId={selectedEquipmentId}
-        onSelectEquipment={(equipmentId) => {
-          setQuickPlacementTemplateKey(null);
-          setSelectedEquipmentId(equipmentId);
-        }}
-      />
-    </div>
-  );
+    setSelectedFloorVenue(null);
+    showVenueMessage(
+      liveVenue.name + " removed from the map. Its venue record remains available.",
+    );
+    return true;
+  };
 
   const handleOpenEquipmentPanel = () => {
     setQuickPlacementTemplateKey(null);
-    if (isCompact) {
-      setIsDrawerOpen(true);
-      return;
-    }
-
-    equipmentPanelRef.current?.scrollIntoView({
-      behavior: "smooth",
-      block: "center",
-    });
   };
 
   const handleOpenEquipmentManager = () => {
-    setActiveTab("equipment");
+    setActiveTab("floor");
     setVenueEditorMode(null);
     setVenueEditTarget(null);
+    if (!isEditMode) {
+      handleToggleEditMode();
+    }
+    window.setTimeout(handleOpenEquipmentPanel, 0);
   };
 
   const handlePlaceEquipmentFromManager = (equipmentId: string) => {
@@ -594,175 +483,32 @@ export function useFacilitiesPageController() {
     window.setTimeout(handleOpenEquipmentPanel, 0);
   };
 
-  const layoutStatusNode = (
-    <LayoutStatusPanel
-      colors={colors}
-      panelPadding={isCompact ? 12 : 14}
-      assignedCount={assignedCount}
-      activeFloor={activeFloor}
-    />
-  );
+  const handleToggleQuickPlacementTemplate = (
+    template: QuickFloorRegionTemplate,
+  ) => {
+    if (!isEditMode) return;
+    setSelectedEquipmentId(null);
+    setSelectedFloorVenue(null);
+    setQuickPlacementTemplateKey((current) =>
+      current === template.key ? null : template.key,
+    );
+  };
 
-  const floorPlanNode = (
-    <FloorPlanPanel
-      colors={colors}
-      floor={activeFloorConfig}
-      isCompact={isCompact}
-      isEditMode={isEditMode}
-      assignedEquipment={assignedEquipment}
-      equipmentById={equipmentById}
-      venues={activeFloorVenues}
-      floorPlanPadding={isCompact ? 10 : 14}
-      floorPlanMinHeight={isCompact ? 360 : 500}
-      floorImageUrl={activeFloorImageUrl}
-      selectedVenueMapId={selectedFloorVenue?.mapId}
-      onRequestDelete={(venueMapId, equipmentId) =>
-        setDeleteTarget({ venueMapId, equipmentId })
-      }
-      selectedEquipmentId={selectedEquipmentId}
-      selectedEquipmentName={selectedEquipmentName}
-      onAssignEquipmentToVenue={(equipmentId, venueMapId, preferredCell) => {
-        setQuickPlacementTemplateKey(null);
-        setSelectedEquipmentId(equipmentId);
-        void assignEquipmentToVenue(equipmentId, venueMapId, preferredCell);
-      }}
-      quickRegionTemplate={quickPlacementTemplate}
-      onPlaceQuickRegionAtCell={(template, placement) => {
-        void handleCreateQuickFloorRegionAt(template, activeFloor, placement);
-      }}
-      onMoveVenue={handleMoveVenueFromCanvas}
-      onNudgeVenue={handleNudgeRegionByMapId}
-      onResizeVenue={handleResizeRegionByMapId}
-      isVenueSubmitting={isVenueSubmitting}
-      isUploadingFloorImage={updateFloorPlanMediaMutation.isPending}
-      onSubmitVenueEdit={handleSubmitVenueFromCanvas}
-      onRequestVenueDelete={handleRequestVenueDeleteFromCanvas}
-      onOpenEquipment={handleOpenEquipmentManager}
-      onSelectVenue={setSelectedFloorVenue}
-      onOpenVenues={() => {
-        setActiveTab("venues");
-      }}
-      onUploadFloorImage={handleUploadFloorPlanImage}
-    />
-  );
+  const handleAddQuickRegion = (template: QuickFloorRegionTemplate) => {
+    if (!isEditMode) return;
+    setQuickPlacementTemplateKey(null);
+    void handleCreateQuickFloorRegion(template, activeFloor);
+  };
 
-  const quickRegionNode = (
-    <QuickRegionPanel
-      colors={colors}
-      isCompact={isCompact}
-      isEditMode={isEditMode}
-      activeFloor={activeFloor}
-      authoredRegionCount={authoredRegionCount}
-      quickRegionTemplates={QUICK_FLOOR_REGION_TEMPLATES}
-      quickPlacementTemplateKey={quickPlacementTemplateKey}
-      selectedRegionName={selectedFloorVenue?.name ?? null}
-      onCreateQuickRegion={(template) => {
-        void handleCreateQuickFloorRegion(template, activeFloor);
-      }}
-      onToggleQuickPlacementTemplate={(template) => {
-        if (!isEditMode) {
-          return;
-        }
-        setSelectedEquipmentId(null);
-        setQuickPlacementTemplateKey((current) =>
-          current === template.key ? null : template.key,
-        );
-      }}
-      onOpenVenueManager={() => {
-        setActiveTab("venues");
-      }}
-    />
-  );
-
-  const quickRegionSidebarNode = (
-    <QuickRegionPanel
-      colors={colors}
-      isCompact
-      isEditMode={isEditMode}
-      activeFloor={activeFloor}
-      authoredRegionCount={authoredRegionCount}
-      quickRegionTemplates={QUICK_FLOOR_REGION_TEMPLATES}
-      quickPlacementTemplateKey={quickPlacementTemplateKey}
-      selectedRegionName={selectedFloorVenue?.name ?? null}
-      showSummaryCard={false}
-      onCreateQuickRegion={(template) => {
-        void handleCreateQuickFloorRegion(template, activeFloor);
-      }}
-      onToggleQuickPlacementTemplate={(template) => {
-        if (!isEditMode) {
-          return;
-        }
-        setSelectedEquipmentId(null);
-        setQuickPlacementTemplateKey((current) =>
-          current === template.key ? null : template.key,
-        );
-      }}
-      onOpenVenueManager={() => {
-        setActiveTab("venues");
-      }}
-    />
-  );
-
-  const quickRegionSummaryNode = (
-    <QuickRegionSummaryCard
-      colors={colors}
-      authoredRegionCount={authoredRegionCount}
-      selectedRegionName={selectedFloorVenue?.name ?? null}
-      onOpenVenueManager={() => {
-        setActiveTab("venues");
-      }}
-      footerNode={
-        quickPlacementTemplateKey ? (
-          <FitText style={{ fontSize: 12, color: colors.brand }}>
-            Canvas placement is active. Click a floor tile to place the selected
-            template.
-          </FitText>
-        ) : null
-      }
-    />
-  );
-
-  const editorNode = (
-    <LayoutEditorPanel
-      colors={colors}
-      isCompact={isCompact}
-      isEditMode={isEditMode}
-      hasUnsavedChanges={hasUnsavedChanges}
-      layoutName={layoutName}
-      layoutType={layoutType}
-      activeFloor={activeFloor}
-      onToggleEditMode={handleToggleFloorEditMode}
-      onLayoutNameChange={(value) => setLayoutName(value)}
-      onLayoutTypeChange={(e: ChangeEvent<HTMLSelectElement>) => {
-        if (!isEditMode) {
-          return;
-        }
-        setLayoutType(e.target.value);
-      }}
-      onFloorChange={(e: ChangeEvent<HTMLSelectElement>) => {
-        if (!isEditMode) {
-          return;
-        }
-        setActiveFloor(e.target.value as FacilityFloorId);
-        setSelectedFloorVenue(null);
-      }}
-      onSave={() => handleSaveLayout(() => showVenueMessage("Layout saved."))}
-      onClearFloor={handleRequestClearFloor}
-      onOpenArchive={() => setArchiveModalOpen(true)}
-      quickRegionNode={!isCompact ? quickRegionSidebarNode : undefined}
-      quickRegionSummaryNode={!isCompact ? quickRegionSummaryNode : undefined}
-      layoutStatusNode={!isCompact ? layoutStatusNode : undefined}
-      equipmentPanelNode={!isCompact ? equipmentPanelNode : undefined}
-    />
-  );
+  const handleClearCanvasPlacement = () => {
+    setSelectedEquipmentId(null);
+    setQuickPlacementTemplateKey(null);
+  };
 
   const venueInitialValues = buildVenueInitialValues(venueEditTarget);
   const combinedMessage = message || layoutMessage || venueMessage;
   const isVenueEditorOpen = activeTab === "venues" && venueEditorMode !== null;
   const handleCloseVenueEditor = () => {
-    if (isVenueSubmitting) {
-      return;
-    }
     setVenueEditorMode(null);
     setVenueEditTarget(null);
     setActiveTab(venueEditorReturnTab);
@@ -790,101 +536,95 @@ export function useFacilitiesPageController() {
     activeFloor,
     activeFloorConfig,
     activeFloorImageUrl,
+    activeFloorBounds,
     activeFloorLabel,
     activeFloorVenues,
     archivedEquipment,
+    archivedEquipmentError,
+    refetchArchivedEquipment,
     archivedEquipmentLoading,
     archivedVenues,
+    archivedVenuesError,
+    refetchArchivedVenues,
     archivedVenuesLoading,
     archiveFilter,
     archiveModalOpen,
     combinedMessage,
     colors,
-    assignedCount,
     assignedEquipment,
-    clearFloorConfirmOpen,
     deleteHasReservations,
     deleteEquipmentMutation,
-    deleteTarget,
-    deleteTargetEquipment,
     deleteVenueMutation,
-    drawerButtonWidth,
-    editorNode,
     equipmentById,
     equipmentRemainingById,
-    equipmentPanelNode,
     availableEquipment,
+    inventoryEquipment,
     fadeIn,
-    floorPlanNode,
     fs,
-    handleAddResource,
     handleCloseVenueEditor,
-    handleConfirmCellDelete,
-    handleClearFloor,
+    handleRemoveEquipmentFromCanvas,
+    handleRemoveVenueFromCanvas,
+    handleResizeRegionByMapId,
+    handleResizeFloorBounds,
+    handleUpdateInventoryEquipmentFromFacilities,
     handleDeleteVenue,
     handleDeleteVenueRequest,
-    handleDragEnd,
-    handleDragStart,
     handleAssignEquipmentFromCanvas,
     handleCreateQuickFloorRegionAtFromCanvas,
+    handleAddQuickRegion,
+    handleClearCanvasPlacement,
+    handleToggleQuickPlacementTemplate,
     handleOpenEquipmentManager,
+    handleOpenEquipmentPanel,
     handleOpenMap,
     handleOpenVenueEditor,
     handlePlaceEquipmentFromManager,
     handleMoveVenueFromCanvas,
+    handleMoveEquipmentFromCanvas,
+    toggleEquipmentMaintenance,
+    toggleVenueMaintenance,
     handleRestoreEquipment,
     handleRestoreVenue,
-    handleSaveAndExit,
     handleVenueSubmit,
     handleUploadFloorPlanImage,
     handleUploadVenueImage,
     handleToggleEditMode,
     hasUnsavedChanges,
     isCompact,
-    isDrawerOpen,
     isEditMode,
     isVenueEditorOpen,
     isVenueSubmitting,
-    layoutName,
-    layoutStatusNode,
-    layoutType,
+    liveEquipment,
     quickPlacementTemplate,
-    quickRegionNode,
-    resourceDraft,
-    resourceLoading,
-    resourceLoadingLabel,
-    resourceModalOpen,
-    scheduleResources,
+    quickPlacementTemplateKey,
+    quickRegionTemplates: QUICK_FLOOR_REGION_TEMPLATES,
     selectedEquipmentId,
     selectedEquipmentName,
     selectedFloorVenue,
-    sensors,
     setActiveTab,
     setActiveFloor,
     setArchiveFilter,
     setArchiveModalOpen,
-    setClearFloorConfirmOpen,
     setDeleteHasReservations,
-    setDeleteTarget,
-    setIsDrawerOpen,
-    setResourceDraft,
-    setResourceModalOpen,
     setSelectedEquipmentId,
     setSelectedFloorVenue,
-    setShowUnsavedConfirm,
     showMessage,
-    showUnsavedConfirm,
     showVenueMessage,
     themeTransition,
     restoreEquipmentMutation,
     restoreVenueMutation,
+    equipmentPlacementPending,
     updateFloorPlanMediaMutation,
+    updateInventoryEquipmentMutation,
     venueDeleteTarget,
     venueEditTarget,
     venueEditorReturnTab,
     venueInitialValues,
     venueSavingLabel,
     venues,
+    venuesError,
+    refetchVenues,
+    activeBookings,
     venuesLoading,
     viewSlideStyle,
     setVenueDeleteTarget,

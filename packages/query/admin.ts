@@ -22,7 +22,7 @@ import type {
   UpdateMembershipCardPayload,
   UpgradeToCoachPayload,
 } from "@fittrack/api-client";
-import type { MemberDirectoryFilters } from "@fittrack/types";
+import type { CreateUserInput, MemberDirectoryFilters } from "@fittrack/types";
 import {
   invalidateAdminBookingsQuery,
   invalidateAdminDeletionRequestsQuery,
@@ -34,14 +34,7 @@ import {
 } from "./cache";
 import { queryKeys } from "./query-keys";
 
-type CreateUserPayload = {
-  email: string;
-  password: string;
-  firstName: string;
-  lastName: string;
-  role: "admin" | "staff" | "member" | "coach";
-  phone_no?: string;
-};
+type CreateUserPayload = CreateUserInput;
 
 type BookingListFilters = {
   endDate?: string;

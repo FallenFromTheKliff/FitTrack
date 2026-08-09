@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { Modal, Pressable, View } from "react-native";
+import { Linking, Modal, Pressable, ScrollView, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import {
   CalendarDays,
@@ -23,7 +23,9 @@ import {
   WEEKDAY_NAMES,
   isPaymongoCheckoutEnabled,
 } from "@fittrack/app-config";
-import type {
+import {
+  resolveAmenityId,
+  type BookingCheckoutResponse,
   CoachAvailabilityResponse,
   VenueBookingRecord,
   VenueAvailabilityRecord,
@@ -76,6 +78,27 @@ const MEMBER_OVERLAP_STATUSES = new Set([
   "confirmed",
   "pending",
 ]);
+const MAX_COACH_AUTOCOMPLETE_RESULTS = 12;
+
+function isDeterministicVenueId(value: string | number) {
+  return resolveAmenityId(value)?.split("-")[2]?.startsWith("5") ?? false;
+}
+
+function shouldPreferVenue(
+  current: VenueRecord,
+  candidate: VenueRecord,
+) {
+  const currentIsDeterministic = isDeterministicVenueId(current.id);
+  const candidateIsDeterministic = isDeterministicVenueId(candidate.id);
+  if (candidateIsDeterministic !== currentIsDeterministic) {
+    return candidateIsDeterministic;
+  }
+
+  const currentOrder = current.displayOrder ?? Number.MAX_SAFE_INTEGER;
+  const candidateOrder = candidate.displayOrder ?? Number.MAX_SAFE_INTEGER;
+  if (candidateOrder !== currentOrder) return candidateOrder < currentOrder;
+  return String(candidate.id).localeCompare(String(current.id)) < 0;
+}
 
 function timeToMinutes(value: string) {
   const match = value.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
@@ -371,6 +394,7 @@ export default function ReservationModal({
     useState<BookingPaymentOption>(defaultPaymentOption);
   const [selectedCoachId, setSelectedCoachId] = useState<string | null>(null);
   const [isCoachPickerOpen, setIsCoachPickerOpen] = useState(false);
+  const [coachSearch, setCoachSearch] = useState("");
   const [selectedVenue, setSelectedVenue] = useState<VenueRecord | null>(null);
   const [isCalOpen, setIsCalOpen] = useState(false);
   const [calendarCursor, setCalendarCursor] = useState(() => {
@@ -390,8 +414,13 @@ export default function ReservationModal({
   const [apiError, setApiError] = useState("");
   const reservingText = useLoadingText("Reserving", isSubmitting);
 
-  const { data: venues = [] } = useQuery({
-    ...venuesQueryOptions(mobileApiClient),
+  const {
+    data: venues = [],
+    error: venuesError,
+    isLoading: venuesLoading,
+    refetch: refetchVenues,
+  } = useQuery({
+    ...venuesQueryOptions(mobileApiClient, user?.id),
     enabled: isVisible,
   });
   const {
@@ -404,17 +433,58 @@ export default function ReservationModal({
   });
 
   const bookableVenues = useMemo(
-    () =>
-      venues
-        .filter((venue) => venue.isReservable !== false)
-        .map((venue) => ({ venue, presentation: getVenuePresentation(venue) })),
+    () => {
+      const canonicalVenues = new Map<string, VenueRecord>();
+
+      venues.forEach((venue) => {
+        const amenityId = resolveAmenityId(venue.id);
+        if (
+          !amenityId ||
+          venue.isActive === false ||
+          venue.isReservable === false
+        ) {
+          return;
+        }
+
+        const candidate = { ...venue, id: amenityId };
+        const key = venue.name.trim().toLowerCase();
+        const current = canonicalVenues.get(key);
+        if (!current || shouldPreferVenue(current, candidate)) {
+          canonicalVenues.set(key, candidate);
+        }
+      });
+
+      return Array.from(canonicalVenues.values())
+        .sort(
+          (left, right) =>
+            (left.displayOrder ?? Number.MAX_SAFE_INTEGER) -
+              (right.displayOrder ?? Number.MAX_SAFE_INTEGER) ||
+            left.name.localeCompare(right.name),
+        )
+        .map((venue) => ({
+          venue,
+          presentation: getVenuePresentation(venue),
+        }));
+    },
     [venues],
   );
-  const selectedVenuePresentation = useMemo(
-    () => (selectedVenue ? getVenuePresentation(selectedVenue) : null),
-    [selectedVenue],
+  const selectedBookableVenue = useMemo(
+    () =>
+      selectedVenue
+        ? (bookableVenues.find(
+            ({ venue }) => String(venue.id) === String(selectedVenue.id),
+          )?.venue ?? null)
+        : null,
+    [bookableVenues, selectedVenue],
   );
-  const selectedVenueId = selectedVenue?.id;
+  const selectedVenuePresentation = useMemo(
+    () =>
+      selectedBookableVenue
+        ? getVenuePresentation(selectedBookableVenue)
+        : null,
+    [selectedBookableVenue],
+  );
+  const selectedVenueId = selectedBookableVenue?.id;
   const selectedCoach = useMemo(
     () => coaches.find((coach) => String(coach.id) === selectedCoachId) ?? null,
     [coaches, selectedCoachId],
@@ -425,6 +495,24 @@ export default function ReservationModal({
         coachCoversReservationWindow(coach, date, startTime, endTime),
       ),
     [coaches, date, endTime, startTime],
+  );
+  const filteredCoachAddOns = useMemo(() => {
+    const query = coachSearch.trim().toLowerCase();
+    if (!query) return availableCoachAddOns;
+
+    return availableCoachAddOns.filter((coach) =>
+      [
+        getCoachName(coach),
+        coach.contactEmail,
+        ...(coach.specialties ?? []),
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query)),
+    );
+  }, [availableCoachAddOns, coachSearch]);
+  const visibleCoachAddOns = filteredCoachAddOns.slice(
+    0,
+    MAX_COACH_AUTOCOMPLETE_RESULTS,
   );
   const fallbackCoachAvailabilityDates = useMemo(
     () => getUpcomingAvailableDates(coaches),
@@ -481,10 +569,11 @@ export default function ReservationModal({
     };
   }, [venueCalendarQueries, venueCalendarQueryDates]);
   const calendarHighlightedDates =
-    selectedVenue != null
+    selectedBookableVenue != null
       ? highlightedVenueDates
       : fallbackCoachAvailabilityDates;
-  const calendarBlockedDates = selectedVenue != null ? blockedVenueDates : [];
+  const calendarBlockedDates =
+    selectedBookableVenue != null ? blockedVenueDates : [];
   const handleCalendarMonthChange = useCallback(
     (view: { month: number; year: number }) => {
       setCalendarCursor((current) =>
@@ -541,6 +630,23 @@ export default function ReservationModal({
   const footerBorderStyle = useAnimatedStyle(() => ({
     borderTopColor: ic.value.border,
   }));
+
+  useEffect(() => {
+    if (
+      !selectedVenue ||
+      selectedBookableVenue ||
+      venuesLoading ||
+      venuesError
+    ) {
+      return;
+    }
+
+    setSelectedVenue(null);
+    setStartTime("");
+    setEndTime("");
+    setSelectedCoachId(null);
+    setApiError("Selected venue is no longer available. Choose another venue.");
+  }, [selectedBookableVenue, selectedVenue, venuesError, venuesLoading]);
 
   useEffect(() => {
     if (
@@ -671,13 +777,13 @@ export default function ReservationModal({
     (slot) => slot.status === "available",
   );
   const canOpenStartTime =
-    Boolean(selectedVenue) &&
+    Boolean(selectedBookableVenue) &&
     !availabilityLoading &&
     !availabilityError &&
     startSlots.length > 0;
   const canOpenEndTime = Boolean(startTime) && endSlots.length > 0;
   const timeAvailabilityMessage = useMemo(() => {
-    if (!selectedVenue) {
+    if (!selectedBookableVenue) {
       return "Select a venue to load live time availability.";
     }
     if (availabilityLoading) {
@@ -703,7 +809,7 @@ export default function ReservationModal({
     availabilityLoading,
     endSlots.length,
     hasOpenStartSlot,
-    selectedVenue,
+    selectedBookableVenue,
     startSlots.length,
     startTime,
   ]);
@@ -715,7 +821,8 @@ export default function ReservationModal({
   }, [isSelectedStartInPast]);
 
   const hasConflict = useMemo(() => {
-    if (!selectedVenue || !date || !startTime || !endTime) return false;
+    if (!selectedBookableVenue || !date || !startTime || !endTime)
+      return false;
     const selStart = timeToMinutes(startTime);
     const selEnd = timeToMinutes(endTime);
     return availability.some((booking) => {
@@ -729,7 +836,7 @@ export default function ReservationModal({
         bookingEnd.getHours() * 60 + bookingEnd.getMinutes();
       return selStart < bookingEndMinutes && selEnd > bookingStartMinutes;
     });
-  }, [availability, date, endTime, selectedVenue, startTime]);
+  }, [availability, date, endTime, selectedBookableVenue, startTime]);
 
   const hasMemberTimeOverlap = useMemo(() => {
     if (!date || !startTime || !endTime) return false;
@@ -796,7 +903,9 @@ export default function ReservationModal({
 
   const canConfirm =
     !!date &&
-    !!selectedVenue &&
+    !!selectedBookableVenue &&
+    !venuesLoading &&
+    !venuesError &&
     !!startTime &&
     !!endTime &&
     reservationHours > 0 &&
@@ -816,6 +925,7 @@ export default function ReservationModal({
     setPaymentOption(defaultPaymentOption);
     setSelectedCoachId(null);
     setIsCoachPickerOpen(false);
+    setCoachSearch("");
     setSelectedVenue(null);
     setTimeTarget("start");
     setIsCalOpen(false);
@@ -843,7 +953,7 @@ export default function ReservationModal({
   };
 
   const submitReservation = async () => {
-    if (!canConfirm || !selectedVenue) return;
+    if (!canConfirm || !selectedBookableVenue) return;
     setApiError("");
     if (
       !isFreeReservation &&
@@ -864,37 +974,63 @@ export default function ReservationModal({
       return;
     }
     try {
-      const result = await createBookingMutation.mutateAsync({
+      const result: BookingCheckoutResponse =
+        await createBookingMutation.mutateAsync({
         payload: {
           coachId: selectedCoach ? String(selectedCoach.id) : undefined,
           paymentStage,
           provider: paymentProvider,
-          venueId: selectedVenue.id,
+          venueId: selectedBookableVenue.id,
           startTime: isoStart,
           durationHours: reservationHours,
           purpose,
         },
-        venueId: selectedVenue.id,
+        venueId: selectedBookableVenue.id,
         date,
       });
-      const successTitle = result?.checkout_url
-        ? "Checkout ready"
-        : isFreeReservation
-          ? "Reservation confirmed"
-          : "Reservation confirmed";
-      const successMessage = result?.checkout_url
-        ? `Complete the PayMongo checkout for ${selectedVenuePresentation?.name ?? "your venue"} on ${formatBookingDate(date)} at ${startTime} - ${endTime}. The booking is not confirmed until full payment succeeds.`
-        : isFreeReservation
-          ? `${selectedVenuePresentation?.name ?? "Your venue"} is now reserved for ${formatBookingDate(date)} at ${startTime} - ${endTime}.`
-          : `Your reservation for ${selectedVenuePresentation?.name ?? "your venue"} is confirmed after full payment.`;
-
-      handleReset();
       onSuccess?.();
+
+      if (!isFreeReservation) {
+        const checkoutUrl = result.checkoutUrl?.trim();
+        if (!checkoutUrl) {
+          handleReset();
+          setSuccessNotice({
+            title: "Checkout unavailable",
+            message:
+              "Your reservation is awaiting payment, but PayMongo did not return a checkout link. It has not been marked paid.",
+          });
+          return;
+        }
+
+        try {
+          await Linking.openURL(checkoutUrl);
+        } catch {
+          handleReset();
+          setSuccessNotice({
+            title: "Checkout could not open",
+            message:
+              "Your reservation is awaiting payment. Reopen it from Bookings to continue checkout; it has not been marked paid.",
+          });
+          return;
+        }
+
+        handleReset();
+        setSuccessNotice({
+          title: "PayMongo checkout opened",
+          message:
+            "Complete the full payment in PayMongo. Your reservation stays unconfirmed until FitTrack receives successful payment confirmation.",
+        });
+        return;
+      }
+
+      const successMessage = `${selectedVenuePresentation?.name ?? "Your venue"} is now reserved for ${formatBookingDate(date)} at ${startTime} - ${endTime}.`;
+      handleReset();
       setSuccessNotice({
-        title: successTitle,
+        title: "Reservation confirmed",
         message: successMessage,
       });
     } catch (err: unknown) {
+      setReservationConfirmation(null);
       setApiError(
         err instanceof Error
           ? err.message
@@ -904,7 +1040,7 @@ export default function ReservationModal({
   };
 
   const handleConfirm = () => {
-    if (!canConfirm || !selectedVenue) return;
+    if (!canConfirm || !selectedBookableVenue) return;
 
     const venueName = selectedVenuePresentation?.name ?? "your venue";
     const scheduleLabel = `${formatBookingDate(date)} at ${startTime} - ${endTime}`;
@@ -1074,7 +1210,9 @@ export default function ReservationModal({
               {timeAvailabilityMessage !== "" ? (
                 <FitText
                   style={
-                    selectedVenue && !availabilityLoading && !availabilityError
+                    selectedBookableVenue &&
+                    !availabilityLoading &&
+                    !availabilityError
                       ? s.unavailableText
                       : s.validationHint
                   }
@@ -1103,66 +1241,98 @@ export default function ReservationModal({
               <FitText style={[s.sectionLabel, { marginTop: 16 }]}>
                 VENUE
               </FitText>
-              <View style={s.amenityGrid}>
-                {bookableVenues.map(({ venue, presentation }) => {
-                  const isActive = selectedVenue?.id === venue.id;
-                  return (
-                    <Pressable
-                      key={venue.id}
-                      accessibilityRole="button"
-                      accessibilityLabel={`${presentation.name}, PHP ${presentation.price}/${presentation.unit}${isActive ? ", selected" : ""}`}
-                      accessibilityState={{ selected: isActive }}
-                      style={[
-                        s.amenityCard,
-                        isActive && {
-                          borderColor: colors.brand,
-                          backgroundColor: colors.brand + "12",
-                        },
-                      ]}
-                      onPress={() => {
-                        setSelectedVenue(isActive ? null : venue);
-                        setStartTime("");
-                        setEndTime("");
-                        setSelectedCoachId(null);
-                        setIsCoachPickerOpen(false);
-                      }}
-                    >
-                      <FitText style={s.amenityEmoji}>
-                        {presentation.name.slice(0, 1)}
-                      </FitText>
-                      <FitText
+              {venuesLoading ? (
+                <FitText style={s.validationHint}>
+                  Loading available venues...
+                </FitText>
+              ) : venuesError ? (
+                <View style={{ gap: 8 }}>
+                  <FitText style={s.unavailableText}>
+                    Unable to load available venues.
+                  </FitText>
+                  <FitButton
+                    variant="ghost"
+                    label="Retry venues"
+                    onPress={() => {
+                      void refetchVenues();
+                    }}
+                    style={{ alignSelf: "flex-start", paddingHorizontal: 12 }}
+                  />
+                </View>
+              ) : bookableVenues.length === 0 ? (
+                <FitText style={s.validationHint}>
+                  No reservable venues are available.
+                </FitText>
+              ) : null}
+              {bookableVenues.length > 0 ? (
+                <ScrollView
+                  style={s.amenityScroll}
+                  contentContainerStyle={s.amenityGrid}
+                  nestedScrollEnabled
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                >
+                  {bookableVenues.map(({ venue, presentation }) => {
+                    const isActive = selectedBookableVenue?.id === venue.id;
+                    return (
+                      <Pressable
+                        key={venue.id}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${presentation.name}, PHP ${presentation.price}/${presentation.unit}${isActive ? ", selected" : ""}`}
+                        accessibilityState={{ selected: isActive }}
                         style={[
-                          s.amenityName,
+                          s.amenityCard,
                           isActive && {
-                            color: colors.brand,
-                            fontWeight: "600",
+                            borderColor: colors.brand,
+                            backgroundColor: colors.brand + "12",
                           },
                         ]}
-                        numberOfLines={2}
+                        onPress={() => {
+                          setSelectedVenue(isActive ? null : venue);
+                          setStartTime("");
+                          setEndTime("");
+                          setSelectedCoachId(null);
+                          setCoachSearch("");
+                          setIsCoachPickerOpen(false);
+                        }}
                       >
-                        {presentation.name}
-                      </FitText>
-                      <FitText
-                        style={[
-                          s.amenityPrice,
-                          isActive && { color: colors.brand },
-                        ]}
-                      >
-                        PHP {presentation.price}/{presentation.unit}
-                      </FitText>
-                      {isActive ? (
-                        <View style={s.amenityCheck}>
-                          <CheckCircle
-                            size={14}
-                            color={colors.brand}
-                            strokeWidth={2}
-                          />
-                        </View>
-                      ) : null}
-                    </Pressable>
-                  );
-                })}
-              </View>
+                        <FitText style={s.amenityEmoji}>
+                          {presentation.name.slice(0, 1)}
+                        </FitText>
+                        <FitText
+                          style={[
+                            s.amenityName,
+                            isActive && {
+                              color: colors.brand,
+                              fontWeight: "600",
+                            },
+                          ]}
+                          numberOfLines={2}
+                        >
+                          {presentation.name}
+                        </FitText>
+                        <FitText
+                          style={[
+                            s.amenityPrice,
+                            isActive && { color: colors.brand },
+                          ]}
+                        >
+                          PHP {presentation.price}/{presentation.unit}
+                        </FitText>
+                        {isActive ? (
+                          <View style={s.amenityCheck}>
+                            <CheckCircle
+                              size={14}
+                              color={colors.brand}
+                              strokeWidth={2}
+                            />
+                          </View>
+                        ) : null}
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              ) : null}
               <View style={s.notesSectionHeader}>
                 <FitText
                   style={[s.sectionLabel, { marginTop: 16, marginBottom: 0 }]}
@@ -1207,7 +1377,10 @@ export default function ReservationModal({
                           : colors.fieldBorder,
                       },
                     ]}
-                    onPress={() => setIsCoachPickerOpen((current) => !current)}
+                    onPress={() => {
+                      setCoachSearch("");
+                      setIsCoachPickerOpen((current) => !current);
+                    }}
                   >
                     <Users
                       size={16}
@@ -1236,25 +1409,60 @@ export default function ReservationModal({
                     />
                   </Pressable>
                   {isCoachPickerOpen ? (
-                    <View style={s.trainerList}>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Remove coach add-on"
-                        style={[
-                          s.trainerRow,
-                          !selectedCoach && {
-                            borderColor: colors.brand,
-                            backgroundColor: colors.brand + "12",
-                          },
-                        ]}
-                        onPress={() => {
-                          setSelectedCoachId(null);
-                          setIsCoachPickerOpen(false);
-                        }}
+                    <View style={s.coachPicker}>
+                      <View style={s.coachSearchField}>
+                        <FitTextInput
+                          nativeID="reservation-coach-search"
+                          accessibilityLabel="Search coach add-ons"
+                          value={coachSearch}
+                          onChangeText={setCoachSearch}
+                          placeholder="Search coaches"
+                          autoCapitalize="none"
+                          autoCorrect={false}
+                          returnKeyType="search"
+                          style={s.coachSearchInput}
+                        />
+                        {coachSearch ? (
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel="Clear coach search"
+                            hitSlop={8}
+                            onPress={() => setCoachSearch("")}
+                          >
+                            <XCircle
+                              size={17}
+                              color={colors.textMuted}
+                              strokeWidth={2}
+                            />
+                          </Pressable>
+                        ) : null}
+                      </View>
+                      <ScrollView
+                        style={s.trainerScroll}
+                        contentContainerStyle={s.trainerList}
+                        nestedScrollEnabled
+                        keyboardShouldPersistTaps="handled"
+                        showsVerticalScrollIndicator={false}
                       >
-                        <FitText style={s.trainerName}>No coach add-on</FitText>
-                      </Pressable>
-                      {availableCoachAddOns.map((coach) => {
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel="Remove coach add-on"
+                          style={[
+                            s.trainerRow,
+                            !selectedCoach && {
+                              borderColor: colors.brand,
+                              backgroundColor: colors.brand + "12",
+                            },
+                          ]}
+                          onPress={() => {
+                            setSelectedCoachId(null);
+                            setCoachSearch("");
+                            setIsCoachPickerOpen(false);
+                          }}
+                        >
+                          <FitText style={s.trainerName}>No coach add-on</FitText>
+                        </Pressable>
+                        {visibleCoachAddOns.map((coach) => {
                         const isActive = selectedCoach?.id === coach.id;
                         return (
                           <Pressable
@@ -1274,6 +1482,7 @@ export default function ReservationModal({
                               setSelectedCoachId(
                                 isActive ? null : String(coach.id),
                               );
+                              setCoachSearch("");
                               setIsCoachPickerOpen(false);
                             }}
                           >
@@ -1318,6 +1527,17 @@ export default function ReservationModal({
                           </Pressable>
                         );
                       })}
+                        {filteredCoachAddOns.length === 0 ? (
+                          <FitText style={s.validationHint}>
+                            No coaches match this search.
+                          </FitText>
+                        ) : filteredCoachAddOns.length >
+                          visibleCoachAddOns.length ? (
+                          <FitText style={s.validationHint}>
+                            Refine the search to see more coaches.
+                          </FitText>
+                        ) : null}
+                      </ScrollView>
                     </View>
                   ) : null}
                 </>

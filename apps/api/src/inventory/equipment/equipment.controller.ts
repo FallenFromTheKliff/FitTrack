@@ -35,6 +35,7 @@ import {
   EquipmentWriteOffResponseDTO,
   UpdateEquipmentItemDTO,
 } from './dto/equipment.dto';
+import { EquipmentStatusTransitionDTO } from './dto/equipment-status-transition.dto';
 import { EquipmentService } from './equipment.service';
 
 function apiEnvelopeSchema(ref: string) {
@@ -190,6 +191,29 @@ export class EquipmentController {
     @Body() dto: EquipmentWriteOffDTO,
   ) {
     return this.equipmentService.writeOffEquipment(user.sub, id, dto);
+  }
+
+  @Post('equipment/:id/status-transition')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.admin, UserRole.staff)
+  @ApiBearerAuth('access-token')
+  @ApiBody({ type: EquipmentStatusTransitionDTO })
+  @ApiOperation({
+    summary: 'Move a selected equipment quantity between status buckets.',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Equipment status quantity moved.',
+    schema: apiEnvelopeSchema(getSchemaPath(EquipmentItemResponseDTO)),
+  })
+  @ApiResponse({ status: 404, description: 'Equipment item not found.' })
+  @ApiResponse({ status: 409, description: 'Equipment quantity changed.' })
+  @ApiResponse({ status: 422, description: 'Invalid status transition.' })
+  transitionEquipmentStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: EquipmentStatusTransitionDTO,
+  ) {
+    return this.equipmentService.transitionEquipmentStatus(id, dto);
   }
 
   @Post('equipment/:id/archive')

@@ -1,13 +1,19 @@
 import {
+  IsBoolean,
+  IsEnum,
   IsIn,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
   MaxLength,
+  Min,
   IsNotEmpty,
+  ValidateNested,
 } from 'class-validator';
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { CoachScheduleType } from '@prisma/client';
 import {
   IsAllowedEmail,
   IsOtpCode,
@@ -205,6 +211,84 @@ export class ChangePasswordDTO {
   new_password: string;
 }
 
+export class AdminCreateCoachProfileDTO {
+  @ApiPropertyOptional({ example: 'Coach Maria Santos' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'display_name must be a string' })
+  @MaxLength(160, {
+    message: 'display_name must not exceed 160 characters',
+  })
+  display_name?: string;
+
+  @ApiPropertyOptional({ example: 'coach.maria@fittrack.com' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'contact_email must be a string' })
+  @MaxLength(255, {
+    message: 'contact_email must not exceed 255 characters',
+  })
+  contact_email?: string;
+
+  @ApiPropertyOptional({ example: '+639171234567' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'contact_phone must be a string' })
+  @MaxLength(40, {
+    message: 'contact_phone must not exceed 40 characters',
+  })
+  contact_phone?: string;
+
+  @ApiPropertyOptional({ example: 'Strength, Mobility' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'specialization must be a string' })
+  @MaxLength(255, {
+    message: 'specialization must not exceed 255 characters',
+  })
+  specialization?: string;
+
+  @ApiPropertyOptional({ example: 'NASM-certified strength coach.' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'bio must be a string' })
+  @MaxLength(2000, { message: 'bio must not exceed 2000 characters' })
+  bio?: string;
+
+  @ApiPropertyOptional({ example: 'NASM-CPT, CPR' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'certification must be a string' })
+  @MaxLength(255, {
+    message: 'certification must not exceed 255 characters',
+  })
+  certification?: string;
+
+  @ApiPropertyOptional({ example: 1200 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({}, { message: 'hourly_rate must be a number' })
+  @Min(0, { message: 'hourly_rate must be at least 0' })
+  hourly_rate?: number;
+
+  @ApiPropertyOptional({
+    enum: CoachScheduleType,
+    example: CoachScheduleType.part_time,
+  })
+  @IsOptional()
+  @IsEnum(CoachScheduleType, {
+    message: `schedule_type must be one of: ${Object.values(CoachScheduleType).join(', ')}`,
+  })
+  schedule_type?: CoachScheduleType;
+
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @IsBoolean({
+    message: 'is_available_for_booking must be a boolean value',
+  })
+  is_available_for_booking?: boolean;
+}
+
 export class AdminCreateUserDTO {
   @ApiProperty({
     example: 'coach@fittrack.com',
@@ -245,6 +329,12 @@ export class AdminCreateUserDTO {
   @IsOptional()
   @IsPhilippineMobileNumber('phone')
   phone?: string;
+
+  @ApiPropertyOptional({ type: AdminCreateCoachProfileDTO })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => AdminCreateCoachProfileDTO)
+  coach_profile?: AdminCreateCoachProfileDTO;
 }
 
 export class ResendOtpDTO {

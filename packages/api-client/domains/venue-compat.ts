@@ -1,4 +1,10 @@
-import { FACILITY_LAYOUT_DEFAULTS, inferFacilityFloorId, type VenueRecord } from "@fittrack/types";
+import {
+  FACILITY_LAYOUT_DEFAULTS,
+  inferFacilityFloorId,
+  type EquipmentStatus,
+  type VenueImageFit,
+  type VenueRecord
+} from "@fittrack/types";
 
 type VenueLikePayload = {
   capacity: number;
@@ -12,9 +18,15 @@ type VenueLikePayload = {
   hourlyRate?: number;
   iconKey: string;
   imageUrl?: string | null;
+  imageFit?: VenueImageFit;
+  imageFocalX?: number;
+  imageFocalY?: number;
+  imageCropZoom?: number;
+  isMapped?: boolean;
   isReservable: boolean;
   minimumHours: number;
   name: string;
+  status?: EquipmentStatus | null;
 };
 
 export type CompatibleVenueId = string | number;
@@ -36,8 +48,14 @@ export type AmenityApiRecord = {
   name?: string | null;
   icon_key?: string | null;
   image_url?: string | null;
+  image_fit?: VenueImageFit | null;
+  image_focal_x?: number | string | null;
+  image_focal_y?: number | string | null;
+  image_crop_zoom?: number | string | null;
+  is_mapped?: boolean;
   requires_subscription?: boolean;
   type?: string | null;
+  status?: EquipmentStatus | null;
 };
 
 type AmenityAvailabilitySlotApiRecord = {
@@ -87,6 +105,19 @@ function toInteger(value?: number | string | null) {
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
+}
+
+function toFiniteNumber(value?: number | string | null) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
 }
 
 export function inferAmenityIconKey(input: {
@@ -158,7 +189,13 @@ export function mapAmenityToVenueRecord(record: AmenityApiRecord): VenueRecord {
     isSystem: false,
     displayOrder: toInteger(record.display_order) ?? layout.displayOrder,
     isActive: record.is_active ?? true,
-    imageUrl: record.image_url ?? null
+    isMapped: record.is_mapped ?? true,
+    imageUrl: record.image_url ?? null,
+    imageFit: record.image_fit === "contain" ? "contain" : "cover",
+    imageFocalX: clampNumber(toFiniteNumber(record.image_focal_x) ?? 0.5, 0, 1),
+    imageFocalY: clampNumber(toFiniteNumber(record.image_focal_y) ?? 0.5, 0, 1),
+    imageCropZoom: clampNumber(toFiniteNumber(record.image_crop_zoom) ?? 1, 1, 4),
+    status: record.status ?? null
   };
 }
 
@@ -179,11 +216,17 @@ export function mapVenueMutationPayloadToAmenityPayload(payload: VenueLikePayloa
         : { hourly_rate: 0 }),
     icon_key: payload.iconKey,
     ...(payload.imageUrl !== undefined ? { image_url: payload.imageUrl } : {}),
+    ...(payload.imageFit !== undefined ? { image_fit: payload.imageFit } : {}),
+    ...(payload.imageFocalX !== undefined ? { image_focal_x: payload.imageFocalX } : {}),
+    ...(payload.imageFocalY !== undefined ? { image_focal_y: payload.imageFocalY } : {}),
+    ...(payload.imageCropZoom !== undefined ? { image_crop_zoom: payload.imageCropZoom } : {}),
+    ...(payload.isMapped !== undefined ? { is_mapped: payload.isMapped } : {}),
     is_reservable: payload.isReservable,
     minimum_hours: payload.minimumHours,
     name: payload.name.trim(),
     requires_subscription: false,
-    type: inferAmenityType(payload)
+    type: inferAmenityType(payload),
+    ...(payload.status !== undefined ? { status: payload.status } : {})
   };
 }
 

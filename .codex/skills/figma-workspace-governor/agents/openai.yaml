@@ -1,8 +1,0 @@
-interface:
-  display_name: "FitTrack Figma Workspace Governor"
-  short_description: "Master-file selection, page taxonomy, and scaffold organization for premium admin Figma work"
-  default_prompt: "Use $figma-workspace-governor before scaffold authoring to keep premium FitTrack admin scaffolds in one organized master Figma file, choose the correct target page, define naming and archive rules, and separate product frames from annotation boards."
-
-policy:
-  allow_implicit_invocation: false
-

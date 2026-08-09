@@ -61,13 +61,24 @@ describe('RetailProductController', () => {
     expect(retailProductService.listProducts).toHaveBeenCalledWith({});
   });
 
-  it.each(['createProduct', 'updateProduct'] as const)(
-    'locks %s to admin users',
-    (methodName) => {
-      expect(getGuardMetadata(methodName)).toEqual([JwtAuthGuard, RolesGuard]);
-      expect(getRolesMetadata(methodName)).toEqual([UserRole.admin]);
-    },
-  );
+  it('locks product creation to admin users', () => {
+    expect(getGuardMetadata('createProduct')).toEqual([
+      JwtAuthGuard,
+      RolesGuard,
+    ]);
+    expect(getRolesMetadata('createProduct')).toEqual([UserRole.admin]);
+  });
+
+  it('locks product updates and archives to admin and staff users', () => {
+    expect(getGuardMetadata('updateProduct')).toEqual([
+      JwtAuthGuard,
+      RolesGuard,
+    ]);
+    expect(getRolesMetadata('updateProduct')).toEqual([
+      UserRole.admin,
+      UserRole.staff,
+    ]);
+  });
 
   it('locks restock to admin and staff users', () => {
     expect(getGuardMetadata('restockProduct')).toEqual([
@@ -96,18 +107,18 @@ describe('RetailProductController', () => {
     });
   });
 
-  it('forwards update requests with the authenticated actor id', async () => {
+  it('forwards staff archive requests with the authenticated actor id', async () => {
     retailProductService.updateProduct.mockResolvedValue({ id: 'product-1' });
 
-    await controller.updateProduct({ sub: 'admin-1' } as never, 'product-1', {
-      name: 'Updated Whey',
+    await controller.updateProduct({ sub: 'staff-1' } as never, 'product-1', {
+      is_active: false,
     });
 
     expect(retailProductService.updateProduct).toHaveBeenCalledWith(
-      'admin-1',
+      'staff-1',
       'product-1',
       {
-        name: 'Updated Whey',
+        is_active: false,
       },
     );
   });

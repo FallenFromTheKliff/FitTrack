@@ -1,0 +1,357 @@
+- generic [active] [ref=e2]:
+  - alert [ref=e1]
+  - generic [ref=e3]:
+    - generic:
+      - generic:
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+      - generic:
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+      - generic:
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+      - generic:
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+    - complementary [ref=e5]:
+      - generic [ref=e6]:
+        - img [ref=e8]
+        - generic [ref=e14]:
+          - generic [ref=e15]: FitTrack
+          - paragraph [ref=e16]: Admin Portal
+      - link "Sera Bro Admin avatar Sera Bro Admin Manage Profile Details" [ref=e18] [cursor=pointer]:
+        - /url: /profile
+        - generic [ref=e19]:
+          - img "Sera Bro Admin avatar" [ref=e21]
+          - generic [ref=e22]:
+            - generic [ref=e23]: Sera Bro Admin
+            - generic [ref=e24]:
+              - img [ref=e25]
+              - paragraph [ref=e28]: Manage Profile Details
+      - navigation [ref=e30]:
+        - generic [ref=e31]:
+          - paragraph [ref=e32]: Main
+          - generic [ref=e33]:
+            - link "Data Analytics" [ref=e34] [cursor=pointer]:
+              - /url: /analytics
+              - img [ref=e35]
+              - generic [ref=e36]: Data Analytics
+            - link "Accounts" [ref=e37] [cursor=pointer]:
+              - /url: /accounts
+              - img [ref=e38]
+              - generic [ref=e43]: Accounts
+            - link "Gym Operations" [ref=e44] [cursor=pointer]:
+              - /url: /schedule
+              - img [ref=e45]
+              - generic [ref=e47]: Gym Operations
+              - img [ref=e48]
+            - link "Facilities" [ref=e50] [cursor=pointer]:
+              - /url: /facilities
+              - img [ref=e51]
+              - generic [ref=e53]: Facilities
+            - link "Inventory" [ref=e54] [cursor=pointer]:
+              - /url: /inventory
+              - img [ref=e55]
+              - generic [ref=e59]: Inventory
+            - link "Gym Actions" [ref=e60] [cursor=pointer]:
+              - /url: /gym-actions
+              - img [ref=e61]
+              - generic [ref=e64]: Gym Actions
+        - generic [ref=e65]:
+          - paragraph [ref=e66]: Fitness Ops
+          - generic [ref=e67]:
+            - link "Ranking Governance" [ref=e68] [cursor=pointer]:
+              - /url: /gamification
+              - img [ref=e69]
+              - generic [ref=e75]: Ranking Governance
+            - link "Milestones" [ref=e76] [cursor=pointer]:
+              - /url: /milestones
+              - img [ref=e77]
+              - generic [ref=e83]: Milestones
+            - link "Exercise Labs" [ref=e84] [cursor=pointer]:
+              - /url: /exercise-lab
+              - img [ref=e85]
+              - generic [ref=e91]: Exercise Labs
+            - link "Memberships" [ref=e92] [cursor=pointer]:
+              - /url: /memberships-promos
+              - img [ref=e93]
+              - generic [ref=e96]: Memberships
+        - generic [ref=e97]:
+          - paragraph [ref=e98]: System
+          - generic [ref=e99]:
+            - link "BrodigyAI" [ref=e100] [cursor=pointer]:
+              - /url: /ai
+              - img [ref=e101]
+              - generic [ref=e104]: BrodigyAI
+            - link "Settings" [ref=e105] [cursor=pointer]:
+              - /url: /settings
+              - img [ref=e106]
+              - generic [ref=e109]: Settings
+      - button "SIGN OUT" [ref=e111] [cursor=pointer]:
+        - img [ref=e112]
+        - generic [ref=e115]: SIGN OUT
+    - main [ref=e117]:
+      - generic [ref=e118]:
+        - generic [ref=e120]:
+          - heading "Gym Operations" [level=1] [ref=e300]
+          - paragraph [ref=e122]: Run bookings a
+        - generic [ref=e124]:
+          - button "Toggle notifications panel" [ref=e125] [cursor=pointer]:
+            - img [ref=e126]
+          - generic "55 unread notifications": "55"
+      - generic [ref=e129]:
+        - generic [ref=e130]:
+          - generic [ref=e131]:
+            - tablist "Gym Operations sections" [ref=e132]:
+              - tab "Schedule" [selected] [ref=e133] [cursor=pointer]:
+                - img [ref=e134]
+                - text: Schedule
+              - tab "Coaches" [ref=e136] [cursor=pointer]:
+                - img [ref=e137]
+                - text: Coaches
+              - tab "Appointments" [ref=e141] [cursor=pointer]:
+                - img [ref=e142]
+                - text: Appointments
+            - generic [ref=e145]:
+              - button "Refresh Gym Operations data" [ref=e146] [cursor=pointer]:
+                - img [ref=e147]
+              - button "NEW COACH BOOKING" [ref=e152] [cursor=pointer]:
+                - img [ref=e153]
+                - generic [ref=e155]: NEW COACH BOOKING
+          - generic [ref=e157]:
+            - tablist "Schedule view" [ref=e159]:
+              - generic [ref=e160]: View
+              - tab "Month Calendar" [selected] [ref=e161] [cursor=pointer]
+              - tab "Coach Schedule" [ref=e162] [cursor=pointer]
+              - tab "Venue Bookings" [ref=e163] [cursor=pointer]
+            - region "Gym Operations calendar for August 2026" [ref=e164]:
+              - generic [ref=e165]:
+                - generic [ref=e166]:
+                  - img [ref=e167]
+                  - generic [ref=e169]:
+                    - generic [ref=e170]: August 2026
+                    - generic [ref=e171]: Select a day to see every coach session and venue booking.
+                - generic [ref=e172]:
+                  - button "Previous month" [ref=e173] [cursor=pointer]:
+                    - img [ref=e174]
+                  - button "TODAY" [ref=e176] [cursor=pointer]:
+                    - generic [ref=e177]: TODAY
+                  - button "Next month" [ref=e178] [cursor=pointer]:
+                    - img [ref=e179]
+              - generic [ref=e181]:
+                - generic [ref=e182]: Sun
+                - generic [ref=e183]: Mon
+                - generic [ref=e184]: Tue
+                - generic [ref=e185]: Wed
+                - generic [ref=e186]: Thu
+                - generic [ref=e187]: Fri
+                - generic [ref=e188]: Sat
+              - generic [ref=e189]:
+                - button [disabled] [ref=e190]
+                - button [disabled] [ref=e191]
+                - button [disabled] [ref=e192]
+                - button [disabled] [ref=e193]
+                - button [disabled] [ref=e194]
+                - button [disabled] [ref=e195]
+                - button "August 1, 0 schedules" [ref=e196] [cursor=pointer]:
+                  - generic [ref=e198]: "1"
+                - button "August 2, 0 schedules" [ref=e199] [cursor=pointer]:
+                  - generic [ref=e201]: "2"
+                - button "August 3, 1 schedule" [ref=e301] [cursor=pointer]:
+                  - generic [ref=e203]:
+                    - generic [ref=e204]: "3"
+                    - generic [ref=e304]: "1"
+                - button "August 4, 1 schedule" [ref=e305] [cursor=pointer]:
+                  - generic [ref=e206]:
+                    - generic [ref=e207]: "4"
+                    - generic [ref=e308]: "1"
+                - button "August 5, 1 schedule" [ref=e309] [cursor=pointer]:
+                  - generic [ref=e209]:
+                    - generic [ref=e210]: "5"
+                    - generic [ref=e312]: "1"
+                - button "August 6, 0 schedules" [ref=e211] [cursor=pointer]:
+                  - generic [ref=e213]: "6"
+                - button "August 7, 0 schedules" [ref=e214] [cursor=pointer]:
+                  - generic [ref=e216]: "7"
+                - button "August 8, 0 schedules" [ref=e217] [cursor=pointer]:
+                  - generic [ref=e219]: "8"
+                - button "August 9, 0 schedules" [ref=e220] [cursor=pointer]:
+                  - generic [ref=e222]: "9"
+                - button "August 10, 0 schedules" [ref=e223] [cursor=pointer]:
+                  - generic [ref=e225]: "10"
+                - button "August 11, 0 schedules" [ref=e226] [cursor=pointer]:
+                  - generic [ref=e228]: "11"
+                - button "August 12, 0 schedules" [ref=e229] [cursor=pointer]:
+                  - generic [ref=e231]: "12"
+                - button "August 13, 0 schedules" [ref=e232] [cursor=pointer]:
+                  - generic [ref=e234]: "13"
+                - button "August 14, 1 schedule" [ref=e313] [cursor=pointer]:
+                  - generic [ref=e236]:
+                    - generic [ref=e237]: "14"
+                    - generic [ref=e316]: "1"
+                - button "August 15, 1 schedule" [ref=e317] [cursor=pointer]:
+                  - generic [ref=e239]:
+                    - generic [ref=e240]: "15"
+                    - generic [ref=e320]: "1"
+                - button "August 16, 1 schedule" [ref=e321] [cursor=pointer]:
+                  - generic [ref=e242]:
+                    - generic [ref=e243]: "16"
+                    - generic [ref=e324]: "1"
+                - button "August 17, 2 schedules" [ref=e325] [cursor=pointer]:
+                  - generic [ref=e245]:
+                    - generic [ref=e246]: "17"
+                    - generic [ref=e329]: "2"
+                - button "August 18, 3 schedules" [ref=e330] [cursor=pointer]:
+                  - generic [ref=e248]:
+                    - generic [ref=e249]: "18"
+                    - generic [ref=e335]: "3"
+                - button "August 19, 3 schedules" [ref=e336] [cursor=pointer]:
+                  - generic [ref=e251]:
+                    - generic [ref=e252]: "19"
+                    - generic [ref=e341]: "3"
+                - button "August 20, 2 schedules" [ref=e342] [cursor=pointer]:
+                  - generic [ref=e254]:
+                    - generic [ref=e255]: "20"
+                    - generic [ref=e346]: "2"
+                - button "August 21, 2 schedules" [ref=e347] [cursor=pointer]:
+                  - generic [ref=e257]:
+                    - generic [ref=e258]: "21"
+                    - generic [ref=e351]: "2"
+                - button "August 22, 2 schedules" [ref=e352] [cursor=pointer]:
+                  - generic [ref=e260]:
+                    - generic [ref=e261]: "22"
+                    - generic [ref=e356]: "2"
+                - button "August 23, 2 schedules" [ref=e357] [cursor=pointer]:
+                  - generic [ref=e263]:
+                    - generic [ref=e264]: "23"
+                    - generic [ref=e361]: "2"
+                - button "August 24, 2 schedules" [ref=e362] [cursor=pointer]:
+                  - generic [ref=e266]:
+                    - generic [ref=e267]: "24"
+                    - generic [ref=e366]: "2"
+                - button "August 25, 2 schedules" [ref=e367] [cursor=pointer]:
+                  - generic [ref=e269]:
+                    - generic [ref=e270]: "25"
+                    - generic [ref=e371]: "2"
+                - button "August 26, 2 schedules" [ref=e372] [cursor=pointer]:
+                  - generic [ref=e272]:
+                    - generic [ref=e273]: "26"
+                    - generic [ref=e376]: "2"
+                - button "August 27, 2 schedules" [ref=e377] [cursor=pointer]:
+                  - generic [ref=e275]:
+                    - generic [ref=e276]: "27"
+                    - generic [ref=e381]: "2"
+                - button "August 28, 2 schedules" [ref=e382] [cursor=pointer]:
+                  - generic [ref=e278]:
+                    - generic [ref=e279]: "28"
+                    - generic [ref=e386]: "2"
+                - button "August 29, 2 schedules" [ref=e387] [cursor=pointer]:
+                  - generic [ref=e281]:
+                    - generic [ref=e282]: "29"
+                    - generic [ref=e391]: "2"
+                - button "August 30, 2 schedules" [ref=e392] [cursor=pointer]:
+                  - generic [ref=e284]:
+                    - generic [ref=e285]: "30"
+                    - generic [ref=e396]: "2"
+                - button "August 31, 2 schedules" [ref=e397] [cursor=pointer]:
+                  - generic [ref=e287]:
+                    - generic [ref=e288]: "31"
+                    - generic [ref=e401]: "2"
+                - button [disabled] [ref=e289]
+                - button [disabled] [ref=e290]
+                - button [disabled] [ref=e291]
+                - button [disabled] [ref=e292]
+                - button [disabled] [ref=e293]
+              - generic [ref=e294]: Loading this month's schedules...
+        - status [ref=e295]
+        - button "Open help for Gym Operations" [ref=e296] [cursor=pointer]:
+          - img [ref=e297]

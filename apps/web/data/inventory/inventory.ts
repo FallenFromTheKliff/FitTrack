@@ -5,7 +5,8 @@ export type RetailStockStatus = "In Stock" | "Low Stock" | "Out of Stock";
 export type EquipmentAvailabilityStatus =
   | "Available"
   | "Under Maintenance"
-  | "Broken";
+  | "Broken"
+  | "Missing";
 export type InventoryAnalyticsPeriod =
   | "Daily"
   | "Weekly"
@@ -53,7 +54,8 @@ export const RETAIL_STOCK_STATUS_COLOR: Record<RetailStockStatus, string> = {
 export const EQUIPMENT_STATUS_COLOR: Record<EquipmentAvailabilityStatus, string> = {
   Available: "var(--fit-success)",
   "Under Maintenance": "var(--fit-warning)",
-  Broken: "var(--fit-danger)"
+  Broken: "var(--fit-danger)",
+  Missing: "var(--fit-danger)"
 };
 
 export const RETAIL_STOCK_FILTER_OPTIONS: Array<{
@@ -73,7 +75,8 @@ export const EQUIPMENT_STATUS_FILTER_OPTIONS: Array<{
   { label: "All Statuses", value: "All" },
   { label: "Available", value: "Available" },
   { label: "Under Maintenance", value: "Under Maintenance" },
-  { label: "Broken", value: "Broken" }
+  { label: "Broken", value: "Broken" },
+  { label: "Missing", value: "Missing" }
 ];
 
 export const EQUIPMENT_STATUS_EDIT_OPTIONS: Array<{
@@ -82,7 +85,8 @@ export const EQUIPMENT_STATUS_EDIT_OPTIONS: Array<{
 }> = [
   { label: "Available", value: "Available" },
   { label: "Under Maintenance", value: "Under Maintenance" },
-  { label: "Broken", value: "Broken" }
+  { label: "Broken", value: "Broken" },
+  { label: "Missing", value: "Missing" }
 ];
 
 export const INVENTORY_ANALYTICS_PERIOD_OPTIONS: Array<{
@@ -285,6 +289,43 @@ export const INVENTORY_EQUIPMENT_WRITEOFF_FIELDS: FieldConfig[] = [
     required: true,
     placeholder: "Explain why this equipment count changed.",
     maxLength: 400
+  }
+];
+
+export function validateInventoryEquipmentDetailForm(
+  data: Record<string, string>,
+) {
+  const errors: Record<string, string> = {};
+
+  if (!data.name?.trim()) errors.name = "Equipment Name is required";
+  if (!data.unit?.trim()) errors.unit = "Unit is required";
+  if (
+    data.status !== "Available" &&
+    data.status !== "Under Maintenance" &&
+    data.status !== "Broken" &&
+    data.status !== "Missing"
+  ) {
+    errors.status = "Choose a valid equipment status.";
+  }
+
+  return errors;
+}
+
+export const INVENTORY_EQUIPMENT_STATUS_TRANSITION_FIELDS: FieldConfig[] = [
+  {
+    name: "quantity",
+    label: "Quantity to Move",
+    type: "text",
+    required: true,
+    placeholder: "e.g., 1",
+    hint: "Move only the selected whole units from this row."
+  },
+  {
+    name: "destinationStatus",
+    label: "Move To",
+    type: "select",
+    required: true,
+    options: EQUIPMENT_STATUS_EDIT_OPTIONS
   }
 ];
 

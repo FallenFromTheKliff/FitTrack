@@ -1,7 +1,0 @@
-interface:
-  display_name: "FitTrack UI Art Direction Review"
-  short_description: "Pre-code scaffold critique for premium admin surfaces"
-  default_prompt: "Use $ui-art-direction-review after a premium FitTrack scaffold is built and before implementation starts, comparing it against the chosen concept and anti-reference surfaces and rejecting clean-but-generic, annotation-leaking, conservative, same-layout-reskin, or family-inconsistent scaffolds until the art direction is truly production-ready."
-
-policy:
-  allow_implicit_invocation: false

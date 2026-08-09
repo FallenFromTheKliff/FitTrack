@@ -1,5 +1,6 @@
 import type {
   InventoryEquipmentRecord,
+  InventoryEquipmentStatusCounts,
   InventoryProductCategory,
   InventoryProductRecord,
   InventorySaleTransactionDetailRecord,
@@ -13,6 +14,18 @@ import type {
 } from "@/data/inventory/inventory";
 
 export const MIN_ACTION_DELAY_MS = FEEDBACK_DURATION_MS.standard;
+
+const EQUIPMENT_STATUS_SEQUENCE = [
+  { key: "available", status: "Available" },
+  { key: "maintenance", status: "Under Maintenance" },
+  { key: "broken", status: "Broken" },
+  { key: "missing", status: "Missing" }
+] as const;
+
+export type EquipmentStatusRow = {
+  quantity: number;
+  status: EquipmentAvailabilityStatus;
+};
 
 export function filterRetailProducts(
   products: Array<
@@ -42,13 +55,13 @@ export function filterRetailProducts(
   });
 }
 
-export function filterEquipmentItems(
-  equipment: Array<
-    InventoryEquipmentRecord & {
-      missingCount: number;
-      status: EquipmentAvailabilityStatus;
-    }
-  >,
+export function filterEquipmentItems<
+  T extends InventoryEquipmentRecord & {
+    missingCount: number;
+    status: EquipmentAvailabilityStatus;
+  },
+>(
+  equipment: T[],
   query: string,
   statusFilter: "All" | EquipmentAvailabilityStatus
 ) {
@@ -83,6 +96,59 @@ export function getEquipmentAvailabilityStatus(
   if (quantityCurrent === 0) return "Broken";
   if (quantityCurrent < quantityTotal) return "Under Maintenance";
   return "Available";
+}
+
+function hasAnyExplicitEquipmentConditionCount(
+  statusCounts: InventoryEquipmentStatusCounts | null | undefined
+) {
+  return ["maintenance", "broken", "missing"].some((key) => {
+    const value = statusCounts?.[key as keyof InventoryEquipmentStatusCounts];
+    return typeof value === "number" && Number.isFinite(value);
+  });
+}
+
+export function getEquipmentMissingCount(equipment: InventoryEquipmentRecord) {
+  const missing = equipment.statusCounts?.missing;
+  if (typeof missing === "number" && Number.isFinite(missing)) {
+    return Math.max(missing, 0);
+  }
+
+  return Math.max(equipment.quantityTotal - equipment.quantityCurrent, 0);
+}
+
+export function getEquipmentStatusRows(
+  equipment: InventoryEquipmentRecord
+): EquipmentStatusRow[] {
+  const statusCounts = equipment.statusCounts;
+
+  if (!hasAnyExplicitEquipmentConditionCount(statusCounts)) {
+    const legacyRows = [
+      {
+        quantity: Math.max(equipment.quantityCurrent, 0),
+        status: "Available" as const
+      },
+      {
+        quantity: Math.max(equipment.quantityTotal - equipment.quantityCurrent, 0),
+        status: "Missing" as const
+      }
+    ].filter((row) => row.quantity > 0);
+
+    return legacyRows;
+  }
+
+  const rows = EQUIPMENT_STATUS_SEQUENCE.map(({ key, status }) => ({
+    quantity: Math.max(
+      Number(
+        key === "available"
+          ? statusCounts?.available ?? equipment.quantityCurrent
+          : statusCounts?.[key] ?? 0
+      ),
+      0
+    ),
+    status
+  })).filter((row) => row.quantity > 0);
+
+  return rows;
 }
 
 export function getTopProductsByInventoryValue(products: InventoryProductRecord[]) {

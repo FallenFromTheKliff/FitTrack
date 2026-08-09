@@ -1,4 +1,0 @@
-interface:
-  display_name: "Runtime Guardrails"
-  short_description: "Check FitTrack runtimes before launching"
-  default_prompt: "Use $runtime-guardrails to verify the FitTrack stack, browser MCP state, and safe runtime actions before starting servers."

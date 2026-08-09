@@ -99,6 +99,27 @@ function startOfUtcDay(value: Date) {
   );
 }
 
+function startOfUtcHour(value: Date) {
+  return new Date(
+    Date.UTC(
+      value.getUTCFullYear(),
+      value.getUTCMonth(),
+      value.getUTCDate(),
+      value.getUTCHours(),
+      0,
+      0,
+      0
+    )
+  );
+}
+
+function startOfUtcWeek(value: Date) {
+  const start = startOfUtcDay(value);
+  const daysSinceMonday = (start.getUTCDay() + 6) % 7;
+  start.setUTCDate(start.getUTCDate() - daysSinceMonday);
+  return start;
+}
+
 function endOfUtcDay(value: Date) {
   return new Date(
     Date.UTC(
@@ -403,6 +424,79 @@ function formatRevenueBucket(bucketStart: string, period: AnalyticsPeriod) {
   });
 }
 
+function getAnalyticsBucketStart(
+  value: string | Date,
+  period: AnalyticsPeriod
+) {
+  const date = value instanceof Date ? new Date(value.getTime()) : new Date(value);
+  if (!Number.isFinite(date.getTime())) return null;
+
+  switch (period) {
+    case "hourly":
+      return startOfUtcHour(date);
+    case "daily":
+      return startOfUtcDay(date);
+    case "weekly":
+      return startOfUtcWeek(date);
+    case "yearly":
+      return startOfUtcYear(date);
+    case "monthly":
+    default:
+      return startOfUtcMonth(date);
+  }
+}
+
+function advanceAnalyticsBucket(value: Date, period: AnalyticsPeriod) {
+  const next = new Date(value.getTime());
+
+  switch (period) {
+    case "hourly":
+      next.setUTCHours(next.getUTCHours() + 1);
+      break;
+    case "daily":
+      next.setUTCDate(next.getUTCDate() + 1);
+      break;
+    case "weekly":
+      next.setUTCDate(next.getUTCDate() + 7);
+      break;
+    case "yearly":
+      next.setUTCFullYear(next.getUTCFullYear() + 1);
+      break;
+    case "monthly":
+    default:
+      next.setUTCMonth(next.getUTCMonth() + 1);
+      break;
+  }
+
+  return next;
+}
+
+function getAnalyticsBucketStarts(
+  startDate: string,
+  endDate: string,
+  period: AnalyticsPeriod
+) {
+  const start = getAnalyticsBucketStart(startDate, period);
+  const end = getAnalyticsBucketStart(endDate, period);
+  if (!start || !end || start > end) return [];
+
+  const buckets: Date[] = [];
+  let cursor = start;
+
+  for (let index = 0; cursor <= end && index < 5000; index += 1) {
+    buckets.push(new Date(cursor.getTime()));
+    const next = advanceAnalyticsBucket(cursor, period);
+    if (next <= cursor) break;
+    cursor = next;
+  }
+
+  return buckets;
+}
+
+function toAnalyticsBucketKey(value: string, period: AnalyticsPeriod) {
+  return getAnalyticsBucketStart(value, period)?.toISOString() ?? null;
+}
+
 function formatAttendanceBucket(bucketStart: string, filter: AnalyticsAttendanceFilter) {
   const date = new Date(bucketStart);
 
@@ -441,25 +535,97 @@ function formatAttendanceBucket(bucketStart: string, filter: AnalyticsAttendance
 export function toRevenueChartSeries(
   revenue: AnalyticsRevenueRecord | undefined
 ): AnalyticsRevenueChartPoint[] {
-  return revenue?.series.map((point) => ({
-    bookingRevenue: point.bookingRevenue,
-    bucket: formatRevenueBucket(point.bucketStart, revenue.period),
-    coachingGymRevenue: point.coachingGymRevenue,
-    membershipRevenue: point.membershipRevenue,
-    productRevenue: point.productRevenue,
-    totalRevenue: point.totalRevenue,
-  })) ?? [];
+  if (!revenue) return [];
+
+  const pointsByBucket = new Map<
+    string,
+    AnalyticsRevenueRecord["series"][number]
+  >();
+  revenue.series.forEach((point) => {
+    const key = toAnalyticsBucketKey(point.bucketStart, revenue.period);
+    if (key) pointsByBucket.set(key, point);
+  });
+
+  const toChartPoint = (
+    bucketStart: Date,
+    point?: AnalyticsRevenueRecord["series"][number]
+  ): AnalyticsRevenueChartPoint => ({
+    bookingRevenue: point?.bookingRevenue ?? 0,
+    bucket: formatRevenueBucket(bucketStart.toISOString(), revenue.period),
+    coachingGymRevenue: point?.coachingGymRevenue ?? 0,
+    membershipRevenue: point?.membershipRevenue ?? 0,
+    productRevenue: point?.productRevenue ?? 0,
+    totalRevenue: point?.totalRevenue ?? 0,
+  });
+
+  const bucketStarts = getAnalyticsBucketStarts(
+    revenue.startDate,
+    revenue.endDate,
+    revenue.period
+  );
+  if (bucketStarts.length) {
+    return bucketStarts.map((bucketStart) =>
+      toChartPoint(
+        bucketStart,
+        pointsByBucket.get(bucketStart.toISOString())
+      )
+    );
+  }
+
+  return [...revenue.series]
+    .sort(
+      (left, right) =>
+        new Date(left.bucketStart).getTime() -
+        new Date(right.bucketStart).getTime()
+    )
+    .map((point) => toChartPoint(new Date(point.bucketStart), point));
 }
 
 export function toAttendanceChartSeries(
   attendance: AnalyticsAttendanceRecord | undefined,
   filter: AnalyticsAttendanceFilter
 ): AnalyticsAttendanceChartPoint[] {
-  return attendance?.series.map((point) => ({
-    bucketStart: point.bucketStart,
-    checkIns: point.checkIns,
-    label: formatAttendanceBucket(point.bucketStart, filter)
-  })) ?? [];
+  if (!attendance) return [];
+
+  const pointsByBucket = new Map<
+    string,
+    AnalyticsAttendanceRecord["series"][number]
+  >();
+  attendance.series.forEach((point) => {
+    const key = toAnalyticsBucketKey(point.bucketStart, filter);
+    if (key) pointsByBucket.set(key, point);
+  });
+
+  const toChartPoint = (
+    bucketStart: Date,
+    point?: AnalyticsAttendanceRecord["series"][number]
+  ): AnalyticsAttendanceChartPoint => ({
+    bucketStart: bucketStart.toISOString(),
+    checkIns: point?.checkIns ?? 0,
+    label: formatAttendanceBucket(bucketStart.toISOString(), filter)
+  });
+
+  const bucketStarts = getAnalyticsBucketStarts(
+    attendance.startDate,
+    attendance.endDate,
+    filter
+  );
+  if (bucketStarts.length) {
+    return bucketStarts.map((bucketStart) =>
+      toChartPoint(
+        bucketStart,
+        pointsByBucket.get(bucketStart.toISOString())
+      )
+    );
+  }
+
+  return [...attendance.series]
+    .sort(
+      (left, right) =>
+        new Date(left.bucketStart).getTime() -
+        new Date(right.bucketStart).getTime()
+    )
+    .map((point) => toChartPoint(new Date(point.bucketStart), point));
 }
 
 function escapeHtml(value: string) {

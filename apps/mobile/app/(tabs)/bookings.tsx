@@ -669,6 +669,8 @@ export default function BookingsScreen() {
   const [isCreatingMonthlyPlan, setIsCreatingMonthlyPlan] = useState(false);
   const [pendingCancellation, setPendingCancellation] =
     useState<PendingCancellation | null>(null);
+  const [cancellationFailure, setCancellationFailure] =
+    useState<PaymentConfirmationState | null>(null);
   const [pendingCoachAction, setPendingCoachAction] =
     useState<PendingCoachAction | null>(null);
   const [reviewTarget, setReviewTarget] = useState<DetailBooking | null>(null);
@@ -1315,6 +1317,13 @@ export default function BookingsScreen() {
         });
         setPendingCancellation(null);
         setDetailBooking(null);
+      } catch {
+        setPendingCancellation(null);
+        setCancellationFailure({
+          title: "Cancellation unavailable",
+          message:
+            "We couldn't cancel this reservation. Your booking and payment status have not changed. Please try again.",
+        });
       } finally {
         setIsCancelling(false);
       }
@@ -4108,6 +4117,13 @@ export default function BookingsScreen() {
           }
           void executeCancelReservation(pendingCancellation.booking);
         }}
+      />
+      <NoticeModal
+        isVisible={cancellationFailure != null}
+        title={cancellationFailure?.title ?? "Cancellation unavailable"}
+        message={cancellationFailure?.message ?? ""}
+        buttonLabel="Stay in Bookings"
+        onClose={() => setCancellationFailure(null)}
       />
       <ConfirmModal
         isVisible={pendingCoachAction != null}

@@ -1,4 +1,0 @@
-interface:
-  display_name: "Browser Runtime Loop"
-  short_description: "One-shot UI runtime verification loop"
-  default_prompt: "Use $browser-runtime-loop to verify a FitTrack route with Playwright MCP and Chrome DevTools, fix objective bugs, and summarize evidence."

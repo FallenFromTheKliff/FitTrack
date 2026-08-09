@@ -1,8 +1,0 @@
-interface:
-  display_name: "FitTrack Brainstorm"
-  short_description: "Practical FitTrack product ideation without premium-UI sprawl"
-  default_prompt: "Use $brainstorm to shape a vague FitTrack feature or workflow request into a practical MVP, expose the hidden holes, and recommend the strongest direction without overcomplicating scope. If the real need is premium UI consultation, hand it to $professional-ui-brainstorm."
-
-policy:
-  allow_implicit_invocation: true
-

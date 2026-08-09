@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { AmenityType } from '@prisma/client';
+import { AmenityType, EquipmentStatus } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
   IsBoolean,
@@ -23,6 +23,7 @@ import {
 import { TrimString } from '../../../common/validators';
 
 const FACILITY_FLOOR_IDS = ['floor-1', 'floor-2', 'floor-3'] as const;
+const VENUE_IMAGE_FITS = ['cover', 'contain'] as const;
 
 function ReservableAmenityHourlyRate(validationOptions?: ValidationOptions) {
   return (object: object, propertyName: string | symbol) => {
@@ -60,6 +61,13 @@ export class CreateAmenityDTO {
     message: `type must be one of: ${Object.values(AmenityType).join(', ')}`,
   })
   type: AmenityType;
+
+  @ApiPropertyOptional({ enum: EquipmentStatus, nullable: true })
+  @IsOptional()
+  @IsEnum(EquipmentStatus, {
+    message: `status must be one of: ${Object.values(EquipmentStatus).join(', ')}`,
+  })
+  status?: EquipmentStatus;
 
   @ApiPropertyOptional({
     example: 'Full-size basketball court with scoreboard access.',
@@ -116,6 +124,35 @@ export class CreateAmenityDTO {
   @IsUrl({}, { message: 'image_url must be a valid URL' })
   @MaxLength(500, { message: 'image_url must not exceed 500 characters' })
   image_url?: string;
+
+  @ApiPropertyOptional({ enum: VENUE_IMAGE_FITS, default: 'cover' })
+  @IsOptional()
+  @IsIn(VENUE_IMAGE_FITS, { message: 'image_fit must be cover or contain' })
+  image_fit?: (typeof VENUE_IMAGE_FITS)[number];
+
+  @ApiPropertyOptional({ default: 0.5, minimum: 0, maximum: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({}, { message: 'image_focal_x must be a number' })
+  @Min(0, { message: 'image_focal_x must be at least 0' })
+  @Max(1, { message: 'image_focal_x must be at most 1' })
+  image_focal_x?: number;
+
+  @ApiPropertyOptional({ default: 0.5, minimum: 0, maximum: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({}, { message: 'image_focal_y must be a number' })
+  @Min(0, { message: 'image_focal_y must be at least 0' })
+  @Max(1, { message: 'image_focal_y must be at most 1' })
+  image_focal_y?: number;
+
+  @ApiPropertyOptional({ default: 1, minimum: 1, maximum: 4 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({}, { message: 'image_crop_zoom must be a number' })
+  @Min(1, { message: 'image_crop_zoom must be at least 1' })
+  @Max(4, { message: 'image_crop_zoom must be at most 4' })
+  image_crop_zoom?: number;
 
   @ApiPropertyOptional({ example: 9, default: 1 })
   @IsOptional()
@@ -185,6 +222,13 @@ export class UpdateAmenityDTO {
   })
   type?: AmenityType;
 
+  @ApiPropertyOptional({ enum: EquipmentStatus, nullable: true })
+  @IsOptional()
+  @IsEnum(EquipmentStatus, {
+    message: `status must be one of: ${Object.values(EquipmentStatus).join(', ')}`,
+  })
+  status?: EquipmentStatus;
+
   @ApiPropertyOptional({
     example: 'Full-size basketball court with scoreboard access.',
   })
@@ -222,6 +266,11 @@ export class UpdateAmenityDTO {
   @IsBoolean({ message: 'is_active must be a boolean value' })
   is_active?: boolean;
 
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @IsBoolean({ message: 'is_mapped must be a boolean value' })
+  is_mapped?: boolean;
+
   @ApiPropertyOptional({ example: 1 })
   @IsOptional()
   @Type(() => Number)
@@ -245,6 +294,35 @@ export class UpdateAmenityDTO {
   @IsUrl({}, { message: 'image_url must be a valid URL' })
   @MaxLength(500, { message: 'image_url must not exceed 500 characters' })
   image_url?: string;
+
+  @ApiPropertyOptional({ enum: VENUE_IMAGE_FITS })
+  @IsOptional()
+  @IsIn(VENUE_IMAGE_FITS, { message: 'image_fit must be cover or contain' })
+  image_fit?: (typeof VENUE_IMAGE_FITS)[number];
+
+  @ApiPropertyOptional({ minimum: 0, maximum: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({}, { message: 'image_focal_x must be a number' })
+  @Min(0, { message: 'image_focal_x must be at least 0' })
+  @Max(1, { message: 'image_focal_x must be at most 1' })
+  image_focal_x?: number;
+
+  @ApiPropertyOptional({ minimum: 0, maximum: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({}, { message: 'image_focal_y must be a number' })
+  @Min(0, { message: 'image_focal_y must be at least 0' })
+  @Max(1, { message: 'image_focal_y must be at most 1' })
+  image_focal_y?: number;
+
+  @ApiPropertyOptional({ minimum: 1, maximum: 4 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({}, { message: 'image_crop_zoom must be a number' })
+  @Min(1, { message: 'image_crop_zoom must be at least 1' })
+  @Max(4, { message: 'image_crop_zoom must be at most 4' })
+  image_crop_zoom?: number;
 
   @ApiPropertyOptional({ example: 9 })
   @IsOptional()

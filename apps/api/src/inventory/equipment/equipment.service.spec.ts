@@ -14,6 +14,7 @@ describe('EquipmentService', () => {
     findEquipmentItemRecordByIdOrThrow: jest.fn(),
     createEquipmentItem: jest.fn(),
     updateEquipmentItem: jest.fn(),
+    transitionEquipmentStatus: jest.fn(),
     listWriteOffHistory: jest.fn(),
     writeOffEquipment: jest.fn(),
   };
@@ -125,6 +126,40 @@ describe('EquipmentService', () => {
         quantity_current: 5,
       }),
     ).rejects.toBeInstanceOf(HttpException);
+  });
+
+  it('delegates a per-status quantity transition and maps the response', async () => {
+    repo.transitionEquipmentStatus.mockResolvedValue(
+      makeEquipment({
+        quantity_maintenance: 2,
+        quantity_broken: 0,
+        quantity_missing: 0,
+        layout_nodes: [],
+      }),
+    );
+
+    await expect(
+      service.transitionEquipmentStatus('equipment-1', {
+        source_status: 'available',
+        destination_status: 'maintenance',
+        quantity: 2,
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        status_counts: {
+          available: 6,
+          maintenance: 2,
+          broken: 0,
+          missing: 0,
+        },
+      }),
+    );
+    expect(repo.transitionEquipmentStatus).toHaveBeenCalledWith(
+      'equipment-1',
+      'available',
+      'maintenance',
+      2,
+    );
   });
 
   it('creates equipment with the default unit when omitted', async () => {

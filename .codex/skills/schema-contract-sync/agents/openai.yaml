@@ -1,4 +1,0 @@
-interface:
-  display_name: "Schema Contract Sync"
-  short_description: "Fix FitTrack schema, API, client, and UI drift"
-  default_prompt: "Use $schema-contract-sync to trace a FitTrack schema/API/client/UI mismatch from canonical source through verification."

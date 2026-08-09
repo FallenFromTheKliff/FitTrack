@@ -9,7 +9,6 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import {
   EquipmentStatus,
-  type GymEquipment,
   UserStatus,
   type Prisma,
 } from '@prisma/client';
@@ -27,6 +26,8 @@ import {
 import {
   GymLayoutRepository,
   type FacilityFloorPlanMediaRow,
+  type GymLayoutEquipmentRecord,
+  type GymLayoutVenueRecord,
 } from './gym-layout.repository';
 import {
   GYM_LAYOUT_STATUS_CHANNEL,
@@ -42,6 +43,8 @@ const GYM_LAYOUT_UPDATE_FIELDS = [
   'status',
   'icon_key',
   'is_active',
+  'grid_width',
+  'grid_height',
 ] as const;
 
 const GYM_LAYOUT_GRID_COLUMNS = 14;
@@ -137,7 +140,19 @@ export class GymLayoutService {
   async createEquipment(
     dto: CreateEquipmentDTO,
   ): Promise<GymLayoutEquipmentResponseDTO> {
-    const equipment = await this.repo.createEquipment(this.toCreateInput(dto));
+    const venue = await this.repo.findActiveVenueByIdOrThrow(dto.venue_id);
+    const placement = this.resolvePlacement(dto);
+    this.assertPlacementInsideVenue(
+      dto.floor_id,
+      placement,
+      dto.grid_width ?? 1,
+      dto.grid_height ?? 1,
+      venue,
+    );
+
+    const equipment = await this.repo.createEquipment(
+      this.toCreateInput(dto, placement),
+    );
     await this.publishRealtimeDelta(equipment, 'upsert');
 
     return this.toEquipmentResponse(equipment);
@@ -184,7 +199,11 @@ export class GymLayoutService {
 
     const media = await this.repo.upsertFloorPlanMedia(
       floorId,
-      dto.image_url ?? null,
+      {
+        ...(dto.image_url !== undefined ? { imageUrl: dto.image_url } : {}),
+        ...(dto.grid_width !== undefined ? { gridWidth: dto.grid_width } : {}),
+        ...(dto.grid_height !== undefined ? { gridHeight: dto.grid_height } : {}),
+      },
     );
     return this.toFloorPlanMediaResponse(media);
   }
@@ -254,13 +273,16 @@ export class GymLayoutService {
 
   private toCreateInput(
     dto: CreateEquipmentDTO,
+    placement: ReturnType<GymLayoutService['resolvePlacement']>,
   ): Prisma.GymEquipmentCreateInput {
-    const placement = this.resolvePlacement(dto);
-
     return {
       name: dto.name,
       type: dto.type,
       floor_id: dto.floor_id,
+      inventory_item: { connect: { id: dto.inventory_item_id } },
+      venue: { connect: { id: dto.venue_id } },
+      grid_width: dto.grid_width ?? 1,
+      grid_height: dto.grid_height ?? 1,
       grid_column: placement.grid_column,
       grid_row: placement.grid_row,
       position_x: placement.position_x,
@@ -273,8 +295,14 @@ export class GymLayoutService {
   private toUpdateInput(
     dto: UpdateEquipmentDTO,
   ): Prisma.GymEquipmentUpdateInput {
+    const { inventory_item_id, venue_id } = dto;
+
     return {
       ...pickDefined(dto, GYM_LAYOUT_UPDATE_FIELDS),
+      ...(inventory_item_id
+        ? { inventory_item: { connect: { id: inventory_item_id } } }
+        : {}),
+      ...(venue_id ? { venue: { connect: { id: venue_id } } } : {}),
     };
   }
 
@@ -288,8 +316,15 @@ export class GymLayoutService {
       dto.grid_row !== undefined ||
       dto.position_x !== undefined ||
       dto.position_y !== undefined;
+    const contractRequested =
+      placementRequested ||
+      dto.venue_id !== undefined ||
+      dto.inventory_item_id !== undefined ||
+      dto.grid_width !== undefined ||
+      dto.grid_height !== undefined ||
+      dto.floor_id !== undefined;
 
-    if (!placementRequested) {
+    if (!contractRequested) {
       return basePatch;
     }
 
@@ -301,10 +336,72 @@ export class GymLayoutService {
       position_y: dto.position_y ?? Number(current.position_y),
     });
 
+    const venueId = dto.venue_id ?? current.venue_id;
+    const gridWidth = dto.grid_width ?? current.grid_width ?? 1;
+    const gridHeight = dto.grid_height ?? current.grid_height ?? 1;
+    const floorId = dto.floor_id ?? current.floor_id;
+
+    if (venueId) {
+      const venue = await this.repo.findActiveVenueByIdOrThrow(venueId);
+      this.assertPlacementInsideVenue(
+        floorId,
+        placement,
+        gridWidth,
+        gridHeight,
+        venue,
+      );
+    }
+
     return {
       ...basePatch,
       ...placement,
     };
+  }
+
+  private assertPlacementInsideVenue(
+    floorId: string,
+    placement: Pick<
+      Prisma.GymEquipmentCreateInput,
+      'grid_column' | 'grid_row'
+    >,
+    gridWidth: number,
+    gridHeight: number,
+    venue: GymLayoutVenueRecord,
+  ): void {
+    if (
+      venue.floor_id !== floorId ||
+      venue.grid_column === null ||
+      venue.grid_row === null ||
+      venue.grid_width === null ||
+      venue.grid_height === null
+    ) {
+      throw new BadRequestException({
+        type: 'INVALID_VENUE_CONTAINMENT',
+        title: 'Venue Layout Dimensions Required',
+        status: 400,
+        detail:
+          'The equipment floor and dimensions must be contained by an active venue with persisted layout dimensions.',
+      });
+    }
+
+    const nodeRight = Number(placement.grid_column) + gridWidth - 1;
+    const nodeBottom = Number(placement.grid_row) + gridHeight - 1;
+    const venueRight = venue.grid_column + venue.grid_width - 1;
+    const venueBottom = venue.grid_row + venue.grid_height - 1;
+
+    if (
+      Number(placement.grid_column) < venue.grid_column ||
+      Number(placement.grid_row) < venue.grid_row ||
+      nodeRight > venueRight ||
+      nodeBottom > venueBottom
+    ) {
+      throw new BadRequestException({
+        type: 'INVALID_VENUE_CONTAINMENT',
+        title: 'Equipment Outside Venue Bounds',
+        status: 400,
+        detail: 'Equipment placement and dimensions must remain inside the selected venue.',
+      });
+    }
   }
 
   private resolvePlacement(input: PlacementInput) {
@@ -344,7 +441,7 @@ export class GymLayoutService {
   }
 
   private toEquipmentResponse(
-    item: GymEquipment,
+    item: GymLayoutEquipmentRecord,
     cachedStatus?: string,
   ): GymLayoutEquipmentResponseDTO {
     const positionX = Number(item.position_x);
@@ -361,6 +458,19 @@ export class GymLayoutService {
       grid_row: gridRow,
       position_x: positionX,
       position_y: positionY,
+      grid_width: item.grid_width ?? null,
+      grid_height: item.grid_height ?? null,
+      inventory_item_id: item.inventory_item_id ?? null,
+      venue_id: item.venue_id ?? null,
+      image_url: item.inventory_item?.image_url ?? null,
+      placed_quantity: item.inventory_item?._count.layout_nodes ?? 0,
+      remaining_placeable_quantity: item.inventory_item
+        ? Math.max(
+            item.inventory_item.quantity_current -
+              item.inventory_item._count.layout_nodes,
+            0,
+          )
+        : null,
       status: this.toCachedStatus(cachedStatus) ?? item.status,
       icon_key: item.icon_key ?? null,
       is_active: item.is_active,
@@ -375,13 +485,15 @@ export class GymLayoutService {
     return {
       floor_id: item.floor_id as (typeof FACILITY_FLOOR_IDS)[number],
       image_url: item.image_url,
+      grid_width: item.grid_width,
+      grid_height: item.grid_height,
       created_at: item.created_at.toISOString(),
       updated_at: item.updated_at.toISOString(),
     };
   }
 
   private async publishRealtimeDelta(
-    equipment: GymEquipment,
+    equipment: GymLayoutEquipmentRecord,
     operation: GymLayoutDeltaOperation,
   ): Promise<void> {
     if (operation === 'remove' || !equipment.is_active) {
@@ -405,7 +517,9 @@ export class GymLayoutService {
     );
   }
 
-  private async cacheStatuses(equipment: GymEquipment[]): Promise<void> {
+  private async cacheStatuses(
+    equipment: GymLayoutEquipmentRecord[],
+  ): Promise<void> {
     await this.redis.del(GYM_LAYOUT_STATUS_HASH_KEY);
 
     if (equipment.length === 0) {
@@ -420,7 +534,9 @@ export class GymLayoutService {
     if (
       value === EquipmentStatus.available ||
       value === EquipmentStatus.occupied ||
-      value === EquipmentStatus.maintenance
+      value === EquipmentStatus.maintenance ||
+      value === EquipmentStatus.broken ||
+      value === EquipmentStatus.missing
     ) {
       return value;
     }

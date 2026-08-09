@@ -1,7 +1,0 @@
-interface:
-  display_name: "FitTrack Admin Design Language"
-  short_description: "Shared admin-page grammar, signature elements, and anti-generic family rules"
-  default_prompt: "Use $admin-design-language to translate premium FitTrack structural and aesthetic references into a durable admin design grammar with page-family classification, visual DNA, material language, typography posture, contrast and lighting, signature elements, copy-density rules, allowed visual range, family variants, disallowed patterns, shared component expectations, and explicit sibling contribution rules so different admin pages do not collapse into one layout."
-
-policy:
-  allow_implicit_invocation: false

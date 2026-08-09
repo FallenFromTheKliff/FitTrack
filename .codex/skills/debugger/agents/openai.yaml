@@ -1,7 +1,0 @@
-interface:
-  display_name: "Debugger"
-  short_description: "Bounded debugging for hard failures"
-  default_prompt: "Use $debugger to investigate a tricky build, test, runtime, CI mismatch, or repeated-fix failure with a bounded evidence-first loop."
-
-policy:
-  allow_implicit_invocation: true

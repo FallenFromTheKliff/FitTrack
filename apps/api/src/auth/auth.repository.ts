@@ -7,6 +7,7 @@ import {
   OtpVerification,
   OtpPurpose,
   AuthProvider,
+  CoachScheduleType,
   UserRole,
   UserStatus,
   CoachProfile,
@@ -346,6 +347,17 @@ export class AuthRepository extends BaseRepository {
     emailVerifiedAt?: Date;
     qrCodeToken?: string;
     createCoachProfile?: boolean;
+    coachProfile?: {
+      displayName?: string | null;
+      contactEmail?: string | null;
+      contactPhone?: string | null;
+      specialization?: string | null;
+      bio?: string | null;
+      certification?: string | null;
+      hourlyRate?: number;
+      scheduleType?: CoachScheduleType;
+      isAvailableForBooking?: boolean;
+    };
   }): Promise<User> {
     return this.transaction(async (tx) => {
       const user = await tx.user.create({
@@ -384,7 +396,27 @@ export class AuthRepository extends BaseRepository {
 
       if (data.createCoachProfile) {
         await tx.coachProfile.create({
-          data: { user_id: user.id },
+          data: {
+            user_id: user.id,
+            display_name: data.coachProfile?.displayName?.trim() || null,
+            contact_email: data.coachProfile?.contactEmail?.trim() || null,
+            contact_phone: data.coachProfile?.contactPhone?.trim() || null,
+            specialization: data.coachProfile?.specialization?.trim() || null,
+            bio: data.coachProfile?.bio?.trim() || null,
+            certification: data.coachProfile?.certification?.trim() || null,
+            ...(data.coachProfile?.hourlyRate !== undefined
+              ? { hourly_rate: data.coachProfile.hourlyRate }
+              : {}),
+            ...(data.coachProfile?.scheduleType !== undefined
+              ? { schedule_type: data.coachProfile.scheduleType }
+              : {}),
+            ...(data.coachProfile?.isAvailableForBooking !== undefined
+              ? {
+                  is_available_for_booking:
+                    data.coachProfile.isAvailableForBooking,
+                }
+              : {}),
+          },
         });
       }
 

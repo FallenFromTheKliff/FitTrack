@@ -1,7 +1,0 @@
-interface:
-  display_name: "GitHub Shared Branch Delivery"
-  short_description: "Personal-branch delivery, merge-from-main sync, and PR-safe conflict handling"
-  default_prompt: "Use $gh-shared-branch-delivery to preflight parallel-work collision risk, keep work on my_branch, merge main into my_branch without rebasing, handle Prisma schema and migration conflicts carefully, run the right local gates, push only to my_branch, and open or prepare a PR from my_branch to main."
-
-policy:
-  allow_implicit_invocation: true

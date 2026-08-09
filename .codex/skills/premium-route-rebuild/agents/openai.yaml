@@ -1,7 +1,0 @@
-interface:
-  display_name: "FitTrack Premium Route Rebuild"
-  short_description: "Design-first route-wide rebuild packets for high-visibility admin pages"
-  default_prompt: "Use $premium-route-rebuild to define the structure for a high-visibility FitTrack route, inventory all states and missing behaviors, build a purpose-driven reference keyword stack, hand reference capture to $ui-reference-lane, hand visual-DNA synthesis to $ui-visual-dna-director, hand shared admin grammar to $admin-design-language, hand approval authoring to $ui-notion-gate, hand workspace governance to $figma-workspace-governor, hand divergent concepting to $figma-concept-explorer, hand scaffold authoring to $figma-scaffold-builder, require a pass from $ui-art-direction-review, and produce a one-shot implementation packet with clear downstream handoffs."
-
-policy:
-  allow_implicit_invocation: true

@@ -14,10 +14,11 @@ import {
   INVENTORY_EQUIPMENT_ARCHIVE_FIELDS,
   INVENTORY_EQUIPMENT_EDIT_FIELDS,
   INVENTORY_EQUIPMENT_PRESET_OPTIONS,
-  INVENTORY_EQUIPMENT_WRITEOFF_FIELDS,
+  INVENTORY_EQUIPMENT_STATUS_TRANSITION_FIELDS,
   INVENTORY_RETAIL_PRODUCT_FIELDS,
   INVENTORY_RETAIL_RESTOCK_FIELDS,
-  RETAIL_STOCK_STATUS_COLOR
+  RETAIL_STOCK_STATUS_COLOR,
+  validateInventoryEquipmentDetailForm
 } from "@/data/inventory/inventory";
 import FitButton from "@/components/fit/FitButton";
 import FitPill from "@/components/fit/FitPill";
@@ -59,9 +60,10 @@ function formatActorName(
 }
 
 function parseWholeNumber(value: string | undefined) {
-  const parsed = Number((value ?? "").trim());
+  const normalized = (value ?? "").trim();
+  const parsed = Number(normalized);
 
-  if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) {
+  if (!/^\d+$/.test(normalized) || !Number.isFinite(parsed) || !Number.isInteger(parsed)) {
     return { error: "Value must be a whole number." };
   }
 
@@ -69,9 +71,10 @@ function parseWholeNumber(value: string | undefined) {
 }
 
 function parsePositiveDecimal(value: string | undefined) {
-  const parsed = Number((value ?? "").trim());
+  const normalized = (value ?? "").trim();
+  const parsed = Number(normalized);
 
-  if (!Number.isFinite(parsed)) {
+  if (!/^\d+(?:\.\d+)?$/.test(normalized) || !Number.isFinite(parsed)) {
     return { error: "Value must be a number." };
   }
 
@@ -163,45 +166,34 @@ function validateEquipmentCreateForm(
   return errors;
 }
 
-function validateEquipmentDetailForm(data: Record<string, string>) {
-  const errors: Record<string, string> = {};
-
-  if (!data.name?.trim()) {
-    errors.name = "Equipment Name is required";
-  }
-  if (!data.unit?.trim()) {
-    errors.unit = "Unit is required";
-  }
-  if (
-    data.status !== "Available" &&
-    data.status !== "Under Maintenance" &&
-    data.status !== "Broken"
-  ) {
-    errors.status = "Choose a valid equipment status.";
-  }
-
-  return errors;
-}
-
 function validateEquipmentWriteOffForm(
   data: Record<string, string>,
-  quantityCurrent: number | null,
+  quantityAvailable: number | null,
+  sourceStatus: string | null,
 ) {
   const errors: Record<string, string> = {};
-  const quantitySetTo = parseWholeNumber(data.quantitySetTo);
+  const quantity = parseWholeNumber(data.quantity);
 
-  if (quantitySetTo.error) {
-    errors.quantitySetTo = "New Current Quantity must be a whole number.";
-  } else if ((quantitySetTo.value ?? 0) < 0) {
-    errors.quantitySetTo = "New Current Quantity cannot be negative.";
+  if (quantity.error) {
+    errors.quantity = "Quantity to Move must be a whole number.";
+  } else if ((quantity.value ?? 0) < 1) {
+    errors.quantity = "Quantity to Move must be at least 1.";
   } else if (
-    quantityCurrent !== null &&
-    (quantitySetTo.value ?? 0) > quantityCurrent
+    quantityAvailable !== null &&
+    (quantity.value ?? 0) > quantityAvailable
   ) {
-    errors.quantitySetTo = "New Current Quantity cannot exceed the current quantity.";
+    errors.quantity = "Quantity to Move cannot exceed the selected status quantity.";
   }
-  if (!data.reason?.trim()) {
-    errors.reason = "Reason is required";
+
+  if (
+    data.destinationStatus !== "Available" &&
+    data.destinationStatus !== "Under Maintenance" &&
+    data.destinationStatus !== "Broken" &&
+    data.destinationStatus !== "Missing"
+  ) {
+    errors.destinationStatus = "Choose a valid destination status.";
+  } else if (data.destinationStatus === sourceStatus) {
+    errors.destinationStatus = "Choose a different destination status.";
   }
 
   return errors;
@@ -686,6 +678,29 @@ export default function InventoryPage() {
   const [isCompactDetail, setIsCompactDetail] = useState(false);
   const [pendingArchiveEquipmentForm, setPendingArchiveEquipmentForm] =
     useState<Record<string, string> | null>(null);
+  const [createRetailStockQuantity, setCreateRetailStockQuantity] = useState("0");
+
+  const createRetailInitialValues = useMemo(
+    () => ({
+      category: "other",
+      cost: "",
+      description: "",
+      name: "",
+      price: "",
+      reorderThreshold: "10",
+      stockQuantity: "0"
+    }),
+    []
+  );
+  const createEquipmentInitialValues = useMemo(
+    () => ({
+      description: "",
+      name: "",
+      presetSelection: inventory.createEquipmentPreset,
+      quantity: ""
+    }),
+    [inventory.createEquipmentPreset]
+  );
 
   const createEquipmentFields = [
     {
@@ -730,26 +745,45 @@ export default function InventoryPage() {
         ])
   ];
 
-  const retailDetailValues = inventory.selectedRetail
-    ? {
-        cost: String(inventory.selectedRetail.cost),
-        name: inventory.selectedRetail.name,
-        category: inventory.selectedRetail.category,
-        description: inventory.selectedRetail.description ?? "",
-        price: String(inventory.selectedRetail.price),
-        stockQuantity: String(inventory.selectedRetail.stockQuantity),
-        reorderThreshold: String(inventory.selectedRetail.reorderThreshold)
-      }
-    : undefined;
+  const retailDetailValues = useMemo(
+    () =>
+      inventory.selectedRetail
+        ? {
+            cost: String(inventory.selectedRetail.cost),
+            name: inventory.selectedRetail.name,
+            category: inventory.selectedRetail.category,
+            description: inventory.selectedRetail.description ?? "",
+            price: String(inventory.selectedRetail.price),
+            stockQuantity: String(inventory.selectedRetail.stockQuantity),
+            reorderThreshold: String(inventory.selectedRetail.reorderThreshold)
+          }
+        : undefined,
+    [inventory.selectedRetail]
+  );
 
-  const equipmentDetailValues = inventory.selectedEquipment
-    ? {
-        name: inventory.selectedEquipment.name,
-        description: inventory.selectedEquipment.description ?? "",
-        unit: inventory.selectedEquipment.unit,
-        status: inventory.selectedEquipment.status
-      }
-    : undefined;
+  const equipmentDetailValues = useMemo(
+    () =>
+      inventory.selectedEquipment
+        ? {
+            name: inventory.selectedEquipment.name,
+            description: inventory.selectedEquipment.description ?? "",
+            unit: inventory.selectedEquipment.unit,
+            status: inventory.selectedEquipment.status
+          }
+        : undefined,
+    [inventory.selectedEquipment]
+  );
+
+  const showZeroStockWarning =
+    createRetailStockQuantity.trim() !== "" &&
+    /^\d+$/.test(createRetailStockQuantity.trim()) &&
+    Number(createRetailStockQuantity) === 0;
+
+  useEffect(() => {
+    if (!inventory.createRetailOpen) {
+      setCreateRetailStockQuantity("0");
+    }
+  }, [inventory.createRetailOpen]);
 
   useEffect(() => {
     const evaluateDetailMode = () => {
@@ -796,7 +830,17 @@ export default function InventoryPage() {
     >
       {inventory.message ? (
         <div style={{ marginBottom: 12, display: "flex", justifyContent: "flex-end" }}>
-          <FitText style={{ fontSize: 13, color: colors.success, fontWeight: 500 }}>
+          <FitText
+            style={{
+              fontSize: 13,
+              color: /failed|required|must|cannot|choose|upload|only|loading/i.test(
+                inventory.message
+              )
+                ? colors.danger
+                : colors.success,
+              fontWeight: 500
+            }}
+          >
             {inventory.message}
           </FitText>
         </div>
@@ -819,15 +863,9 @@ export default function InventoryPage() {
         title="Add Retail Product"
         subtitle="Create a retail item with category and stock thresholds."
         fields={INVENTORY_RETAIL_PRODUCT_FIELDS}
-        initialValues={{
-          category: "other",
-          cost: "",
-          description: "",
-          name: "",
-          price: "",
-          reorderThreshold: "10",
-          stockQuantity: "0"
-        }}
+        initialValues={createRetailInitialValues}
+        showRequiredIndicators={false}
+        validateOnChange
         submitLabel={inventory.createRetailPending ? "ADDING PRODUCT..." : "ADD PRODUCT"}
         isLoading={inventory.createRetailPending}
         validate={(data) => ({
@@ -836,6 +874,7 @@ export default function InventoryPage() {
             ? { productImage: "Product image is required." }
             : {})
         })}
+        onChange={(data) => setCreateRetailStockQuantity(data.stockQuantity ?? "")}
         onSubmit={inventory.handleCreateRetail}
         onCancel={() => inventory.setCreateRetailOpen(false)}
       >
@@ -847,6 +886,20 @@ export default function InventoryPage() {
             void inventory.handleUploadInventoryImage(file, "create-retail");
           }}
         />
+        {showZeroStockWarning ? (
+          <FitText
+            as="p"
+            role="status"
+            style={{
+              color: colors.warning,
+              fontSize: 12,
+              fontWeight: 700,
+              marginTop: 8
+            }}
+          >
+            You are about to create an item with 0 stocks.
+          </FitText>
+        ) : null}
         {!inventory.createRetailImageUrl.trim() ? (
           <FitText
             as="p"
@@ -871,6 +924,8 @@ export default function InventoryPage() {
         subtitle={inventory.selectedRetail?.name ?? "Retail item"}
         fields={INVENTORY_RETAIL_PRODUCT_FIELDS}
         initialValues={retailDetailValues}
+        showRequiredIndicators={false}
+        validateOnChange
         submitLabel={inventory.updateRetailPending ? "SAVING..." : "SAVE CHANGES"}
         isLoading={inventory.updateRetailPending}
         validate={validateRetailProductForm}
@@ -1033,6 +1088,8 @@ export default function InventoryPage() {
         }
         fields={INVENTORY_RETAIL_RESTOCK_FIELDS}
         initialValues={{ notes: "", quantity: "1" }}
+        showRequiredIndicators={false}
+        validateOnChange
         submitLabel={
           inventory.retailRestockLoading
             ? "LOADING ITEM..."
@@ -1075,12 +1132,9 @@ export default function InventoryPage() {
         title="Add Equipment Item"
         subtitle="Track operational equipment separately from retail stock."
         fields={createEquipmentFields}
-        initialValues={{
-          description: "",
-          name: "",
-          presetSelection: inventory.createEquipmentPreset,
-          quantity: "1"
-        }}
+        initialValues={createEquipmentInitialValues}
+        showRequiredIndicators={false}
+        validateOnChange
         submitLabel={inventory.createEquipmentPending ? "ADDING EQUIPMENT..." : "ADD EQUIPMENT"}
         isLoading={inventory.createEquipmentPending}
         validate={(data) =>
@@ -1119,9 +1173,11 @@ export default function InventoryPage() {
         subtitle={inventory.selectedEquipment?.name ?? "Equipment item"}
         fields={INVENTORY_EQUIPMENT_EDIT_FIELDS}
         initialValues={equipmentDetailValues}
+        showRequiredIndicators={false}
+        validateOnChange
         submitLabel={inventory.updateEquipmentPending ? "SAVING..." : "SAVE CHANGES"}
         isLoading={inventory.updateEquipmentPending}
-        validate={validateEquipmentDetailForm}
+        validate={validateInventoryEquipmentDetailForm}
         readOnly={!canManageInventoryCatalog}
         readOnlyBanner="Equipment details are admin-controlled. Operational writeoff remains available below."
         dangerLabel={canManageInventoryCatalog ? "ARCHIVE EQUIPMENT" : undefined}
@@ -1181,7 +1237,7 @@ export default function InventoryPage() {
                 />
               </div>
               <FitText style={{ fontSize: 13, color: colors.textMuted, marginTop: 10 }}>
-                Equipment alerts live in an operational lane, such as missing or maintenance,
+                Equipment alerts live in an operational lane, such as maintenance, broken, or missing,
                 instead of retail low-stock notifications.
               </FitText>
               <div
@@ -1226,7 +1282,7 @@ export default function InventoryPage() {
               {canPerformInventoryOperations ? (
                 <FitButton
                   variant="ghost"
-                  label="RECORD WRITEOFF"
+                  label="MOVE QUANTITY"
                   fullWidth
                   onClick={() => {
                     if (!inventory.selectedEquipment) return;
@@ -1292,19 +1348,22 @@ export default function InventoryPage() {
 
       <DetailsModal
         isOpen={canPerformInventoryOperations && inventory.writeOffEquipmentOpen}
-        title="Record Equipment Writeoff"
+        title="Move Equipment Quantity"
         subtitle={inventory.writeOffEquipmentTarget?.name ?? "Equipment item"}
-        fields={INVENTORY_EQUIPMENT_WRITEOFF_FIELDS}
+        fields={INVENTORY_EQUIPMENT_STATUS_TRANSITION_FIELDS}
         initialValues={{
-          quantitySetTo: String(inventory.writeOffEquipmentTarget?.quantityCurrent ?? 0),
-          reason: ""
+          quantity: "1",
+          destinationStatus: ""
         }}
-        submitLabel={inventory.equipmentWriteOffPending ? "RECORDING..." : "RECORD WRITEOFF"}
+        showRequiredIndicators={false}
+        validateOnChange
+        submitLabel={inventory.equipmentWriteOffPending ? "MOVING..." : "MOVE QUANTITY"}
         isLoading={inventory.equipmentWriteOffPending}
         validate={(data) =>
           validateEquipmentWriteOffForm(
             data,
-            inventory.writeOffEquipmentTarget?.quantityCurrent ?? null
+            inventory.writeOffEquipmentTarget?.statusQuantity ?? null,
+            inventory.writeOffEquipmentTarget?.status ?? null
           )
         }
         onSubmit={inventory.handleWriteOffEquipment}
@@ -1317,6 +1376,8 @@ export default function InventoryPage() {
         subtitle={inventory.archiveEquipmentTarget?.name ?? "Equipment item"}
         fields={INVENTORY_EQUIPMENT_ARCHIVE_FIELDS}
         initialValues={{ quantityToArchive: "1", reason: "" }}
+        showRequiredIndicators={false}
+        validateOnChange
         submitLabel="CONTINUE"
         isLoading={false}
         validate={(data) =>

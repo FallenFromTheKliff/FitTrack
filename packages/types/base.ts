@@ -14,6 +14,11 @@ export type BookingStatus =
   | "no_show"
   | "cancelled";
 export type StockStatus = "in_stock" | "low_stock" | "out_of_stock";
-export type EquipmentStatus = "available" | "maintenance" | "occupied";
+export type EquipmentStatus =
+  | "available"
+  | "maintenance"
+  | "occupied"
+  | "broken"
+  | "missing";
 export type MemberTier = "Basic" | "Premium" | "Elite";
 export type CalendarViewMode = "DAYS" | "MONTHS" | "YEARS";

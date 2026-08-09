@@ -599,6 +599,11 @@ export class AuthService {
       PASSWORD_HASH_ROUNDS,
     );
 
+    const accountDisplayName = buildAccountDisplayName(
+      dto.first_name,
+      dto.last_name,
+    );
+
     const user = await this.repo.createUserWithProfile({
       role: dto.role as UserRole,
       status: UserStatus.pending,
@@ -607,18 +612,25 @@ export class AuthService {
       firstName: dto.first_name,
       lastName: dto.last_name,
       phone: dto.phone,
+      createCoachProfile: dto.role === 'coach',
+      ...(dto.role === 'coach'
+        ? {
+            coachProfile: {
+              displayName:
+                dto.coach_profile?.display_name ?? accountDisplayName,
+              contactEmail: dto.coach_profile?.contact_email ?? email,
+              contactPhone: dto.coach_profile?.contact_phone ?? dto.phone,
+              specialization: dto.coach_profile?.specialization,
+              bio: dto.coach_profile?.bio,
+              certification: dto.coach_profile?.certification,
+              hourlyRate: dto.coach_profile?.hourly_rate,
+              scheduleType: dto.coach_profile?.schedule_type,
+              isAvailableForBooking:
+                dto.coach_profile?.is_available_for_booking,
+            },
+          }
+        : {}),
     });
-
-    const accountDisplayName = buildAccountDisplayName(
-      dto.first_name,
-      dto.last_name,
-    );
-
-    if (dto.role === 'coach') {
-      await this.repo.createCoachProfile(user.id, {
-        displayName: accountDisplayName,
-      });
-    }
 
     this.emitAudit({
       userId: actorId,

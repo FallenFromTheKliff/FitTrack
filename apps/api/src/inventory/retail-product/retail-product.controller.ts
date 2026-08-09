@@ -114,11 +114,11 @@ export class RetailProductController {
 
   @Patch('products/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.admin)
+  @Roles(UserRole.admin, UserRole.staff)
   @ApiBearerAuth('access-token')
   @ApiBody({ type: UpdateRetailProductDTO })
   @ApiOperation({
-    summary: 'Update or deactivate a retail product. Admin only.',
+    summary: 'Update or deactivate a retail product. Admin and staff only.',
   })
   @ApiResponse({
     status: 200,

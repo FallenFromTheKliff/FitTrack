@@ -8,7 +8,9 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
   IsUrl,
+  Max,
   MaxLength,
   Min,
 } from 'class-validator';
@@ -42,6 +44,14 @@ export class CreateEquipmentDTO {
   })
   floor_id: 'floor-1' | 'floor-2' | 'floor-3';
 
+  @ApiProperty({ example: '22222222-2222-4222-8222-222222222222' })
+  @IsUUID(undefined, { message: 'inventory_item_id must be a UUID' })
+  inventory_item_id: string;
+
+  @ApiProperty({ example: '33333333-3333-4333-8333-333333333333' })
+  @IsUUID(undefined, { message: 'venue_id must be a UUID' })
+  venue_id: string;
+
   @ApiPropertyOptional({ example: 10 })
   @IsOptional()
   @Type(() => Number)
@@ -67,6 +77,20 @@ export class CreateEquipmentDTO {
   @Type(() => Number)
   @IsNumber({}, { message: 'position_y must be a number' })
   position_y?: number;
+
+  @ApiPropertyOptional({ example: 2 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'grid_width must be an integer' })
+  @Min(1, { message: 'grid_width must be at least 1' })
+  grid_width?: number;
+
+  @ApiPropertyOptional({ example: 2 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'grid_height must be an integer' })
+  @Min(1, { message: 'grid_height must be at least 1' })
+  grid_height?: number;
 
   @ApiPropertyOptional({ example: 'leg-press', nullable: true })
   @IsOptional()
@@ -100,6 +124,16 @@ export class UpdateEquipmentDTO {
   })
   floor_id?: 'floor-1' | 'floor-2' | 'floor-3';
 
+  @ApiPropertyOptional({ example: '22222222-2222-4222-8222-222222222222' })
+  @IsOptional()
+  @IsUUID(undefined, { message: 'inventory_item_id must be a UUID' })
+  inventory_item_id?: string;
+
+  @ApiPropertyOptional({ example: '33333333-3333-4333-8333-333333333333' })
+  @IsOptional()
+  @IsUUID(undefined, { message: 'venue_id must be a UUID' })
+  venue_id?: string;
+
   @ApiPropertyOptional({ example: 11 })
   @IsOptional()
   @Type(() => Number)
@@ -125,6 +159,20 @@ export class UpdateEquipmentDTO {
   @Type(() => Number)
   @IsNumber({}, { message: 'position_y must be a number' })
   position_y?: number;
+
+  @ApiPropertyOptional({ example: 2 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'grid_width must be an integer' })
+  @Min(1, { message: 'grid_width must be at least 1' })
+  grid_width?: number;
+
+  @ApiPropertyOptional({ example: 2 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'grid_height must be an integer' })
+  @Min(1, { message: 'grid_height must be at least 1' })
+  grid_height?: number;
 
   @ApiPropertyOptional({
     enum: EquipmentStatus,
@@ -174,6 +222,27 @@ export class GymLayoutEquipmentResponseDTO {
   @ApiProperty({ example: 7.25 })
   position_y: number;
 
+  @ApiPropertyOptional({ example: 2, nullable: true })
+  grid_width: number | null;
+
+  @ApiPropertyOptional({ example: 2, nullable: true })
+  grid_height: number | null;
+
+  @ApiPropertyOptional({ example: '22222222-2222-4222-8222-222222222222', nullable: true })
+  inventory_item_id: string | null;
+
+  @ApiPropertyOptional({ example: '33333333-3333-4333-8333-333333333333', nullable: true })
+  venue_id: string | null;
+
+  @ApiPropertyOptional({ example: 'https://cdn.fittrack.test/images/bench.png', nullable: true })
+  image_url: string | null;
+
+  @ApiProperty({ example: 1 })
+  placed_quantity: number;
+
+  @ApiPropertyOptional({ example: 3, nullable: true })
+  remaining_placeable_quantity: number | null;
+
   @ApiProperty({ enum: EquipmentStatus, example: EquipmentStatus.available })
   status: EquipmentStatus;
 
@@ -200,6 +269,20 @@ export class UpdateFacilityFloorPlanMediaDTO {
   @IsUrl({}, { message: 'image_url must be a valid URL' })
   @MaxLength(500, { message: 'image_url must not exceed 500 characters' })
   image_url?: string | null;
+
+  @ApiPropertyOptional({ example: 15, minimum: 8, maximum: 30 })
+  @IsOptional()
+  @IsInt()
+  @Min(8)
+  @Max(30)
+  grid_width?: number;
+
+  @ApiPropertyOptional({ example: 10, minimum: 6, maximum: 20 })
+  @IsOptional()
+  @IsInt()
+  @Min(6)
+  @Max(20)
+  grid_height?: number;
 }
 
 export class FacilityFloorPlanMediaResponseDTO {
@@ -211,6 +294,12 @@ export class FacilityFloorPlanMediaResponseDTO {
     nullable: true,
   })
   image_url: string | null;
+
+  @ApiProperty({ example: 15 })
+  grid_width: number;
+
+  @ApiProperty({ example: 10 })
+  grid_height: number;
 
   @ApiProperty({ example: '2026-04-28T03:00:00.000Z' })
   created_at: string;

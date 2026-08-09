@@ -1,6 +1,12 @@
 import type { VenueBookingRecord } from "@fittrack/api-client";
 import { mapVenueBookingRecord, mapVenueBookingRecords } from "@fittrack/app-core";
-import type { Booking, FacilityFloorId, FloorVenueRecord, VenueRecord } from "@fittrack/types";
+import type {
+  Booking,
+  EquipmentStatus,
+  FacilityFloorId,
+  FloorVenueRecord,
+  VenueRecord
+} from "@fittrack/types";
 
 import { normalizeVenueIconKey, type VenueIconKey } from "@/utils/venueMap";
 export type { VenueRecord } from "@fittrack/types";
@@ -15,6 +21,7 @@ export type VenuePresentation = {
   emoji: string;
   maxSlots: number;
   price: number;
+  status: EquipmentStatus | null;
   unit: string;
   description?: string | null;
   imageUrl?: string | null;
@@ -39,6 +46,7 @@ export function getVenuePresentation(venue: VenueRecord): VenuePresentation {
     emoji: venue.name.slice(0, 1),
     maxSlots: venue.capacity ?? 0,
     price,
+    status: venue.status ?? null,
     unit,
     description: venue.description,
     imageUrl: venue.imageUrl,

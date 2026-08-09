@@ -93,6 +93,17 @@ export type InventoryEquipmentListParams = {
   page?: number;
 };
 
+export type InventoryEquipmentStatus =
+  | "available"
+  | "maintenance"
+  | "broken"
+  | "missing";
+
+export type InventoryEquipmentStatusCounts = Record<
+  InventoryEquipmentStatus,
+  number | null
+>;
+
 export type InventoryEquipmentRecord = {
   createdAt: string;
   description: string | null;
@@ -102,6 +113,9 @@ export type InventoryEquipmentRecord = {
   name: string;
   quantityCurrent: number;
   quantityTotal: number;
+  statusCounts: InventoryEquipmentStatusCounts;
+  placedQuantity: number;
+  remainingPlaceableQuantity: number;
   unit: string;
   updatedAt: string;
 };
@@ -112,6 +126,9 @@ export type InventoryEquipmentCreateInput = {
   name: string;
   quantityCurrent: number;
   quantityTotal: number;
+  quantityMaintenance?: number;
+  quantityBroken?: number;
+  quantityMissing?: number;
   unit?: string;
 };
 
@@ -122,12 +139,22 @@ export type InventoryEquipmentUpdateInput = {
   name?: string;
   quantityCurrent?: number;
   quantityTotal?: number;
+  quantityMaintenance?: number;
+  quantityBroken?: number;
+  quantityMissing?: number;
   unit?: string;
 };
 
 export type InventoryEquipmentWriteOffInput = {
   quantitySetTo: number;
   reason: string;
+  status?: Exclude<InventoryEquipmentStatus, "available">;
+};
+
+export type InventoryEquipmentStatusTransitionInput = {
+  sourceStatus: InventoryEquipmentStatus;
+  destinationStatus: InventoryEquipmentStatus;
+  quantity: number;
 };
 
 export type InventoryEquipmentArchiveInput = {

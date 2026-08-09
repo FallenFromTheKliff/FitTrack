@@ -7,6 +7,7 @@ import {
   resolveAmenityId,
   type AmenityApiRecord
 } from "./venue-compat";
+import type { EquipmentStatus, VenueImageFit } from "@fittrack/types";
 
 export type VenueMutationPayload = {
   capacity: number;
@@ -20,9 +21,15 @@ export type VenueMutationPayload = {
   hourlyRate?: number;
   iconKey: string;
   imageUrl?: string | null;
+  imageFit?: VenueImageFit;
+  imageFocalX?: number;
+  imageFocalY?: number;
+  imageCropZoom?: number;
+  isMapped?: boolean;
   isReservable: boolean;
   minimumHours: number;
   name: string;
+  status?: EquipmentStatus | null;
 };
 
 export type VenueAvailabilityRecord = {

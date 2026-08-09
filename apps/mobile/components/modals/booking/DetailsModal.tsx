@@ -14,15 +14,16 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useThemeTransitionAnim } from "@/hooks/animations/core/useThemeTransition";
 import { useOverlayAnim } from "@/hooks/animations/modal/useOverlayAnim";
 import { makeDetailsModalStyles } from "@/styles/modals/DetailsStyles";
-import { AMENITY_STATUS_META, type AmenityStatus } from "@/data/amenities";
 import { buildRenderableAssetUrl, formatCurrency } from "@fittrack/utils";
 import { MOBILE_API_BASE_URL, mobileApiClient } from "@/lib/api-client";
+import { getFacilityStatusColor, getFacilityStatusLabel } from "@/utils/facilityStatus";
 import { getVenueIcon } from "@/utils/venueMap";
 import type { VenuePresentation } from "@/utils/venueBookings";
 
 import { FitText } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
 import FitModalScrollView from "@/components/modals/shared/FitModalScrollView";
+import FacilityImageLightbox from "@/components/modals/shared/FacilityImageLightbox";
 
 type Props = {
   isVisible: boolean;
@@ -47,6 +48,7 @@ export default function DetailsModal({ isVisible, venue, onClose, onReserve }: P
     text: string;
     tone: "danger" | "success";
   } | null>(null);
+  const [isImageOpen, setIsImageOpen] = useState(false);
   const [failedImageUri, setFailedImageUri] = useState<string | null>(null);
   const resolvedVenueImageUrl = buildRenderableAssetUrl({
     apiBaseUrl: MOBILE_API_BASE_URL,
@@ -55,6 +57,7 @@ export default function DetailsModal({ isVisible, venue, onClose, onReserve }: P
 
   useEffect(() => {
     setFailedImageUri(null);
+    setIsImageOpen(false);
   }, [resolvedVenueImageUrl]);
 
   const feedbackQuery = useQuery({
@@ -84,14 +87,17 @@ export default function DetailsModal({ isVisible, venue, onClose, onReserve }: P
 
   if (!venue) return null;
 
+  const status = venue.status ?? "available";
   const meta = {
     description:
       venue.description?.trim() ||
       "No member-facing description has been published for this venue yet.",
-    hours: "Facility-specific hours have not been published for this venue.",
-    status: "available" as AmenityStatus
+    hours: "Facility-specific hours have not been published for this venue."
   };
-  const statusMeta = AMENITY_STATUS_META[meta.status];
+  const statusMeta = {
+    color: getFacilityStatusColor(status, colors),
+    label: getFacilityStatusLabel(status)
+  };
   const Icon = getVenueIcon(venue.iconKey);
   const priceLabel = venue.isReservable ? `${formatCurrency(venue.price)} / ${venue.unit}` : "Core facility";
   const capacityLabel = venue.maxSlots > 0 ? `${venue.maxSlots} slots` : "Not specified";
@@ -99,15 +105,22 @@ export default function DetailsModal({ isVisible, venue, onClose, onReserve }: P
   const venueFloorId = venue.floorId ?? null;
   const assignedEquipment = venueFloorId
     ? liveEquipment
-        .filter((item) =>
-          isEquipmentInsideVenue(item, {
-            floorId: venueFloorId,
-            gridColumn: venue.gridColumn,
-            gridHeight: venue.gridHeight,
-            gridRow: venue.gridRow,
-            gridWidth: venue.gridWidth
-          })
-        )
+        .filter((item) => {
+          if (!item.isActive) return false;
+          const isExplicitlyAssigned =
+            item.venueId != null &&
+            String(item.venueId) === String(venue.sourceVenueId ?? venue.id);
+          return (
+            isExplicitlyAssigned ||
+            isEquipmentInsideVenue(item, {
+              floorId: venueFloorId,
+              gridColumn: venue.gridColumn,
+              gridHeight: venue.gridHeight,
+              gridRow: venue.gridRow,
+              gridWidth: venue.gridWidth
+            })
+          );
+        })
         .sort((left, right) => left.name.localeCompare(right.name))
     : [];
   const venueFeedback = feedbackQuery.data ?? [];
@@ -146,7 +159,8 @@ export default function DetailsModal({ isVisible, venue, onClose, onReserve }: P
   };
 
   return (
-    <Modal
+    <>
+      <Modal
       visible={isVisible}
       transparent
       animationType="none"
@@ -204,9 +218,20 @@ export default function DetailsModal({ isVisible, venue, onClose, onReserve }: P
               <View style={s.fieldBlock}>
                 {assignedEquipment.length > 0 ? (
                   assignedEquipment.map((item) => (
-                    <FitText key={item.id} style={s.fieldText}>
-                      * {item.name}
-                    </FitText>
+                    <View key={item.id} style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                      <View
+                        style={{
+                          backgroundColor: getFacilityStatusColor(item.status, colors),
+                          borderRadius: 4,
+                          height: 8,
+                          width: 8
+                        }}
+                      />
+                      <FitText style={[s.fieldText, { flex: 1 }]}>{item.name}</FitText>
+                      <FitText style={{ color: getFacilityStatusColor(item.status, colors), fontSize: 11 }}>
+                        {getFacilityStatusLabel(item.status)}
+                      </FitText>
+                    </View>
                   ))
                 ) : (
                   <FitText style={s.fieldTextMuted}>No live equipment is assigned to this zone yet.</FitText>
@@ -216,12 +241,20 @@ export default function DetailsModal({ isVisible, venue, onClose, onReserve }: P
             <View>
               <FitText style={s.sectionLabel}>Images</FitText>
               {canShowVenueImage ? (
-                <Image
-                  source={{ uri: resolvedVenueImageUrl ?? "" }}
-                  resizeMode="cover"
-                  onError={() => setFailedImageUri(resolvedVenueImageUrl)}
-                  style={s.imagePreview}
-                />
+                <Pressable
+                  accessibilityLabel={`Open larger image for ${venue.name}`}
+                  accessibilityRole="button"
+                  onPress={() => setIsImageOpen(true)}
+                  style={s.imagePressable}
+                >
+                  <Image
+                    accessibilityLabel={`${venue.name} image`}
+                    source={{ uri: resolvedVenueImageUrl ?? "" }}
+                    resizeMode="cover"
+                    onError={() => setFailedImageUri(resolvedVenueImageUrl)}
+                    style={s.imagePreview}
+                  />
+                </Pressable>
               ) : (
                 <View style={s.imageTile}>
                   <ImageIcon size={28} color={colors.textDisabled} strokeWidth={1.5} />
@@ -317,12 +350,19 @@ export default function DetailsModal({ isVisible, venue, onClose, onReserve }: P
           </FitModalScrollView>
           <Animated.View style={[s.footer, footerBorderStyle]}>
             <FitButton label="Close" variant="ghost" onPress={onClose} flex={1} />
-            {onReserve && venue.isReservable && meta.status === "available" ? (
+            {onReserve && venue.isReservable && status === "available" ? (
               <FitButton label="Reserve Now" variant="primary" onPress={onReserve} flex={2} />
             ) : null}
           </Animated.View>
         </Animated.View>
       </Animated.View>
-    </Modal>
+      </Modal>
+      <FacilityImageLightbox
+        imageUri={canShowVenueImage ? resolvedVenueImageUrl : null}
+        isVisible={isImageOpen}
+        onClose={() => setIsImageOpen(false)}
+        title={venue.name}
+      />
+    </>
   );
 }
