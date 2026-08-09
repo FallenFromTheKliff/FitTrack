@@ -2,6 +2,7 @@ import {
   HttpCode,
   Body,
   Controller,
+  Delete,
   Get,
   Headers,
   Param,
@@ -234,6 +235,26 @@ export class SubscriptionController {
     @Body() dto: UpdatePlanDTO,
   ) {
     return this.subscriptionService.updatePlan(id, dto);
+  }
+
+  @Delete('plans/:id')
+  @HttpCode(200)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.admin, UserRole.staff)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Delete an unreferenced membership plan. Admin/Staff only.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Membership plan deleted.',
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Membership plan has membership history and cannot be deleted.',
+  })
+  deletePlan(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
+    return this.subscriptionService.deletePlan(id);
   }
 
   @Patch('catalog-settings')

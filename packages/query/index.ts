@@ -196,9 +196,10 @@ export {
   writeOffInventoryEquipmentMutationOptions,
 } from "./inventory";
 export {
-  cancelMembershipMutationOptions,
-  createMembershipPlanMutationOptions,
-  membershipCatalogSettingsQueryOptions,
+      cancelMembershipMutationOptions,
+      createMembershipPlanMutationOptions,
+      deleteMembershipPlanMutationOptions,
+      membershipCatalogSettingsQueryOptions,
   membershipCurrentSubscriptionQueryOptions,
   membershipOperationsDashboardQueryOptions,
   membershipPaymentsQueryOptions,

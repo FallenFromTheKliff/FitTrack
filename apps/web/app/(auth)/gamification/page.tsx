@@ -488,10 +488,7 @@ function AdminGamificationPage() {
     enabled: manualExpOpen || leaderboardMode === "muscle",
   });
   const manualExpMuscleDefinitions = useMemo(
-    () =>
-      (muscleDefinitionsQuery.data ?? []).filter(
-        (definition) => definition.isActive,
-      ),
+    () => muscleDefinitionsQuery.data ?? [],
     [muscleDefinitionsQuery.data],
   );
   const seasonFilterParams = useMemo<AdminGamificationSeasonStandingListParams>(
@@ -1721,7 +1718,6 @@ function AdminGamificationPage() {
         isOpen={seasonManagerOpen}
         onClose={() => setSeasonManagerOpen(false)}
         title="Season planner"
-        subtitle="Schedule the next ranking season or manually start an eligible draft."
         icon={Crown}
         maxWidth={760}
         closeAriaLabel="Close season planner"
@@ -1766,6 +1762,30 @@ function AdminGamificationPage() {
         }
       >
         <div style={{ display: "grid", gap: 18 }}>
+          <div style={{ alignItems: "center", display: "flex", gap: 8 }}>
+            <FitText style={{ color: colors.textSecondary, fontSize: 12, fontWeight: 800 }}>
+              Season lifecycle
+            </FitText>
+            <span
+              aria-label="Season planner help"
+              tabIndex={0}
+              title="Schedule or force-start an eligible draft."
+              style={{
+                alignItems: "center",
+                border: `1px solid ${colors.border}`,
+                borderRadius: "50%",
+                color: colors.textMuted,
+                display: "inline-flex",
+                fontSize: 11,
+                fontWeight: 900,
+                height: 18,
+                justifyContent: "center",
+                width: 18,
+              }}
+            >
+              ?
+            </span>
+          </div>
           {overview?.activeSeason ? (
             <section
               style={{
@@ -2005,7 +2025,7 @@ function AdminGamificationPage() {
                       <FitButton
                         variant="ghost"
                         icon={CheckCircle2}
-                        label={overview?.activeSeason ? "Active season running" : "Start now"}
+                        label={overview?.activeSeason ? "Active season running" : "Force start"}
                         disabled={Boolean(overview?.activeSeason)}
                         loading={seasonMutation.isPending}
                         onClick={() =>
@@ -2202,8 +2222,27 @@ function SeasonPerformanceTable({
     total: 0,
     total_pages: 1,
   };
+  const displayedSeason = rows[0]
+    ? { status: rows[0].seasonStatus, title: rows[0].seasonTitle }
+    : seasons.find((season) => season.id === selectedSeasonId) ?? null;
+  const isHistoricalSeason = displayedSeason?.status === "closed";
+  const hasSeasonHistory = seasons.some((season) => season.status === "closed");
+  const hasActiveSeason = seasons.some((season) => season.status === "active");
+  const emptyMessage =
+    seasons.length > 0 && !hasSeasonHistory && !hasActiveSeason
+      ? "No season history yet. Create and start a season to populate standings."
+      : "No season standings match the current filters.";
+  const defaultSeason =
+    seasons.find((season) => season.status === "active") ??
+    seasons.find((season) => season.status === "closed") ??
+    null;
   const seasonOptions = [
-    { label: "All seasons", value: "" },
+    {
+      label: defaultSeason
+        ? `${defaultSeason.title} (${defaultSeason.status === "closed" ? "Previous" : "Current"})`
+        : "No season history",
+      value: "",
+    },
     ...seasons.map((season) => ({
       label: `${season.title} (${labelize(season.status)})`,
       value: season.id,
@@ -2455,6 +2494,14 @@ function SeasonPerformanceTable({
                   competitors
                 </FitText>
               </span>
+              {displayedSeason ? (
+                <FitPill
+                  mode="status"
+                  label={isHistoricalSeason ? "Previous season" : "Current season"}
+                  color={isHistoricalSeason ? colors.warning : colors.brand}
+                  style={{ borderRadius: 6 }}
+                />
+              ) : null}
             </div>
             <FitText style={{ color: colors.textMuted, fontSize: 12 }}>
               Compare member momentum, earned EXP, milestones, and ranking eligibility.
@@ -2614,7 +2661,7 @@ function SeasonPerformanceTable({
             columns={tableColumns}
             rows={rows}
             getRowKey={(row) => `${row.userId}-${row.seasonId}`}
-            emptyMessage="No season standings match the current filters."
+            emptyMessage={emptyMessage}
             emptyStateHeight={480}
             compact
             overflowX
@@ -2763,8 +2810,17 @@ function MusclePerformanceTable({
     label: definition.name,
     value: definition.key,
   }));
+  const defaultSeason =
+    seasons.find((season) => season.status === "active") ??
+    seasons.find((season) => season.status === "closed") ??
+    null;
   const seasonOptions = [
-    { label: "Current season", value: "" },
+    {
+      label: defaultSeason
+        ? `${defaultSeason.title} (${defaultSeason.status === "closed" ? "Previous" : "Current"})`
+        : "No season history",
+      value: "",
+    },
     ...seasons
       .filter((season) => season.status === "active" || season.status === "closed")
       .map((season) => ({
@@ -2774,8 +2830,21 @@ function MusclePerformanceTable({
   ];
   const selectedSeason =
     seasons.find((season) => season.id === selectedSeasonId) ??
-    seasons.find((season) => season.status === "active") ??
-    null;
+    (rows[0]?.seasonId
+      ? seasons.find((season) => season.id === rows[0].seasonId)
+      : null) ??
+    defaultSeason;
+  const isHistoricalSeason =
+    scope === "season" && selectedSeason?.status === "closed";
+  const hasSeasonHistory = seasons.some((season) => season.status === "closed");
+  const hasActiveSeason = seasons.some((season) => season.status === "active");
+  const emptyMessage =
+    scope === "season" &&
+    seasons.length > 0 &&
+    !hasSeasonHistory &&
+    !hasActiveSeason
+      ? "No season history yet. Create and start a season to populate standings."
+      : "No muscle standings match the current filters.";
   const openReview = (row: FitnessMuscleLeaderboardEntryRecord) => {
     const profile = governanceProfiles.find(
       (candidate) => candidate.userId === row.userId,
@@ -2963,6 +3032,14 @@ function MusclePerformanceTable({
                   competitors
                 </FitText>
               </span>
+              {scope === "season" && selectedSeason ? (
+                <FitPill
+                  mode="status"
+                  label={isHistoricalSeason ? "Previous season" : "Current season"}
+                  color={isHistoricalSeason ? colors.warning : colors.brand}
+                  style={{ borderRadius: 6 }}
+                />
+              ) : null}
             </div>
             <FitText style={{ color: colors.textMuted, fontSize: 12 }}>
               Compare true per-muscle EXP without changing the overall season ranking.
@@ -3080,7 +3157,7 @@ function MusclePerformanceTable({
             getRowKey={(row) =>
               `${row.userId}-${row.scope}-${row.seasonId ?? "lifetime"}-${row.muscleKey}`
             }
-            emptyMessage="No muscle standings match the current filters."
+            emptyMessage={emptyMessage}
             emptyStateHeight={480}
             compact
             style={{ border: 0, borderRadius: 0 }}

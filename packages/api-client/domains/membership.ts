@@ -263,6 +263,12 @@ export function createMembershipApi(transport: ApiTransport) {
         "Unable to update membership plan."
       );
     },
+    deletePlan(planId: string) {
+      return unwrapVoidResponse(
+        transport.delete("/membership/plans/" + planId),
+        "Unable to delete membership plan."
+      );
+    },
     updateCatalogSettings(payload: UpdateMembershipCatalogSettingsInput) {
       return unwrapResponse<MembershipCatalogSettingsRecord>(
         transport.patch("/membership/catalog-settings", toCatalogSettingsRequest(payload)),

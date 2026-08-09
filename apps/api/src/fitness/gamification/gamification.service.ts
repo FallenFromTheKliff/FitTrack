@@ -709,20 +709,6 @@ export class GamificationService {
     dto: MuscleLeaderboardFilterDTO | AdminMuscleLeaderboardFilterDTO,
     currentUserId?: string,
   ): Promise<PaginatedResult<MuscleLeaderboardRowDTO>> {
-    if (dto.scope === 'season' && !dto.season_id) {
-      const active = await this.repo.listAdminSeasons();
-      if (!active.some((season) => season.status === SeasonStatus.active)) {
-        return {
-          data: [],
-          meta: {
-            page: dto.page ?? 1,
-            limit: dto.limit ?? 20,
-            total: 0,
-            total_pages: 0,
-          },
-        };
-      }
-    }
     const adminDto = dto as AdminMuscleLeaderboardFilterDTO;
     const result = await this.repo.listMuscleLeaderboard({
       includeHidden: adminDto.include_hidden ?? false,

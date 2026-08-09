@@ -174,7 +174,18 @@ export function updateAdminGamificationSeasonStatusMutationOptions(
       seasonId: string;
     }) => client.admin.updateGamificationSeasonStatus(seasonId, payload),
     onSuccess: async () => {
-      await invalidateAdminGamificationOverviewQuery(queryClient);
+      await Promise.all([
+        invalidateAdminGamificationOverviewQuery(queryClient),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.adminGamificationSeasons(),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.adminGamificationSeasonStandings(),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.adminGamificationMuscleStandings(),
+        }),
+      ]);
     },
   });
 }

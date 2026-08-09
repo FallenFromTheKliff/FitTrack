@@ -19,10 +19,22 @@ describe('GamificationRepository', () => {
     count: jest.fn(),
   };
 
+  const seasonalMuscleStanding = {
+    findMany: jest.fn(),
+    count: jest.fn(),
+  };
+
+  const seasonDefinition = {
+    findFirst: jest.fn(),
+    findUnique: jest.fn(),
+  };
+
   const prisma = {
     muscleMasteryProgress,
     exerciseLog,
     seasonalStanding,
+    seasonalMuscleStanding,
+    seasonDefinition,
     $transaction: jest.fn(),
   };
 
@@ -31,6 +43,7 @@ describe('GamificationRepository', () => {
   beforeEach(() => {
     repo = new GamificationRepository(prisma as never);
     jest.clearAllMocks();
+    seasonDefinition.findFirst.mockResolvedValue({ id: 'season-active' });
   });
 
   it('normalizes and tokenizes ranking governance member searches', async () => {
@@ -84,6 +97,100 @@ describe('GamificationRepository', () => {
           },
         },
       },
+    });
+  });
+
+  it('derives current season ranks from score order instead of stored positions', async () => {
+    const rows = [
+      {
+        season_id: 'season-active',
+        season_points: 240,
+        rank_position: 2,
+        is_hidden: false,
+        is_disqualified: false,
+      },
+      {
+        season_id: 'season-active',
+        season_points: 120,
+        rank_position: 1,
+        is_hidden: false,
+        is_disqualified: false,
+      },
+      {
+        season_id: 'season-active',
+        season_points: 80,
+        rank_position: 3,
+        is_hidden: true,
+        is_disqualified: false,
+      },
+    ];
+    prisma.$transaction.mockResolvedValue([rows, rows.length]);
+
+    const result = await repo.listAdminSeasonStandings({
+      seasonId: 'season-active',
+      limit: 10,
+    });
+
+    expect(result.data.map((row) => row.rank_position)).toEqual([1, 2, null]);
+  });
+
+  it('uses the latest closed season for muscle standings when no season is active', async () => {
+    seasonDefinition.findFirst
+      .mockReset()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: 'season-closed',
+        status: 'closed',
+        title: 'Spring 2026',
+      });
+    prisma.$transaction.mockResolvedValue([
+      [
+        {
+          user_id: 'user-1',
+          user: { profile: { first_name: 'Nels', last_name: 'DeLa Cruz' } },
+          muscle_group: 'chest',
+          muscle_points: 140,
+          rank_position: 9,
+          is_hidden: false,
+          is_disqualified: false,
+          last_earned_at: null,
+        },
+      ],
+      1,
+    ]);
+
+    const result = await repo.listMuscleLeaderboard({
+      muscleKey: 'chest',
+      scope: 'season',
+      search: '  nels   DeLa   Cruz ',
+    });
+
+    expect(result.data[0]).toMatchObject({
+      displayName: 'Nels DeLa Cruz',
+      rankPosition: 1,
+      seasonId: 'season-closed',
+    });
+    expect(seasonalMuscleStanding.findMany.mock.calls[0][0].where).toEqual(
+      expect.objectContaining({
+        season_id: 'season-closed',
+        user: {
+          OR: [
+            expect.objectContaining({ AND: expect.any(Array) }),
+            expect.any(Object),
+          ],
+        },
+      }),
+    );
+  });
+
+  it('returns an empty season muscle result when there is no season history', async () => {
+    seasonDefinition.findFirst.mockReset().mockResolvedValue(null);
+
+    await expect(
+      repo.listMuscleLeaderboard({ muscleKey: 'chest', scope: 'season' }),
+    ).resolves.toEqual({
+      data: [],
+      meta: { page: 1, limit: 20, total: 0, total_pages: 0 },
     });
   });
 

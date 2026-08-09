@@ -80,6 +80,18 @@ export function updateMembershipPlanMutationOptions(
   });
 }
 
+export function deleteMembershipPlanMutationOptions(
+  client: Pick<ApiClient, "membership">,
+  queryClient: QueryClient
+) {
+  return mutationOptions({
+    mutationFn: (planId: string) => client.membership.deletePlan(planId),
+    onSuccess: async () => {
+      await invalidateMembershipQueries(queryClient);
+    }
+  });
+}
+
 export function updateMembershipCatalogSettingsMutationOptions(
   client: Pick<ApiClient, "membership">,
   queryClient: QueryClient

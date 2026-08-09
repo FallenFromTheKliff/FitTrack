@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
-import { BadgePercent, CheckCircle2, Plus, RefreshCcw, Save } from "lucide-react";
+import {
+  BadgePercent,
+  CalendarDays,
+  CheckCircle2,
+  Plus,
+  RefreshCcw,
+  Save,
+  Trash2,
+} from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   GymPromotionRecord,
@@ -13,6 +21,7 @@ import type { MembershipCatalogSettingsRecord } from "@fittrack/types";
 import {
   createGymPromotionMutationOptions,
   createMembershipPlanMutationOptions,
+  deleteMembershipPlanMutationOptions,
   deactivateGymPromotionMutationOptions,
   gymPromotionsQueryOptions,
   membershipCatalogSettingsQueryOptions,
@@ -34,7 +43,7 @@ import {
   FitTextArea,
   FitTextInput,
 } from "@/components/fit";
-import { ConfirmModal, FitModal } from "@/components/modals";
+import { CalendarModal, ConfirmModal, FitModal } from "@/components/modals";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +69,7 @@ type PromoDraft = {
   startsAt: string;
   title: string;
 };
+type PromoCalendarTarget = "startsAt" | "endsAt";
 
 const DEFAULT_CREATE_PLAN_DRAFT: CreatePlanDraft = {
   description: "",
@@ -163,8 +173,12 @@ function formatDate(value: string) {
   });
 }
 
-function toIsoDateTime(value: string) {
-  return new Date(value).toISOString();
+function toIsoDateTime(value: string, endOfDay = false) {
+  const normalized =
+    value.length === 10
+      ? value + (endOfDay ? "T23:59:59.999" : "T00:00:00")
+      : value;
+  return new Date(normalized).toISOString();
 }
 
 function getMessage(error: unknown, fallback: string) {
@@ -238,8 +252,12 @@ export default function MembershipsPromosPage() {
   const [promoDraft, setPromoDraft] = useState<PromoDraft>(DEFAULT_PROMO_DRAFT);
   const [validationMessage, setValidationMessage] = useState<string | null>(null);
   const [plansModalOpen, setPlansModalOpen] = useState(false);
+  const [deletePlanTarget, setDeletePlanTarget] =
+    useState<MembershipPlanRecord | null>(null);
   const [deactivatePromoTarget, setDeactivatePromoTarget] =
     useState<GymPromotionRecord | null>(null);
+  const [promoCalendarTarget, setPromoCalendarTarget] =
+    useState<PromoCalendarTarget | null>(null);
 
   const plansQuery = useQuery(
     membershipPlansQueryOptions(webApiClient, { limit: 20, page: 1 }),
@@ -265,6 +283,9 @@ export default function MembershipsPromosPage() {
   );
   const updatePlanMutation = useMutation(
     updateMembershipPlanMutationOptions(webApiClient, queryClient),
+  );
+  const deletePlanMutation = useMutation(
+    deleteMembershipPlanMutationOptions(webApiClient, queryClient),
   );
   const updateMembershipCatalogSettingsMutation = useMutation(
     updateMembershipCatalogSettingsMutationOptions(webApiClient, queryClient),
@@ -299,11 +320,26 @@ export default function MembershipsPromosPage() {
     updatePlanMutation.error ??
     updateMembershipCatalogSettingsMutation.error ??
     createPromotionMutation.error ??
-    deactivatePromotionMutation.error;
+    deactivatePromotionMutation.error ??
+    deletePlanMutation.error;
   const errorMessage = pageError
     ? getMessage(pageError, "Unable to complete the membership operation.")
     : null;
   const pageMessage = validationMessage ?? errorMessage;
+  const clearValidationMessage = () => setValidationMessage(null);
+
+  const membershipCardPriceError = membershipCardPriceDraft.trim()
+    ? parsePositiveMoney(membershipCardPriceDraft, "Membership card fee").error
+    : null;
+  const createPlanPriceError = createPlanDraft.price.trim()
+    ? parsePositiveMoney(createPlanDraft.price, "Plan fee").error
+    : null;
+  const createPlanDurationError = createPlanDraft.durationDays.trim()
+    ? parsePositiveWholeNumber(
+        createPlanDraft.durationDays,
+        "Plan duration",
+      ).error
+    : null;
 
   const shell = useMemo(
     () => ({
@@ -564,8 +600,19 @@ export default function MembershipsPromosPage() {
                     step="0.01"
                     type="number"
                     value={membershipCardPriceDraft}
-                    onChange={(event) => setMembershipCardPriceDraft(event.target.value)}
+                    onChange={(event) => {
+                      setMembershipCardPriceDraft(event.target.value);
+                      clearValidationMessage();
+                    }}
                   />
+                  {membershipCardPriceError ? (
+                    <div
+                      role="alert"
+                      style={{ color: "#b42318", fontSize: 12, marginTop: 4 }}
+                    >
+                      {membershipCardPriceError}
+                    </div>
+                  ) : null}
                 </div>
               </label>
               <FitButton
@@ -631,10 +678,24 @@ export default function MembershipsPromosPage() {
                       step="0.01"
                       type="number"
                       value={draft.price}
-                      onChange={(event) =>
-                        updatePlanDraft(plan, { price: event.target.value })
-                      }
+                      onChange={(event) => {
+                        updatePlanDraft(plan, { price: event.target.value });
+                        clearValidationMessage();
+                      }}
                     />
+                    {draft.price.trim() &&
+                    parsePositiveMoney(draft.price, "Plan fee").error ? (
+                      <div
+                        role="alert"
+                        style={{
+                          color: "#b42318",
+                          fontSize: 12,
+                          marginTop: 4,
+                        }}
+                      >
+                        {parsePositiveMoney(draft.price, "Plan fee").error}
+                      </div>
+                    ) : null}
                   </div>
                 </label>
                 <label style={{ display: "grid", gap: 6 }}>
@@ -649,10 +710,32 @@ export default function MembershipsPromosPage() {
                       step="1"
                       type="number"
                       value={draft.durationDays}
-                      onChange={(event) =>
-                        updatePlanDraft(plan, { durationDays: event.target.value })
-                      }
+                      onChange={(event) => {
+                        updatePlanDraft(plan, { durationDays: event.target.value });
+                        clearValidationMessage();
+                      }}
                     />
+                    {draft.durationDays.trim() &&
+                    parsePositiveWholeNumber(
+                      draft.durationDays,
+                      "Plan duration",
+                    ).error ? (
+                      <div
+                        role="alert"
+                        style={{
+                          color: "#b42318",
+                          fontSize: 12,
+                          marginTop: 4,
+                        }}
+                      >
+                        {
+                          parsePositiveWholeNumber(
+                            draft.durationDays,
+                            "Plan duration",
+                          ).error
+                        }
+                      </div>
+                    ) : null}
                   </div>
                 </label>
                 <div style={{ display: "grid", gap: 8, justifyItems: "end" }}>
@@ -668,6 +751,20 @@ export default function MembershipsPromosPage() {
                     />
                     <FitText style={{ fontSize: 12 }}>Active</FitText>
                   </label>
+                  <FitButton
+                    icon={Trash2}
+                    label="DELETE"
+                    loading={
+                      deletePlanMutation.isPending &&
+                      deletePlanTarget?.id === plan.id
+                    }
+                    onClick={() => {
+                      deletePlanMutation.reset();
+                      setValidationMessage(null);
+                      setDeletePlanTarget(plan);
+                    }}
+                    variant="ghost"
+                  />
                   <FitButton
                     icon={Save}
                     label="SAVE"
@@ -733,14 +830,23 @@ export default function MembershipsPromosPage() {
                   step="0.01"
                   type="number"
                   value={createPlanDraft.price}
-                  onChange={(event) =>
+                  onChange={(event) => {
                     setCreatePlanDraft((current) => ({
                       ...current,
                       price: event.target.value,
-                    }))
-                  }
+                    }));
+                    clearValidationMessage();
+                  }}
                   placeholder="1499"
                 />
+                {createPlanPriceError ? (
+                  <div
+                    role="alert"
+                    style={{ color: "#b42318", fontSize: 12, marginTop: 4 }}
+                  >
+                    {createPlanPriceError}
+                  </div>
+                ) : null}
               </div>
             </label>
             <label style={{ display: "grid", gap: 6 }}>
@@ -754,13 +860,22 @@ export default function MembershipsPromosPage() {
                   step="1"
                   type="number"
                   value={createPlanDraft.durationDays}
-                  onChange={(event) =>
+                  onChange={(event) => {
                     setCreatePlanDraft((current) => ({
                       ...current,
                       durationDays: event.target.value,
-                    }))
-                  }
+                    }));
+                    clearValidationMessage();
+                  }}
                 />
+                {createPlanDurationError ? (
+                  <div
+                    role="alert"
+                    style={{ color: "#b42318", fontSize: 12, marginTop: 4 }}
+                  >
+                    {createPlanDurationError}
+                  </div>
+                ) : null}
               </div>
             </label>
             <FitButton
@@ -897,34 +1012,40 @@ export default function MembershipsPromosPage() {
             <label style={{ display: "grid", gap: 6 }}>
               <FitText style={{ color: colors.textMuted, fontSize: 12 }}>Starts</FitText>
               <div style={inputShell(fieldBorder, colors.surfaceRaised)}>
-                <FitTextInput
+                <FitButton
+                  icon={CalendarDays}
                   id="membership-promo-starts-at"
-                  name="membershipPromoStartsAt"
-                  type="datetime-local"
-                  value={promoDraft.startsAt}
-                  onChange={(event) =>
-                    setPromoDraft((current) => ({
-                      ...current,
-                      startsAt: event.target.value,
-                    }))
+                  label={
+                    promoDraft.startsAt
+                      ? formatDate(promoDraft.startsAt)
+                      : "SELECT START DATE"
                   }
+                  name="membershipPromoStartsAt"
+                  onClick={() => {
+                    clearValidationMessage();
+                    setPromoCalendarTarget("startsAt");
+                  }}
+                  variant="ghost"
                 />
               </div>
             </label>
             <label style={{ display: "grid", gap: 6 }}>
               <FitText style={{ color: colors.textMuted, fontSize: 12 }}>Ends</FitText>
               <div style={inputShell(fieldBorder, colors.surfaceRaised)}>
-                <FitTextInput
+                <FitButton
+                  icon={CalendarDays}
                   id="membership-promo-ends-at"
-                  name="membershipPromoEndsAt"
-                  type="datetime-local"
-                  value={promoDraft.endsAt}
-                  onChange={(event) =>
-                    setPromoDraft((current) => ({
-                      ...current,
-                      endsAt: event.target.value,
-                    }))
+                  label={
+                    promoDraft.endsAt
+                      ? formatDate(promoDraft.endsAt)
+                      : "SELECT END DATE"
                   }
+                  name="membershipPromoEndsAt"
+                  onClick={() => {
+                    clearValidationMessage();
+                    setPromoCalendarTarget("endsAt");
+                  }}
+                  variant="ghost"
                 />
               </div>
             </label>
@@ -1006,6 +1127,33 @@ export default function MembershipsPromosPage() {
           }
         }
       `}</style>
+      <CalendarModal
+        isOpen={promoCalendarTarget !== null}
+        minDate={
+          promoCalendarTarget === "endsAt"
+            ? promoDraft.startsAt || null
+            : null
+        }
+        closeOnSelect={false}
+        keepViewOnMonthSelect
+        keepViewOnYearSelect
+        preserveViewOnSelectedDateChange
+        noScroll={false}
+        selectedDate={
+          promoCalendarTarget
+            ? promoDraft[promoCalendarTarget] || undefined
+            : undefined
+        }
+        onSelect={(dateYmd) => {
+          if (!promoCalendarTarget) return;
+          setPromoDraft((current) => ({
+            ...current,
+            [promoCalendarTarget]: dateYmd,
+          }));
+          clearValidationMessage();
+        }}
+        onClose={() => setPromoCalendarTarget(null)}
+      />
       <ConfirmModal
         isOpen={deactivatePromoTarget !== null}
         title="Deactivate Promotion"
@@ -1022,6 +1170,33 @@ export default function MembershipsPromosPage() {
           });
         }}
         onCancel={() => setDeactivatePromoTarget(null)}
+      />
+      <ConfirmModal
+        isOpen={deletePlanTarget !== null}
+        title="Delete Membership Plan"
+        message={
+          deletePlanMutation.error
+            ? getMessage(
+                deletePlanMutation.error,
+                "Unable to delete membership plan.",
+              )
+            : 'Delete "' +
+              (deletePlanTarget?.name ?? "this membership plan") +
+              '"? This permanently removes it from the catalog. Plans with membership history are blocked so existing records stay intact; deactivate the plan instead when history exists.'
+        }
+        confirmLabel="DELETE PLAN"
+        loadingLabel="DELETING PLAN"
+        confirmIcon={Trash2}
+        isLoading={deletePlanMutation.isPending}
+        isDanger
+        onConfirm={() => {
+          if (!deletePlanTarget || deletePlanMutation.isPending) return;
+          setValidationMessage(null);
+          deletePlanMutation.mutate(deletePlanTarget.id, {
+            onSuccess: () => setDeletePlanTarget(null),
+          });
+        }}
+        onCancel={() => setDeletePlanTarget(null)}
       />
     </main>
   );

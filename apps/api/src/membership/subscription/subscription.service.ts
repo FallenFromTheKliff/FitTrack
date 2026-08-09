@@ -118,6 +118,49 @@ export class SubscriptionService {
     return this.repo.updatePlan(id, this.toUpdateInput(dto));
   }
 
+  async deletePlan(id: string): Promise<void> {
+    const plan = await this.repo.findPlanByIdOrThrow(id);
+    const subscriptionCount = await this.repo.countSubscriptionsByPlanId(id);
+
+    if (subscriptionCount > 0) {
+      const recordLabel = subscriptionCount === 1 ? 'record' : 'records';
+      throw new ConflictException({
+        type: 'CONFLICT',
+        title: 'Membership Plan Has History',
+        status: HttpStatus.CONFLICT,
+        detail:
+          'Membership plan "' +
+          plan.name +
+          '" cannot be deleted because it has ' +
+          subscriptionCount +
+          ' membership ' +
+          recordLabel +
+          '. Deactivate it instead to preserve membership history.',
+      });
+    }
+
+    try {
+      await this.repo.deletePlan(id);
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2003'
+      ) {
+        throw new ConflictException({
+          type: 'CONFLICT',
+          title: 'Membership Plan Has History',
+          status: HttpStatus.CONFLICT,
+          detail:
+            'Membership plan "' +
+            plan.name +
+            '" cannot be deleted because membership history was added during the request. Deactivate it instead to preserve membership history.',
+        });
+      }
+
+      throw error;
+    }
+  }
+
   async updateCatalogSettings(
     dto: UpdateMembershipCatalogSettingsDTO,
   ): Promise<MembershipCatalogSettingsResponseDTO> {

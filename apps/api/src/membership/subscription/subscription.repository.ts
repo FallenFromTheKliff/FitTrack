@@ -233,6 +233,14 @@ export class SubscriptionRepository extends BaseRepository {
     return this.create<MembershipPlan>(this.prisma.membershipPlan, data);
   }
 
+  countSubscriptionsByPlanId(planId: string): Promise<number> {
+    return this.count(this.prisma.subscription, { plan_id: planId });
+  }
+
+  deletePlan(id: string): Promise<void> {
+    return this.deleteById(this.prisma.membershipPlan, id);
+  }
+
   updatePlan(
     id: string,
     data: Prisma.MembershipPlanUpdateInput,
