@@ -1,4 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   AppointmentStatus,
   AuthProvider,
@@ -17,6 +22,10 @@ import {
   MilestoneTriggerType,
   MilestoneVerificationPolicy,
   ModerationActionType,
+  NotificationChannel,
+  NotificationStatus,
+  NotificationType,
+  ProgressionIconKind,
   ProgressionGrantStatus,
   ProgressionGrantType,
   ProgressionSourceStatus,
@@ -42,9 +51,53 @@ import type {
 } from '../progression-source.types';
 import { type MasteryFilterDTO } from './dto/gamification.dto';
 import {
+  DEFAULT_MUSCLE_ICON_KEY,
   evaluateMasteryRank,
+  getCompetitionRankPositions,
   isHigherMasteryRank,
+  resolveProgressionIcon,
 } from './gamification.constants';
+import {
+  decodeLeaderboardCursor,
+  encodeLeaderboardCursor,
+  isAfterLeaderboardCursor,
+} from './leaderboard-pagination';
+
+const SEASON_STATUS_TRANSITIONS: Record<SeasonStatus, SeasonStatus[]> = {
+  [SeasonStatus.draft]: [SeasonStatus.active, SeasonStatus.archived],
+  [SeasonStatus.active]: [SeasonStatus.closed, SeasonStatus.archived],
+  [SeasonStatus.closed]: [SeasonStatus.archived],
+  [SeasonStatus.archived]: [],
+};
+
+const SERIALIZABLE_RETRY_LIMIT = 3;
+
+function isSerializationConflict(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error.code === 'P2034' || error.code === 'P2002')
+  );
+}
+
+function isUniqueConstraintConflict(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === 'P2002'
+  );
+}
+
+function isAdminHiddenGovernanceStatus(
+  status: RankingGovernanceStatus | undefined,
+): boolean {
+  return (
+    status === RankingGovernanceStatus.hidden_by_admin ||
+    status === RankingGovernanceStatus.disqualified
+  );
+}
 
 export interface LeaderboardTotalRecord {
   user_id: string;
@@ -208,6 +261,10 @@ export interface GrantModerationResult {
   userId: string;
 }
 
+export interface ManualExpGrantResult extends GrantModerationResult {
+  grantIds: string[];
+}
+
 export interface RankingOverrideResult {
   adminNote: string | null;
   displayAlias: string | null;
@@ -327,7 +384,7 @@ export type AdminSeasonListRecord = Prisma.SeasonDefinitionGetPayload<{
   };
 }>;
 
-export type AdminSeasonStandingRecord = Prisma.SeasonalStandingGetPayload<{
+type AdminSeasonStandingPayload = Prisma.SeasonalStandingGetPayload<{
   include: {
     season: true;
     user: {
@@ -347,6 +404,11 @@ export type AdminSeasonStandingRecord = Prisma.SeasonalStandingGetPayload<{
   };
 }>;
 
+export type AdminSeasonStandingRecord = Omit<
+  AdminSeasonStandingPayload,
+  'rank_position'
+> & { rank_position: number };
+
 export interface SeasonStatusUpdateResult {
   activatedAt: Date | null;
   archivedAt: Date | null;
@@ -358,7 +420,11 @@ export interface SeasonStatusUpdateResult {
 }
 
 export interface MuscleLeaderboardRecord {
+  avatarUrl: string | null;
   displayName: string;
+  iconAssetKey: string | null;
+  iconKey: string | null;
+  iconKind: ProgressionIconKind;
   isDisqualified: boolean;
   isHidden: boolean;
   lastEarnedAt: Date | null;
@@ -887,6 +953,7 @@ async function syncMilestoneProgress(
     const isAlreadyUnlocked =
       existingProgress?.status === MilestoneProgressStatus.unlocked ||
       existingProgress?.status === MilestoneProgressStatus.claimed;
+    const newlyUnlocked = !isAlreadyUnlocked && evaluation.unlocked;
     const nextProgressValue = isAlreadyUnlocked
       ? Math.max(existingProgress?.progress_value ?? 0, evaluation.targetValue)
       : Math.max(0, evaluation.observedValue);
@@ -926,6 +993,31 @@ async function syncMilestoneProgress(
           unlocked_at: nextUnlockedAt,
         },
       });
+
+      if (newlyUnlocked) {
+        await tx.notification.upsert({
+          where: {
+            dedupe_key: `achievement-unlocked:${input.userId}:${milestone.id}`,
+          },
+          create: {
+            user_id: input.userId,
+            type: NotificationType.system,
+            channel: NotificationChannel.in_app,
+            title: 'Achievement unlocked',
+            body: milestone.title,
+            data: {
+              kind: 'achievement_unlocked',
+              milestone_id: milestone.id,
+              milestone_key: milestone.key,
+              reward_payload: milestone.reward_payload,
+            } satisfies Prisma.InputJsonObject,
+            status: NotificationStatus.sent,
+            sent_at: input.evaluatedAt,
+            dedupe_key: `achievement-unlocked:${input.userId}:${milestone.id}`,
+          },
+          update: {},
+        });
+      }
       continue;
     }
 
@@ -948,6 +1040,31 @@ async function syncMilestoneProgress(
         unlocked_at: nextUnlockedAt,
       },
     });
+
+    if (newlyUnlocked) {
+      await tx.notification.upsert({
+        where: {
+          dedupe_key: `achievement-unlocked:${input.userId}:${milestone.id}`,
+        },
+        create: {
+          user_id: input.userId,
+          type: NotificationType.system,
+          channel: NotificationChannel.in_app,
+          title: 'Achievement unlocked',
+          body: milestone.title,
+          data: {
+            kind: 'achievement_unlocked',
+            milestone_id: milestone.id,
+            milestone_key: milestone.key,
+            reward_payload: milestone.reward_payload,
+          } satisfies Prisma.InputJsonObject,
+          status: NotificationStatus.sent,
+          sent_at: input.evaluatedAt,
+          dedupe_key: `achievement-unlocked:${input.userId}:${milestone.id}`,
+        },
+        update: {},
+      });
+    }
   }
 }
 
@@ -955,6 +1072,92 @@ async function syncMilestoneProgress(
 export class GamificationRepository extends BaseRepository {
   constructor(prisma: PrismaService) {
     super(prisma);
+  }
+
+  private async runSerializableTransaction<T>(
+    work: (tx: Prisma.TransactionClient) => Promise<T>,
+  ): Promise<T> {
+    for (let attempt = 0; attempt < SERIALIZABLE_RETRY_LIMIT; attempt += 1) {
+      try {
+        return await this.prisma.$transaction(work, {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        });
+      } catch (error) {
+        if (
+          !isSerializationConflict(error) ||
+          attempt === SERIALIZABLE_RETRY_LIMIT - 1
+        ) {
+          throw error;
+        }
+      }
+    }
+
+    throw new Error('Serializable transaction retry limit exceeded.');
+  }
+
+  private async assertSeasonIntervalAvailable(
+    tx: Prisma.TransactionClient,
+    input: {
+      endsAt: Date;
+      excludeSeasonId?: string;
+      startsAt: Date;
+    },
+  ): Promise<void> {
+    if (
+      Number.isNaN(input.startsAt.getTime()) ||
+      Number.isNaN(input.endsAt.getTime()) ||
+      input.endsAt <= input.startsAt
+    ) {
+      throw new BadRequestException('Season end must be after its start.');
+    }
+
+    const overlappingSeason = await tx.seasonDefinition.findFirst({
+      where: {
+        ...(input.excludeSeasonId
+          ? { id: { not: input.excludeSeasonId } }
+          : {}),
+        starts_at: { lt: input.endsAt },
+        ends_at: { gt: input.startsAt },
+      },
+      select: { id: true },
+    });
+
+    if (overlappingSeason) {
+      throw new ConflictException({
+        type: 'CONFLICT',
+        title: 'Season Interval Conflict',
+        status: 409,
+        detail: 'The requested season interval overlaps an existing season.',
+      });
+    }
+  }
+
+  private async ensureSeasonStandingsInTransaction(
+    tx: Prisma.TransactionClient,
+    seasonId: string,
+  ): Promise<void> {
+    const eligibleMembers = await tx.user.findMany({
+      where: {
+        deletedAt: null,
+        role: UserRole.member,
+        status: UserStatus.active,
+      },
+      select: { id: true },
+    });
+
+    if (!eligibleMembers.length) {
+      return;
+    }
+
+    await tx.seasonalStanding.createMany({
+      data: eligibleMembers.map((member) => ({
+        season_id: seasonId,
+        user_id: member.id,
+        season_points: 0,
+        last_earned_at: null,
+      })),
+      skipDuplicates: true,
+    });
   }
 
   async getAdminOverview(): Promise<AdminGamificationOverviewRecord> {
@@ -1180,7 +1383,7 @@ export class GamificationRepository extends BaseRepository {
     });
   }
 
-  createSeason(input: {
+  async createSeason(input: {
     autoStartNext: boolean;
     description: string | null;
     endsAt: Date;
@@ -1188,24 +1391,31 @@ export class GamificationRepository extends BaseRepository {
     startsAt: Date;
     title: string;
   }) {
-    return this.prisma.seasonDefinition.create({
-      data: {
-        auto_start_next: input.autoStartNext,
-        description: input.description,
-        ends_at: input.endsAt,
-        rules_version: input.rulesVersion,
-        starts_at: input.startsAt,
-        status: SeasonStatus.draft,
-        title: input.title,
-      },
-      include: {
-        standings: {
-          select: {
-            is_disqualified: true,
-            is_hidden: true,
+    return this.runSerializableTransaction(async (tx) => {
+      await this.assertSeasonIntervalAvailable(tx, {
+        endsAt: input.endsAt,
+        startsAt: input.startsAt,
+      });
+
+      return tx.seasonDefinition.create({
+        data: {
+          auto_start_next: input.autoStartNext,
+          description: input.description,
+          ends_at: input.endsAt,
+          rules_version: input.rulesVersion,
+          starts_at: input.startsAt,
+          status: SeasonStatus.draft,
+          title: input.title,
+        },
+        include: {
+          standings: {
+            select: {
+              is_disqualified: true,
+              is_hidden: true,
+            },
           },
         },
-      },
+      });
     });
   }
 
@@ -1218,13 +1428,19 @@ export class GamificationRepository extends BaseRepository {
     startsAt?: Date;
     title?: string;
   }): Promise<AdminSeasonListRecord> {
-    return this.prisma.$transaction(async (tx) => {
+    return this.runSerializableTransaction(async (tx) => {
       const season = await tx.seasonDefinition.findUniqueOrThrow({
         where: { id: input.seasonId },
       });
       if (season.status !== SeasonStatus.draft) {
-        throw new Error('Only draft seasons can be edited.');
+        throw new BadRequestException('Only draft seasons can be edited.');
       }
+
+      await this.assertSeasonIntervalAvailable(tx, {
+        endsAt: input.endsAt ?? season.ends_at,
+        excludeSeasonId: input.seasonId,
+        startsAt: input.startsAt ?? season.starts_at,
+      });
 
       return tx.seasonDefinition.update({
         where: { id: input.seasonId },
@@ -1268,9 +1484,14 @@ export class GamificationRepository extends BaseRepository {
     const limit = input.limit ?? 20;
     let seasonId = input.seasonId;
     if (!seasonId && !input.includeArchived) {
+      const now = new Date();
       const fallbackSeason =
         (await this.prisma.seasonDefinition.findFirst({
-          where: { status: SeasonStatus.active },
+          where: {
+            status: SeasonStatus.active,
+            starts_at: { lte: now },
+            ends_at: { gte: now },
+          },
           orderBy: { starts_at: 'desc' },
           select: { id: true },
         })) ??
@@ -1289,140 +1510,132 @@ export class GamificationRepository extends BaseRepository {
 
       seasonId = fallbackSeason.id;
     }
+    if (seasonId) {
+      const selectedSeason = await this.prisma.seasonDefinition.findUnique({
+        where: { id: seasonId },
+        select: { status: true },
+      });
+      if (selectedSeason?.status === SeasonStatus.active) {
+        await this.runSerializableTransaction((tx) =>
+          this.ensureSeasonStandingsInTransaction(tx, seasonId),
+        );
+      }
+    }
     const normalizedSearch = input.search?.trim().replace(/\s+/g, ' ');
-    const searchTerms = normalizedSearch?.split(' ').filter(Boolean) ?? [];
-    const trimmedMuscleKey = input.muscleKey?.trim();
-    const userWhere: Prisma.UserWhereInput = {};
-
-    if (trimmedMuscleKey) {
-      userWhere.muscle_mastery = {
-        some: {
-          muscle_group: {
-            contains: trimmedMuscleKey,
-            mode: 'insensitive',
-          },
-        },
-      };
-    }
-
-    if (input.visibility || input.governanceStatus) {
-      userWhere.ranking_profile = {
-        is: {
-          ...(input.visibility ? { visibility: input.visibility } : {}),
-          ...(input.governanceStatus
-            ? { governance_status: input.governanceStatus }
-            : {}),
-        },
-      };
-    }
-
-    const where: Prisma.SeasonalStandingWhereInput = {
+    const normalizedSearchTerms =
+      normalizedSearch?.toLocaleLowerCase().split(' ').filter(Boolean) ?? [];
+    const normalizedMuscleKey = input.muscleKey
+      ?.trim()
+      .toLocaleLowerCase();
+    const baseWhere: Prisma.SeasonalStandingWhereInput = {
       ...(seasonId ? { season_id: seasonId } : {}),
       season: input.includeArchived
         ? {}
         : {
             status: { not: SeasonStatus.archived },
           },
-      ...(Object.keys(userWhere).length ? { user: userWhere } : {}),
-      ...(normalizedSearch
-        ? {
-            OR: [
-              {
-                AND: searchTerms.map((term) => ({
-                  OR: [
-                    {
-                      user: {
-                        profile: {
-                          is: {
-                            first_name: {
-                              contains: term,
-                              mode: 'insensitive',
-                            },
-                          },
-                        },
-                      },
-                    },
-                    {
-                      user: {
-                        profile: {
-                          is: {
-                            last_name: {
-                              contains: term,
-                              mode: 'insensitive',
-                            },
-                          },
-                        },
-                      },
-                    },
-                  ],
-                })),
-              },
-              {
-                user: {
-                  ranking_profile: {
-                    is: {
-                      display_alias: {
-                        contains: normalizedSearch,
-                        mode: 'insensitive',
-                      },
-                    },
-                  },
-                },
-              },
-            ],
-          }
-        : {}),
     };
 
-    const [data, total] = await this.prisma.$transaction([
-      this.prisma.seasonalStanding.findMany({
-        where,
-        include: {
-          season: true,
-          user: {
-            include: {
-              profile: {
-                select: {
-                  first_name: true,
-                  last_name: true,
-                },
+    const eligibleData = await this.prisma.seasonalStanding.findMany({
+      where: baseWhere,
+      include: {
+        season: true,
+        user: {
+          include: {
+            profile: {
+              select: {
+                first_name: true,
+                last_name: true,
               },
-              ranking_profile: true,
-              progression_profile: true,
-              muscle_mastery: true,
-              milestone_progress: true,
             },
+            ranking_profile: true,
+            progression_profile: true,
+            muscle_mastery: true,
+            milestone_progress: true,
           },
         },
-        orderBy: [
-          { season: { starts_at: 'desc' } },
-          { season_points: 'desc' },
-          { updated_at: 'desc' },
-        ],
-      }),
-      this.prisma.seasonalStanding.count({ where }),
-    ]);
-
-    const visibleRanks = new Map<string, number>();
-    const rankedData = data.map((standing) => {
-      const currentRank = visibleRanks.get(standing.season_id) ?? 0;
-      const rankPosition =
-        standing.is_disqualified || standing.is_hidden
-          ? null
-          : currentRank + 1;
-
-      if (rankPosition !== null) {
-        visibleRanks.set(standing.season_id, rankPosition);
-      }
-
-      return {
-        ...standing,
-        rank_position: rankPosition,
-      };
+      },
     });
 
+    const orderedEligibleData = [...eligibleData].sort((left, right) => {
+      const seasonDifference =
+        right.season.starts_at.getTime() - left.season.starts_at.getTime();
+      if (seasonDifference !== 0) return seasonDifference;
+
+      const totalXpDifference =
+        (right.user.progression_profile?.total_xp ?? 0) -
+        (left.user.progression_profile?.total_xp ?? 0);
+      if (totalXpDifference !== 0) return totalXpDifference;
+
+      return left.user_id.localeCompare(right.user_id);
+    });
+    const rowsBySeason = new Map<string, typeof orderedEligibleData>();
+    for (const standing of orderedEligibleData) {
+      const rows = rowsBySeason.get(standing.season_id) ?? [];
+      rows.push(standing);
+      rowsBySeason.set(standing.season_id, rows);
+    }
+    const globallyRankedData: AdminSeasonStandingRecord[] = [];
+    for (const rows of rowsBySeason.values()) {
+      const rankPositions = getCompetitionRankPositions(
+        rows,
+        (standing) => standing.user.progression_profile?.total_xp ?? 0,
+      );
+      globallyRankedData.push(
+        ...rows.map((standing, index) => ({
+          ...standing,
+          rank_position: rankPositions[index],
+        })),
+      );
+    }
+
+    const filteredData = globallyRankedData.filter((standing) => {
+      const rankingProfile = standing.user.ranking_profile;
+      if (
+        input.visibility &&
+        (rankingProfile?.visibility ?? RankingVisibility.public) !==
+          input.visibility
+      ) {
+        return false;
+      }
+      if (
+        input.governanceStatus &&
+        (rankingProfile?.governance_status ??
+          RankingGovernanceStatus.normal) !== input.governanceStatus
+      ) {
+        return false;
+      }
+      if (
+        normalizedMuscleKey &&
+        !standing.user.muscle_mastery.some((mastery) =>
+          mastery.muscle_group
+            .toLocaleLowerCase()
+            .includes(normalizedMuscleKey),
+        )
+      ) {
+        return false;
+      }
+      if (!normalizedSearch) return true;
+
+      const profileNames = standing.user.profile
+        ? [
+            standing.user.profile.first_name.toLocaleLowerCase(),
+            standing.user.profile.last_name.toLocaleLowerCase(),
+          ]
+        : [];
+      const matchesName = normalizedSearchTerms.every((term) =>
+        profileNames.some((name) => name.includes(term)),
+      );
+      const matchesAlias =
+        rankingProfile?.display_alias
+          ?.toLocaleLowerCase()
+          .includes(normalizedSearch.toLocaleLowerCase()) ?? false;
+      return matchesName || matchesAlias;
+    });
+    const total = filteredData.length;
+
     return {
-      data: rankedData.slice((page - 1) * limit, page * limit),
+      data: filteredData.slice((page - 1) * limit, page * limit),
       meta: {
         page,
         limit,
@@ -1433,6 +1646,7 @@ export class GamificationRepository extends BaseRepository {
   }
 
   async listMuscleLeaderboard(input: {
+    cursor?: string;
     includeHidden?: boolean;
     limit?: number;
     muscleKey: string;
@@ -1440,10 +1654,64 @@ export class GamificationRepository extends BaseRepository {
     scope: 'lifetime' | 'season';
     search?: string;
     seasonId?: string;
+    snapshot?: string;
   }): Promise<PaginatedResult<MuscleLeaderboardRecord>> {
     const page = input.page ?? 1;
     const limit = input.limit ?? 20;
+    const cursor = decodeLeaderboardCursor(input.cursor);
+    if (input.cursor && !cursor) {
+      throw new BadRequestException('Invalid muscle leaderboard cursor.');
+    }
+    const snapshot = input.snapshot ?? cursor?.snapshot ?? new Date().toISOString();
+    if (Number.isNaN(new Date(snapshot).getTime())) {
+      throw new BadRequestException('Invalid muscle leaderboard snapshot.');
+    }
+    if (cursor && cursor.snapshot !== snapshot) {
+      throw new BadRequestException('Muscle leaderboard cursor does not match snapshot.');
+    }
     const muscleKey = input.muscleKey.trim().toLowerCase();
+    if (!muscleKey) {
+      throw new BadRequestException('muscle_key must not be empty.');
+    }
+
+    const muscleDefinitionSelect = {
+      aliases: true,
+      icon_asset_key: true,
+      icon_key: true,
+      icon_kind: true,
+      is_active: true,
+      key: true,
+    } as const;
+    let muscleDefinition = await this.prisma.muscleDefinition.findUnique({
+      where: { key: muscleKey },
+      select: muscleDefinitionSelect,
+    });
+    if (!muscleDefinition) {
+      const activeMuscleDefinitions =
+        (await this.prisma.muscleDefinition.findMany({
+          where: { is_active: true },
+          orderBy: { sort_order: 'asc' },
+          select: muscleDefinitionSelect,
+        })) ?? [];
+      muscleDefinition =
+        activeMuscleDefinitions.find((definition) =>
+          readStringArray(definition.aliases).some(
+            (alias) => alias.trim().toLowerCase() === muscleKey,
+          ),
+        ) ?? null;
+    }
+    if (!muscleDefinition?.is_active) {
+      throw new NotFoundException(`Muscle group ${muscleKey} was not found.`);
+    }
+
+    const canonicalMuscleKey = muscleDefinition.key.trim().toLowerCase();
+    const muscleIcon = resolveProgressionIcon({
+      assetKey: muscleDefinition.icon_asset_key,
+      defaultIconKey: DEFAULT_MUSCLE_ICON_KEY,
+      iconKey: muscleDefinition.icon_key,
+      kind: muscleDefinition.icon_kind,
+    });
+    const snapshotAt = new Date(snapshot);
     const normalizedSearch = input.search?.trim().replace(/\s+/g, ' ');
     const searchTerms = normalizedSearch?.split(' ').filter(Boolean) ?? [];
     const nameSearch = normalizedSearch
@@ -1484,13 +1752,18 @@ export class GamificationRepository extends BaseRepository {
       : undefined;
 
     if (input.scope === 'season') {
+      const now = new Date();
       const season =
         (input.seasonId
           ? await this.prisma.seasonDefinition.findUnique({
               where: { id: input.seasonId },
             })
           : await this.prisma.seasonDefinition.findFirst({
-              where: { status: SeasonStatus.active },
+              where: {
+                status: SeasonStatus.active,
+                starts_at: { lte: now },
+                ends_at: { gte: now },
+              },
               orderBy: { starts_at: 'desc' },
             })) ??
         (input.seasonId
@@ -1513,12 +1786,30 @@ export class GamificationRepository extends BaseRepository {
       }
 
       const where: Prisma.SeasonalMuscleStandingWhereInput = {
-        muscle_group: { equals: muscleKey, mode: 'insensitive' },
+        muscle_group: { equals: canonicalMuscleKey, mode: 'insensitive' },
         season_id: season.id,
         ...(input.includeHidden
           ? {}
           : { is_disqualified: false, is_hidden: false }),
-        ...(nameSearch ? { user: nameSearch } : {}),
+        ...(!input.includeHidden || nameSearch
+          ? {
+              user: {
+                AND: [
+                  ...(!input.includeHidden
+                    ? [
+                        {
+                          ranking_profile: {
+                            is: { visibility: RankingVisibility.public },
+                          },
+                        } satisfies Prisma.UserWhereInput,
+                      ]
+                    : []),
+                  ...(nameSearch ? [nameSearch] : []),
+                ],
+              },
+            }
+          : {}),
+        last_earned_at: { lte: snapshotAt },
       };
       const [rows, total] = await this.prisma.$transaction([
         this.prisma.seasonalMuscleStanding.findMany({
@@ -1526,27 +1817,37 @@ export class GamificationRepository extends BaseRepository {
           include: { user: { include: { profile: true } } },
           orderBy: [
             { muscle_points: 'desc' },
-            { updated_at: 'asc' },
             { user_id: 'asc' },
           ],
         }),
         this.prisma.seasonalMuscleStanding.count({ where }),
       ]);
 
-      const rankedRows = rows.map((row, index) => ({
-        displayName: row.user.profile
-          ? `${row.user.profile.first_name} ${row.user.profile.last_name}`.trim()
-          : 'FitTrack Member',
-        isDisqualified: row.is_disqualified,
-        isHidden: row.is_hidden,
-        lastEarnedAt: row.last_earned_at,
-        muscleKey: row.muscle_group,
-        rankPosition: index + 1,
-        seasonId: season.id,
-        seasonTitle: season.title,
-        userId: row.user_id,
-        xpPoints: row.muscle_points,
-      }));
+      let previousMusclePoints: number | null = null;
+      let rankPosition = 0;
+      const rankedRows = rows.map((row, index) => {
+        if (previousMusclePoints !== row.muscle_points) {
+          rankPosition = index + 1;
+          previousMusclePoints = row.muscle_points;
+        }
+
+        return {
+          ...muscleIcon,
+          avatarUrl: row.user.profile?.avatar_url ?? null,
+          displayName: row.user.profile
+            ? `${row.user.profile.first_name} ${row.user.profile.last_name}`.trim()
+            : 'FitTrack Member',
+          isDisqualified: row.is_disqualified,
+          isHidden: row.is_hidden,
+          lastEarnedAt: row.last_earned_at,
+          muscleKey: canonicalMuscleKey,
+          rankPosition,
+          seasonId: season.id,
+          seasonTitle: season.title,
+          userId: row.user_id,
+          xpPoints: row.muscle_points,
+        };
+      });
 
       return {
         data: rankedRows.slice((page - 1) * limit, page * limit),
@@ -1560,7 +1861,7 @@ export class GamificationRepository extends BaseRepository {
     }
 
     const userFilters: Prisma.UserWhereInput[] = [
-      ...(search
+      ...(nameSearch
         ? [nameSearch as Prisma.UserWhereInput]
         : []),
       ...(input.includeHidden
@@ -1568,10 +1869,10 @@ export class GamificationRepository extends BaseRepository {
         : [
             {
               OR: [
-                { ranking_profile: { is: null } },
                 {
                   ranking_profile: {
                     is: {
+                      visibility: RankingVisibility.public,
                       governance_status: {
                         notIn: [
                           RankingGovernanceStatus.hidden_by_admin,
@@ -1586,7 +1887,8 @@ export class GamificationRepository extends BaseRepository {
           ]),
     ];
     const where: Prisma.MuscleMasteryProgressWhereInput = {
-      muscle_group: { equals: muscleKey, mode: 'insensitive' },
+      muscle_group: { equals: canonicalMuscleKey, mode: 'insensitive' },
+      updated_at: { lte: snapshotAt },
       ...(userFilters.length > 0 ? { user: { AND: userFilters } } : {}),
     };
     const [rows, total] = await this.prisma.$transaction([
@@ -1602,31 +1904,41 @@ export class GamificationRepository extends BaseRepository {
         },
         orderBy: [
           { xp_points: 'desc' },
-          { updated_at: 'asc' },
           { user_id: 'asc' },
         ],
       }),
       this.prisma.muscleMasteryProgress.count({ where }),
     ]);
 
-    const rankedRows = rows.map((row, index) => ({
-      displayName: row.user.profile
-        ? `${row.user.profile.first_name} ${row.user.profile.last_name}`.trim()
-        : 'FitTrack Member',
-      isDisqualified:
-        row.user.ranking_profile?.governance_status ===
-        RankingGovernanceStatus.disqualified,
-      isHidden:
-        row.user.ranking_profile?.governance_status ===
-        RankingGovernanceStatus.hidden_by_admin,
-      lastEarnedAt: row.last_ranked_at,
-      muscleKey: row.muscle_group,
-      rankPosition: index + 1,
-      seasonId: null,
-      seasonTitle: null,
-      userId: row.user_id,
-      xpPoints: row.xp_points,
-    }));
+    let previousXpPoints: number | null = null;
+    let rankPosition = 0;
+    const rankedRows = rows.map((row, index) => {
+      if (previousXpPoints !== row.xp_points) {
+        rankPosition = index + 1;
+        previousXpPoints = row.xp_points;
+      }
+
+      return {
+        ...muscleIcon,
+        avatarUrl: row.user.profile?.avatar_url ?? null,
+        displayName: row.user.profile
+          ? `${row.user.profile.first_name} ${row.user.profile.last_name}`.trim()
+          : 'FitTrack Member',
+        isDisqualified:
+          row.user.ranking_profile?.governance_status ===
+          RankingGovernanceStatus.disqualified,
+        isHidden:
+          row.user.ranking_profile?.governance_status ===
+          RankingGovernanceStatus.hidden_by_admin,
+        lastEarnedAt: row.last_ranked_at,
+        muscleKey: canonicalMuscleKey,
+        rankPosition,
+        seasonId: null,
+        seasonTitle: null,
+        userId: row.user_id,
+        xpPoints: row.xp_points,
+      };
+    });
 
     return {
       data: rankedRows.slice((page - 1) * limit, page * limit),
@@ -1648,11 +1960,19 @@ export class GamificationRepository extends BaseRepository {
         standings: {
           where: { is_disqualified: false, is_hidden: false },
           include: { user: { include: { profile: true } } },
-          orderBy: [{ rank_position: 'asc' }, { season_points: 'desc' }],
+          orderBy: [
+            { rank_position: 'asc' },
+            { season_points: 'desc' },
+            { user_id: 'asc' },
+          ],
           take: input.limit,
         },
       },
-      orderBy: [{ ends_at: 'desc' }, { closed_at: 'desc' }],
+      orderBy: [
+        { ends_at: 'desc' },
+        { closed_at: 'desc' },
+        { id: 'asc' },
+      ],
     });
 
     return seasons.map((season) => ({
@@ -1673,68 +1993,110 @@ export class GamificationRepository extends BaseRepository {
   }
 
   async syncSeasonMuscleStandings(seasonId: string): Promise<void> {
-    await this.prisma.$transaction(async (tx) => {
-      const aggregates = await tx.progressionGrantLedger.groupBy({
-        by: ['user_id', 'muscle_group'],
-        where: {
-          grant_status: ProgressionGrantStatus.applied,
-          muscle_group: { not: null },
-          season_id: seasonId,
-        },
-        _max: { created_at: true },
-        _sum: { amount: true },
-      });
+    await this.runSerializableTransaction((tx) =>
+      this.syncSeasonMuscleStandingsInTransaction(tx, seasonId),
+    );
+  }
 
-      await tx.seasonalMuscleStanding.deleteMany({
-        where: { season_id: seasonId },
-      });
-      if (!aggregates.length) {
-        return;
-      }
-
-      const orderedByMuscle = new Map<
-        string,
-        typeof aggregates
-      >();
-      for (const aggregate of aggregates) {
-        if (!aggregate.muscle_group) continue;
-        const key = aggregate.muscle_group.trim().toLowerCase();
-        const group = orderedByMuscle.get(key) ?? [];
-        group.push(aggregate);
-        orderedByMuscle.set(key, group);
-      }
-
-      const rows: Prisma.SeasonalMuscleStandingCreateManyInput[] = [];
-      for (const [muscleKey, group] of orderedByMuscle) {
-        group.sort((a, b) => {
-          const pointDifference =
-            (b._sum.amount ?? 0) - (a._sum.amount ?? 0);
-          if (pointDifference !== 0) return pointDifference;
-
-          const earnedDifference =
-            (b._max.created_at?.getTime() ?? 0) -
-            (a._max.created_at?.getTime() ?? 0);
-          if (earnedDifference !== 0) return earnedDifference;
-
-          return a.user_id.localeCompare(b.user_id);
-        });
-        group.forEach((aggregate, index) => {
-          rows.push({
-            is_disqualified: false,
-            is_hidden: false,
-            last_earned_at: aggregate._max.created_at,
-            muscle_group: muscleKey,
-            rank_position: index + 1,
-            season_id: seasonId,
-            user_id: aggregate.user_id,
-            muscle_points: aggregate._sum.amount ?? 0,
-          });
-        });
-      }
-      if (rows.length) {
-        await tx.seasonalMuscleStanding.createMany({ data: rows });
-      }
+  private async syncSeasonMuscleStandingsInTransaction(
+    tx: Prisma.TransactionClient,
+    seasonId: string,
+  ): Promise<void> {
+    const aggregates = await tx.progressionGrantLedger.groupBy({
+      by: ['user_id', 'muscle_group'],
+      where: {
+        grant_status: ProgressionGrantStatus.applied,
+        muscle_group: { not: null },
+        season_id: seasonId,
+      },
+      _max: { created_at: true },
+      _sum: { amount: true },
     });
+
+    const existingRows = await tx.seasonalMuscleStanding.findMany({
+      where: { season_id: seasonId },
+      select: {
+        is_disqualified: true,
+        is_hidden: true,
+        muscle_group: true,
+        user_id: true,
+      },
+    });
+    const existingByKey = new Map(
+      existingRows.map((row) => [
+        `${row.user_id}:${row.muscle_group.trim().toLowerCase()}`,
+        row,
+      ]),
+    );
+    const userIds = [...new Set(aggregates.map((aggregate) => aggregate.user_id))];
+    const rankingProfiles = userIds.length
+      ? await tx.rankingProfile.findMany({
+          where: { user_id: { in: userIds } },
+          select: { governance_status: true, user_id: true },
+        })
+      : [];
+    const governanceByUserId = new Map(
+      rankingProfiles.map((profile) => [profile.user_id, profile.governance_status]),
+    );
+
+    await tx.seasonalMuscleStanding.deleteMany({
+      where: { season_id: seasonId },
+    });
+    if (!aggregates.length) {
+      return;
+    }
+
+    const orderedByMuscle = new Map<string, typeof aggregates>();
+    for (const aggregate of aggregates) {
+      if (!aggregate.muscle_group) continue;
+      const key = aggregate.muscle_group.trim().toLowerCase();
+      const group = orderedByMuscle.get(key) ?? [];
+      group.push(aggregate);
+      orderedByMuscle.set(key, group);
+    }
+
+    const rows: Prisma.SeasonalMuscleStandingCreateManyInput[] = [];
+    for (const [muscleKey, group] of orderedByMuscle) {
+      group.sort((left, right) => {
+        const pointDifference =
+          (right._sum.amount ?? 0) - (left._sum.amount ?? 0);
+        if (pointDifference !== 0) return pointDifference;
+
+        const earnedDifference =
+          (right._max.created_at?.getTime() ?? 0) -
+          (left._max.created_at?.getTime() ?? 0);
+        if (earnedDifference !== 0) return earnedDifference;
+
+        return left.user_id.localeCompare(right.user_id);
+      });
+
+      let visibleRank = 0;
+      for (const aggregate of group) {
+        const existing = existingByKey.get(`${aggregate.user_id}:${muscleKey}`);
+        const governanceStatus = governanceByUserId.get(aggregate.user_id);
+        const isHidden = governanceStatus
+          ? isAdminHiddenGovernanceStatus(governanceStatus)
+          : (existing?.is_hidden ?? false);
+        const isDisqualified = governanceStatus
+          ? governanceStatus === RankingGovernanceStatus.disqualified
+          : (existing?.is_disqualified ?? false);
+
+        rows.push({
+          is_disqualified: isDisqualified,
+          is_hidden: isHidden,
+          last_earned_at: aggregate._max.created_at,
+          muscle_group: muscleKey,
+          rank_position: isHidden || isDisqualified ? null : ++visibleRank,
+          season_id: seasonId,
+          user_id: aggregate.user_id,
+          muscle_points: aggregate._sum.amount ?? 0,
+        });
+      }
+    }
+
+    if (rows.length) {
+      await tx.seasonalMuscleStanding.createMany({ data: rows });
+    }
   }
 
   async updateSeasonStatus(input: {
@@ -1743,154 +2105,188 @@ export class GamificationRepository extends BaseRepository {
     seasonId: string;
     status: SeasonStatus;
   }): Promise<SeasonStatusUpdateResult> {
-    if (input.status === SeasonStatus.closed) {
-      await this.syncSeasonMuscleStandings(input.seasonId);
-    }
-
-    return this.prisma.$transaction(async (tx) => {
-      const now = new Date();
+    return this.runSerializableTransaction(async (tx) => {
       const season = await tx.seasonDefinition.findUniqueOrThrow({
         where: { id: input.seasonId },
       });
 
-      if (input.status === SeasonStatus.active) {
-        const existingActive = await tx.seasonDefinition.findFirst({
-          where: {
-            id: { not: input.seasonId },
-            status: SeasonStatus.active,
-          },
-          select: { id: true },
-        });
-        if (existingActive) {
-          throw new Error('Another season is already active.');
-        }
-        if (season.ends_at <= season.starts_at) {
-          throw new Error('Season end must be after its start.');
-        }
-        await tx.userProgressionProfile.updateMany({
-          data: {
-            active_season_id: input.seasonId,
-            current_season_points: 0,
-          },
-        });
+      return this.applySeasonStatusTransition(tx, input, new Date(), season);
+    });
+  }
+
+  private async applySeasonStatusTransition(
+    tx: Prisma.TransactionClient,
+    input: {
+      actorUserId: string;
+      rationale: string;
+      seasonId: string;
+      status: SeasonStatus;
+    },
+    now: Date,
+    season: Prisma.SeasonDefinitionGetPayload<object>,
+  ): Promise<SeasonStatusUpdateResult> {
+    if (!SEASON_STATUS_TRANSITIONS[season.status].includes(input.status)) {
+      throw new BadRequestException(
+        `Cannot move a ${season.status} season to ${input.status}.`,
+      );
+    }
+
+    if (input.status === SeasonStatus.active) {
+      const existingActive = await tx.seasonDefinition.findFirst({
+        where: {
+          id: { not: input.seasonId },
+          status: SeasonStatus.active,
+        },
+        select: { id: true },
+      });
+      if (existingActive) {
+        throw new BadRequestException('Another season is already active.');
+      }
+      if (season.ends_at <= season.starts_at) {
+        throw new BadRequestException('Season end must be after its start.');
+      }
+      if (season.ends_at <= now) {
+        throw new BadRequestException(
+          'Season end must be in the future when activated.',
+        );
       }
 
-      if (input.status === SeasonStatus.closed) {
-        const standings = await tx.seasonalStanding.findMany({
-          where: { season_id: input.seasonId },
-          orderBy: [{ season_points: 'desc' }, { updated_at: 'asc' }],
-          select: { id: true, is_disqualified: true, is_hidden: true },
-        });
-        let visibleRank = 0;
-        for (const standing of standings) {
-          const rankPosition =
-            standing.is_disqualified || standing.is_hidden
-              ? null
-              : ++visibleRank;
-          await tx.seasonalStanding.update({
-            where: { id: standing.id },
-            data: { rank_position: rankPosition },
-          });
-        }
-        await tx.userProgressionProfile.updateMany({
-          where: { active_season_id: input.seasonId },
-          data: {
-            active_season_id: null,
-            current_season_points: 0,
-          },
-        });
-      }
-
-      const updatedSeason = await tx.seasonDefinition.update({
-        where: { id: input.seasonId },
+      await tx.userProgressionProfile.updateMany({
         data: {
-          status: input.status,
-          ...(input.status === SeasonStatus.active
-            ? {
-                activated_at: now,
-                archived_at: null,
-                closed_at: null,
-              }
-            : {}),
-          ...(input.status === SeasonStatus.closed ? { closed_at: now } : {}),
-          ...(input.status === SeasonStatus.archived
-            ? { archived_at: now }
-            : {}),
+          active_season_id: input.seasonId,
+          current_season_points: 0,
         },
       });
+      await this.ensureSeasonStandingsInTransaction(tx, input.seasonId);
+    }
 
-      return {
-        activatedAt: updatedSeason.activated_at,
-        archivedAt: updatedSeason.archived_at,
-        autoStartNext: updatedSeason.auto_start_next,
-        closedAt: updatedSeason.closed_at,
-        seasonId: updatedSeason.id,
-        status: updatedSeason.status,
-        title: updatedSeason.title,
-      };
+    if (input.status === SeasonStatus.closed) {
+      await this.syncSeasonMuscleStandingsInTransaction(tx, input.seasonId);
+      const standings = await tx.seasonalStanding.findMany({
+        where: { season_id: input.seasonId },
+        orderBy: [
+          { season_points: 'desc' },
+          { last_earned_at: 'desc' },
+          { user_id: 'asc' },
+        ],
+        select: { id: true, is_disqualified: true, is_hidden: true },
+      });
+      let visibleRank = 0;
+      for (const standing of standings) {
+        const rankPosition =
+          standing.is_disqualified || standing.is_hidden
+            ? null
+            : ++visibleRank;
+        await tx.seasonalStanding.update({
+          where: { id: standing.id },
+          data: { rank_position: rankPosition },
+        });
+      }
+      await tx.userProgressionProfile.updateMany({
+        where: { active_season_id: input.seasonId },
+        data: {
+          active_season_id: null,
+          current_season_points: 0,
+        },
+      });
+    }
+
+    const updatedSeason = await tx.seasonDefinition.update({
+      where: { id: input.seasonId },
+      data: {
+        status: input.status,
+        ...(input.status === SeasonStatus.active
+          ? {
+              activated_at: now,
+              archived_at: null,
+              closed_at: null,
+            }
+          : {}),
+        ...(input.status === SeasonStatus.closed ? { closed_at: now } : {}),
+        ...(input.status === SeasonStatus.archived
+          ? { archived_at: now }
+          : {}),
+      },
     });
+
+    return {
+      activatedAt: updatedSeason.activated_at,
+      archivedAt: updatedSeason.archived_at,
+      autoStartNext: updatedSeason.auto_start_next,
+      closedAt: updatedSeason.closed_at,
+      seasonId: updatedSeason.id,
+      status: updatedSeason.status,
+      title: updatedSeason.title,
+    };
   }
 
   async runSeasonLifecycleSweep(
     now = new Date(),
   ): Promise<SeasonLifecycleSweepResult> {
-    const expiredActive = await this.prisma.seasonDefinition.findMany({
-      where: {
-        ends_at: { lte: now },
-        status: SeasonStatus.active,
-      },
-      orderBy: { ends_at: 'asc' },
-    });
-    const closedSeasonIds: string[] = [];
-    let shouldAutoStart = false;
-
-    for (const season of expiredActive) {
-      await this.updateSeasonStatus({
-        actorUserId: 'system',
-        rationale: 'Automatic season close after configured end time.',
-        seasonId: season.id,
-        status: SeasonStatus.closed,
+    return this.runSerializableTransaction(async (tx) => {
+      const expiredActive = await tx.seasonDefinition.findMany({
+        where: {
+          ends_at: { lte: now },
+          status: SeasonStatus.active,
+        },
+        orderBy: [{ ends_at: 'asc' }, { id: 'asc' }],
       });
-      closedSeasonIds.push(season.id);
-      shouldAutoStart ||= season.auto_start_next;
-    }
+      const closedSeasonIds: string[] = [];
+      let shouldAutoStart = false;
 
-    const activeSeason = await this.prisma.seasonDefinition.findFirst({
-      where: { status: SeasonStatus.active },
-      select: { id: true },
-    });
-    if (activeSeason) {
-      return { closedSeasonIds, startedSeasonId: null };
-    }
+      for (const season of expiredActive) {
+        await this.applySeasonStatusTransition(
+          tx,
+          {
+            actorUserId: 'system',
+            rationale: 'Automatic season close after configured end time.',
+            seasonId: season.id,
+            status: SeasonStatus.closed,
+          },
+          now,
+          season,
+        );
+        closedSeasonIds.push(season.id);
+        shouldAutoStart ||= season.auto_start_next;
+      }
 
-    const eligibleDrafts = await this.prisma.seasonDefinition.findMany({
-      where: {
-        auto_start_next: true,
-        ends_at: { gt: now },
-        starts_at: { lte: now },
-        status: SeasonStatus.draft,
-      },
-      orderBy: [{ starts_at: 'asc' }, { created_at: 'asc' }],
-      take: 2,
-    });
-    if (
-      eligibleDrafts.length !== 1 ||
-      (!shouldAutoStart && closedSeasonIds.length > 0)
-    ) {
-      return { closedSeasonIds, startedSeasonId: null };
-    }
+      const activeSeason = await tx.seasonDefinition.findFirst({
+        where: { status: SeasonStatus.active },
+        select: { id: true },
+      });
+      if (activeSeason) {
+        return { closedSeasonIds, startedSeasonId: null };
+      }
 
-    const seasonToStart = eligibleDrafts[0];
-    await this.updateSeasonStatus({
-      actorUserId: 'system',
-      rationale: 'Automatic season start at configured start time.',
-      seasonId: seasonToStart.id,
-      status: SeasonStatus.active,
+      const seasonToStart = await tx.seasonDefinition.findFirst({
+        where: {
+          auto_start_next: true,
+          ends_at: { gt: now },
+          starts_at: { lte: now },
+          status: SeasonStatus.draft,
+        },
+        orderBy: [{ starts_at: 'asc' }, { created_at: 'asc' }, { id: 'asc' }],
+      });
+      if (!seasonToStart || (!shouldAutoStart && closedSeasonIds.length > 0)) {
+        return { closedSeasonIds, startedSeasonId: null };
+      }
+
+      await this.applySeasonStatusTransition(
+        tx,
+        {
+          actorUserId: 'system',
+          rationale: 'Automatic season start at configured start time.',
+          seasonId: seasonToStart.id,
+          status: SeasonStatus.active,
+        },
+        now,
+        seasonToStart,
+      );
+      return {
+        closedSeasonIds,
+        startedSeasonId: seasonToStart.id,
+      };
     });
-    return {
-      closedSeasonIds,
-      startedSeasonId: seasonToStart.id,
-    };
   }
 
   async updateCreatorState(input: {
@@ -1999,14 +2395,17 @@ export class GamificationRepository extends BaseRepository {
   }
 
   async listLeaderboardTotals(): Promise<LeaderboardTotalRecord[]> {
-    const rows = await this.prisma.muscleMasteryProgress.groupBy({
-      by: ['user_id'],
-      _sum: { xp_points: true },
+    const rows = await this.prisma.userProgressionProfile.findMany({
+      select: {
+        user_id: true,
+        total_xp: true,
+      },
+      orderBy: { user_id: 'asc' },
     });
 
     return rows.map((row) => ({
       user_id: row.user_id,
-      total_xp: row._sum.xp_points ?? 0,
+      total_xp: row.total_xp,
     }));
   }
 
@@ -2309,33 +2708,55 @@ export class GamificationRepository extends BaseRepository {
     userId: string,
     milestoneDefinitionId: string,
   ): Promise<MilestoneProgressRecord> {
-    const now = new Date();
-    await this.prisma.userMilestoneProgress.update({
-      where: {
-        user_id_milestone_definition_id: {
-          user_id: userId,
-          milestone_definition_id: milestoneDefinitionId,
-        },
-      },
-      data: {
-        status: MilestoneProgressStatus.claimed,
-        claimed_at: now,
-      },
-    });
-
-    return this.prisma.milestoneDefinition.findUniqueOrThrow({
-      where: { id: milestoneDefinitionId },
-      include: {
-        user_progress: {
-          where: {
+    return this.runSerializableTransaction(async (tx) => {
+      const progress = await tx.userMilestoneProgress.findUniqueOrThrow({
+        where: {
+          user_id_milestone_definition_id: {
             user_id: userId,
-          },
-          take: 1,
-          orderBy: {
-            created_at: 'desc',
+            milestone_definition_id: milestoneDefinitionId,
           },
         },
-      },
+      });
+
+      if (progress.status === MilestoneProgressStatus.claimed) {
+        return tx.milestoneDefinition.findUniqueOrThrow({
+          where: { id: milestoneDefinitionId },
+          include: {
+            user_progress: {
+              where: { user_id: userId },
+              take: 1,
+              orderBy: { created_at: 'desc' },
+            },
+          },
+        });
+      }
+
+      if (progress.status !== MilestoneProgressStatus.unlocked) {
+        throw new BadRequestException(
+          'Only unlocked milestones can be claimed.',
+        );
+      }
+
+      const now = new Date();
+      await tx.userMilestoneProgress.update({
+        where: { id: progress.id },
+        data: {
+          status: MilestoneProgressStatus.claimed,
+          claimed_at: progress.claimed_at ?? now,
+          reward_granted_at: progress.reward_granted_at ?? now,
+        },
+      });
+
+      return tx.milestoneDefinition.findUniqueOrThrow({
+        where: { id: milestoneDefinitionId },
+        include: {
+          user_progress: {
+            where: { user_id: userId },
+            take: 1,
+            orderBy: { created_at: 'desc' },
+          },
+        },
+      });
     });
   }
 
@@ -2344,7 +2765,7 @@ export class GamificationRepository extends BaseRepository {
     sourceType?: ProgressionSourceType;
     userId: string;
   }): Promise<void> {
-    await this.prisma.$transaction(async (tx) => {
+    await this.runSerializableTransaction(async (tx) => {
       const profile = await tx.userProgressionProfile.findUnique({
         where: { user_id: input.userId },
       });
@@ -2468,6 +2889,9 @@ export class GamificationRepository extends BaseRepository {
   }
 
   async createAdminMilestoneDefinition(input: {
+    iconAssetKey: string | null;
+    iconKey: string | null;
+    iconKind: ProgressionIconKind;
     actorUserId: string;
     category: MilestoneCategory;
     conditionPayload?: Record<string, unknown> | null;
@@ -2488,6 +2912,9 @@ export class GamificationRepository extends BaseRepository {
     const now = new Date();
     const record = await this.prisma.milestoneDefinition.create({
       data: {
+        icon_asset_key: input.iconAssetKey,
+        icon_key: input.iconKey,
+        icon_kind: input.iconKind,
         key: input.key,
         title: input.title,
         description: input.description ?? null,
@@ -2534,6 +2961,9 @@ export class GamificationRepository extends BaseRepository {
   }
 
   async updateAdminMilestoneDefinition(input: {
+    iconAssetKey: string | null;
+    iconKey: string | null;
+    iconKind: ProgressionIconKind;
     actorUserId: string;
     category: MilestoneCategory;
     conditionPayload?: Record<string, unknown> | null;
@@ -2556,6 +2986,9 @@ export class GamificationRepository extends BaseRepository {
     const record = await this.prisma.milestoneDefinition.update({
       where: { id: input.id },
       data: {
+        icon_asset_key: input.iconAssetKey,
+        icon_key: input.iconKey,
+        icon_kind: input.iconKind,
         key: input.key,
         title: input.title,
         description: input.description ?? null,
@@ -3051,7 +3484,7 @@ export class GamificationRepository extends BaseRepository {
     grantId: string;
     rationale: string;
   }): Promise<GrantModerationResult> {
-    return this.prisma.$transaction(async (tx) => {
+    return this.runSerializableTransaction(async (tx) => {
       const now = new Date();
       const grant = await tx.progressionGrantLedger.findUniqueOrThrow({
         where: { id: input.grantId },
@@ -3062,6 +3495,26 @@ export class GamificationRepository extends BaseRepository {
       const profile = await tx.userProgressionProfile.findUnique({
         where: { user_id: grant.user_id },
       });
+
+      if (grant.grant_status === ProgressionGrantStatus.voided) {
+        const existingAction = await tx.moderationActionRecord.findFirst({
+          where: {
+            action_type: ModerationActionType.void_progression_grant,
+            progression_grant_id: grant.id,
+          },
+          orderBy: { created_at: 'asc' },
+          select: { id: true },
+        });
+
+        return {
+          grantId: grant.id,
+          userId: grant.user_id,
+          grantStatus: ProgressionGrantStatus.voided,
+          moderationActionId: existingAction?.id ?? grant.id,
+          totalXp: profile?.total_xp ?? 0,
+          currentSeasonPoints: profile?.current_season_points ?? 0,
+        };
+      }
 
       const beforeState = {
         current_season_points: profile?.current_season_points ?? 0,
@@ -3147,17 +3600,23 @@ export class GamificationRepository extends BaseRepository {
         grant.grant_type === ProgressionGrantType.season_points &&
         grant.season_id
       ) {
-        await tx.seasonalStanding.updateMany({
+        const standing = await tx.seasonalStanding.findUnique({
           where: {
-            season_id: grant.season_id,
-            user_id: grant.user_id,
-          },
-          data: {
-            season_points: {
-              decrement: grant.amount,
+            season_id_user_id: {
+              season_id: grant.season_id,
+              user_id: grant.user_id,
             },
           },
         });
+
+        if (standing) {
+          await tx.seasonalStanding.update({
+            where: { id: standing.id },
+            data: {
+              season_points: Math.max(0, standing.season_points - grant.amount),
+            },
+          });
+        }
 
         if (profile?.active_season_id === grant.season_id) {
           nextCurrentSeasonPoints = Math.max(
@@ -3175,6 +3634,10 @@ export class GamificationRepository extends BaseRepository {
             current_season_points: nextCurrentSeasonPoints,
           },
         });
+      }
+
+      if (grant.season_id) {
+        await this.syncSeasonMuscleStandingsInTransaction(tx, grant.season_id);
       }
 
       const activeGrantCountForSource = grant.source_event_id
@@ -3358,15 +3821,121 @@ export class GamificationRepository extends BaseRepository {
 
   async createManualExpGrant(input: {
     actorUserId: string;
-    amount: number;
-    appointmentId?: string | null;
-    muscleGroup?: string | null;
+    allocations: Array<{ amount: number; muscle_group: string }>;
     rationale: string;
     sourceId: string;
     userId: string;
-  }): Promise<GrantModerationResult> {
-    return this.prisma.$transaction(async (tx) => {
-      const now = new Date();
+  }): Promise<ManualExpGrantResult> {
+    try {
+      return await this.runSerializableTransaction(async (tx) => {
+        const now = new Date();
+        if (!Array.isArray(input.allocations) || input.allocations.length < 1) {
+          throw new BadRequestException(
+            'Manual EXP allocations must contain at least one item.',
+          );
+        }
+        const allocations = input.allocations.map((allocation) => ({
+          amount: allocation.amount,
+          muscleGroup:
+            typeof allocation.muscle_group === 'string'
+              ? allocation.muscle_group.trim().toLowerCase()
+              : '',
+        }));
+        for (const allocation of allocations) {
+          if (
+            !allocation.muscleGroup ||
+            !Number.isInteger(allocation.amount) ||
+            allocation.amount < 1 ||
+            allocation.amount > 1000
+          ) {
+            throw new BadRequestException(
+              'Each manual EXP allocation requires a muscle group and an integer amount between 1 and 1000.',
+            );
+          }
+        }
+        const muscleGroups = allocations.map(
+          (allocation) => allocation.muscleGroup,
+        );
+        if (new Set(muscleGroups).size !== muscleGroups.length) {
+          throw new BadRequestException(
+            'Manual EXP allocations must use unique muscle groups.',
+          );
+        }
+        const totalAmount = allocations.reduce(
+          (total, allocation) => total + allocation.amount,
+          0,
+        );
+        if (!Number.isSafeInteger(totalAmount)) {
+          throw new BadRequestException('Manual EXP total is too large.');
+        }
+      const rationale = input.rationale.trim();
+      if (rationale.length < 3 || rationale.length > 500) {
+        throw new BadRequestException(
+          'Manual EXP rationale must be between 3 and 500 characters.',
+        );
+      }
+
+      const eligibleMember = await tx.user.findFirst({
+        where: {
+          deletedAt: null,
+          id: input.userId,
+          membership_card: {
+            is: { status: MembershipCardStatus.active },
+          },
+          role: UserRole.member,
+          status: UserStatus.active,
+        },
+        select: { id: true },
+      });
+      if (!eligibleMember) {
+        throw new NotFoundException(
+          'Manual EXP can only be granted to an active member with an active membership card.',
+        );
+      }
+
+      const muscleDefinitions = await tx.muscleDefinition.findMany({
+        where: { is_active: true, key: { in: muscleGroups } },
+        select: { key: true },
+      });
+      const activeMuscleGroups = new Set(
+        muscleDefinitions.map((definition) =>
+          definition.key.trim().toLowerCase(),
+        ),
+      );
+      const missingMuscleGroup = muscleGroups.find(
+        (muscleGroup) => !activeMuscleGroups.has(muscleGroup),
+      );
+      if (missingMuscleGroup) {
+        throw new NotFoundException(
+          `Muscle group ${missingMuscleGroup} was not found.`,
+        );
+      }
+
+      const existingSourceEvent = await tx.progressionSourceEvent.findUnique({
+        where: {
+          source_type_source_id: {
+            source_id: input.sourceId,
+            source_type: ProgressionSourceType.moderation_action,
+          },
+        },
+        select: { id: true },
+      });
+      if (existingSourceEvent) {
+        throw new ConflictException(
+          'A manual EXP grant already exists for this source.',
+        );
+      }
+
+      await tx.rankingProfile.upsert({
+        where: { user_id: input.userId },
+        create: {
+          user_id: input.userId,
+          visibility: RankingVisibility.public,
+          governance_status: RankingGovernanceStatus.normal,
+        },
+        update: {},
+      });
+
       const activeSeason = await tx.seasonDefinition.findFirst({
         where: {
           status: SeasonStatus.active,
@@ -3380,6 +3949,8 @@ export class GamificationRepository extends BaseRepository {
         select: {
           active_season_id: true,
           current_season_points: true,
+          current_streak: true,
+          longest_streak: true,
           total_xp: true,
         },
       });
@@ -3392,30 +3963,37 @@ export class GamificationRepository extends BaseRepository {
           processed_at: now,
           source_context: {
             allocation_type: 'manual_exp_post_session',
-            appointment_id: input.appointmentId ?? null,
-            rationale: input.rationale,
-            muscle_group: input.muscleGroup ?? null,
-            amount: input.amount,
+            rationale,
+            allocations: allocations.map((allocation) => ({
+              muscle_group: allocation.muscleGroup,
+              amount: allocation.amount,
+            })),
+            total_amount: totalAmount,
           } satisfies Prisma.JsonObject,
         },
       });
-      const xpGrant = await tx.progressionGrantLedger.create({
-        data: {
-          user_id: input.userId,
-          source_event_id: sourceEvent.id,
-          season_id: activeSeason?.id ?? null,
-          grant_type: ProgressionGrantType.xp,
-          grant_status: ProgressionGrantStatus.applied,
-          amount: input.amount,
-          muscle_group: input.muscleGroup ?? null,
-          reason: 'manual_exp_post_session',
-          metadata: {
-            appointment_id: input.appointmentId ?? null,
-            rationale: input.rationale,
-          } satisfies Prisma.JsonObject,
-        },
-      });
-      const seasonPointsGranted = activeSeason ? input.amount : 0;
+      const xpGrants: Array<{ id: string }> = [];
+      for (const [index, allocation] of allocations.entries()) {
+        xpGrants.push(
+          await tx.progressionGrantLedger.create({
+            data: {
+              user_id: input.userId,
+              source_event_id: sourceEvent.id,
+              season_id: activeSeason?.id ?? null,
+              grant_type: ProgressionGrantType.xp,
+              grant_status: ProgressionGrantStatus.applied,
+              amount: allocation.amount,
+              muscle_group: allocation.muscleGroup,
+              reason: 'manual_exp_post_session',
+              metadata: {
+                allocation_index: index,
+                rationale,
+              } satisfies Prisma.JsonObject,
+            },
+          }),
+        );
+      }
+      const seasonPointsGranted = activeSeason ? totalAmount : 0;
       if (seasonPointsGranted > 0 && activeSeason) {
         await tx.progressionGrantLedger.create({
           data: {
@@ -3429,13 +4007,13 @@ export class GamificationRepository extends BaseRepository {
             reason: 'manual_exp_post_session',
             metadata: {
               grant_basis: 'manual_xp_mirror',
-              appointment_id: input.appointmentId ?? null,
+              allocation_count: allocations.length,
             } satisfies Prisma.JsonObject,
           },
         });
       }
 
-      const nextTotalXp = (existingProfile?.total_xp ?? 0) + input.amount;
+      const nextTotalXp = (existingProfile?.total_xp ?? 0) + totalAmount;
       const nextCurrentSeasonPoints = activeSeason
         ? existingProfile?.active_season_id === activeSeason.id
           ? (existingProfile?.current_season_points ?? 0) + seasonPointsGranted
@@ -3447,7 +4025,7 @@ export class GamificationRepository extends BaseRepository {
         create: {
           user_id: input.userId,
           active_season_id: activeSeason?.id ?? null,
-          total_xp: input.amount,
+          total_xp: totalAmount,
           current_season_points: nextCurrentSeasonPoints,
           last_progressed_at: now,
         },
@@ -3459,24 +4037,37 @@ export class GamificationRepository extends BaseRepository {
         },
       });
 
-      if (input.muscleGroup) {
-        await tx.muscleMasteryProgress.upsert({
+      for (const allocation of allocations) {
+        const mastery = await tx.muscleMasteryProgress.upsert({
           where: {
             user_id_muscle_group: {
               user_id: input.userId,
-              muscle_group: input.muscleGroup,
+              muscle_group: allocation.muscleGroup,
             },
           },
           create: {
             user_id: input.userId,
-            muscle_group: input.muscleGroup,
-            xp_points: input.amount,
+            muscle_group: allocation.muscleGroup,
+            xp_points: allocation.amount,
             rank: MasteryRank.bronze,
           },
           update: {
-            xp_points: { increment: input.amount },
+            xp_points: { increment: allocation.amount },
           },
         });
+        const nextRank = evaluateMasteryRank(
+          mastery.xp_points,
+          mastery.total_volume_kg,
+        );
+        if (nextRank !== mastery.rank) {
+          await tx.muscleMasteryProgress.update({
+            where: { id: mastery.id },
+            data: {
+              rank: nextRank,
+              last_ranked_at: now,
+            },
+          });
+        }
       }
 
       if (activeSeason) {
@@ -3498,6 +4089,7 @@ export class GamificationRepository extends BaseRepository {
             last_earned_at: now,
           },
         });
+        await this.syncSeasonMuscleStandingsInTransaction(tx, activeSeason.id);
       }
 
       const moderationAction = await tx.moderationActionRecord.create({
@@ -3505,15 +4097,19 @@ export class GamificationRepository extends BaseRepository {
           actor_user_id: input.actorUserId,
           target_user_id: input.userId,
           source_event_id: sourceEvent.id,
-          progression_grant_id: xpGrant.id,
+          progression_grant_id: xpGrants[0].id,
           season_id: activeSeason?.id ?? null,
           action_type: ModerationActionType.manual_exp_grant,
-          rationale: input.rationale,
+          rationale,
           after_state: {
-            amount: input.amount,
+            allocations: allocations.map((allocation) => ({
+              muscle_group: allocation.muscleGroup,
+              amount: allocation.amount,
+            })),
+            grant_ids: xpGrants.map((grant) => grant.id),
+            total_amount: totalAmount,
             total_xp: nextTotalXp,
             current_season_points: nextCurrentSeasonPoints,
-            appointment_id: input.appointmentId ?? null,
           } satisfies Prisma.JsonObject,
         },
       });
@@ -3522,8 +4118,8 @@ export class GamificationRepository extends BaseRepository {
         userId: input.userId,
         totalXp: nextTotalXp,
         currentSeasonPoints: nextCurrentSeasonPoints,
-        currentStreak: 0,
-        longestStreak: 0,
+        currentStreak: existingProfile?.current_streak ?? 0,
+        longestStreak: existingProfile?.longest_streak ?? 0,
       });
 
       await syncMilestoneProgress(tx, {
@@ -3536,13 +4132,22 @@ export class GamificationRepository extends BaseRepository {
 
       return {
         currentSeasonPoints: nextCurrentSeasonPoints,
-        grantId: xpGrant.id,
+        grantId: xpGrants[0].id,
+        grantIds: xpGrants.map((grant) => grant.id),
         grantStatus: ProgressionGrantStatus.applied,
         moderationActionId: moderationAction.id,
         totalXp: nextTotalXp,
         userId: input.userId,
       };
-    });
+      });
+    } catch (error) {
+      if (isUniqueConstraintConflict(error)) {
+        throw new ConflictException(
+          'A manual EXP grant already exists for this source.',
+        );
+      }
+      throw error;
+    }
   }
 
   async restoreProgressionGrant(input: {
@@ -3550,7 +4155,7 @@ export class GamificationRepository extends BaseRepository {
     grantId: string;
     rationale: string;
   }): Promise<GrantModerationResult> {
-    return this.prisma.$transaction(async (tx) => {
+    return this.runSerializableTransaction(async (tx) => {
       const now = new Date();
       const grant = await tx.progressionGrantLedger.findUniqueOrThrow({
         where: { id: input.grantId },
@@ -3566,6 +4171,26 @@ export class GamificationRepository extends BaseRepository {
       const profile = await tx.userProgressionProfile.findUnique({
         where: { user_id: grant.user_id },
       });
+
+      if (grant.grant_status === ProgressionGrantStatus.applied) {
+        const existingAction = await tx.moderationActionRecord.findFirst({
+          where: {
+            action_type: ModerationActionType.restore_progression_grant,
+            progression_grant_id: grant.id,
+          },
+          orderBy: { created_at: 'asc' },
+          select: { id: true },
+        });
+
+        return {
+          grantId: grant.id,
+          userId: grant.user_id,
+          grantStatus: ProgressionGrantStatus.applied,
+          moderationActionId: existingAction?.id ?? grant.id,
+          totalXp: profile?.total_xp ?? 0,
+          currentSeasonPoints: profile?.current_season_points ?? 0,
+        };
+      }
 
       if (counterGrantId) {
         await tx.progressionGrantLedger.update({
@@ -3593,29 +4218,33 @@ export class GamificationRepository extends BaseRepository {
       let nextCurrentSeasonPoints = profile?.current_season_points ?? 0;
 
       if (grant.grant_type === ProgressionGrantType.xp) {
-        nextTotalXp += grant.amount;
+        nextTotalXp = Math.max(0, nextTotalXp + grant.amount);
 
         if (grant.muscle_group) {
-          const mastery = await tx.muscleMasteryProgress.upsert({
+          const existingMastery = await tx.muscleMasteryProgress.findUnique({
             where: {
               user_id_muscle_group: {
                 user_id: grant.user_id,
                 muscle_group: grant.muscle_group,
               },
             },
-            create: {
-              user_id: grant.user_id,
-              muscle_group: grant.muscle_group,
-              xp_points: grant.amount,
-              total_volume_kg: new Prisma.Decimal(0),
-              rank: MasteryRank.bronze,
-            },
-            update: {
-              xp_points: {
-                increment: grant.amount,
-              },
-            },
           });
+          const mastery = existingMastery
+            ? await tx.muscleMasteryProgress.update({
+                where: { id: existingMastery.id },
+                data: {
+                  xp_points: Math.max(0, existingMastery.xp_points + grant.amount),
+                },
+              })
+            : await tx.muscleMasteryProgress.create({
+                data: {
+                  user_id: grant.user_id,
+                  muscle_group: grant.muscle_group,
+                  xp_points: Math.max(0, grant.amount),
+                  total_volume_kg: new Prisma.Decimal(0),
+                  rank: MasteryRank.bronze,
+                },
+              });
           const nextRank = evaluateMasteryRank(
             mastery.xp_points,
             mastery.total_volume_kg,
@@ -3636,29 +4265,38 @@ export class GamificationRepository extends BaseRepository {
         grant.grant_type === ProgressionGrantType.season_points &&
         grant.season_id
       ) {
-        await tx.seasonalStanding.upsert({
+        const standing = await tx.seasonalStanding.findUnique({
           where: {
             season_id_user_id: {
               season_id: grant.season_id,
               user_id: grant.user_id,
             },
           },
-          create: {
-            season_id: grant.season_id,
-            user_id: grant.user_id,
-            season_points: grant.amount,
-            last_earned_at: now,
-          },
-          update: {
-            season_points: {
-              increment: grant.amount,
-            },
-            last_earned_at: now,
-          },
         });
+        if (standing) {
+          await tx.seasonalStanding.update({
+            where: { id: standing.id },
+            data: {
+              season_points: Math.max(0, standing.season_points + grant.amount),
+              last_earned_at: now,
+            },
+          });
+        } else {
+          await tx.seasonalStanding.create({
+            data: {
+              season_id: grant.season_id,
+              user_id: grant.user_id,
+              season_points: Math.max(0, grant.amount),
+              last_earned_at: now,
+            },
+          });
+        }
 
         if (profile?.active_season_id === grant.season_id) {
-          nextCurrentSeasonPoints += grant.amount;
+          nextCurrentSeasonPoints = Math.max(
+            0,
+            nextCurrentSeasonPoints + grant.amount,
+          );
         }
       }
 
@@ -3678,6 +4316,10 @@ export class GamificationRepository extends BaseRepository {
             current_season_points: nextCurrentSeasonPoints,
           },
         });
+      }
+
+      if (grant.season_id) {
+        await this.syncSeasonMuscleStandingsInTransaction(tx, grant.season_id);
       }
 
       if (grant.source_event_id) {
@@ -4002,7 +4644,7 @@ export class GamificationRepository extends BaseRepository {
     sourceStatus: ProgressionSourceStatus;
     userId: string;
   }): Promise<PoseSourceRecordingResult> {
-    return this.prisma.$transaction(async (tx) => {
+    return this.runSerializableTransaction(async (tx) => {
       const existingSource = await tx.progressionSourceEvent.findUnique({
         where: {
           source_type_source_id: {
@@ -4286,7 +4928,7 @@ export class GamificationRepository extends BaseRepository {
     userId: string;
     validationState: ProgressionSourceValidationState;
   }): Promise<WorkoutProgressionApplicationResult> {
-    return this.prisma.$transaction(async (tx) => {
+    return this.runSerializableTransaction(async (tx) => {
       const existingSource = await tx.progressionSourceEvent.findUnique({
         where: {
           source_type_source_id: {
@@ -4307,9 +4949,9 @@ export class GamificationRepository extends BaseRepository {
         };
       }
 
-      const activeSeason = await tx.seasonDefinition.findFirst({
+      const progressionSeason = await tx.seasonDefinition.findFirst({
         where: {
-          status: SeasonStatus.active,
+          status: { in: [SeasonStatus.active, SeasonStatus.closed] },
           starts_at: { lte: input.completedAt },
           ends_at: { gte: input.completedAt },
         },
@@ -4323,7 +4965,7 @@ export class GamificationRepository extends BaseRepository {
       const hasIntegrityAdvisory =
         input.validationState === 'flagged' ||
         input.integrityState === 'suspicious';
-      const seasonPointsGranted = activeSeason ? totalXpGranted : 0;
+      const seasonPointsGranted = progressionSeason ? totalXpGranted : 0;
       const existingProfile = await tx.userProgressionProfile.findUnique({
         where: { user_id: input.userId },
         select: {
@@ -4343,7 +4985,7 @@ export class GamificationRepository extends BaseRepository {
           recorded_at: input.recordedAt.toISOString(),
           exercise_log_count: input.exerciseLogCount,
           muscle_groups: input.deltas.map((delta) => delta.muscleGroup),
-          season_id: activeSeason?.id ?? null,
+          season_id: progressionSeason?.id ?? null,
           total_volume_kg: input.totalVolumeKg.toFixed(2),
           total_xp_granted: totalXpGranted,
         },
@@ -4486,7 +5128,7 @@ export class GamificationRepository extends BaseRepository {
           ...input.deltas.map((delta) => ({
             user_id: input.userId,
             source_event_id: sourceEvent.id,
-            season_id: activeSeason?.id ?? null,
+            season_id: progressionSeason?.id ?? null,
             grant_type: ProgressionGrantType.xp,
             grant_status: ProgressionGrantStatus.applied,
             amount: delta.xpDelta,
@@ -4496,12 +5138,12 @@ export class GamificationRepository extends BaseRepository {
               total_volume_kg: delta.volumeKgDelta.toFixed(2),
             } satisfies Prisma.JsonObject,
           })),
-          ...(seasonPointsGranted > 0 && activeSeason
+          ...(seasonPointsGranted > 0 && progressionSeason
             ? [
                 {
                   user_id: input.userId,
                   source_event_id: sourceEvent.id,
-                  season_id: activeSeason.id,
+                  season_id: progressionSeason.id,
                   grant_type: ProgressionGrantType.season_points,
                   grant_status: ProgressionGrantStatus.applied,
                   amount: seasonPointsGranted,
@@ -4522,18 +5164,23 @@ export class GamificationRepository extends BaseRepository {
         lastProgressedAt: existingProfile?.last_progressed_at ?? null,
         longestStreak: existingProfile?.longest_streak ?? 0,
       });
-      const nextCurrentSeasonPoints = activeSeason
-        ? existingProfile?.active_season_id === activeSeason.id
+      const nextCurrentSeasonPoints =
+        progressionSeason?.status === SeasonStatus.active
+        ? existingProfile?.active_season_id === progressionSeason.id
           ? (existingProfile?.current_season_points ?? 0) + seasonPointsGranted
           : seasonPointsGranted
-        : 0;
+        : (existingProfile?.current_season_points ?? 0);
       const nextTotalXp = (existingProfile?.total_xp ?? 0) + totalXpGranted;
+      const nextActiveSeasonId =
+        progressionSeason?.status === SeasonStatus.active
+          ? progressionSeason.id
+          : (existingProfile?.active_season_id ?? null);
 
       await tx.userProgressionProfile.upsert({
         where: { user_id: input.userId },
         create: {
           user_id: input.userId,
-          active_season_id: activeSeason?.id ?? null,
+          active_season_id: nextActiveSeasonId,
           total_xp: totalXpGranted,
           current_streak: streakState.currentStreak,
           longest_streak: streakState.longestStreak,
@@ -4544,22 +5191,22 @@ export class GamificationRepository extends BaseRepository {
           total_xp: nextTotalXp,
           current_streak: streakState.currentStreak,
           longest_streak: streakState.longestStreak,
-          active_season_id: activeSeason?.id ?? null,
+          active_season_id: nextActiveSeasonId,
           current_season_points: nextCurrentSeasonPoints,
           last_progressed_at: streakState.lastProgressedAt,
         },
       });
 
-      if (activeSeason) {
+      if (progressionSeason) {
         await tx.seasonalStanding.upsert({
           where: {
             season_id_user_id: {
-              season_id: activeSeason.id,
+              season_id: progressionSeason.id,
               user_id: input.userId,
             },
           },
           create: {
-            season_id: activeSeason.id,
+            season_id: progressionSeason.id,
             user_id: input.userId,
             season_points: seasonPointsGranted,
             last_earned_at: input.completedAt,
@@ -4571,6 +5218,11 @@ export class GamificationRepository extends BaseRepository {
             last_earned_at: input.completedAt,
           },
         });
+
+        await this.syncSeasonMuscleStandingsInTransaction(
+          tx,
+          progressionSeason.id,
+        );
       }
 
       let integrityEventId: string | null = null;

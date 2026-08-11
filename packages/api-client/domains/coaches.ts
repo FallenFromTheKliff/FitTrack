@@ -163,6 +163,11 @@ type CoachUserApiRecord = {
   profile?: CoachUserProfileApiRecord | null;
 };
 
+type CoachSpecialtyApiRecord = {
+  id: string;
+  label: string;
+};
+
 type CoachApiRecord = {
   average_rating?: number | string | null;
   availability_slots?: CoachAvailabilitySlotApiRecord[];
@@ -185,6 +190,7 @@ type CoachApiRecord = {
   recent_reviews?: CoachPublicReviewApiRecord[];
   schedule_type?: "full_time" | "part_time";
   specialization?: string | null;
+  specialties?: Array<CoachSpecialtyApiRecord> | string[] | null;
   user?: CoachUserApiRecord | null;
 };
 
@@ -264,6 +270,22 @@ function splitMultiValue(value?: string | null) {
     .split(/[\n,]/)
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function mapCoachSpecialties(
+  specialties?: Array<CoachSpecialtyApiRecord> | string[] | null,
+  specialization?: string | null,
+) {
+  if (Array.isArray(specialties)) {
+    return specialties
+      .map((specialty) =>
+        typeof specialty === "string" ? specialty : specialty.label,
+      )
+      .map((label) => label.trim())
+      .filter(Boolean);
+  }
+
+  return splitMultiValue(specialization);
 }
 
 function toNullableNumber(value?: number | string | null) {
@@ -373,7 +395,7 @@ function mapCoachRecord(record: CoachApiRecord): CoachProfileRecord {
       createdAt: review.created_at,
     })),
     scheduleType: record.schedule_type ?? "part_time",
-    specialties: splitMultiValue(record.specialization),
+    specialties: mapCoachSpecialties(record.specialties, record.specialization),
     user: null,
     yearsExperience: null,
   };
@@ -590,7 +612,7 @@ export function createCoachesApi(transport: ApiTransport) {
             ? { schedule_type: payload.scheduleType }
             : {}),
           ...(payload.specialties !== undefined
-            ? { specialization: payload.specialties.join(", ") }
+            ? { specialty_labels: payload.specialties }
             : {}),
         }),
         "Unable to update coach profile.",

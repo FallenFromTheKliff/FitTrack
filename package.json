@@ -55,8 +55,12 @@
     "test:ui:real-data": "node tasks/run-real-data-e2e.mjs",
     "test:ui:headed": "playwright test --headed",
     "test:ui:report": "playwright show-report .artifacts/playwright/report",
+    "test:ui:golden": "playwright test --config=playwright.storybook.config.ts tests/ui/golden-archetypes.spec.ts",
     "storybook": "pnpm --filter @fittrack/web storybook",
     "storybook:build": "pnpm --filter @fittrack/web storybook:build",
+    "registry:build": "pnpm --dir apps/web registry:build",
+    "registry:validate": "node scripts/validate-fittrack-tooling.mjs",
+    "ui-quality:check": "pnpm registry:build && pnpm registry:validate && pnpm storybook:build",
     "clean": "node tasks/clean-workspaces.mjs",
     "refresh:packages-db-client": "pnpm clean && pnpm install && pnpm db:migrate:generate",
     "deploy:railway": "node tasks/deploy-railway.mjs"

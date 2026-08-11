@@ -13,6 +13,7 @@ import {
   MilestoneTriggerType,
   MilestoneVerificationPolicy,
   ModerationActionType,
+  ProgressionIconKind,
   ProgressionGrantStatus,
   ProgressionSourceStatus,
   ProgressionSourceType,
@@ -21,6 +22,8 @@ import {
   SeasonStatus,
 } from '@prisma/client';
 import {
+  ArrayMinSize,
+  IsArray,
   IsEnum,
   IsBoolean,
   IsDateString,
@@ -34,6 +37,7 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -45,6 +49,7 @@ export class MasteryFilterDTO {
   @IsOptional()
   @TrimString()
   @IsString({ message: 'muscle_group must be a string' })
+  @MinLength(1, { message: 'muscle_group must not be empty' })
   @MaxLength(100, {
     message: 'muscle_group must not exceed 100 characters',
   })
@@ -127,6 +132,20 @@ export class LeaderboardEntryResponseDTO {
 
   @ApiProperty({ example: 2750 })
   total_xp: number;
+}
+
+export class LeaderboardFilterDTO extends PaginationDTO {
+  @ApiPropertyOptional({ description: 'Opaque stable paging cursor.' })
+  @IsOptional()
+  @TrimString()
+  @IsString()
+  @MaxLength(600)
+  cursor?: string;
+
+  @ApiPropertyOptional({ description: 'Snapshot timestamp returned by the first page.' })
+  @IsOptional()
+  @IsDateString()
+  snapshot?: string;
 }
 
 export class ProgressionActiveSeasonResponseDTO {
@@ -472,6 +491,15 @@ export class MilestoneProgressResponseDTO {
   })
   reward_payload: Record<string, unknown> | null;
 
+  @ApiProperty({ enum: ProgressionIconKind, example: ProgressionIconKind.library })
+  icon_kind: ProgressionIconKind;
+
+  @ApiPropertyOptional({ example: 'trophy', nullable: true })
+  icon_key: string | null;
+
+  @ApiPropertyOptional({ example: 'uploads/admin/2026/08/badge.png', nullable: true })
+  icon_asset_key: string | null;
+
   @ApiPropertyOptional({
     type: String,
     example: '2026-04-23T09:30:00.000Z',
@@ -677,6 +705,15 @@ export class AdminMilestoneDefinitionResponseDTO {
   @ApiPropertyOptional({ type: Object, nullable: true })
   reward_payload: Record<string, unknown> | null;
 
+  @ApiProperty({ enum: ProgressionIconKind, example: ProgressionIconKind.library })
+  icon_kind: ProgressionIconKind;
+
+  @ApiPropertyOptional({ example: 'trophy', nullable: true })
+  icon_key: string | null;
+
+  @ApiPropertyOptional({ example: 'uploads/admin/2026/08/badge.png', nullable: true })
+  icon_asset_key: string | null;
+
   @ApiProperty({ example: true })
   is_active: boolean;
 
@@ -852,6 +889,25 @@ export class AdminMilestoneDefinitionDTO {
   @IsOptional()
   @IsObject({ message: 'reward_payload must be an object' })
   reward_payload?: Record<string, unknown> | null;
+
+  @ApiPropertyOptional({ enum: ProgressionIconKind, example: ProgressionIconKind.library })
+  @IsOptional()
+  @IsEnum(ProgressionIconKind)
+  icon_kind?: ProgressionIconKind;
+
+  @ApiPropertyOptional({ example: 'trophy', nullable: true })
+  @IsOptional()
+  @TrimString()
+  @IsString()
+  @MaxLength(100)
+  icon_key?: string | null;
+
+  @ApiPropertyOptional({ example: 'uploads/admin/2026/08/badge.png', nullable: true })
+  @IsOptional()
+  @TrimString()
+  @IsString()
+  @MaxLength(500)
+  icon_asset_key?: string | null;
 
   @ApiPropertyOptional({ example: false })
   @IsOptional()
@@ -1323,14 +1379,10 @@ export class ResolveIntegrityCaseDTO {
   rationale: string;
 }
 
-export class AdminManualExpGrantDTO {
-  @ApiProperty({ example: '22222222-2222-4222-8222-222222222222' })
-  @IsUUID('all', { message: 'user_id must be a UUID' })
-  user_id: string;
-
+export class AdminManualExpAllocationDTO {
   @ApiProperty({
     example: 75,
-    description: 'EXP amount approved after a non-camera or coach-verified session.',
+    description: 'EXP allocated to this muscle group.',
   })
   @Type(() => Number)
   @IsInt({ message: 'amount must be an integer' })
@@ -1338,25 +1390,37 @@ export class AdminManualExpGrantDTO {
   @Max(1000, { message: 'amount must not exceed 1000' })
   amount: number;
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     example: 'legs',
-    nullable: true,
   })
-  @IsOptional()
   @TrimString()
   @IsString({ message: 'muscle_group must be a string' })
+  @MinLength(1, { message: 'muscle_group must not be empty' })
   @MaxLength(100, {
     message: 'muscle_group must not exceed 100 characters',
   })
-  muscle_group?: string | null;
+  muscle_group: string;
+}
 
-  @ApiPropertyOptional({
-    example: '33333333-3333-4333-8333-333333333333',
-    nullable: true,
+export class AdminManualExpGrantDTO {
+  @ApiProperty({ example: '22222222-2222-4222-8222-222222222222' })
+  @IsUUID('all', { message: 'user_id must be a UUID' })
+  user_id: string;
+
+  @ApiProperty({
+    type: () => AdminManualExpAllocationDTO,
+    isArray: true,
+    minItems: 1,
+    example: [
+      { muscle_group: 'chest', amount: 75 },
+      { muscle_group: 'triceps', amount: 40 },
+    ],
   })
-  @IsOptional()
-  @IsUUID('all', { message: 'appointment_id must be a UUID' })
-  appointment_id?: string | null;
+  @IsArray({ message: 'allocations must be an array' })
+  @ArrayMinSize(1, { message: 'allocations must contain at least one item' })
+  @ValidateNested({ each: true })
+  @Type(() => AdminManualExpAllocationDTO)
+  allocations: AdminManualExpAllocationDTO[];
 
   @ApiProperty({
     example: 'Coach confirmed the member completed the post-session workout without camera tracking.',
@@ -1373,6 +1437,15 @@ export class AdminManualExpGrantDTO {
 export class AdminProgressionGrantResponseDTO {
   @ApiProperty({ example: '66666666-6666-4666-8666-666666666666' })
   grant_id: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    example: [
+      '66666666-6666-4666-8666-666666666666',
+      '77777777-7777-4777-8777-777777777777',
+    ],
+  })
+  grant_ids?: string[];
 
   @ApiProperty({ example: '22222222-2222-4222-8222-222222222222' })
   user_id: string;
@@ -1612,6 +1685,7 @@ export class MuscleLeaderboardFilterDTO extends PaginationDTO {
   @ApiProperty({ example: 'chest' })
   @TrimString()
   @IsString({ message: 'muscle_key must be a string' })
+  @MinLength(1, { message: 'muscle_key must not be empty' })
   @MaxLength(100, {
     message: 'muscle_key must not exceed 100 characters',
   })
@@ -1621,6 +1695,18 @@ export class MuscleLeaderboardFilterDTO extends PaginationDTO {
   @IsOptional()
   @IsUUID('4', { message: 'season_id must be a valid UUID' })
   season_id?: string;
+
+  @ApiPropertyOptional({ description: 'Opaque stable paging cursor.' })
+  @IsOptional()
+  @TrimString()
+  @IsString()
+  @MaxLength(600)
+  cursor?: string;
+
+  @ApiPropertyOptional({ description: 'Snapshot timestamp returned by the first page.' })
+  @IsOptional()
+  @IsDateString()
+  snapshot?: string;
 }
 
 export class AdminMuscleLeaderboardFilterDTO extends MuscleLeaderboardFilterDTO {
@@ -1658,6 +1744,18 @@ export class MuscleLeaderboardRowDTO {
 
   @ApiProperty({ example: 950 })
   xp_points: number;
+
+  @ApiProperty({ enum: ProgressionIconKind, example: ProgressionIconKind.library })
+  icon_kind: ProgressionIconKind;
+
+  @ApiPropertyOptional({ example: 'dumbbell', nullable: true })
+  icon_key: string | null;
+
+  @ApiPropertyOptional({ example: 'uploads/user/2026/08/icon.png', nullable: true })
+  icon_asset_key: string | null;
+
+  @ApiPropertyOptional({ type: String, nullable: true })
+  avatar_url: string | null;
 
   @ApiPropertyOptional({
     type: String,
@@ -1801,8 +1899,8 @@ export class AdminSeasonStandingRowDTO {
   @ApiProperty({ example: 580 })
   season_points: number;
 
-  @ApiPropertyOptional({ type: Number, example: 4, nullable: true })
-  rank_position: number | null;
+  @ApiProperty({ type: Number, example: 4 })
+  rank_position: number;
 
   @ApiProperty({ example: 2750 })
   total_xp: number;

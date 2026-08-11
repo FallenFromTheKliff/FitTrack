@@ -5,7 +5,17 @@ export const MINIMUM_MEMBER_AGE_YEARS = 5;
 
 export const canonicalPhilippineMobilePattern = /^\+639\d{9}$/;
 export const localPhilippineMobilePattern = /^09\d{9}$/;
+export const philippineMobileSubscriberPattern = /^9\d{9}$/;
 export const supportedPhilippineMobilePattern = /^(\+639\d{9}|09\d{9})$/;
+const memberNamePattern = /^[\p{L}\p{M}]+(?:[ \p{L}\p{M}]*[\p{L}\p{M}])?$/u;
+
+export function sanitizePhilippineMobileSubscriberInput(value: string) {
+  const digits = value.replace(/\D/g, "");
+
+  if (digits.startsWith("63")) return digits.slice(2, 12);
+  if (digits.startsWith("0")) return digits.slice(1, 11);
+  return digits.slice(0, 10);
+}
 
 export function sanitizePhilippineMobileInput(value: string) {
   const digits = value.replace(/\D/g, "");
@@ -158,35 +168,53 @@ export const profilePersonalSchema = z.object({
 });
 
 export const profileBodySchema = z.object({
-  heightCm: z.number().min(100).max(250),
-  weightKg: z.number().min(30).max(300),
+  heightCm: z.number().positive().max(300),
+  weightKg: z.number().positive().max(700),
   age: z.number().min(13).max(100)
 });
 
 export const profileFitnessSchema = z.object({
-  weightKg: z.number().min(30).max(300),
-  heightCm: z.number().min(100).max(250),
+  weightKg: z.number().positive().max(700),
+  heightCm: z.number().positive().max(300),
   currentCalories: z.number().min(0).max(10000)
 });
 
+const memberNameSchema = (label: string) =>
+  z
+    .string()
+    .trim()
+    .min(2, `${label} must be at least 2 characters`)
+    .max(100, `${label} must be 100 characters or fewer`)
+    .regex(memberNamePattern, `${label} may contain only Unicode letters and spaces`);
+
 export const editProfilePersonalSchema = z.object({
-  firstName: z.string().min(1, "First name is required"),
-  lastName: z.string().min(1, "Last name is required"),
+  firstName: memberNameSchema("First name"),
+  lastName: memberNameSchema("Last name"),
   email: z.string().email("Invalid email address"),
-  phone: z.string().trim().refine((value) => isSupportedPhilippineMobileNumber(value), {
-    message: "Enter a valid PH mobile number"
-  }),
+  phone: z
+    .string()
+    .trim()
+    .min(1, "Phone number is required")
+    .regex(canonicalPhilippineMobilePattern, "Enter 10 mobile digits starting with 9"),
   dateOfBirth: optionalMemberDateOfBirthSchema,
   gender: z.enum(["male", "female", "other"]).optional()
 });
 
 export const editProfileFitnessSchema = z.object({
-  weightKg: z.string().refine((value) => value === "" || (!isNaN(Number(value)) && Number(value) >= 0), {
-    message: "Enter a valid weight"
-  }),
-  heightCm: z.string().refine((value) => value === "" || (!isNaN(Number(value)) && Number(value) >= 0), {
-    message: "Enter a valid height"
-  })
+  weightKg: z
+    .string()
+    .trim()
+    .min(1, "Weight is required")
+    .regex(/^\d+(?:\.\d+)?$/, "Enter a valid weight")
+    .refine((value) => Number(value) > 0, "Weight must be greater than zero")
+    .refine((value) => Number(value) <= 700, "Weight must be 700 kg or less"),
+  heightCm: z
+    .string()
+    .trim()
+    .min(1, "Height is required")
+    .regex(/^\d+(?:\.\d+)?$/, "Enter a valid height")
+    .refine((value) => Number(value) > 0, "Height must be greater than zero")
+    .refine((value) => Number(value) <= 300, "Height must be 300 cm or less")
 });
 
 export type ProfilePersonalData = z.infer<typeof profilePersonalSchema>;

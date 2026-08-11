@@ -13,12 +13,24 @@ import {
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Archive,
+  Badge,
   ChevronRight,
+  Dumbbell,
+  Flame,
+  Medal,
   Pencil,
   RefreshCcw,
+  Star,
+  Target,
+  Trophy,
   X,
+  type LucideIcon,
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  FITNESS_PROGRESSION_LIBRARY_ICON_KEYS,
+  type ProgressionIconKind,
+} from "@fittrack/types";
 import type {
   CreateMuscleDefinitionInput,
   ExerciseReviewSubmissionStatus,
@@ -36,6 +48,7 @@ import {
   fitnessExerciseReviewSubmissionsQueryOptions,
   fitnessExercisesQueryOptions,
   fitnessMuscleDefinitionsQueryOptions,
+  uploadImageMutationOptions,
   updateExerciseReviewSubmissionMutationOptions,
   updateFitnessExerciseMutationOptions,
   updateMuscleDefinitionMutationOptions,
@@ -44,10 +57,11 @@ import {
   normalizeExerciseHandShapeProfile,
   normalizeExerciseMovementProfile,
   normalizeExerciseMuscleTargets,
+  buildRenderableAssetUrl,
   validateExerciseEditorContract,
 } from "@fittrack/utils";
 
-import { webApiClient } from "@/lib/api-client";
+import { WEB_API_BASE_URL, webApiClient } from "@/lib/api-client";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useFadeIn } from "@/hooks/animations/useFadeIn";
 import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
@@ -90,6 +104,162 @@ import type {
   ExerciseEditorTab,
 } from "@/components/exercise-lab/ExerciseContractEditors";
 
+export type MuscleIconKey =
+  (typeof FITNESS_PROGRESSION_LIBRARY_ICON_KEYS)[number];
+
+export type MuscleDefinitionEditorDraft = MuscleDefinitionDraft & {
+  iconAssetKey: string | null;
+  iconKey: MuscleIconKey;
+  iconKind: ProgressionIconKind;
+};
+
+const MUSCLE_ICON_LABELS: Record<MuscleIconKey, string> = {
+  badge: "Badge",
+  dumbbell: "Dumbbell",
+  flame: "Flame",
+  medal: "Medal",
+  star: "Star",
+  target: "Target",
+  trophy: "Trophy",
+};
+
+export const MUSCLE_ICON_OPTIONS = FITNESS_PROGRESSION_LIBRARY_ICON_KEYS.map(
+  (value) => ({ label: MUSCLE_ICON_LABELS[value], value }),
+);
+
+export const MUSCLE_ICON_ACCEPT =
+  "image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp";
+export const MUSCLE_ICON_UPLOAD_ERROR =
+  "Choose a managed PNG, JPEG, or WebP image. SVG files are not supported.";
+
+const ALLOWED_MUSCLE_ICON_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
+const ALLOWED_MUSCLE_ICON_FILE_PATTERN = /\.(?:jpe?g|png|webp)$/i;
+
+const MUSCLE_ICON_COMPONENTS: Record<MuscleIconKey, LucideIcon> = {
+  badge: Badge,
+  dumbbell: Dumbbell,
+  flame: Flame,
+  medal: Medal,
+  star: Star,
+  target: Target,
+  trophy: Trophy,
+};
+
+export function getDefaultMuscleIconKey(
+  value: string | null | undefined,
+): MuscleIconKey {
+  return (
+    MUSCLE_ICON_OPTIONS.find((option) => option.value === value)?.value ??
+    "dumbbell"
+  );
+}
+
+export function getMuscleIconComponent(
+  value: string | null | undefined,
+): LucideIcon {
+  return MUSCLE_ICON_COMPONENTS[getDefaultMuscleIconKey(value)];
+}
+
+export function isAllowedMuscleIconFile(file: File) {
+  return (
+    ALLOWED_MUSCLE_ICON_MIME_TYPES.has(file.type.toLowerCase()) &&
+    ALLOWED_MUSCLE_ICON_FILE_PATTERN.test(file.name)
+  );
+}
+
+export type MuscleIconColors = {
+  accent: string;
+  background: string;
+  border: string;
+};
+
+export function MuscleDefinitionIcon({
+  colors,
+  definition,
+  onImageError,
+  onImageLoad,
+  size = 38,
+  assetUrl: assetUrlOverride,
+}: {
+  colors: MuscleIconColors;
+  definition?: Pick<
+    MuscleDefinitionRecord,
+    "iconAssetKey" | "iconKey" | "iconKind"
+  > | null;
+  onImageError?: () => void;
+  onImageLoad?: () => void;
+  size?: number;
+  assetUrl?: string | null;
+}) {
+  const assetUrl =
+    assetUrlOverride !== undefined
+      ? assetUrlOverride
+      : definition?.iconKind === "custom"
+        ? buildRenderableAssetUrl({
+            apiBaseUrl: WEB_API_BASE_URL,
+            assetKey: definition.iconAssetKey ?? null,
+          })
+        : null;
+  const [imageError, setImageError] = useState(false);
+  const Icon = getMuscleIconComponent(definition?.iconKey);
+
+  useEffect(() => {
+    setImageError(false);
+  }, [assetUrl]);
+
+  const showImage = Boolean(assetUrl) && !imageError;
+
+  return (
+    <span
+      aria-hidden="true"
+      style={{
+        alignItems: "center",
+        backgroundColor: colors.background,
+        border: `1px solid ${colors.border}`,
+        borderRadius: 9,
+        display: "inline-flex",
+        flexShrink: 0,
+        height: size,
+        justifyContent: "center",
+        overflow: "hidden",
+        width: size,
+      }}
+    >
+      {showImage ? (
+        <img
+          alt=""
+          src={assetUrl ?? undefined}
+          onError={() => {
+            setImageError(true);
+            onImageError?.();
+          }}
+          onLoad={onImageLoad}
+          style={{ height: "100%", objectFit: "cover", width: "100%" }}
+        />
+      ) : (
+        <Icon color={colors.accent} size={Math.max(16, Math.round(size * 0.46))} />
+      )}
+    </span>
+  );
+}
+
+function createEmptyMuscleDefinitionDraft(): MuscleDefinitionEditorDraft {
+  return {
+    aliases: "",
+    bodyRegion: "",
+    iconAssetKey: null,
+    iconKey: "dumbbell",
+    iconKind: "library",
+    key: "",
+    name: "",
+    sortOrder: 500,
+  };
+}
+
 function useExerciseLabPageState() {
   const { colors, settings } = useTheme();
   const pathname = usePathname();
@@ -107,13 +277,14 @@ function useExerciseLabPageState() {
   const [libraryScope, setLibraryScope] = useState<LibraryScope>("active");
   const [libraryPage, setLibraryPage] = useState(1);
   const [muscleSearch, setMuscleSearch] = useState("");
-  const [muscleDraft, setMuscleDraft] = useState<MuscleDefinitionDraft>({
-    aliases: "",
-    bodyRegion: "",
-    key: "",
-    name: "",
-    sortOrder: 500,
-  });
+  const [muscleDraft, setMuscleDraft] = useState<MuscleDefinitionEditorDraft>(
+    createEmptyMuscleDefinitionDraft(),
+  );
+  const [pendingMuscleIconFile, setPendingMuscleIconFile] =
+    useState<File | null>(null);
+  const [muscleIconUploadError, setMuscleIconUploadError] = useState<
+    string | null
+  >(null);
   const [editingMuscleId, setEditingMuscleId] = useState<string | null>(null);
   const [muscleEditorOpen, setMuscleEditorOpen] = useState(false);
   const [musclePage, setMusclePage] = useState(1);
@@ -240,6 +411,9 @@ function useExerciseLabPageState() {
   );
   const createMuscleDefinitionMutation = useMutation(
     createMuscleDefinitionMutationOptions(webApiClient, queryClient),
+  );
+  const uploadMuscleIconMutation = useMutation(
+    uploadImageMutationOptions(webApiClient),
   );
   const updateMuscleDefinitionMutation = useMutation(
     updateMuscleDefinitionMutationOptions(webApiClient, queryClient),
@@ -625,11 +799,48 @@ function useExerciseLabPageState() {
     }
   };
 
+  const handleMuscleIconFileChange = (file: File) => {
+    if (!isAllowedMuscleIconFile(file)) {
+      setMuscleIconUploadError(MUSCLE_ICON_UPLOAD_ERROR);
+      return false;
+    }
+
+    setMuscleIconUploadError(null);
+    setPendingMuscleIconFile(file);
+    setMuscleDraft((current) => ({
+      ...current,
+      iconAssetKey: null,
+      iconKind: "custom",
+    }));
+    return true;
+  };
+
+  const selectMuscleLibraryIcon = (value: string) => {
+    setPendingMuscleIconFile(null);
+    setMuscleIconUploadError(null);
+    setMuscleDraft((current) => ({
+      ...current,
+      iconAssetKey: null,
+      iconKey: getDefaultMuscleIconKey(value),
+      iconKind: "library",
+    }));
+  };
+
   const resetMuscleDraft = (definition?: MuscleDefinitionRecord) => {
+    const iconAssetKey = definition?.iconAssetKey ?? null;
+    const iconKind: ProgressionIconKind =
+      definition?.iconKind === "custom" && iconAssetKey
+        ? "custom"
+        : "library";
     setEditingMuscleId(definition?.id ?? null);
+    setPendingMuscleIconFile(null);
+    setMuscleIconUploadError(null);
     setMuscleDraft({
       aliases: definition?.aliases.join(", ") ?? "",
       bodyRegion: definition?.bodyRegion ?? "",
+      iconAssetKey,
+      iconKey: getDefaultMuscleIconKey(definition?.iconKey),
+      iconKind,
       key: definition?.key ?? "",
       name: definition?.name ?? "",
       sortOrder: definition?.sortOrder ?? 500,
@@ -646,7 +857,9 @@ function useExerciseLabPageState() {
     resetMuscleDraft();
   };
 
-  const toMuscleDefinitionPayload = ():
+  const toMuscleDefinitionPayload = (
+    iconAssetKey = muscleDraft.iconAssetKey,
+  ):
     | CreateMuscleDefinitionInput
     | UpdateMuscleDefinitionInput => ({
     aliases: muscleDraft.aliases
@@ -655,6 +868,18 @@ function useExerciseLabPageState() {
       .filter(Boolean),
     bodyRegion: muscleDraft.bodyRegion.trim(),
     ...(editingMuscleId ? {} : { key: muscleDraft.key.trim() || undefined }),
+    iconAssetKey:
+      muscleDraft.iconKind === "custom" && iconAssetKey?.trim()
+        ? iconAssetKey.trim()
+        : null,
+    iconKey:
+      muscleDraft.iconKind === "custom" && iconAssetKey?.trim()
+        ? null
+        : getDefaultMuscleIconKey(muscleDraft.iconKey),
+    iconKind:
+      muscleDraft.iconKind === "custom" && iconAssetKey?.trim()
+        ? "custom"
+        : "library",
     name: muscleDraft.name.trim(),
     sortOrder: Number.isFinite(Number(muscleDraft.sortOrder))
       ? Number(muscleDraft.sortOrder)
@@ -671,16 +896,63 @@ function useExerciseLabPageState() {
       return;
     }
 
+    setMuscleIconUploadError(null);
+
+    let iconAssetKey = muscleDraft.iconAssetKey;
+    if (muscleDraft.iconKind === "custom") {
+      if (pendingMuscleIconFile) {
+        try {
+          const formData = new FormData();
+          formData.append("file", pendingMuscleIconFile);
+          const uploadResult = await uploadMuscleIconMutation.mutateAsync(
+            formData,
+          );
+          iconAssetKey = uploadResult.fileKey?.trim() || null;
+          if (!iconAssetKey) {
+            throw new Error("Managed icon upload did not return a file key.");
+          }
+          setPendingMuscleIconFile(null);
+          setMuscleDraft((current) => ({
+            ...current,
+            iconAssetKey,
+            iconKind: "custom",
+          }));
+        } catch (error) {
+          const message = getErrorMessage(
+            error,
+            "Unable to upload the muscle icon.",
+          );
+          setMuscleIconUploadError(message);
+          showMessage(message);
+          return;
+        }
+      }
+
+      if (!iconAssetKey?.trim()) {
+        const message =
+          "Upload a managed PNG, JPEG, or WebP image before saving.";
+        setMuscleIconUploadError(message);
+        showMessage(message);
+        return;
+      }
+    } else {
+      iconAssetKey = null;
+    }
+
     try {
       if (editingMuscleId) {
         await updateMuscleDefinitionMutation.mutateAsync({
           muscleDefinitionId: editingMuscleId,
-          payload: toMuscleDefinitionPayload() as UpdateMuscleDefinitionInput,
+          payload: toMuscleDefinitionPayload(
+            iconAssetKey,
+          ) as UpdateMuscleDefinitionInput,
         });
         showMessage(`${muscleDraft.name.trim()} was updated.`);
       } else {
         await createMuscleDefinitionMutation.mutateAsync({
-          payload: toMuscleDefinitionPayload() as CreateMuscleDefinitionInput,
+          payload: toMuscleDefinitionPayload(
+            iconAssetKey,
+          ) as CreateMuscleDefinitionInput,
         });
         showMessage(`${muscleDraft.name.trim()} was added to Muscle Library.`);
       }
@@ -1211,13 +1483,41 @@ function useExerciseLabPageState() {
       heading: "Muscle",
       align: "left",
       render: (definition, c) => (
-        <div style={{ display: "grid", gap: 3, minWidth: 180 }}>
-          <FitText style={{ fontSize: 14, fontWeight: 850, color: c.textPrimary }}>
-            {definition.name}
-          </FitText>
-          <FitText style={{ fontSize: 12, color: c.textSecondary }}>
-            {definition.key}
-          </FitText>
+        <div
+          style={{
+            alignItems: "center",
+            display: "flex",
+            gap: 10,
+            minWidth: 210,
+          }}
+        >
+          <MuscleDefinitionIcon
+            colors={{
+              accent: c.brand,
+              background: c.surfaceRaised,
+              border: c.border,
+            }}
+            definition={definition}
+            size={38}
+          />
+          <div style={{ display: "grid", gap: 3, minWidth: 0 }}>
+            <FitText
+              style={{
+                color: c.textPrimary,
+                fontSize: 14,
+                fontWeight: 850,
+              }}
+            >
+              {definition.name}
+            </FitText>
+            <FitText style={{ color: c.textSecondary, fontSize: 12 }}>
+              {definition.key} / {
+                definition.iconKind === "custom" && definition.iconAssetKey
+                  ? "Managed icon"
+                  : `${toTitleCase(getDefaultMuscleIconKey(definition.iconKey))} icon`
+              }
+            </FitText>
+          </div>
         </div>
       ),
     },
@@ -1370,6 +1670,7 @@ function useExerciseLabPageState() {
     handleConfirmAction,
     handleCreatorGovernanceUpdate,
     handleModeChange,
+    handleMuscleIconFileChange,
     handleOpenCreate,
     handleOpenPublish,
     handleReject,
@@ -1392,6 +1693,7 @@ function useExerciseLabPageState() {
     muscleDefinitions,
     muscleDefinitionsQuery,
     muscleDraft,
+    muscleIconUploadError,
     muscleEditorOpen,
     musclePage,
     muscleSearch,
@@ -1400,6 +1702,7 @@ function useExerciseLabPageState() {
     muscleTotalPages,
     openReviewModal,
     openMuscleEditor,
+    pendingMuscleIconFile,
     publishCandidate,
     rejectRationale,
     rejectTarget,
@@ -1438,6 +1741,7 @@ function useExerciseLabPageState() {
     setMuscleDraft,
     setMusclePage,
     setMuscleSearch,
+    selectMuscleLibraryIcon,
     setRejectRationale,
     setRejectTarget,
     setRejectValidationError,
@@ -1457,6 +1761,7 @@ function useExerciseLabPageState() {
     themeTransition,
     updateExerciseMutation,
     updateMuscleDefinitionMutation,
+    uploadMuscleIconMutation,
     updateReviewSubmissionMutation,
     visibleMuscleDefinitions,
     visibleReviewCandidates,

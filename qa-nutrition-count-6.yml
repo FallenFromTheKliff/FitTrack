@@ -1,0 +1,145 @@
+- generic [ref=e19]:
+  - generic [ref=e20]:
+    - img [ref=e22] [cursor=pointer]
+    - generic [ref=e23]:
+      - generic [ref=e24]: Nutrition
+      - generic [ref=e25]: Fuel your body right!
+    - generic [ref=e26]:
+      - button "Open page help" [ref=e27] [cursor=pointer]:
+        - img [ref=e28]
+      - button "Open notifications" [ref=e31] [cursor=pointer]:
+        - img [ref=e32]
+  - generic [ref=e41]:
+    - generic [ref=e44]:
+      - generic [ref=e45]:
+        - generic [ref=e46]:
+          - generic [ref=e47]: MAINTENANCE
+          - generic [ref=e48]: TODAY'S CALORIES
+        - img [ref=e50]
+      - generic [ref=e52]: "1836"
+      - generic [ref=e53]: / 2365 kcal
+      - generic [ref=e55]: 529 kcal remaining
+      - generic [ref=e56]:
+        - img [ref=e57]
+        - generic [ref=e62]: Use the FAB to update this target.
+    - generic [ref=e65]:
+      - generic [ref=e66]:
+        - generic [ref=e67]: Target Status
+        - generic [ref=e69]:
+          - generic [ref=e70]:
+            - generic:
+              - img [ref=e73]
+              - generic [ref=e77]:
+                - generic [ref=e78]:
+                  - generic [ref=e79]: Daily Target
+                  - generic [ref=e82]: In range
+                - generic [ref=e83]: 78% of today's target logged.
+          - generic [ref=e84]:
+            - generic:
+              - img [ref=e87]
+              - generic [ref=e89]:
+                - generic [ref=e90]:
+                  - generic [ref=e91]: Recent Adherence
+                  - generic [ref=e94]: 78% Near target, low
+                - generic [ref=e95]: 1836 kcal logged against 2365 kcal today.
+          - generic [ref=e96]:
+            - generic:
+              - img [ref=e98]
+              - generic [ref=e103]:
+                - generic [ref=e104]:
+                  - generic [ref=e105]: Target History
+                  - generic [ref=e108]: +255 kcal
+                - generic [ref=e109]: Last calculated Aug 9, 2026. 2 saved calculations on record.
+      - generic [ref=e110]:
+        - generic [ref=e111]: Macro Breakdown
+        - generic [ref=e113]:
+          - 'generic "Protein: 131 grams of 104 grams. Above target, 126 percent of target." [ref=e2043]':
+            - generic [ref=e115]:
+              - generic [ref=e117]: Protein
+              - generic [ref=e118]: 131g / 104g
+            - generic [ref=e120]: 27g over target | Above target (126%)
+          - 'generic "Carbs: 216 grams of 339 grams. Below target, 64 percent of target." [ref=e2044]':
+            - generic [ref=e122]:
+              - generic [ref=e124]: Carbs
+              - generic [ref=e125]: 216g / 339g
+            - generic [ref=e127]: 123g remaining | Below target (64%)
+          - 'generic "Fats: 58 grams of 66 grams. Near target, low, 88 percent of target." [ref=e2045]':
+            - generic [ref=e129]:
+              - generic [ref=e131]: Fats
+              - generic [ref=e132]: 58g / 66g
+            - generic [ref=e134]: 8g remaining | Near target, low (88%)
+      - generic [ref=e135]:
+        - generic [ref=e136]:
+          - generic [ref=e137]: Today's Nutrition Log
+          - button "History" [ref=e139] [cursor=pointer]:
+            - img [ref=e140]
+            - generic [ref=e144]: History
+        - generic [ref=e145]:
+          - generic [ref=e146]:
+            - generic [ref=e638]:
+              - generic [ref=e639]:
+                - generic [ref=e640]: Breakfast
+                - generic [ref=e641]: 202 kcal
+              - generic [ref=e642]:
+                - button "Edit Breakfast, QA-NUTRITION-1 Ultra-long breakfast name intended to verify ellipsis truncation without obscuring macros or the trailing chevron" [ref=e1770] [cursor=pointer]:
+                  - generic "utensils meal icon" [ref=e1772]:
+                    - img [ref=e1773]
+                  - generic [ref=e1778]:
+                    - generic [ref=e1779]: Breakfast - QA-NUTRITION-1 Ultra-long breakfast name intended to verify ellipsis truncation without obscuring macros or the trailing chevron
+                    - generic [ref=e1780]: 101 kcal | P 10 C 20 F 5 | 1 serving
+                  - img [ref=e1781]
+                - button "Edit Breakfast, QA-NUTRITION-1 Ultra-long breakfast name intended to verify ellipsis truncation without obscuring macros or the trailing chevron" [ref=e643] [cursor=pointer]:
+                  - generic "utensils meal icon" [ref=e645]:
+                    - img [ref=e646]
+                  - generic [ref=e651]:
+                    - generic [ref=e652]: Breakfast - QA-NUTRITION-1 Ultra-long breakfast name intended to verify ellipsis truncation without obscuring macros or the trailing chevron
+                    - generic [ref=e653]: 101 kcal | P 10 C 20 F 5 | 1 serving
+                  - img [ref=e654]
+            - generic [ref=e1203]:
+              - generic [ref=e1204]:
+                - generic [ref=e1205]: Lunch
+                - generic [ref=e1206]: 710 kcal
+              - button "Edit Lunch, Chicken adobo bowl with vegetables" [ref=e1208] [cursor=pointer]:
+                - generic "sandwich meal icon" [ref=e1210]:
+                  - img [ref=e1211]
+                - generic [ref=e1217]:
+                  - generic [ref=e1218]: Lunch - Chicken adobo bowl with vegetables
+                  - generic [ref=e1219]: 710 kcal | P 46 C 78 F 22 | 1 cup
+                - img [ref=e1220]
+            - generic [ref=e1487]:
+              - generic [ref=e1488]:
+                - generic [ref=e1489]: Dinner
+                - generic [ref=e1490]: 590 kcal
+              - button "Edit Dinner, Grilled tuna, rice, and ensalada" [ref=e1492] [cursor=pointer]:
+                - generic "beef meal icon" [ref=e1494]:
+                  - img [ref=e1495]
+                - generic [ref=e1499]:
+                  - generic [ref=e1500]: Dinner - Grilled tuna, rice, and ensalada
+                  - generic [ref=e1501]: 590 kcal | P 48 C 55 F 16 | 1 cup
+                - img [ref=e1502]
+            - generic [ref=e920]:
+              - generic [ref=e921]:
+                - generic [ref=e922]: Snacks
+                - generic [ref=e923]: 334 kcal
+              - generic [ref=e924]:
+                - button "Edit Snack, Runtime nutrition check updated" [ref=e2046] [cursor=pointer]:
+                  - generic "cookie meal icon" [ref=e2048]:
+                    - img [ref=e2049]
+                  - generic [ref=e2051]:
+                    - generic [ref=e2052]: Snack - Runtime nutrition check updated
+                    - generic [ref=e2053]: 211 kcal | P 12 C 25 F 7 | 1 serving
+                  - img [ref=e2054]
+                - button "Edit Snack, Runtime icon verification" [ref=e925] [cursor=pointer]:
+                  - generic "apple meal icon" [ref=e927]:
+                    - img [ref=e928]
+                  - generic [ref=e931]:
+                    - generic [ref=e932]: Snack - Runtime icon verification
+                    - generic [ref=e933]: 123 kcal | P 5 C 18 F 3 | 1 serving
+                  - img [ref=e934]
+          - generic [ref=e154]:
+            - img [ref=e155]
+            - generic [ref=e157]: Use the FAB to log meals.
+  - button "Open quick actions menu" [ref=e1814] [cursor=pointer]:
+    - generic [ref=e160]:
+      - img [ref=e162]
+      - img [ref=e164]

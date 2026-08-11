@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Modal, Platform, Pressable, useWindowDimensions, View } from "react-native";
+import { Modal, Platform, Pressable, ScrollView, useWindowDimensions, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
-import { CalendarDays, Camera, Dumbbell, User } from "lucide-react-native";
+import { CalendarDays, Camera, Check, Dumbbell, User, X } from "lucide-react-native";
 import * as ImagePicker from "expo-image-picker";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { AuthUser, CoachProfileRecord } from "@fittrack/types";
+import type { UpdateUserProfilePayload } from "@fittrack/api-client";
 import {
   buildRenderableAssetUrl,
   calcBMI,
@@ -16,14 +17,14 @@ import {
 } from "@fittrack/utils";
 import {
   coachProfileSchema,
+  editProfileFitnessSchema,
   editProfilePersonalSchema,
-  formatPhilippineMobileForInput,
   getLatestAllowedMemberBirthDate,
   normalizePhilippineMobileNumber,
-  sanitizePhilippineMobileInput,
+  sanitizePhilippineMobileSubscriberInput,
   type EditProfilePersonalData
 } from "@fittrack/validators";
-import { updateCoachProfileMutationOptions, updatePhoneMutationOptions, updateProfileMutationOptions, uploadImageMutationOptions } from "@fittrack/query";
+import { coachSpecialtiesQueryOptions, updateCoachProfileMutationOptions, updatePhoneMutationOptions, updateProfileMutationOptions, uploadImageMutationOptions } from "@fittrack/query";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { MOBILE_API_BASE_URL, mobileApiClient } from "@/lib/api-client";
@@ -33,6 +34,7 @@ import { useLoadingText } from "@fittrack/hooks";
 import { makeEditProfileModalStyles } from "@/styles/modals/EditProfileStyles";
 
 import CalendarModal from "@/components/modals/shared/CalendarModal";
+import ConfirmModal from "@/components/modals/shared/ConfirmModal";
 import FitModalScrollView from "@/components/modals/shared/FitModalScrollView";
 import { FitAvatarImage, FitButton, FitInputField, FitText, FitTextInput } from "@/components/fit";
 
@@ -69,6 +71,30 @@ type SelectedAvatarAsset = {
   uri: string;
 };
 
+type SaveScope = "personal" | "fitness";
+
+type ProfileBaseline = {
+  avatarUrl?: string;
+  dateOfBirth: string;
+  firstName: string;
+  gender: string;
+  heightCm?: number;
+  lastName: string;
+  phone: string;
+  weightKg?: number;
+};
+
+const emptyProfileBaseline: ProfileBaseline = {
+  avatarUrl: undefined,
+  dateOfBirth: "",
+  firstName: "",
+  gender: "other",
+  heightCm: undefined,
+  lastName: "",
+  phone: "",
+  weightKg: undefined
+};
+
 const createAvatarUploadPart = async (asset: SelectedAvatarAsset) => {
   const fileName = asset.fileName ?? `avatar-${Date.now()}.jpg`;
   const mimeType = asset.mimeType ?? "image/jpeg";
@@ -92,6 +118,190 @@ const createAvatarUploadPart = async (asset: SelectedAvatarAsset) => {
   });
 };
 
+const normalizeSpecialtyLabel = (value: string) => value.trim().replace(/\s+/g, " ");
+
+const isSameSpecialtyLabel = (left: string, right: string) =>
+  normalizeSpecialtyLabel(left).toLocaleLowerCase() ===
+  normalizeSpecialtyLabel(right).toLocaleLowerCase();
+
+const parseSpecialtyLabels = (value: string) => {
+  const seen = new Set<string>();
+  return value
+    .split(/[\n,]/)
+    .map(normalizeSpecialtyLabel)
+    .filter((label) => {
+      const key = label.toLocaleLowerCase();
+      if (!label || key === "n/a" || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+};
+
+function CoachSpecialtyPicker({
+  disabled,
+  onChange,
+  value
+}: {
+  disabled: boolean;
+  onChange: (value: string[]) => void;
+  value: string[];
+}) {
+  const { colors } = useTheme();
+  const [search, setSearch] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
+  const queryParams = useMemo(
+    () => ({ limit: 20, page: 1, search: search.trim() || undefined }),
+    [search]
+  );
+  const specialtiesQuery = useQuery({
+    ...coachSpecialtiesQueryOptions(mobileApiClient, queryParams),
+    enabled: !disabled && isOpen,
+    staleTime: 5 * 60_000
+  });
+  const selectedLabels = useMemo(
+    () => new Set(value.map((label) => normalizeSpecialtyLabel(label).toLocaleLowerCase())),
+    [value]
+  );
+  const catalogOptions = specialtiesQuery.data?.data ?? [];
+  const normalizedSearch = normalizeSpecialtyLabel(search);
+  const exactCatalogOption = catalogOptions.find((option) =>
+    isSameSpecialtyLabel(option.label, normalizedSearch)
+  );
+  const canAddCustom = Boolean(
+    normalizedSearch &&
+      !exactCatalogOption &&
+      !selectedLabels.has(normalizedSearch.toLocaleLowerCase()) &&
+      !isSameSpecialtyLabel(normalizedSearch, "N/A")
+  );
+
+  const addSpecialty = (label: string) => {
+    const normalizedLabel = normalizeSpecialtyLabel(label);
+    const canonicalLabel = catalogOptions.find((option) =>
+      isSameSpecialtyLabel(option.label, normalizedLabel)
+    )?.label ?? normalizedLabel;
+    const key = canonicalLabel.toLocaleLowerCase();
+    if (!canonicalLabel || value.length >= 20 || selectedLabels.has(key) || key === "n/a") return;
+
+    onChange([...value, canonicalLabel]);
+    setSearch("");
+    setIsOpen(false);
+  };
+
+  return (
+    <View style={{ gap: 8 }}>
+      {value.length ? (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}>
+          {value.map((label) => (
+            <Pressable
+              key={label}
+              accessibilityLabel={`Remove ${label}`}
+              accessibilityRole="button"
+              disabled={disabled}
+              onPress={() => onChange(value.filter((item) => !isSameSpecialtyLabel(item, label)))}
+              style={{
+                alignItems: "center",
+                backgroundColor: colors.brand + "18",
+                borderColor: colors.brand + "55",
+                borderRadius: 999,
+                borderWidth: 1,
+                flexDirection: "row",
+                gap: 6,
+                maxWidth: "100%",
+                paddingHorizontal: 10,
+                paddingVertical: 7
+              }}
+            >
+              <FitText style={{ color: colors.brand, flexShrink: 1, fontSize: 12, fontWeight: "700" }}>
+                {label}
+              </FitText>
+              {!disabled ? <X color={colors.brand} size={13} strokeWidth={2.5} /> : null}
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+      <FitTextInput
+        nativeID="coach-specialties"
+        accessibilityLabel="Search or add coach specialties"
+        value={search}
+        placeholder={value.length >= 20 ? "Specialty limit reached" : "Search or add a specialty"}
+        editable={!disabled && value.length < 20}
+        onFocus={() => setIsOpen(true)}
+        onChangeText={(text) => {
+          setSearch(text);
+          setIsOpen(true);
+        }}
+        onSubmitEditing={() => {
+          if (canAddCustom) addSpecialty(normalizedSearch);
+        }}
+        style={{
+          backgroundColor: colors.fieldBg,
+          borderColor: colors.fieldBorder,
+          borderRadius: 10,
+          borderWidth: 1,
+          minHeight: 46,
+          paddingHorizontal: 14
+        }}
+      />
+      {isOpen && !disabled ? (
+        <View
+          style={{
+            backgroundColor: colors.surfaceRaised,
+            borderColor: colors.border,
+            borderRadius: 10,
+            borderWidth: 1,
+            maxHeight: 190,
+            overflow: "hidden"
+          }}
+        >
+          <ScrollView keyboardShouldPersistTaps="handled" nestedScrollEnabled>
+            {catalogOptions.map((option) => {
+              const selected = selectedLabels.has(option.label.toLocaleLowerCase());
+              return (
+                <Pressable
+                  key={option.id}
+                  accessibilityLabel={`${option.label}${selected ? ", added" : ""}`}
+                  accessibilityRole="button"
+                  disabled={selected}
+                  onPress={() => addSpecialty(option.label)}
+                  style={{ paddingHorizontal: 12, paddingVertical: 10 }}
+                >
+                  <FitText style={{ color: selected ? colors.brand : colors.textPrimary, fontSize: 12 }}>
+                    {option.label}{selected ? " (Added)" : ""}
+                  </FitText>
+                </Pressable>
+              );
+            })}
+            {canAddCustom ? (
+              <Pressable
+                accessibilityLabel={`Add custom specialty ${normalizedSearch}`}
+                accessibilityRole="button"
+                onPress={() => addSpecialty(normalizedSearch)}
+                style={{ paddingHorizontal: 12, paddingVertical: 10 }}
+              >
+                <FitText style={{ color: colors.warning, fontSize: 12, fontWeight: "700" }}>
+                  Add custom: {normalizedSearch}
+                </FitText>
+              </Pressable>
+            ) : null}
+            {catalogOptions.length === 0 && !canAddCustom ? (
+              <FitText style={{ color: colors.textMuted, fontSize: 12, padding: 12 }}>
+                {specialtiesQuery.isPending
+                  ? "Loading specialties..."
+                  : specialtiesQuery.isError
+                    ? "Catalog unavailable. Enter a custom specialty."
+                    : "No matching specialties."}
+              </FitText>
+            ) : null}
+          </ScrollView>
+        </View>
+      ) : null}
+      <FitText style={{ color: colors.textMuted, fontSize: 11, lineHeight: 16 }}>
+        Search the shared catalog or add a custom label. {value.length}/20 selected.
+      </FitText>
+    </View>
+  );
+}
+
 export default function EditProfileModal({ isVisible, onClose, coachProfile = null }: Props) {
   const { colors } = useTheme();
   const { ic } = useThemeTransitionAnim();
@@ -114,8 +324,15 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
   const [coachSpecialties, setCoachSpecialties] = useState("");
   const [coachCertifications, setCoachCertifications] = useState("");
   const [coachHourlyRate, setCoachHourlyRate] = useState("");
+  const [saveError, setSaveError] = useState("");
+  const [pendingSave, setPendingSave] = useState<{
+    personal: EditProfilePersonalData;
+    scope: SaveScope;
+  } | null>(null);
   const personalForm = useForm<EditProfilePersonalData>({
     resolver: zodResolver(editProfilePersonalSchema),
+    mode: "onChange",
+    reValidateMode: "onChange",
     defaultValues: {
       firstName: "",
       lastName: "",
@@ -127,8 +344,10 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
   });
   const savingText = useLoadingText("Saving", isSubmitting);
   const latestAllowedBirthDate = useMemo(() => getLatestAllowedMemberBirthDate(), []);
-  const { reset: resetPersonal } = personalForm;
+  const { reset: resetPersonal, trigger: triggerPersonalValidation } = personalForm;
   const wasVisibleRef = useRef(false);
+  const saveCommitLockedRef = useRef(false);
+  const profileBaselineRef = useRef<ProfileBaseline>(emptyProfileBaseline);
   const [weightInput, setWeightInput] = useState("");
   const [heightInput, setHeightInput] = useState("");
   const coachSnapshot = useRef({
@@ -140,10 +359,13 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
   const userName = user?.name ?? "";
   const userEmail = user?.email ?? "";
   const userPhone = user?.phone_no ?? "";
-  const userDob = user?.dateOfBirth ?? "";
+  const userDob = user?.dateOfBirth ?? user?.profile?.dateOfBirth ?? "";
   const userGender = normalizeGenderOption(user?.gender ?? user?.profile?.gender);
-  const userWeight = user?.weightKg;
-  const userHeight = user?.heightCm;
+  const userWeight = user?.weightKg ?? user?.profile?.currentWeightKg ?? undefined;
+  const userHeight = user?.heightCm ?? user?.profile?.heightCm ?? undefined;
+  const userAvatarUrl = user?.avatarUri ?? user?.profile?.avatarUrl ?? undefined;
+  const userProfileFirstName = user?.profile?.firstName?.trim() ?? "";
+  const userProfileLastName = user?.profile?.lastName?.trim() ?? "";
   const statusValue = (user?.status ?? "active").toLowerCase();
   const statusLabel = statusValue === "frozen" ? "Frozen" : statusValue === "expired" ? "Expired" : "Active";
   const statusColor = statusValue === "frozen" ? colors.warning : statusValue === "expired" ? colors.danger : colors.success;
@@ -156,20 +378,34 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
     const isOpening = isVisible && !wasVisibleRef.current;
     if (isOpening) {
       const { firstName: fn, lastName: ln } = splitFullName(userName);
+      const firstName = userProfileFirstName || fn;
+      const lastName = userProfileLastName || ln;
+      profileBaselineRef.current = {
+        avatarUrl: userAvatarUrl,
+        dateOfBirth: userDob,
+        firstName,
+        gender: userGender,
+        heightCm: userHeight,
+        lastName,
+        phone: normalizePhilippineMobileNumber(userPhone),
+        weightKg: userWeight
+      };
       resetPersonal({
-        firstName: fn,
-        lastName: ln,
+        firstName,
+        lastName,
         email: userEmail,
-        phone: formatPhilippineMobileForInput(userPhone),
+        phone: normalizePhilippineMobileNumber(userPhone),
         dateOfBirth: userDob,
         gender: userGender
       });
+      void triggerPersonalValidation("phone");
       setWeightInput(String(userWeight ?? ""));
       setHeightInput(String(userHeight ?? ""));
       setAvatarAsset(null);
       setActiveTab("personal");
       setIsDobCalOpen(false);
       setIsSubmitting(false);
+      setSaveError("");
       const nextCoachState = {
         bio: coachProfile?.bio ?? "",
         specialties: coachProfile?.specialties?.join(", ") ?? "",
@@ -192,11 +428,15 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
     coachProfile,
     isVisible,
     resetPersonal,
+    triggerPersonalValidation,
     userDob,
     userEmail,
     userGender,
+    userAvatarUrl,
     userHeight,
     userName,
+    userProfileFirstName,
+    userProfileLastName,
     userPhone,
     userWeight
   ]);
@@ -230,17 +470,35 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
 
   const dateOfBirth = personalForm.watch("dateOfBirth") ?? "";
   const selectedGender = personalForm.watch("gender") ?? "other";
-  const wKg = parseFloat(weightInput);
-  const hCm = parseFloat(heightInput);
+  const firstNameInput = personalForm.watch("firstName") ?? "";
+  const lastNameInput = personalForm.watch("lastName") ?? "";
+  const phoneInput = personalForm.watch("phone") ?? "";
+  const wKg = Number(weightInput);
+  const hCm = Number(heightInput);
   const bmiResult = wKg > 0 && hCm > 0 ? calcBMI(wKg, hCm) : null;
-  const weightError =
-    weightInput.trim().length > 0 && (!Number.isFinite(wKg) || wKg <= 0)
-      ? "Weight must be greater than zero."
-      : "";
-  const heightError =
-    heightInput.trim().length > 0 && (!Number.isFinite(hCm) || hCm <= 0)
-      ? "Height must be greater than zero."
-      : "";
+  const fitnessValidation = useMemo(
+    () => editProfileFitnessSchema.safeParse({ weightKg: weightInput, heightCm: heightInput }),
+    [heightInput, weightInput]
+  );
+  const fitnessErrors = useMemo(() => {
+    if (fitnessValidation.success) return { height: "", weight: "" };
+
+    return {
+      height:
+        fitnessValidation.error.issues.find((issue) => issue.path[0] === "heightCm")?.message ?? "",
+      weight:
+        fitnessValidation.error.issues.find((issue) => issue.path[0] === "weightKg")?.message ?? ""
+    };
+  }, [fitnessValidation]);
+  const coachValidation = useMemo(
+    () =>
+      coachProfileSchema.safeParse({
+        bio: coachBio,
+        specialties: coachSpecialties,
+        certifications: coachCertifications
+      }),
+    [coachBio, coachCertifications, coachSpecialties]
+  );
   const avatarInitials =
     [
       (personalForm.watch("firstName") ?? "").trim().charAt(0),
@@ -253,119 +511,209 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
     "?";
   const displayedAvatarUri = buildRenderableAssetUrl({
     apiBaseUrl: MOBILE_API_BASE_URL,
-    assetUrl: avatarAsset?.uri ?? user?.avatarUri ?? null
+    assetUrl: avatarAsset?.uri ?? userAvatarUrl ?? null
   });
-  const isFitnessDirty = weightInput !== String(userWeight ?? "") || heightInput !== String(userHeight ?? "");
+  const baseline = profileBaselineRef.current;
+  const normalizedPhone = normalizePhilippineMobileNumber(phoneInput);
+  const firstNameChanged = firstNameInput.trim() !== baseline.firstName;
+  const lastNameChanged = lastNameInput.trim() !== baseline.lastName;
+  const dateOfBirthChanged = dateOfBirth.trim() !== baseline.dateOfBirth;
+  const genderChanged = selectedGender !== baseline.gender;
+  const phoneChanged = normalizedPhone !== baseline.phone;
+  const avatarChanged = !!avatarAsset;
+  const isPersonalDirty =
+    firstNameChanged ||
+    lastNameChanged ||
+    dateOfBirthChanged ||
+    genderChanged ||
+    phoneChanged ||
+    avatarChanged;
+  const isWeightDirty = fitnessValidation.success
+    ? Number(fitnessValidation.data.weightKg) !== baseline.weightKg
+    : weightInput.trim() !== String(baseline.weightKg ?? "");
+  const isHeightDirty = fitnessValidation.success
+    ? Number(fitnessValidation.data.heightCm) !== baseline.heightCm
+    : heightInput.trim() !== String(baseline.heightCm ?? "");
+  const isFitnessDirty = isWeightDirty || isHeightDirty;
   const isCoachDirty = isCoach && (
     coachBio !== coachSnapshot.current.bio ||
     coachSpecialties !== coachSnapshot.current.specialties ||
-    coachCertifications !== coachSnapshot.current.certifications ||
-    coachHourlyRate !== coachSnapshot.current.hourlyRate
+    coachCertifications !== coachSnapshot.current.certifications
   );
-  const isDirty = personalForm.formState.isDirty || isFitnessDirty || !!avatarAsset || isCoachDirty;
+  const isCurrentTabDirty = activeTab === "personal"
+    ? isPersonalDirty
+    : isCoach
+      ? isCoachDirty
+      : isFitnessDirty;
+  const isCurrentTabValid = activeTab === "personal"
+    ? personalForm.formState.isValid
+    : isCoach
+      ? coachValidation.success
+      : fitnessValidation.success;
+  const isDirty = isCurrentTabDirty && isCurrentTabValid;
 
-  const buildPatch = (personal: EditProfilePersonalData): Partial<AuthUser> => {
-    const fullName = [personal.firstName.trim(), personal.lastName.trim()].filter(Boolean).join(" ");
-    const normalizedPhone = normalizePhilippineMobileNumber(personal.phone);
-    const patch: Partial<AuthUser> = {
-      name: fullName || user?.name,
-      email: user?.email ?? "",
-      phone_no: (normalizedPhone || user?.phone_no) ?? null,
-      dateOfBirth: personal.dateOfBirth || undefined,
-      gender: personal.gender
-    };
-    const wKgNum = parseFloat(weightInput);
-    const hCmNum = parseFloat(heightInput);
-    if (wKgNum > 0) patch.weightKg = wKgNum;
-    if (hCmNum > 0) patch.heightCm = hCmNum;
+  const buildProfileUpdate = (
+    personal: EditProfilePersonalData,
+    scope: SaveScope,
+    nextAvatarUri: string | undefined
+  ): UpdateUserProfilePayload => {
+    const payload: UpdateUserProfilePayload = {};
+    if (scope === "personal") {
+      const nextFirstName = personal.firstName.trim();
+      const nextLastName = personal.lastName.trim();
+      const nextDateOfBirth = personal.dateOfBirth?.trim() ?? "";
+
+      if (nextFirstName !== baseline.firstName) payload.firstName = nextFirstName;
+      if (nextLastName !== baseline.lastName) payload.lastName = nextLastName;
+      if (nextDateOfBirth && nextDateOfBirth !== baseline.dateOfBirth) {
+        payload.dateOfBirth = nextDateOfBirth;
+      }
+      if (personal.gender !== baseline.gender) payload.gender = personal.gender;
+      if (avatarAsset && nextAvatarUri && nextAvatarUri !== baseline.avatarUrl) {
+        payload.avatarUrl = nextAvatarUri;
+      }
+    }
+
+    if (scope === "fitness" && !isCoach && fitnessValidation.success) {
+      const nextWeightKg = Number(fitnessValidation.data.weightKg);
+      const nextHeightCm = Number(fitnessValidation.data.heightCm);
+      if (nextWeightKg !== baseline.weightKg) payload.currentWeightKg = nextWeightKg;
+      if (nextHeightCm !== baseline.heightCm) payload.heightCm = nextHeightCm;
+    }
+
+    return payload;
+  };
+
+  const buildAuthPatch = (
+    personal: EditProfilePersonalData,
+    scope: SaveScope,
+    profilePayload: UpdateUserProfilePayload,
+    nextAvatarUri: string | undefined
+  ): Partial<AuthUser> => {
+    const patch: Partial<AuthUser> = {};
+    const nextProfile = { ...(user?.profile ?? {}) };
+    let profileChanged = false;
+
+    if (scope === "personal") {
+      const nextFirstName = personal.firstName.trim();
+      const nextLastName = personal.lastName.trim();
+      const nextDateOfBirth = personal.dateOfBirth?.trim() ?? "";
+
+      if (firstNameChanged || lastNameChanged) {
+        patch.name = [nextFirstName, nextLastName].filter(Boolean).join(" ");
+        nextProfile.firstName = nextFirstName;
+        nextProfile.lastName = nextLastName;
+        profileChanged = true;
+      }
+      if (dateOfBirthChanged && nextDateOfBirth) {
+        patch.dateOfBirth = nextDateOfBirth;
+        nextProfile.dateOfBirth = nextDateOfBirth;
+        profileChanged = true;
+      }
+      if (genderChanged) {
+        patch.gender = personal.gender;
+        nextProfile.gender = personal.gender;
+        profileChanged = true;
+      }
+      if (avatarChanged && nextAvatarUri) {
+        patch.avatarUri = nextAvatarUri;
+        nextProfile.avatarUrl = nextAvatarUri;
+        profileChanged = true;
+      }
+      if (phoneChanged) patch.phone_no = normalizedPhone;
+    }
+
+    if (scope === "fitness" && !isCoach) {
+      if (profilePayload.currentWeightKg !== undefined) {
+        patch.weightKg = profilePayload.currentWeightKg;
+        nextProfile.currentWeightKg = profilePayload.currentWeightKg;
+        profileChanged = true;
+      }
+      if (profilePayload.heightCm !== undefined) {
+        patch.heightCm = profilePayload.heightCm;
+        nextProfile.heightCm = profilePayload.heightCm;
+        profileChanged = true;
+      }
+    }
+
+    if (profileChanged) patch.profile = nextProfile;
     return patch;
   };
 
-  const commitSave = async (personal: EditProfilePersonalData) => {
-    if (isSubmitting) return;
+  const commitSave = async (personal: EditProfilePersonalData, scope: SaveScope) => {
+    if (saveCommitLockedRef.current) return;
+    saveCommitLockedRef.current = true;
     setIsSubmitting(true);
-    const normalizedPhone = normalizePhilippineMobileNumber(personal.phone);
-    const currentPhone = normalizePhilippineMobileNumber(user?.phone_no ?? "");
-    const phoneChanged = normalizedPhone !== currentPhone;
-    const patch = buildPatch(personal);
+    setSaveError("");
     try {
-      const coachPayload = coachProfileSchema.parse({
-        bio: coachBio,
-        specialties: coachSpecialties,
-        certifications: coachCertifications,
-        hourlyRate: coachHourlyRate
-      });
-      const wKgNum = parseFloat(weightInput);
-      const hCmNum = parseFloat(heightInput);
-      let nextAvatarUri = user?.avatarUri;
-      if (avatarAsset) {
+      let nextAvatarUri = userAvatarUrl;
+      if (scope === "personal" && avatarAsset) {
         const formData = new FormData();
         formData.append("file", await createAvatarUploadPart(avatarAsset) as never);
         const avatarResult = await uploadImageMutation.mutateAsync(formData);
         nextAvatarUri = avatarResult.url;
       }
-      await updateProfileMutation.mutateAsync({
-        firstName: personal.firstName.trim() || undefined,
-        lastName: personal.lastName.trim() || undefined,
-        avatarUrl: nextAvatarUri,
-        dateOfBirth: personal.dateOfBirth || undefined,
-        gender: personal.gender,
-        currentWeightKg: !isCoach && wKgNum > 0 ? wKgNum : undefined,
-        heightCm: !isCoach && hCmNum > 0 ? hCmNum : undefined
-      });
-      if (phoneChanged) {
-        if (!normalizedPhone) {
-          throw new Error("Phone number removal is not available in profile settings.");
-        }
+      const profilePayload = buildProfileUpdate(personal, scope, nextAvatarUri);
+      if (Object.keys(profilePayload).length > 0) {
+        await updateProfileMutation.mutateAsync(profilePayload);
+      }
+      if (scope === "personal" && phoneChanged) {
         await updatePhoneMutation.mutateAsync({
           phone_number: normalizedPhone
         });
       }
-      if (isCoach) {
+      if (scope === "fitness" && isCoach) {
+        const coachPayload = coachProfileSchema.parse({
+          bio: coachBio,
+          specialties: coachSpecialties,
+          certifications: coachCertifications
+        });
         await updateCoachProfileMutation.mutateAsync({
           payload: {
             bio: coachPayload.bio || undefined,
             specialties: coachPayload.specialties,
-            certifications: coachPayload.certifications,
-            hourlyRate: coachPayload.hourlyRate
+            certifications: coachPayload.certifications
           },
           userId: user?.id,
           coachId: coachProfile?.id
         });
       }
-      await Promise.all([
-        updateUser({
-          ...patch,
-          avatarUri: nextAvatarUri,
-          profile: {
-            ...user?.profile,
-            avatarUrl: nextAvatarUri ?? null,
-            firstName: personal.firstName.trim() || null,
-            lastName: personal.lastName.trim() || null,
-            dateOfBirth: personal.dateOfBirth || null,
-            gender: personal.gender ?? null,
-            currentWeightKg: !isCoach && wKgNum > 0 ? wKgNum : null,
-            heightCm: !isCoach && hCmNum > 0 ? hCmNum : null
-          }
-        }),
-        new Promise((resolve) => setTimeout(resolve, 1200))
-      ]);
+      const authPatch = buildAuthPatch(personal, scope, profilePayload, nextAvatarUri);
+      if (Object.keys(authPatch).length > 0) await updateUser(authPatch);
       setAvatarAsset(null);
       onClose();
-      return true;
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Unable to save profile changes.");
     } finally {
+      saveCommitLockedRef.current = false;
       setIsSubmitting(false);
     }
   };
 
-  const handleSave = personalForm.handleSubmit(async (personal) => {
-    if (isSubmitting) return;
-    if (weightError || heightError) return;
-    await commitSave(personal);
-  });
+  const handleSave = () => {
+    if (isSubmitting || !isDirty) return;
+    setSaveError("");
+    if (activeTab === "personal") {
+      void personalForm.handleSubmit((personal) => {
+        setPendingSave({ personal, scope: "personal" });
+      })();
+      return;
+    }
+
+    if (!isCurrentTabValid) return;
+    setPendingSave({ personal: personalForm.getValues(), scope: "fitness" });
+  };
+
+  const handleConfirmSave = () => {
+    if (!pendingSave || saveCommitLockedRef.current) return;
+    const nextSave = pendingSave;
+    setPendingSave(null);
+    void commitSave(nextSave.personal, nextSave.scope);
+  };
 
   const handleClose = () => {
     if (isSubmitting) return;
+    setPendingSave(null);
     setIsDobCalOpen(false);
     onClose();
   };
@@ -384,6 +732,7 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
     : "--";
 
   return (
+    <>
     <Modal
       visible={isVisible}
       transparent
@@ -496,11 +845,12 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
                   control={personalForm.control}
                   name="phone"
                   label="Phone"
-                  placeholder="0917xxxxxxx"
+                  placeholder="9XXXXXXXXX"
                   errors={personalForm.formState.errors}
                   keyboardType="phone-pad"
-                  maxLength={11}
-                  sanitizeValue={sanitizePhilippineMobileInput}
+                  maxLength={10}
+                  phonePrefix="+63"
+                  sanitizeValue={sanitizePhilippineMobileSubscriberInput}
                   compact
                   editable={!isSubmitting}
                 />
@@ -531,7 +881,8 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
                           accessibilityState={{ disabled: isSubmitting, selected: isActive }}
                           onPress={() =>
                             personalForm.setValue("gender", option.value, {
-                              shouldDirty: true
+                              shouldDirty: true,
+                              shouldValidate: true
                             })
                           }
                           style={[
@@ -574,23 +925,23 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
                     nativeID="coach-hourly-rate"
                     accessibilityLabel="Hourly Rate"
                     value={coachHourlyRate}
-                    placeholder="e.g. 850"
-                    keyboardType="phone-pad"
-                    editable={!isSubmitting}
-                    onChangeText={(text) => setCoachHourlyRate(text.replace(/[^0-9]/g, ""))}
-                    style={s.fitInput}
+                    placeholder="Set by admin"
+                    editable={false}
+                    style={[
+                      s.fitInput,
+                      { backgroundColor: colors.surfaceRaised, color: colors.textDisabled }
+                    ]}
                   />
+                  <FitText style={{ color: colors.textMuted, fontSize: 11, lineHeight: 16 }}>
+                    Hourly rate is managed by gym admin.
+                  </FitText>
                 </View>
                 <View style={s.fitRow}>
                   <FitText style={s.fitLabel}>Specialties</FitText>
-                  <FitTextInput
-                    nativeID="coach-specialties"
-                    accessibilityLabel="Specialties"
-                    value={coachSpecialties}
-                    placeholder="Strength, Boxing"
-                    editable={!isSubmitting}
-                    onChangeText={setCoachSpecialties}
-                    style={s.fitInput}
+                  <CoachSpecialtyPicker
+                    disabled={isSubmitting}
+                    value={parseSpecialtyLabels(coachSpecialties)}
+                    onChange={(labels) => setCoachSpecialties(labels.join(", "))}
                   />
                 </View>
                 <View style={s.fitRow}>
@@ -658,15 +1009,18 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
                     accessibilityLabel="Weight (kg)"
                     value={weightInput}
                     placeholder="e.g. 70"
-                    keyboardType="phone-pad"
-                    maxLength={3}
+                    keyboardType="decimal-pad"
+                    maxLength={7}
                     editable={!isSubmitting}
-                    onChangeText={(text) => setWeightInput(text.replace(/[^0-9]/g, ""))}
+                    onChangeText={(text) => {
+                      setSaveError("");
+                      setWeightInput(text);
+                    }}
                     style={s.fitInput}
                   />
-                  {weightError ? (
+                  {fitnessErrors.weight ? (
                     <FitText style={{ color: colors.danger, fontSize: 12 }}>
-                      {weightError}
+                      {fitnessErrors.weight}
                     </FitText>
                   ) : null}
                 </View>
@@ -677,15 +1031,18 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
                     accessibilityLabel="Height (cm)"
                     value={heightInput}
                     placeholder="e.g. 170"
-                    keyboardType="phone-pad"
-                    maxLength={3}
+                    keyboardType="decimal-pad"
+                    maxLength={7}
                     editable={!isSubmitting}
-                    onChangeText={(text) => setHeightInput(text.replace(/[^0-9]/g, ""))}
+                    onChangeText={(text) => {
+                      setSaveError("");
+                      setHeightInput(text);
+                    }}
                     style={s.fitInput}
                   />
-                  {heightError ? (
+                  {fitnessErrors.height ? (
                     <FitText style={{ color: colors.danger, fontSize: 12 }}>
-                      {heightError}
+                      {fitnessErrors.height}
                     </FitText>
                   ) : null}
                 </View>
@@ -701,6 +1058,11 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
               </>
             )}
           </FitModalScrollView>
+          {saveError ? (
+            <FitText style={{ color: colors.danger, fontSize: 12, lineHeight: 18, marginHorizontal: 20 }}>
+              {saveError}
+            </FitText>
+          ) : null}
           <View style={s.footer}>
             <FitButton
               label="Cancel"
@@ -724,16 +1086,31 @@ export default function EditProfileModal({ isVisible, onClose, coachProfile = nu
       <CalendarModal
         isVisible={isDobCalOpen}
         selectedDate={dateOfBirth}
-        allowEmpty
         maxDate={latestAllowedBirthDate}
         defaultYear={2000}
         defaultMonth={1}
         onSelect={(date) => {
-          personalForm.setValue("dateOfBirth", date, { shouldDirty: true });
+          personalForm.setValue("dateOfBirth", date, {
+            shouldDirty: true,
+            shouldValidate: true
+          });
           setIsDobCalOpen(false);
         }}
         onClose={() => setIsDobCalOpen(false)}
       />
     </Modal>
+    <ConfirmModal
+      isVisible={pendingSave !== null}
+      title="Save profile changes?"
+      message="Review complete. Confirm to update your profile with these changes."
+      yesLabel="Confirm Save"
+      noLabel="Keep Editing"
+      yesIcon={Check}
+      isLoading={isSubmitting}
+      loadingLabel="Saving"
+      onNo={() => setPendingSave(null)}
+      onYes={handleConfirmSave}
+    />
+    </>
   );
 }

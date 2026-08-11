@@ -1,4 +1,4 @@
-import { useMemo, useState, type ElementType, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type ElementType, type FormEvent } from "react";
 import { Keyboard, KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useForm } from "react-hook-form";
@@ -6,7 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "expo-router";
 import { ArrowLeft, Dumbbell, Lock, Mail, Phone, ShieldCheck, User } from "lucide-react-native";
 
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth, type RegistrationProblem } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuthEntrance } from "@/hooks/animations/feature/useAuthEntrance";
 import { usePanelAnim } from "@/hooks/animations/ui/usePanelAnim";
@@ -18,12 +18,8 @@ import {
 } from "@fittrack/app-config";
 import { makeAuthStyles } from "@/styles/shared/AuthStyles";
 import {
-  coerceAuthPhilippineMobileInput,
-  composeAuthPhilippineMobileNumber,
-  formatAuthPhilippineMobileDigits,
-  normalizeAuthPhilippineMobileNumber,
-  registerSchema,
-  type RegisterData,
+  mobileRegisterSchema,
+  type MobileRegisterData,
 } from "@fittrack/validators";
 
 import { FitText } from "@/components/fit/FitText";
@@ -33,17 +29,28 @@ import { LegalDocumentSections } from "@/components/legal/LegalDocumentSections"
 import OTPModal from "@/components/modals/auth/OTPModal";
 import SettingsModal from "@/components/modals/settings/SettingsModal";
 import PasswordRequirements from "@/components/requirements/PasswordRequirements";
+import {
+  formatRegistrationLockCountdown,
+  getRegistrationLockExpiry,
+  getRegistrationLockRemainingSeconds,
+  type RegistrationLockMetadata,
+} from "@/lib/registration-lock";
 
 const PASS_REQ_HEIGHT = 210;
-const PHONE_PREFIX_OPTIONS = [
-  { label: "+63", value: "+63" },
-  { label: "09", value: "09" },
-] as const;
 
-type PhonePrefixMode = (typeof PHONE_PREFIX_OPTIONS)[number]["value"];
+const sanitizeNameInput = (value: string) => value.replace(/[^\p{L} ]/gu, "");
+const sanitizeMobileRemainder = (value: string) => {
+  const digits = value.replace(/\D/g, "");
+  return digits.startsWith("9") ? digits.slice(0, 10) : "";
+};
 
 export default function RegisterScreen() {
-  const { register, sendOTP, verifyOTP } = useAuth();
+  const {
+    register,
+    sendOTP,
+    verifyOTP,
+    clearRegistrationChallenge,
+  } = useAuth();
   const { colors } = useTheme();
   const router = useRouter();
   const { fadeIn, takeFlight } = useAuthEntrance();
@@ -57,14 +64,16 @@ export default function RegisterScreen() {
   const [hasAcceptedRegistrationTerms, setHasAcceptedRegistrationTerms] = useState(false);
   const [pendingEmail, setPendingEmail] = useState("");
   const [statusTone, setStatusTone] = useState<"danger" | "brand">("brand");
-  const [phonePrefixMode, setPhonePrefixMode] = useState<PhonePrefixMode>("+63");
+  const [registrationLock, setRegistrationLock] = useState<RegistrationLockMetadata | null>(null);
+  const [lockExpiresAt, setLockExpiresAt] = useState<number | null>(null);
+  const [lockSeconds, setLockSeconds] = useState(0);
 
   const loadingText = useLoadingText("Creating account", isLoading);
   const { message: statusText, showMessage: showStatus } = useTimedMessage(2000);
   const buttonLabel = isLoading ? loadingText : "Create Account";
 
-  const { control, getValues, handleSubmit, setValue, watch, formState: { errors } } = useForm<RegisterData>({
-    resolver: zodResolver(registerSchema),
+  const { control, getValues, handleSubmit, trigger, watch, formState: { errors, isValid } } = useForm<MobileRegisterData>({
+    resolver: zodResolver(mobileRegisterSchema),
     defaultValues: {
       firstName: "",
       lastName: "",
@@ -73,11 +82,59 @@ export default function RegisterScreen() {
       password: "",
       confirmPassword: ""
     },
-    mode: "onSubmit",
+    mode: "onChange",
     reValidateMode: "onChange"
   });
+  const isRegistrationLocked = registrationLock !== null && lockSeconds > 0;
   const passwordValue = watch("password");
   const showReqs = passwordValue.length > 0 && (isPasswordFocused || !isPasswordValid);
+
+  const applyRegistrationLock = (problem?: RegistrationProblem) => {
+    if (
+      problem?.status !== 423 ||
+      typeof problem.retryAfterSeconds !== "number" ||
+      !problem.lockedUntil
+    ) {
+      return false;
+    }
+
+    const metadata: RegistrationLockMetadata = {
+      retryAfterSeconds: problem.retryAfterSeconds,
+      lockedUntil: problem.lockedUntil,
+    };
+    const expiresAt = getRegistrationLockExpiry(metadata);
+    setRegistrationLock(metadata);
+    setLockExpiresAt(expiresAt);
+    setLockSeconds(getRegistrationLockRemainingSeconds(expiresAt));
+    return true;
+  };
+
+  useEffect(() => {
+    if (!lockExpiresAt) return;
+
+    const updateRemaining = () => {
+      const remaining = getRegistrationLockRemainingSeconds(lockExpiresAt);
+      setLockSeconds(remaining);
+      if (remaining > 0) return;
+
+      setRegistrationLock(null);
+      setLockExpiresAt(null);
+      setLockSeconds(0);
+      setStatusTone("brand");
+      showStatus("Registration lock expired. You can try again.");
+    };
+
+    updateRemaining();
+    const timer = setInterval(updateRemaining, 1000);
+    return () => clearInterval(timer);
+  }, [lockExpiresAt, showStatus]);
+
+  useEffect(
+    () => () => {
+      clearRegistrationChallenge();
+    },
+    [clearRegistrationChallenge],
+  );
 
   const blurActiveWebElement = () => {
     if (Platform.OS !== "web") return;
@@ -87,26 +144,15 @@ export default function RegisterScreen() {
     activeElement?.blur?.();
   };
 
-  const applyPhonePrefixMode = (nextMode: string) => {
-    if (nextMode !== "+63" && nextMode !== "09") return;
-    const nextPrefix = nextMode as PhonePrefixMode;
-    const nextDigits = formatAuthPhilippineMobileDigits(getValues("phone") ?? "", nextPrefix);
-    setPhonePrefixMode(nextPrefix);
-    setValue("phone", composeAuthPhilippineMobileNumber(nextPrefix, nextDigits), {
-      shouldDirty: true,
-      shouldValidate: true,
-    });
-  };
-
   const { height: reqHeight, opacity: reqOpacity } = usePanelAnim({
     targetHeight: PASS_REQ_HEIGHT,
     visible: showReqs
   });
 
-  const createAccount = async (data: RegisterData) => {
-    if (isLoading) return;
+  const createAccount = async (data: MobileRegisterData) => {
+    if (isLoading || isRegistrationLocked) return;
     setIsLoading(true);
-    const normalizedPhone = normalizeAuthPhilippineMobileNumber(data.phone);
+    const normalizedPhone = data.phone.trim();
     const normalizedEmail = data.email.trim();
     const result = await register({
       firstName: data.firstName,
@@ -117,9 +163,15 @@ export default function RegisterScreen() {
       acceptedTerms: true,
       legalVersion: FITTRACK_LEGAL_VERSION,
     });
-    if ("user" in result) {
+    if (result.success) {
       setPendingEmail(normalizedEmail);
       setShowOTP(true);
+      setIsLoading(false);
+      return;
+    }
+    if (applyRegistrationLock(result.problem)) {
+      setStatusTone("danger");
+      showStatus("Registration is temporarily locked. Verification and restart are disabled until the server lock expires.");
       setIsLoading(false);
       return;
     }
@@ -128,7 +180,8 @@ export default function RegisterScreen() {
     setIsLoading(false);
   };
 
-  const requestRegistration = (data: RegisterData) => {
+  const requestRegistration = (data: MobileRegisterData) => {
+    if (isRegistrationLocked) return;
     if (!hasAcceptedRegistrationTerms) {
       setShowTermsModal(true);
       return;
@@ -137,7 +190,10 @@ export default function RegisterScreen() {
     void createAccount(data);
   };
 
-  const handleAcceptTerms = () => {
+  const handleAcceptTerms = async () => {
+    if (isLoading || isRegistrationLocked) return;
+    const valid = await trigger();
+    if (!valid) return;
     setHasAcceptedRegistrationTerms(true);
     setShowTermsModal(false);
     void createAccount(getValues());
@@ -148,6 +204,7 @@ export default function RegisterScreen() {
     blurActiveWebElement();
     setShowOTP(false);
     setPendingEmail("");
+    clearRegistrationChallenge();
     setStatusTone("brand");
     showStatus("Email verified. Please sign in with your credentials.");
     router.replace("/(auth)/login");
@@ -157,12 +214,10 @@ export default function RegisterScreen() {
     verifyOTP(code, { persistSession: false });
 
   const handleOTPResend = async () => {
-    if (!pendingEmail) return;
-    const result = await sendOTP(pendingEmail);
-    if (!result.success) {
-      setStatusTone("danger");
-      showStatus("Could not resend the verification code.");
+    if (!pendingEmail) {
+      return { success: false as const, error: "No pending registration." };
     }
+    return sendOTP(pendingEmail);
   };
 
   const handleOTPDismiss = () => {
@@ -170,6 +225,7 @@ export default function RegisterScreen() {
     blurActiveWebElement();
     setShowOTP(false);
     setPendingEmail("");
+    clearRegistrationChallenge();
     setStatusTone("brand");
     showStatus("Verification cancelled. Please try again.");
   };
@@ -243,7 +299,8 @@ export default function RegisterScreen() {
                 errors={errors}
                 icon={User}
                 autoCapitalize="words"
-                editable={!isLoading}
+                editable={!isLoading && !isRegistrationLocked}
+                sanitizeValue={sanitizeNameInput}
               />
               <FitInputField
                 control={control}
@@ -253,7 +310,8 @@ export default function RegisterScreen() {
                 errors={errors}
                 icon={User}
                 autoCapitalize="words"
-                editable={!isLoading}
+                editable={!isLoading && !isRegistrationLocked}
+                sanitizeValue={sanitizeNameInput}
               />
               <FitInputField
                 control={control}
@@ -264,29 +322,20 @@ export default function RegisterScreen() {
                 icon={Mail}
                 keyboardType="email-address"
                 autoCapitalize="none"
-                editable={!isLoading}
+                editable={!isLoading && !isRegistrationLocked}
               />
               <FitInputField
                 control={control}
                 name="phone"
                 label="Phone Number"
-                placeholder={phonePrefixMode === "+63" ? "9171234567" : "171234567"}
+                placeholder="9171234567"
                 errors={errors}
                 icon={Phone}
                 keyboardType="phone-pad"
-                maxLength={13}
-                editable={!isLoading}
-                phonePrefixOptions={PHONE_PREFIX_OPTIONS}
-                phonePrefixValue={phonePrefixMode}
-                onPhonePrefixChange={applyPhonePrefixMode}
-                formatInputValue={(currentValue) => formatAuthPhilippineMobileDigits(currentValue, phonePrefixMode)}
-                sanitizeValue={(inputValue) => {
-                  const next = coerceAuthPhilippineMobileInput(inputValue, phonePrefixMode);
-                  if (next.mode !== phonePrefixMode) {
-                    setPhonePrefixMode(next.mode);
-                  }
-                  return next.value;
-                }}
+                maxLength={10}
+                editable={!isLoading && !isRegistrationLocked}
+                phonePrefix="+63"
+                sanitizeValue={sanitizeMobileRemainder}
               />
               <FitInputField
                 control={control}
@@ -296,7 +345,7 @@ export default function RegisterScreen() {
                 errors={errors}
                 icon={Lock}
                 secureTextEntry
-                editable={!isLoading}
+                editable={!isLoading && !isRegistrationLocked}
                 onFocusChange={setIsPasswordFocused}
               />
               <Animated.View style={reqPanelStyle}>
@@ -313,15 +362,20 @@ export default function RegisterScreen() {
                 errors={errors}
                 icon={Lock}
                 secureTextEntry
-                editable={!isLoading}
+                editable={!isLoading && !isRegistrationLocked}
               />
             </View>
               <FitButton
                 label={buttonLabel}
                 onPress={submitRegistration}
-                disabled={isLoading}
+                disabled={isLoading || !isValid || isRegistrationLocked}
                 style={s.primaryBtn}
               />
+              {isRegistrationLocked ? (
+                <FitText style={[s.statusMessage, { color: colors.danger }]}>
+                  Registration locked. Try again in {formatRegistrationLockCountdown(lockSeconds)}. Verification and restart are disabled until the server lock expires.
+                </FitText>
+              ) : null}
               {statusText ? (
                 <FitText
                   style={[
@@ -365,6 +419,8 @@ export default function RegisterScreen() {
         onResend={handleOTPResend}
         onSuccess={handleOTPSuccess}
         onDismiss={handleOTPDismiss}
+        registrationNotice="Your account is created only after the correct verification code is accepted."
+        dismissLabel="Back to registration"
       />
       <SettingsModal
         visible={showTermsModal}
@@ -375,7 +431,7 @@ export default function RegisterScreen() {
           setShowTermsModal(false);
         }}
       >
-        <View style={{ gap: 18, paddingBottom: 8 }}>
+        <View style={{ gap: 18, paddingHorizontal: 20, paddingTop: 18, paddingBottom: 20 }}>
           <LegalDocumentSections
             eyebrow="Terms of Service"
             sections={FITTRACK_TERMS_SECTIONS}
@@ -390,6 +446,7 @@ export default function RegisterScreen() {
               borderTopWidth: 1,
               gap: 10,
               paddingTop: 14,
+              paddingBottom: 4,
             }}
           >
             <FitText style={[s.termsText, { textAlign: "left" }]}>
@@ -402,7 +459,7 @@ export default function RegisterScreen() {
               variant="primary"
               icon={ShieldCheck}
               onPress={handleAcceptTerms}
-              disabled={isLoading}
+              disabled={isLoading || isRegistrationLocked}
               style={{ width: "100%" }}
             />
             <FitButton
@@ -415,7 +472,7 @@ export default function RegisterScreen() {
                   "Accept the terms and privacy notice before creating an account.",
                 );
               }}
-              disabled={isLoading}
+              disabled={isLoading || isRegistrationLocked}
               style={{ width: "100%" }}
             />
           </View>

@@ -1,11 +1,25 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useMemo, useState } from "react";
-import { Modal, Pressable, StyleSheet, View } from "react-native";
+import { Modal, Platform, Pressable, StyleSheet, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
-import { CalendarDays, Check, ChevronDown, Plus, Scale, Search, UtensilsCrossed } from "lucide-react-native";
+import { CalendarDays, Check, ChevronDown, ImagePlus, Plus, Scale, Search, UtensilsCrossed } from "lucide-react-native";
+import * as ImagePicker from "expo-image-picker";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { createNutritionLogMutationOptions, nutritionLogsQueryOptions } from "@fittrack/query";
-import type { NutritionLogRecord, NutritionUnit, ThemeColors } from "@fittrack/types";
+import {
+  createNutritionLogMutationOptions,
+  nutritionLogsQueryOptions,
+  updateNutritionLogMutationOptions,
+  uploadImageMutationOptions
+} from "@fittrack/query";
+import {
+  NUTRITION_MEAL_ICON_LIBRARY_KEYS,
+  type NutritionLogIconInput,
+  type NutritionLogRecord,
+  type NutritionMealIconLibraryKey,
+  type NutritionUnit,
+  type ThemeColors
+} from "@fittrack/types";
 import { nutritionLogSchema, type NutritionLogData } from "@fittrack/validators";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -16,6 +30,8 @@ import { getTodayString } from "@/data/bookings";
 import {
   MEAL_NAME_OPTIONS,
   NUTRITION_UNIT_OPTIONS,
+  formatNutritionLogSubtitle,
+  getNutritionLogSearchText,
   type NutritionMealName,
   type NutritionPickerOption
 } from "@/data/nutrition";
@@ -28,8 +44,10 @@ import { FitText, FitTextInput } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
 import CalendarModal from "@/components/modals/shared/CalendarModal";
 import FitModalScrollView from "@/components/modals/shared/FitModalScrollView";
+import NutritionMealIcon from "@/components/nutrition/NutritionMealIcon";
 
 type Props = {
+  editingEntry?: NutritionLogRecord | null;
   isVisible: boolean;
   onClose: () => void;
   onSuccess: () => void;
@@ -38,11 +56,84 @@ type Props = {
 type NutritionLogFieldErrors = Partial<Record<keyof NutritionLogData, string[]>>;
 type LogStep = "choice" | "form";
 type PickerSheet = "meal" | "unit";
+type SelectedIconAsset = {
+  file?: File | null;
+  fileName?: string | null;
+  mimeType?: string | null;
+  uri: string;
+};
+
+const ALLOWED_ICON_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 const localStyles = StyleSheet.create({
+  customIconRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10
+  },
+  iconChoice: {
+    alignItems: "center",
+    borderRadius: R.md,
+    borderWidth: 1,
+    height: 44,
+    justifyContent: "center",
+    width: 44
+  },
+  iconGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8
+  },
+  modalCard: {
+    height: "88%",
+    maxHeight: 740,
+    minHeight: 560,
+    minWidth: 0
+  },
+  modalBody: {
+    flex: 1,
+    minHeight: 160
+  },
   choiceAction: {
+    gap: 12,
     paddingHorizontal: 16,
     paddingBottom: 12
+  },
+  recommendationToggle: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10
+  },
+  recommendationToggleCopy: {
+    flex: 1,
+    gap: 2
+  },
+  recommendationToggleHint: {
+    fontSize: 11,
+    lineHeight: 16
+  },
+  recommendationToggleTitle: {
+    fontSize: 13,
+    fontWeight: "700"
+  },
+  recommendationSwitch: {
+    alignItems: "center",
+    height: 44,
+    justifyContent: "center",
+    width: 44
+  },
+  recommendationSwitchThumb: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 9,
+    height: 18,
+    width: 18
+  },
+  recommendationSwitchTrack: {
+    borderRadius: 12,
+    height: 24,
+    justifyContent: "center",
+    paddingHorizontal: 3,
+    width: 40
   },
   previousMealCopy: {
     flex: 1,
@@ -55,6 +146,23 @@ const localStyles = StyleSheet.create({
     gap: 8
   }
 });
+
+const createIconUploadPart = async (asset: SelectedIconAsset) => {
+  const fileName = asset.fileName ?? `nutrition-icon-${Date.now()}.png`;
+  const mimeType = asset.mimeType ?? "image/png";
+
+  if (Platform.OS !== "web") {
+    return { uri: asset.uri, name: fileName, type: mimeType };
+  }
+  if (asset.file) return asset.file;
+  const response = await fetch(asset.uri);
+  const blob = await response.blob();
+  return new File([blob], fileName, { type: blob.type || mimeType });
+};
+
+function formatIconLabel(key: NutritionMealIconLibraryKey) {
+  return key.charAt(0).toUpperCase() + key.slice(1);
+}
 
 function sanitizeDecimalInput(value: string) {
   const sanitized = value.replace(/[^0-9.]/g, "");
@@ -87,26 +195,11 @@ function toFieldValue(value: number) {
 }
 
 function getPreviousMealSubtitle(entry: NutritionLogRecord) {
-  return `${entry.mealName} | ${entry.calories.toFixed(0)} kcal | P ${entry.proteinG.toFixed(0)} C ${entry.carbsG.toFixed(0)} F ${entry.fatG.toFixed(0)}`;
+  return `${entry.mealName} | ${formatNutritionLogSubtitle(entry)}`;
 }
 
-function getPreviousMealSearchText(entry: NutritionLogRecord) {
-  const unitOption = getSelectedOption(NUTRITION_UNIT_OPTIONS, entry.unit);
-  return [
-    entry.foodItem,
-    entry.mealName,
-    entry.unit,
-    unitOption?.label,
-    getPreviousMealSubtitle(entry),
-    `${entry.quantity} ${entry.unit}`,
-    `calories ${entry.calories.toFixed(0)} kcal`,
-    `protein ${entry.proteinG.toFixed(0)} p`,
-    `carbs ${entry.carbsG.toFixed(0)} c`,
-    `fat ${entry.fatG.toFixed(0)} f`
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
+function toDateOnly(value?: string | null) {
+  return value?.match(/^\d{4}-\d{2}-\d{2}/)?.[0] ?? getTodayString();
 }
 
 type OptionSheetModalProps<T extends string> = {
@@ -273,7 +366,7 @@ function OptionSheetModal<T extends string>({
   );
 }
 
-export default function NutritionLogModal({ isVisible, onClose, onSuccess }: Props) {
+export default function NutritionLogModal({ editingEntry = null, isVisible, onClose, onSuccess }: Props) {
   const { colors } = useTheme();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -291,14 +384,24 @@ export default function NutritionLogModal({ isVisible, onClose, onSuccess }: Pro
   const [fatG, setFatG] = useState("");
   const [quantity, setQuantity] = useState("1");
   const [unit, setUnit] = useState<NutritionUnit>("serving");
+  const [selectedIcon, setSelectedIcon] = useState<NutritionLogIconInput>({
+    kind: "library",
+    key: "utensils"
+  });
+  const [customIconAsset, setCustomIconAsset] = useState<SelectedIconAsset | null>(null);
   const [isCalOpen, setIsCalOpen] = useState(false);
   const [activePicker, setActivePicker] = useState<PickerSheet | null>(null);
+  const [showRecommendations, setShowRecommendations] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<NutritionLogFieldErrors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const savingText = useLoadingText("Saving", isSubmitting);
+  const isEditing = !!editingEntry;
+  const recommendationsStorageKey = user?.id ? `fittrack:nutrition:recommendations:${user.id}` : null;
 
   const createLogMutation = useMutation(createNutritionLogMutationOptions(mobileApiClient, queryClient));
+  const updateLogMutation = useMutation(updateNutritionLogMutationOptions(mobileApiClient, queryClient));
+  const uploadIconMutation = useMutation(uploadImageMutationOptions(mobileApiClient));
   const {
     data: recentLogs = { data: [], meta: { page: 1, limit: 12, total: 0, total_pages: 0 } },
     isFetching: isRecentLogsLoading
@@ -307,9 +410,50 @@ export default function NutritionLogModal({ isVisible, onClose, onSuccess }: Pro
       page: 1,
       limit: 12
     }),
-    enabled: isVisible && !!user?.id
+    enabled: isVisible && !!user?.id && !isEditing
   });
   const { opacity, scale } = useOverlayAnim(isVisible, "scale");
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!recommendationsStorageKey) {
+      setShowRecommendations(true);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void AsyncStorage.getItem(recommendationsStorageKey)
+      .then((value) => {
+        if (!cancelled && value !== null) setShowRecommendations(value !== "0");
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [recommendationsStorageKey]);
+
+  useEffect(() => {
+    if (!editingEntry) return;
+    setStep("form");
+    setLogDate(toDateOnly(editingEntry.logDate));
+    setMealName(getKnownMealName(editingEntry.mealName));
+    setFoodItem(editingEntry.foodItem);
+    setCalories(toFieldValue(editingEntry.calories));
+    setProteinG(toFieldValue(editingEntry.proteinG));
+    setCarbsG(toFieldValue(editingEntry.carbsG));
+    setFatG(toFieldValue(editingEntry.fatG));
+    setQuantity(toFieldValue(editingEntry.quantity));
+    setUnit(editingEntry.unit);
+    setSelectedIcon(editingEntry.icon);
+    setCustomIconAsset(null);
+    setFieldErrors({});
+    setSubmitError(null);
+    setIsSubmitting(false);
+    setIsCalOpen(false);
+    setActivePicker(null);
+  }, [editingEntry]);
 
   const previousMeals = useMemo(() => {
     const seen = new Set<string>();
@@ -333,28 +477,8 @@ export default function NutritionLogModal({ isVisible, onClose, onSuccess }: Pro
   const previousMealSearchTerm = previousMealSearch.trim().toLowerCase();
   const filteredPreviousMeals = useMemo(() => {
     if (!previousMealSearchTerm) return previousMeals;
-    return previousMeals.filter((entry) => getPreviousMealSearchText(entry).includes(previousMealSearchTerm));
+    return previousMeals.filter((entry) => getNutritionLogSearchText(entry).includes(previousMealSearchTerm));
   }, [previousMeals, previousMealSearchTerm]);
-
-  useEffect(() => {
-    if (!isVisible) return;
-    setStep("choice");
-    setPreviousMealSearch("");
-    setLogDate(getTodayString());
-    setMealName("");
-    setFoodItem("");
-    setCalories("");
-    setProteinG("");
-    setCarbsG("");
-    setFatG("");
-    setQuantity("1");
-    setUnit("serving");
-    setFieldErrors({});
-    setSubmitError(null);
-    setIsSubmitting(false);
-    setIsCalOpen(false);
-    setActivePicker(null);
-  }, [isVisible]);
 
   const backdropStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
   const cardStyle = useAnimatedStyle(() => ({
@@ -367,13 +491,32 @@ export default function NutritionLogModal({ isVisible, onClose, onSuccess }: Pro
   const footerBorderStyle = useAnimatedStyle(() => ({ borderTopColor: ic.value.border }));
 
   const handleClose = () => {
-    setStep("choice");
     setPreviousMealSearch("");
     setSubmitError(null);
     setFieldErrors({});
     setIsSubmitting(false);
     setActivePicker(null);
     onClose();
+  };
+
+  const resetDraft = () => {
+    setStep("choice");
+    setPreviousMealSearch("");
+    setLogDate(getTodayString());
+    setMealName("");
+    setFoodItem("");
+    setCalories("");
+    setProteinG("");
+    setCarbsG("");
+    setFatG("");
+    setQuantity("1");
+    setUnit("serving");
+    setSelectedIcon({ kind: "library", key: "utensils" });
+    setCustomIconAsset(null);
+    setFieldErrors({});
+    setSubmitError(null);
+    setIsCalOpen(false);
+    setActivePicker(null);
   };
 
   const handleStartNewMeal = () => {
@@ -386,6 +529,8 @@ export default function NutritionLogModal({ isVisible, onClose, onSuccess }: Pro
     setFatG("");
     setQuantity("1");
     setUnit("serving");
+    setSelectedIcon({ kind: "library", key: "utensils" });
+    setCustomIconAsset(null);
     setFieldErrors({});
     setSubmitError(null);
     setActivePicker(null);
@@ -403,6 +548,8 @@ export default function NutritionLogModal({ isVisible, onClose, onSuccess }: Pro
     setFatG(toFieldValue(entry.fatG));
     setQuantity(toFieldValue(entry.quantity));
     setUnit(entry.unit);
+    setSelectedIcon(entry.icon);
+    setCustomIconAsset(null);
     setFieldErrors({});
     setSubmitError(null);
     setActivePicker(null);
@@ -411,6 +558,10 @@ export default function NutritionLogModal({ isVisible, onClose, onSuccess }: Pro
   };
 
   const handleBackToPreviousMeals = () => {
+    if (isEditing) {
+      handleClose();
+      return;
+    }
     setSubmitError(null);
     setFieldErrors({});
     setIsSubmitting(false);
@@ -421,6 +572,35 @@ export default function NutritionLogModal({ isVisible, onClose, onSuccess }: Pro
 
   const clearFieldError = (field: keyof NutritionLogData) => {
     setFieldErrors((previous) => ({ ...previous, [field]: undefined }));
+  };
+
+  const handlePickCustomIcon = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      setSubmitError("Photo access is required to choose a custom meal illustration.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: "images",
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8
+    });
+    const asset = result.canceled ? null : result.assets[0];
+    if (!asset?.uri) return;
+    const mimeType = asset.mimeType ?? "image/jpeg";
+    if (!ALLOWED_ICON_MIME_TYPES.has(mimeType)) {
+      setSubmitError("Custom meal illustrations must be JPEG, PNG, or WebP.");
+      return;
+    }
+    setCustomIconAsset({
+      file: asset.file ?? null,
+      fileName: asset.fileName,
+      mimeType,
+      uri: asset.uri
+    });
+    setSelectedIcon({ kind: "custom", assetKey: null });
+    setSubmitError(null);
   };
 
   const macroFields: {
@@ -486,20 +666,40 @@ export default function NutritionLogModal({ isVisible, onClose, onSuccess }: Pro
     setIsSubmitting(true);
 
     try {
-      await createLogMutation.mutateAsync({
-        payload: {
-          logDate: parsed.data.logDate,
-          mealName: parsed.data.mealName,
-          foodItem: parsed.data.foodItem,
-          calories: parsed.data.calories,
-          proteinG: parsed.data.proteinG,
-          carbsG: parsed.data.carbsG,
-          fatG: parsed.data.fatG,
-          quantity: parsed.data.quantity,
-          unit: parsed.data.unit
-        },
-        userId: user?.id
-      });
+      let icon = selectedIcon;
+      if (customIconAsset) {
+        const formData = new FormData();
+        formData.append("file", await createIconUploadPart(customIconAsset) as never);
+        const uploadedIcon = await uploadIconMutation.mutateAsync(formData);
+        if (!uploadedIcon.fileKey) {
+          throw new Error("The managed upload did not return an asset key.");
+        }
+        icon = { kind: "custom", assetKey: uploadedIcon.fileKey };
+      }
+      const payload = {
+        mealName: parsed.data.mealName,
+        foodItem: parsed.data.foodItem,
+        calories: parsed.data.calories,
+        proteinG: parsed.data.proteinG,
+        carbsG: parsed.data.carbsG,
+        fatG: parsed.data.fatG,
+        quantity: parsed.data.quantity,
+        unit: parsed.data.unit,
+        icon
+      };
+      if (editingEntry) {
+        await updateLogMutation.mutateAsync({
+          id: editingEntry.id,
+          payload: { ...payload, logDate: parsed.data.logDate },
+          userId: user?.id
+        });
+      } else {
+        await createLogMutation.mutateAsync({
+          payload: { ...payload, logDate: parsed.data.logDate },
+          userId: user?.id
+        });
+      }
+      resetDraft();
       onSuccess();
       handleClose();
     } catch (error) {
@@ -512,25 +712,29 @@ export default function NutritionLogModal({ isVisible, onClose, onSuccess }: Pro
   return (
     <Modal visible={isVisible} transparent animationType="none" statusBarTranslucent onRequestClose={handleClose}>
       <Animated.View style={[s.backdrop, backdropStyle]}>
-        <Animated.View style={[s.card, cardStyle]}>
+        <Animated.View style={[s.card, localStyles.modalCard, cardStyle]}>
           <Animated.View style={[s.header, headerBorderStyle]}>
             <View style={s.headerIcon}>
               <Plus size={18} color={colors.brand} strokeWidth={2} />
             </View>
             <View style={s.headerText}>
-              <FitText style={s.headerTitle}>Log Meal</FitText>
+              <FitText style={s.headerTitle}>{isEditing ? "Edit Meal" : "Log Meal"}</FitText>
               <FitText style={s.headerSubtitle}>
                 {step === "choice"
                   ? "Choose a previous meal or start fresh"
-                  : "Save today's nutrition to the live backend"}
+                  : isEditing
+                    ? "Update this saved meal in the live backend"
+                    : "Save today's nutrition to the live backend"}
               </FitText>
             </View>
           </Animated.View>
           <FitModalScrollView
-            style={{ flex: 1 }}
+            style={localStyles.modalBody}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+            automaticallyAdjustKeyboardInsets
             contentContainerStyle={s.body}
-            resetKey={`${isVisible}-${step}`}
+            resetKey={isVisible}
           >
             {step === "choice" ? (
               <>
@@ -552,8 +756,9 @@ export default function NutritionLogModal({ isVisible, onClose, onSuccess }: Pro
                   </View>
                 </View>
 
-                <View style={s.sectionGap}>
-                  <FitText style={s.sectionLabel}>PREVIOUS MEALS</FitText>
+                {showRecommendations ? (
+                  <View style={s.sectionGap}>
+                  <FitText style={s.sectionLabel}>RECOMMENDATIONS</FitText>
                   <View style={localStyles.previousMealList}>
                     {isRecentLogsLoading && previousMeals.length === 0 ? (
                       <View style={[s.readOnlyRow, { alignItems: "flex-start" }]}>
@@ -606,7 +811,8 @@ export default function NutritionLogModal({ isVisible, onClose, onSuccess }: Pro
                       </View>
                     )}
                   </View>
-                </View>
+                  </View>
+                ) : null}
               </>
             ) : (
               <>
@@ -686,6 +892,55 @@ export default function NutritionLogModal({ isVisible, onClose, onSuccess }: Pro
               ) : (
                 <FitText style={s.fieldNote}>Use the actual food, brand, or recipe name you want to remember.</FitText>
               )}
+            </View>
+
+            <View style={s.sectionGap}>
+              <FitText style={s.sectionLabel}>MEAL ICON</FitText>
+              <View style={localStyles.iconGrid}>
+                {NUTRITION_MEAL_ICON_LIBRARY_KEYS.map((key) => {
+                  const isActive = selectedIcon.kind === "library" && selectedIcon.key === key;
+                  return (
+                    <Pressable
+                      key={key}
+                      accessibilityLabel={`Use ${formatIconLabel(key)} meal icon`}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: isActive }}
+                      onPress={() => {
+                        setSelectedIcon({ kind: "library", key });
+                        setCustomIconAsset(null);
+                        setSubmitError(null);
+                      }}
+                      style={[
+                        localStyles.iconChoice,
+                        {
+                          backgroundColor: isActive ? colors.brand + "18" : colors.fieldBg,
+                          borderColor: isActive ? colors.brand : colors.fieldBorder
+                        }
+                      ]}
+                    >
+                      <NutritionMealIcon color={isActive ? colors.brand : colors.textMuted} icon={{ kind: "library", key }} />
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <View style={localStyles.customIconRow}>
+                <View style={[localStyles.iconChoice, { borderColor: colors.fieldBorder, backgroundColor: colors.fieldBg }]}>
+                  <NutritionMealIcon
+                    color={colors.brand}
+                    icon={selectedIcon}
+                    previewUri={customIconAsset?.uri}
+                    size={20}
+                  />
+                </View>
+                <FitButton
+                  label={selectedIcon.kind === "custom" ? "Replace Illustration" : "Custom Illustration"}
+                  icon={ImagePlus}
+                  iconSize={16}
+                  variant="ghost"
+                  onPress={() => void handlePickCustomIcon()}
+                />
+              </View>
+              <FitText style={s.fieldNote}>Choose a FitTrack icon or upload a managed JPEG, PNG, or WebP illustration.</FitText>
             </View>
 
             <View style={s.sectionGap}>
@@ -772,6 +1027,40 @@ export default function NutritionLogModal({ isVisible, onClose, onSuccess }: Pro
           </FitModalScrollView>
           {step === "choice" ? (
             <View style={localStyles.choiceAction}>
+              <View style={localStyles.recommendationToggle}>
+                <View style={localStyles.recommendationToggleCopy}>
+                  <FitText style={[localStyles.recommendationToggleTitle, { color: colors.textPrimary }]}>Show recommendations</FitText>
+                  <FitText style={[localStyles.recommendationToggleHint, { color: colors.textMuted }]}>Keep recent saved meals ready when this modal opens.</FitText>
+                </View>
+                <Pressable
+                  accessibilityRole="switch"
+                  accessibilityLabel="Show recommendations"
+                  accessibilityState={{ checked: showRecommendations }}
+                  hitSlop={4}
+                  onPress={() => {
+                    const nextValue = !showRecommendations;
+                    setShowRecommendations(nextValue);
+                    if (recommendationsStorageKey) {
+                      void AsyncStorage.setItem(recommendationsStorageKey, nextValue ? "1" : "0");
+                    }
+                  }}
+                  style={localStyles.recommendationSwitch}
+                >
+                  <View
+                    style={[
+                      localStyles.recommendationSwitchTrack,
+                      { backgroundColor: showRecommendations ? colors.brand + "66" : colors.fieldBorder }
+                    ]}
+                  >
+                    <View
+                      style={[
+                        localStyles.recommendationSwitchThumb,
+                        { transform: [{ translateX: showRecommendations ? 16 : 0 }] }
+                      ]}
+                    />
+                  </View>
+                </Pressable>
+              </View>
               <FitButton
                 label="New Log Meal"
                 variant="primary"
@@ -794,7 +1083,7 @@ export default function NutritionLogModal({ isVisible, onClose, onSuccess }: Pro
                   flex={1}
                 />
                 <FitButton
-                  label={isSubmitting ? savingText : "Save Log"}
+                  label={isSubmitting ? savingText : isEditing ? "Save Changes" : "Save Log"}
                   variant="primary"
                   icon={Plus}
                   iconSize={16}

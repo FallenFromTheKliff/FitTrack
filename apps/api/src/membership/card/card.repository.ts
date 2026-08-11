@@ -172,12 +172,15 @@ export class MembershipCardRepository extends BaseRepository {
   async activateMembershipCard(
     id: string,
     input: { activatedAt: Date; verifiedAt: Date; verifiedBy?: string | null },
-  ): Promise<MembershipCard> {
+  ): Promise<MembershipCard | null> {
     return this.transaction(async (tx) => {
-      const membershipCard = await this.updateById<MembershipCard>(
-        tx.membershipCard,
-        id,
-        {
+      const transition = await tx.membershipCard.updateMany({
+        where: {
+          id,
+          source: MembershipCardSource.paymongo,
+          status: MembershipCardStatus.pending_verification,
+        },
+        data: {
           activated_at: input.activatedAt,
           revoke_reason: null,
           revoked_at: null,
@@ -186,7 +189,19 @@ export class MembershipCardRepository extends BaseRepository {
           verified_at: input.verifiedAt,
           verified_by: input.verifiedBy ?? null,
         },
-      );
+      });
+
+      if (transition.count === 0) {
+        return null;
+      }
+
+      const membershipCard = await tx.membershipCard.findUnique({
+        where: { id },
+      });
+
+      if (!membershipCard) {
+        return null;
+      }
 
       const owner = await tx.user.findUnique({
         where: { id: membershipCard.user_id },
@@ -218,15 +233,30 @@ export class MembershipCardRepository extends BaseRepository {
     });
   }
 
-  revokeMembershipCard(
+  async revokeMembershipCard(
     id: string,
     input: { reason: string | null; revokedAt: Date },
-  ): Promise<MembershipCard> {
-    return this.updateById<MembershipCard>(this.prisma.membershipCard, id, {
-      activated_at: null,
-      revoke_reason: input.reason,
-      revoked_at: input.revokedAt,
-      status: MembershipCardStatus.revoked,
+  ): Promise<MembershipCard | null> {
+    return this.transaction(async (tx) => {
+      const transition = await tx.membershipCard.updateMany({
+        where: {
+          id,
+          source: MembershipCardSource.paymongo,
+          status: MembershipCardStatus.pending_verification,
+        },
+        data: {
+          activated_at: null,
+          revoke_reason: input.reason,
+          revoked_at: input.revokedAt,
+          status: MembershipCardStatus.revoked,
+        },
+      });
+
+      if (transition.count === 0) {
+        return null;
+      }
+
+      return tx.membershipCard.findUnique({ where: { id } });
     });
   }
 

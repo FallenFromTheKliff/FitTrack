@@ -1,7 +1,12 @@
-import { ForbiddenException } from '@nestjs/common';
+import { ForbiddenException, GoneException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { PayableType, PaymentStage, UserRole } from '@prisma/client';
+import {
+  PayableType,
+  PaymentProvider,
+  PaymentStage,
+  UserRole,
+} from '@prisma/client';
 
 import { PaymongoWebhookService } from './paymongo-webhook.service';
 import { PAYMENT_FAILED_EVENT } from './events/payment-failed.event';
@@ -21,6 +26,8 @@ describe('PaymentService', () => {
     findPaymentByGatewayEventId: jest.fn(),
     findPaymentByProviderRefOrThrow: jest.fn(),
     updatePayment: jest.fn(),
+    completePaymongoMembershipCardPayment: jest.fn(),
+    failPaymongoMembershipCardPayment: jest.fn(),
     findSubscriptionPaymentContextOrThrow: jest.fn(),
     findBookingPaymentContextOrThrow: jest.fn(),
     findCoachingPaymentContextOrThrow: jest.fn(),
@@ -180,6 +187,21 @@ describe('PaymentService', () => {
     );
   });
 
+  it('retires member cash membership-card payment submissions', async () => {
+    await expect(
+      service.submitManualPayment('member-1', UserRole.member, {
+        payable_type: PayableType.membership_card,
+        payable_id: 'card-1',
+        payment_stage: PaymentStage.full,
+        amount: 400,
+        screenshot_url: 'https://cdn.fittrack.test/receipt.png',
+        reference_no: 'OR-CARD-123',
+      }),
+    ).rejects.toBeInstanceOf(GoneException);
+
+    expect(repo.createPayment).not.toHaveBeenCalled();
+  });
+
   it('returns any payment to staff without ownership enforcement', async () => {
     repo.findPaymentByIdForStaffOrThrow.mockResolvedValue({ id: 'payment-1' });
 
@@ -285,6 +307,40 @@ describe('PaymentService', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
+  it('retires admin/staff verification for membership-card payments', async () => {
+    repo.findPaymentByIdForStaffOrThrow.mockResolvedValue({
+      id: 'payment-card-1',
+      status: 'awaiting_verification',
+      amount: 400,
+      user_id: 'member-1',
+      payable_type: PayableType.membership_card,
+      payable_id: 'card-1',
+    });
+
+    await expect(
+      service.verifyPayment('payment-card-1', { action: 'approve' }, 'admin-1'),
+    ).rejects.toBeInstanceOf(GoneException);
+
+    expect(repo.updatePayment).not.toHaveBeenCalled();
+  });
+
+  it('returns the retired response before validating a membership-card rejection reason', async () => {
+    repo.findPaymentByIdForStaffOrThrow.mockResolvedValue({
+      id: 'payment-card-1',
+      status: 'awaiting_verification',
+      amount: 400,
+      user_id: 'member-1',
+      payable_type: PayableType.membership_card,
+      payable_id: 'card-1',
+    });
+
+    await expect(
+      service.verifyPayment('payment-card-1', { action: 'reject' }, 'admin-1'),
+    ).rejects.toBeInstanceOf(GoneException);
+
+    expect(repo.updatePayment).not.toHaveBeenCalled();
+  });
+
   it('acknowledges duplicate webhook events without duplicating side effects', async () => {
     paymongoWebhookService.parseAndVerify.mockReturnValue({
       data: {
@@ -360,6 +416,7 @@ describe('PaymentService', () => {
       payable_type: PayableType.subscription,
       payable_id: 'sub-1',
       provider_ref: 'cs_1',
+      provider: PaymentProvider.paymongo,
       gateway_metadata: {
         checkout_url: 'https://checkout.paymongo.com/cs_1',
       },
@@ -425,6 +482,7 @@ describe('PaymentService', () => {
       payable_type: PayableType.subscription,
       payable_id: 'sub-1',
       provider_ref: 'cs_1',
+      provider: PaymentProvider.paymongo,
       gateway_metadata: {
         checkout_url: 'https://checkout.paymongo.com/cs_1',
       },

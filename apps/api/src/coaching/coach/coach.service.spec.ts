@@ -19,13 +19,16 @@ describe('CoachService', () => {
 
   const repo = {
     listAvailableCoaches: jest.fn(),
+    listSpecialties: jest.fn(),
     hasActiveAppointmentConflict: jest.fn(),
     hasActiveLinkedBookingConflict: jest.fn(),
     findCoachByIdOrThrow: jest.fn(),
     findCoachByUserIdOrThrow: jest.fn(),
     listActiveBookingDateKeys: jest.fn(),
     updateCoachByUserId: jest.fn(),
+    updateCoachByUserIdWithSpecialties: jest.fn(),
     updateCoachById: jest.fn(),
+    updateCoachByIdWithSpecialties: jest.fn(),
   };
   const eventEmitter = {
     emit: jest.fn(),
@@ -62,6 +65,7 @@ describe('CoachService', () => {
         end_time: END_TIME,
       },
     ],
+    specialties: [],
     ...overrides,
   });
 
@@ -118,6 +122,28 @@ describe('CoachService', () => {
     });
   });
 
+  it('maps the paginated specialty catalog to its canonical response shape', async () => {
+    repo.listSpecialties.mockResolvedValue({
+      data: [
+        {
+          id: '11111111-1111-4111-8111-111111111111',
+          display_label: 'Strength and Conditioning',
+        },
+      ],
+      meta: { page: 1, limit: 20, total: 1, total_pages: 1 },
+    });
+
+    await expect(service.listSpecialties({ search: 'strength' })).resolves.toEqual({
+      data: [
+        {
+          id: '11111111-1111-4111-8111-111111111111',
+          label: 'Strength and Conditioning',
+        },
+      ],
+      meta: { page: 1, limit: 20, total: 1, total_pages: 1 },
+    });
+  });
+
   it('formats active availability when loading a coach profile', async () => {
     repo.findCoachByIdOrThrow.mockResolvedValue(makeCoach());
 
@@ -165,6 +191,52 @@ describe('CoachService', () => {
       service.updateMyProfile('user-1', { hourly_rate: 1500 }),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(repo.updateCoachByUserId).not.toHaveBeenCalled();
+  });
+
+  it('rejects schedule type updates from coach self-service', async () => {
+    await expect(
+      service.updateMyProfile('user-1', { schedule_type: 'full_time' }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(repo.updateCoachByUserId).not.toHaveBeenCalled();
+    expect(repo.updateCoachByUserIdWithSpecialties).not.toHaveBeenCalled();
+  });
+
+  it('replaces specialties through the authenticated coach ownership seam', async () => {
+    repo.updateCoachByUserIdWithSpecialties.mockResolvedValue(
+      makeCoach({
+        specialization: 'Strength and Conditioning',
+        specialties: [
+          {
+            specialty: {
+              id: '11111111-1111-4111-8111-111111111111',
+              display_label: 'Strength and Conditioning',
+            },
+          },
+        ],
+      }),
+    );
+
+    await expect(
+      service.updateMyProfile('user-1', {
+        specialty_labels: ['Strength and Conditioning'],
+      }),
+    ).resolves.toMatchObject({
+      specialties: [
+        {
+          id: '11111111-1111-4111-8111-111111111111',
+          label: 'Strength and Conditioning',
+        },
+      ],
+    });
+
+    expect(repo.updateCoachByUserIdWithSpecialties).toHaveBeenCalledWith(
+      'user-1',
+      {},
+      {
+        specialty_ids: [],
+        specialty_labels: ['Strength and Conditioning'],
+      },
+    );
   });
 
   it('keeps monthly offer fields read-only for coach self-service', async () => {

@@ -1,4 +1,48 @@
-import { MasteryRank, Prisma } from '@prisma/client';
+import { MasteryRank, Prisma, ProgressionIconKind } from '@prisma/client';
+
+export const DEFAULT_MILESTONE_ICON_KEY = 'trophy';
+export const DEFAULT_MUSCLE_ICON_KEY = 'dumbbell';
+
+const PROGRESSION_LIBRARY_ICON_KEYS = new Set([
+  'badge',
+  'dumbbell',
+  'flame',
+  'medal',
+  'star',
+  'target',
+  'trophy',
+]);
+
+export function isAllowedProgressionLibraryIconKey(value: string): boolean {
+  return PROGRESSION_LIBRARY_ICON_KEYS.has(value);
+}
+
+export function resolveProgressionIcon(input: {
+  assetKey?: string | null;
+  defaultIconKey: string;
+  iconKey?: string | null;
+  kind?: ProgressionIconKind | null;
+}): {
+  iconAssetKey: string | null;
+  iconKey: string | null;
+  iconKind: ProgressionIconKind;
+} {
+  if (input.kind === ProgressionIconKind.custom) {
+    return {
+      iconAssetKey: input.assetKey ?? null,
+      iconKey: null,
+      iconKind: ProgressionIconKind.custom,
+    };
+  }
+
+  return {
+    iconAssetKey: null,
+    iconKey: input.iconKey ?? input.defaultIconKey,
+    iconKind: ProgressionIconKind.library,
+  };
+}
+
+export const PROGRESSION_RULES_VERSION = 'exp-v1';
 
 export const XP_THRESHOLDS: Record<
   MasteryRank,
@@ -18,6 +62,71 @@ export const MASTERY_RANK_ORDER: readonly MasteryRank[] = [
   MasteryRank.platinum,
   MasteryRank.adamantite,
 ];
+
+export interface ExpProgressionState {
+  current_exp: number;
+  is_uncapped: boolean;
+  level: MasteryRank;
+  next_level_exp: number | null;
+  progress_percent: number;
+  remaining_exp: number | null;
+}
+
+function normalizeExp(exp: number): number {
+  if (!Number.isFinite(exp)) {
+    return 0;
+  }
+
+  return Math.max(0, Math.floor(exp));
+}
+
+/** EXP is canonical; volume is retained only for backwards-compatible callers. */
+export function evaluateExpRank(exp: number): MasteryRank {
+  const normalizedExp = normalizeExp(exp);
+  let level: MasteryRank = MasteryRank.bronze;
+
+  for (const rank of MASTERY_RANK_ORDER) {
+    if (normalizedExp >= XP_THRESHOLDS[rank].xp) {
+      level = rank;
+    }
+  }
+
+  return level;
+}
+
+export function getExpProgressionState(exp: number): ExpProgressionState {
+  const currentExp = normalizeExp(exp);
+  const level = evaluateExpRank(currentExp);
+  const levelIndex = MASTERY_RANK_ORDER.indexOf(level);
+  const nextLevel = MASTERY_RANK_ORDER[levelIndex + 1];
+
+  if (!nextLevel) {
+    return {
+      current_exp: currentExp,
+      is_uncapped: true,
+      level,
+      next_level_exp: null,
+      progress_percent: 100,
+      remaining_exp: null,
+    };
+  }
+
+  const currentLevelExp = XP_THRESHOLDS[level].xp;
+  const nextLevelExp = XP_THRESHOLDS[nextLevel].xp;
+  const range = nextLevelExp - currentLevelExp;
+  const progressPercent = Math.round(
+    ((currentExp - currentLevelExp) / range) * 100,
+  );
+
+  return {
+    current_exp: currentExp,
+    is_uncapped: false,
+    level,
+    next_level_exp: nextLevelExp,
+    progress_percent: Math.min(100, Math.max(0, progressPercent)),
+    remaining_exp: Math.max(0, nextLevelExp - currentExp),
+  };
+}
 
 const RANK_LABELS: Record<MasteryRank, string> = {
   [MasteryRank.bronze]: 'Bronze',
@@ -47,24 +156,9 @@ export function formatMasteryRankDisplay(
 
 export function evaluateMasteryRank(
   xpPoints: number,
-  totalVolumeKg: Prisma.Decimal | number,
+  _totalVolumeKg: Prisma.Decimal | number,
 ): MasteryRank {
-  const volumeKg =
-    totalVolumeKg instanceof Prisma.Decimal
-      ? totalVolumeKg.toNumber()
-      : totalVolumeKg;
-
-  let evaluatedRank: MasteryRank = MasteryRank.bronze;
-
-  for (const rank of MASTERY_RANK_ORDER) {
-    const threshold = XP_THRESHOLDS[rank];
-
-    if (xpPoints >= threshold.xp || volumeKg >= threshold.volume_kg) {
-      evaluatedRank = rank;
-    }
-  }
-
-  return evaluatedRank;
+  return evaluateExpRank(xpPoints);
 }
 
 export function isHigherMasteryRank(
@@ -75,4 +169,21 @@ export function isHigherMasteryRank(
     MASTERY_RANK_ORDER.indexOf(nextRank) >
     MASTERY_RANK_ORDER.indexOf(currentRank)
   );
+}
+
+export function getCompetitionRankPositions<T>(
+  orderedRows: readonly T[],
+  getScore: (row: T) => number,
+): number[] {
+  let previousScore: number | undefined;
+  let rankPosition = 0;
+
+  return orderedRows.map((row, index) => {
+    const score = getScore(row);
+    if (previousScore !== score) {
+      rankPosition = index + 1;
+      previousScore = score;
+    }
+    return rankPosition;
+  });
 }

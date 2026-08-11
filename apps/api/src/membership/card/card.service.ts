@@ -1,6 +1,7 @@
 import {
   ConflictException,
   ForbiddenException,
+  GoneException,
   HttpException,
   HttpStatus,
   Injectable,
@@ -81,6 +82,10 @@ export class MembershipCardService {
     const owner = await this.repo.findMembershipOwnerByIdOrThrow(userId);
     this.assertEligibleOwner(owner);
 
+    if (dto.provider === PaymentProvider.cash) {
+      throw this.buildRetiredCashPurchaseException();
+    }
+
     const existingPayment = await this.paymentRepo.findPaymentByIdempotencyKey(
       normalizedIdempotencyKey,
     );
@@ -105,19 +110,9 @@ export class MembershipCardService {
     const initiation = await this.repo.createOrRefreshPendingPurchase({
       idempotencyKey: normalizedIdempotencyKey,
       provider: dto.provider,
-      source: dto.provider === PaymentProvider.cash ? 'cash' : 'paymongo',
+      source: 'paymongo',
       userId,
     });
-
-    if (dto.provider === PaymentProvider.cash) {
-      return {
-        checkout_url: null,
-        membership_card: initiation.membershipCard,
-        message:
-          'Membership card cash request submitted. Front-desk staff can verify it from the members panel.',
-        payment: initiation.payment,
-      };
-    }
 
     const checkoutUrl = await this.startCheckoutForPayment(initiation.payment);
     return {
@@ -139,16 +134,14 @@ export class MembershipCardService {
         event.payableId,
       );
 
-    if (membershipCard.status === 'active') {
+    const hasTrustedActivationMarker =
+      typeof event.membershipCardActivationCommitted === 'boolean';
+
+    if (!hasTrustedActivationMarker || membershipCard.status !== 'active') {
       return;
     }
 
     const completedAt = new Date();
-    await this.repo.activateMembershipCard(membershipCard.id, {
-      activatedAt: completedAt,
-      verifiedAt: completedAt,
-      verifiedBy: event.verifiedBy ?? null,
-    });
 
     await this.notificationsService.dispatch(
       membershipCard.user_id,
@@ -191,7 +184,10 @@ export class MembershipCardService {
       event.payableId,
     );
 
-    if (membershipCard.status === 'active') {
+    if (
+      membershipCard.status === 'active' ||
+      membershipCard.status === 'revoked'
+    ) {
       return;
     }
 
@@ -249,6 +245,12 @@ export class MembershipCardService {
       return;
     }
 
+    // Cash member requests are retired. Keep legacy rows for reconciliation,
+    // but never let them block a new PayMongo attempt.
+    if (payment.provider === PaymentProvider.cash) {
+      return;
+    }
+
     if (payment.status === 'awaiting_verification') {
       throw new ConflictException({
         type: 'CONFLICT',
@@ -292,15 +294,7 @@ export class MembershipCardService {
     );
 
     if (payment.provider === PaymentProvider.cash) {
-      return {
-        checkout_url: null,
-        membership_card: membershipCard,
-        message:
-          payment.status === 'awaiting_verification'
-            ? 'Membership card cash request is still awaiting staff verification.'
-            : 'Membership card cash request already exists for this account.',
-        payment,
-      };
+      throw this.buildRetiredCashPurchaseException();
     }
 
     if (payment.provider !== PaymentProvider.paymongo) {
@@ -423,5 +417,15 @@ export class MembershipCardService {
 
   private toMinorAmount(amount: Prisma.Decimal): number {
     return Math.round(Number(amount) * 100);
+  }
+
+  private buildRetiredCashPurchaseException(): GoneException {
+    return new GoneException({
+      type: 'GONE',
+      title: 'Membership Card Cash Purchase Retired',
+      status: 410,
+      detail:
+        'Member cash membership-card requests are retired. Authorized admin or staff users must grant membership-card access from the members directory.',
+    });
   }
 }

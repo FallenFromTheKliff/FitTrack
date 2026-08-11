@@ -39,6 +39,27 @@ export function makeOTPModalStyles(colors: ThemeColors) {
       color: colors.textSecondary
     },
     phoneMasked: { fontSize: 13, fontWeight: "600", color: colors.textPrimary },
+    notice: {
+      width: "100%",
+      fontSize: 12,
+      lineHeight: 18,
+      textAlign: "center",
+      marginBottom: 16,
+      color: colors.textMuted,
+    },
+    lockNotice: {
+      width: "100%",
+      borderRadius: R.md,
+      borderWidth: 1,
+      borderColor: colors.danger,
+      backgroundColor: colors.surfaceRaised,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      gap: 4,
+      marginBottom: 16,
+    },
+    lockTitle: { fontSize: 13, fontWeight: "700", color: colors.danger },
+    lockText: { fontSize: 12, lineHeight: 18, color: colors.textSecondary },
     digitRow: { flexDirection: "row", gap: 10, marginBottom: 20 },
     digitBox: {
       width: 44,
@@ -53,10 +74,20 @@ export function makeOTPModalStyles(colors: ThemeColors) {
       color: colors.textPrimary
     },
     digitBoxFilled: { borderColor: colors.brand },
+    digitBoxDisabled: { opacity: 0.55 },
     verifyBtn: { width: "100%", marginBottom: 16 },
+    errorText: {
+      width: "100%",
+      fontSize: 12,
+      lineHeight: 18,
+      textAlign: "center",
+      color: colors.danger,
+      marginBottom: 12,
+    },
     resendRow: { flexDirection: "row", alignItems: "center", marginBottom: 20 },
     resendText: { fontSize: 13, color: colors.textMuted },
     resendBtn: { marginLeft: 4 },
+    dismissBtn: { marginBottom: 12 },
     copyright: { fontSize: 11, color: colors.textMuted }
   });
 }

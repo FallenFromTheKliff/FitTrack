@@ -39,7 +39,7 @@ export const WEB_PAGE_ALLOWED_ROLES: Record<PageKey, readonly WebPortalRole[]> =
     settings: WEB_PORTAL_ALLOWED_ROLES,
     profile: ["ADMIN", "STAFF", "COACH"],
     "coach-dashboard": WEB_COACH_ROLES,
-    "coach-clients": WEB_COACH_ROLES,
+    "coach-clients": [],
     "coach-sessions": WEB_COACH_ROLES,
     "coach-earnings": WEB_COACH_ROLES,
     "coach-gamification": [],

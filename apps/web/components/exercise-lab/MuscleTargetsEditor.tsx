@@ -23,6 +23,7 @@ import {
   toNumber,
   type EditorColors,
 } from "./ExerciseContractEditorShared";
+import { MuscleDefinitionIcon } from "./ExerciseLabPageContext";
 import { FitSelect } from "@/components/fit";
 export function MuscleTargetsEditor({
   colors,
@@ -42,6 +43,12 @@ export function MuscleTargetsEditor({
   const definitions = getCanonicalMuscleDefinitions(muscleDefinitions);
   const activeDefinitions = definitions.filter(
     (definition) => definition.isActive,
+  );
+  const definitionByKey = new Map(
+    (muscleDefinitions ?? []).map((definition) => [
+      definition.key.trim().toLowerCase(),
+      definition,
+    ]),
   );
   const targets = normalizeExerciseMuscleTargets(value, fallbackMuscleGroup);
   const total = targets.reduce((sum, target) => sum + target.allocationPercent, 0);
@@ -127,29 +134,46 @@ export function MuscleTargetsEditor({
             }}
           >
             <FieldShell colors={colors} label="Muscle">
-              <FitSelect
-                compact
-                fullWidth
-                name={`exercise-muscle-target-${index}`}
-                onChange={(event) =>
-                  updateTarget(index, { muscleGroup: event.target.value })
-                }
-                options={[
-                  ...(activeDefinitions.some(
-                    (definition) => definition.key === target.muscleGroup,
-                  )
-                    ? []
-                    : [{
-                        label: `${getMuscleDefinitionLabel(target.muscleGroup, definitions)} archived/unknown`,
-                        value: target.muscleGroup,
-                      }]),
-                  ...activeDefinitions.map((definition) => ({
-                    label: definition.name,
-                    value: definition.key,
-                  })),
-                ]}
-                value={target.muscleGroup}
-              />
+              <div style={{ alignItems: "center", display: "flex", gap: 8 }}>
+                {definitionByKey.get(target.muscleGroup.trim().toLowerCase()) ? (
+                  <MuscleDefinitionIcon
+                    colors={{
+                      accent: colors.primary,
+                      background: colors.surface,
+                      border: colors.border,
+                    }}
+                    definition={definitionByKey.get(
+                      target.muscleGroup.trim().toLowerCase(),
+                    )}
+                    size={32}
+                  />
+                ) : null}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <FitSelect
+                    compact
+                    fullWidth
+                    name={`exercise-muscle-target-${index}`}
+                    onChange={(event) =>
+                      updateTarget(index, { muscleGroup: event.target.value })
+                    }
+                    options={[
+                      ...(activeDefinitions.some(
+                        (definition) => definition.key === target.muscleGroup,
+                      )
+                        ? []
+                        : [{
+                            label: `${getMuscleDefinitionLabel(target.muscleGroup, definitions)} archived/unknown`,
+                            value: target.muscleGroup,
+                          }]),
+                      ...activeDefinitions.map((definition) => ({
+                        label: definition.name,
+                        value: definition.key,
+                      })),
+                    ]}
+                    value={target.muscleGroup}
+                  />
+                </div>
+              </div>
             </FieldShell>
             <FieldShell colors={colors} label="Role">
               <FitSelect

@@ -676,9 +676,36 @@ model CoachProfile {
   reviews              CoachReview[]
   availability_slots   CoachAvailabilitySlot[]
   client_relationships CoachClientRelationship[] @relation("coach_rel")
+  specialties          CoachProfileSpecialty[]
 
   @@index([is_available_for_booking, average_rating(sort: Desc)])
   @@map("coach_profiles")
+}
+
+model CoachSpecialty {
+  id               String                  @id @default(uuid()) @db.Uuid
+  normalized_label String                  @unique @db.VarChar(255)
+  display_label    String                  @db.VarChar(255)
+  created_at       DateTime                @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime                @updatedAt @db.Timestamptz(6)
+
+  coach_profiles CoachProfileSpecialty[]
+
+  @@index([display_label])
+  @@map("coach_specialties")
+}
+
+model CoachProfileSpecialty {
+  coach_profile_id String   @db.Uuid
+  specialty_id     String   @db.Uuid
+  created_at       DateTime @default(now()) @db.Timestamptz(6)
+
+  coach_profile CoachProfile  @relation(fields: [coach_profile_id], references: [id], onDelete: Cascade)
+  specialty     CoachSpecialty @relation(fields: [specialty_id], references: [id], onDelete: Restrict)
+
+  @@id([coach_profile_id, specialty_id])
+  @@index([specialty_id])
+  @@map("coach_profile_specialties")
 }
 
 model CoachAppointment {
@@ -954,6 +981,9 @@ model MuscleDefinition {
   name        String   @db.VarChar(120)
   body_region String   @db.VarChar(80)
   aliases     Json?
+  icon_kind   ProgressionIconKind?
+  icon_key    String?  @db.VarChar(100)
+  icon_asset_key String? @db.VarChar(500)
   sort_order  Int      @default(0) @db.SmallInt
   is_active   Boolean  @default(true)
   is_system   Boolean  @default(false)
@@ -1278,6 +1308,11 @@ enum MasteryRank {
   adamantite
 }
 
+enum ProgressionIconKind {
+  library
+  custom
+}
+
 model ProgressionSourceEvent {
   id             String                  @id @default(uuid()) @db.Uuid
   user_id        String                  @db.Uuid
@@ -1330,6 +1365,7 @@ model UserProgressionProfile {
   id                    String    @id @default(uuid()) @db.Uuid
   user_id               String    @unique @db.Uuid
   active_season_id      String?   @db.Uuid
+  progression_rules_version String @default("exp-v1") @db.VarChar(50)
   total_xp              Int       @default(0)
   current_streak        Int       @default(0)
   longest_streak        Int       @default(0)
@@ -1428,6 +1464,9 @@ model MilestoneDefinition {
   trigger_type         MilestoneTriggerType
   condition_payload    Json?
   reward_payload       Json?
+  icon_kind            ProgressionIconKind?
+  icon_key             String?                      @db.VarChar(100)
+  icon_asset_key       String?                      @db.VarChar(500)
   status               MilestoneDefinitionStatus    @default(active)
   verification_policy  MilestoneVerificationPolicy  @default(auto)
   evidence_requirement MilestoneEvidenceRequirement @default(none)
@@ -1465,6 +1504,7 @@ model UserMilestoneProgress {
   progress_payload        Json?
   unlocked_at             DateTime?               @db.Timestamptz(6)
   claimed_at              DateTime?               @db.Timestamptz(6)
+  reward_granted_at       DateTime?               @db.Timestamptz(6)
   created_at              DateTime                @default(now()) @db.Timestamptz(6)
   updated_at              DateTime                @updatedAt @db.Timestamptz(6)
 
@@ -1842,6 +1882,9 @@ model NutritionLog {
   log_date        DateTime      @db.Date
   meal_name       String        @db.VarChar(100)
   food_item       String        @db.VarChar(255)
+  icon_kind       NutritionIconKind?
+  icon_key        String?       @db.VarChar(100)
+  icon_asset_key  String?       @db.VarChar(500)
   calories        Decimal       @db.Decimal(8, 2)
   protein_g       Decimal       @default(0) @db.Decimal(6, 2)
   carbs_g         Decimal       @default(0) @db.Decimal(6, 2)
@@ -1871,6 +1914,11 @@ enum NutritionUnit {
   tsp
   serving
   piece
+}
+
+enum NutritionIconKind {
+  library
+  custom
 }
 
 // =============================================================================
@@ -2097,6 +2145,7 @@ model Notification {
   title      String              @db.VarChar(255)
   body       String
   data       Json?
+  dedupe_key String?              @unique @db.VarChar(255)
   status     NotificationStatus  @default(pending)
   sent_at    DateTime?           @db.Timestamptz(6)
   read_at    DateTime?           @db.Timestamptz(6)

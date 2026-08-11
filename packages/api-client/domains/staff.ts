@@ -565,7 +565,7 @@ export function createStaffApi(transport: ApiTransport) {
             ? { schedule_type: payload.scheduleType }
             : {}),
           ...(payload.specialties !== undefined
-            ? { specialization: payload.specialties.join(", ") }
+            ? { specialty_labels: payload.specialties }
             : {}),
         }),
         "Unable to update coach profile.",
@@ -616,7 +616,7 @@ export function createStaffApi(transport: ApiTransport) {
             ? { schedule_type: payload.scheduleType }
             : {}),
           ...(payload.specialties !== undefined
-            ? { specialization: payload.specialties.join(", ") }
+            ? { specialty_labels: payload.specialties }
             : {}),
         }),
         "Unable to create coach.",

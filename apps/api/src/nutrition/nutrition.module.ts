@@ -3,6 +3,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
 
 import { AiModule } from '../ai/ai.module';
 import { ActiveMemberAccountGuard } from '../common/guards/active-member-account.guard';
+import { FilesModule } from '../files/files.module';
 import { MembershipModule } from '../membership/membership.module';
 import { UserModule } from '../user/user.module';
 import { NutritionController } from './nutrition.controller';
@@ -12,6 +13,7 @@ import { NutritionService } from './nutrition.service';
 @Module({
   imports: [
     EventEmitterModule,
+    FilesModule,
     UserModule,
     MembershipModule,
     forwardRef(() => AiModule),

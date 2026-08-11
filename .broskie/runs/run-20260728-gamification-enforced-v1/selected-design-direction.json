@@ -1,7 +1,0 @@
-{
-  "schema_version": "selected-design-direction.v1",
-  "source_revision": "git-scope:dd95bcff1a09181d591817523312a32f48264e67f81955c3d039a02cb26ca892",
-  "selected_candidate_id": "compact-governance-workspace",
-  "human_approval": "approved",
-  "rationale": "The user approved applying the proposed harness improvements and using Gamification as the immediate test surface."
-}

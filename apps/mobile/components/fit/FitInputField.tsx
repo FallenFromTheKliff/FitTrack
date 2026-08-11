@@ -33,6 +33,7 @@ type FitInputFieldProps<TFieldValues extends FieldValues> = {
   displayValue?: string;
   trailingIcon?: LucideIcon;
   sanitizeValue?: (value: string) => string;
+  phonePrefix?: string;
   phonePrefixOptions?: ReadonlyArray<{ label: string; value: string }>;
   phonePrefixValue?: string;
   onPhonePrefixChange?: (value: string) => void;
@@ -69,6 +70,7 @@ export default function FitInputField<TFieldValues extends FieldValues>({
   displayValue,
   trailingIcon: TrailingIcon,
   sanitizeValue,
+  phonePrefix,
   phonePrefixOptions,
   phonePrefixValue,
   onPhonePrefixChange,
@@ -91,7 +93,13 @@ export default function FitInputField<TFieldValues extends FieldValues>({
       rules={rules}
       render={({ field: { onChange, onBlur, value } }) => {
         const rawValue = value == null ? "" : String(value);
-        const renderedValue = formatInputValue ? formatInputValue(rawValue) : rawValue;
+        const inputValue =
+          phonePrefix && rawValue.startsWith(phonePrefix)
+            ? rawValue.slice(phonePrefix.length)
+            : rawValue;
+        const renderedValue = formatInputValue
+          ? formatInputValue(inputValue)
+          : inputValue;
 
         return (
           <View style={s.wrapper}>
@@ -154,7 +162,18 @@ export default function FitInputField<TFieldValues extends FieldValues>({
                 multiline && { alignItems: "flex-start" }
               ]}
             >
-              {phonePrefixOptions?.length && phonePrefixValue && onPhonePrefixChange ? (
+              {phonePrefix ? (
+                <View style={s.fixedPrefix}>
+                  <FitText
+                    style={[
+                      s.fixedPrefixText,
+                      !editable && s.prefixOptionTextDisabled,
+                    ]}
+                  >
+                    {phonePrefix}
+                  </FitText>
+                </View>
+              ) : phonePrefixOptions?.length && phonePrefixValue && onPhonePrefixChange ? (
                 <View style={s.prefixToggle}>
                   {phonePrefixOptions.map((option) => {
                     const isActive = option.value === phonePrefixValue;
@@ -197,8 +216,13 @@ export default function FitInputField<TFieldValues extends FieldValues>({
                 }
                 onChangeText={(text) => {
                   const filtered = sanitizeValue ? sanitizeValue(text) : filterInput(text, keyboardType);
-                  onChange(filtered);
-                  onChangeValue?.(filtered);
+                  const nextValue = phonePrefix
+                    ? filtered
+                      ? `${phonePrefix}${filtered}`
+                      : ""
+                    : filtered;
+                  onChange(nextValue);
+                  onChangeValue?.(nextValue);
                 }}
                 onFocus={() => {
                   isFocusedRef.current = true;

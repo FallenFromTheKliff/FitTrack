@@ -61,6 +61,16 @@ export class UserController {
 
   @Patch('me')
   @ApiOperation({ summary: 'Update own profile.' })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Profile updated with canonical date and numeric body-metric aliases.',
+  })
+  @ApiResponse({ status: 400, description: 'Invalid profile field.' })
+  @ApiResponse({
+    status: 422,
+    description: 'Birthdate violates the member date or age rules.',
+  })
   updateMyProfile(
     @CurrentUser() user: JwtPayload,
     @Body() dto: UpdateProfileDTO,
@@ -153,6 +163,10 @@ export class UserController {
   @Patch('me/phone')
   @ApiOperation({
     summary: 'Update phone number stored on the user profile.',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Phone must use canonical +639XXXXXXXXX format.',
   })
   updatePhone(@CurrentUser() user: JwtPayload, @Body() dto: UpdatePhoneDTO) {
     return this.usersService.updatePhone(user.sub, dto);

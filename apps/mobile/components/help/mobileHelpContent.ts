@@ -805,7 +805,6 @@ const HELP_BY_TAB: Record<TabKey, MobileHelpContent> = {
       "Use the four tabs to switch between Summary, Milestones, Muscle EXP, and Leaderboard.",
       "Tap a help card below to expand one detailed guide at a time for the matching Muscle Mastery section.",
       "Use the Muscle Mastery FAB for Workout, Nutrition, or BrodigyAI shortcuts when the data suggests a next training, food, or guidance step.",
-      "If a Progress Status review notice appears, some gains may stay pending until the integrity review closes.",
     ],
     detailTitle: "Mastery views",
     detailIntro:

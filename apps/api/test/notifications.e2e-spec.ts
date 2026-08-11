@@ -4,7 +4,6 @@ import {
   ForbiddenException,
   Injectable,
   INestApplication,
-  NotFoundException,
   UnauthorizedException,
   ValidationPipe,
 } from '@nestjs/common';
@@ -33,6 +32,7 @@ type NotificationsServiceMethods =
   | 'getUnreadCount'
   | 'markAllRead'
   | 'markRead'
+  | 'deleteAllNotifications'
   | 'deleteNotification';
 
 type NotificationsServiceMock = jest.Mocked<
@@ -56,6 +56,14 @@ const USERS: Record<string, JwtPayload> = {
     iat: 1,
     exp: 9999999999,
   },
+  coach: {
+    sub: '33333333-3333-4333-8333-333333333333',
+    role: UserRole.coach,
+    status: UserStatus.active,
+    jti: 'coach-jti',
+    iat: 1,
+    exp: 9999999999,
+  },
   admin: {
     sub: '22222222-2222-4222-8222-222222222222',
     role: UserRole.admin,
@@ -74,6 +82,7 @@ function createNotificationsServiceMock(): NotificationsServiceMock {
     getUnreadCount: jest.fn(),
     markAllRead: jest.fn(),
     markRead: jest.fn(),
+    deleteAllNotifications: jest.fn(),
     deleteNotification: jest.fn(),
   };
 }
@@ -240,52 +249,58 @@ describe('S12 Notifications Controller (e2e)', () => {
     expect(notificationsService.getMyNotifications).not.toHaveBeenCalled();
   });
 
-  it('lists inbox notifications with transformed query params and the standard envelope', async () => {
-    notificationsService.getMyNotifications.mockResolvedValue(
-      createNotificationInboxResult({
-        data: [
-          createNotificationRecord(),
-          createNotificationRecord({
-            id: '99999999-9999-4999-8999-999999999999',
-            title: 'Payment confirmed',
-            type: NotificationType.payment_confirmed,
-            body: 'Your membership renewal was paid successfully.',
-            data: {
-              payment_id: '12121212-1212-4212-8212-121212121212',
-            },
-            read_at: '2026-03-28T06:10:00.000Z',
-          }),
-        ],
-        meta: {
+  it.each([
+    ['member', USERS.member.sub],
+    ['coach', USERS.coach.sub],
+  ] as const)(
+    'lists inbox notifications for the authenticated %s user with transformed query params',
+    async (token, userId) => {
+      notificationsService.getMyNotifications.mockResolvedValue(
+        createNotificationInboxResult({
+          data: [
+            createNotificationRecord(),
+            createNotificationRecord({
+              id: '99999999-9999-4999-8999-999999999999',
+              title: 'Payment confirmed',
+              type: NotificationType.payment_confirmed,
+              body: 'Your membership renewal was paid successfully.',
+              data: {
+                payment_id: '12121212-1212-4212-8212-121212121212',
+              },
+              read_at: '2026-03-28T06:10:00.000Z',
+            }),
+          ],
+          meta: {
+            page: 2,
+            limit: 5,
+            total: 2,
+            total_pages: 1,
+          },
+        }),
+      );
+
+      const response = await request(getHttpServer(app))
+        .get('/v1/notifications/my?unread_only=%20true%20&page=2&limit=5')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      expect(notificationsService.getMyNotifications).toHaveBeenCalledWith(
+        userId,
+        {
+          unread_only: true,
           page: 2,
           limit: 5,
-          total: 2,
-          total_pages: 1,
         },
-      }),
-    );
-
-    const response = await request(getHttpServer(app))
-      .get('/v1/notifications/my?unread_only=%20true%20&page=2&limit=5')
-      .set('Authorization', 'Bearer member')
-      .expect(200);
-
-    expect(notificationsService.getMyNotifications).toHaveBeenCalledWith(
-      USERS.member.sub,
-      {
-        unread_only: true,
-        page: 2,
-        limit: 5,
-      },
-    );
-    expect(response.body).toMatchObject({
-      data: [
-        { id: '77777777-7777-4777-8777-777777777777' },
-        { id: '99999999-9999-4999-8999-999999999999' },
-      ],
-      meta: { page: 2, limit: 5, total: 2, total_pages: 1 },
-    });
-  });
+      );
+      expect(response.body).toMatchObject({
+        data: [
+          { id: '77777777-7777-4777-8777-777777777777' },
+          { id: '99999999-9999-4999-8999-999999999999' },
+        ],
+        meta: { page: 2, limit: 5, total: 2, total_pages: 1 },
+      });
+    },
+  );
 
   it('rejects invalid inbox query booleans before the service is called', async () => {
     const response = await request(getHttpServer(app))
@@ -302,86 +317,130 @@ describe('S12 Notifications Controller (e2e)', () => {
     expect(notificationsService.getMyNotifications).not.toHaveBeenCalled();
   });
 
-  it('returns unread counts and mark-all updates for the authenticated user', async () => {
-    notificationsService.getUnreadCount.mockResolvedValue({ count: 4 });
-    notificationsService.markAllRead.mockResolvedValue({ updated_count: 4 });
+  it.each([
+    ['member', USERS.member.sub],
+    ['coach', USERS.coach.sub],
+  ] as const)(
+    'returns unread counts and mark-all updates for the authenticated %s user',
+    async (token, userId) => {
+      notificationsService.getUnreadCount.mockResolvedValue({ count: 4 });
+      notificationsService.markAllRead.mockResolvedValue({ updated_count: 4 });
 
-    const unreadResponse = await request(getHttpServer(app))
-      .get('/v1/notifications/unread-count')
-      .set('Authorization', 'Bearer member')
-      .expect(200);
+      const unreadResponse = await request(getHttpServer(app))
+        .get('/v1/notifications/unread-count')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
 
-    expect(notificationsService.getUnreadCount).toHaveBeenCalledWith(
-      USERS.member.sub,
-    );
-    expect(unreadResponse.body).toEqual({
-      data: { count: 4 },
-    });
+      expect(notificationsService.getUnreadCount).toHaveBeenCalledWith(userId);
+      expect(unreadResponse.body).toEqual({
+        data: { count: 4 },
+      });
 
-    const markAllResponse = await request(getHttpServer(app))
-      .patch('/v1/notifications/read-all')
-      .set('Authorization', 'Bearer member')
-      .expect(200);
+      const markAllResponse = await request(getHttpServer(app))
+        .patch('/v1/notifications/read-all')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
 
-    expect(notificationsService.markAllRead).toHaveBeenCalledWith(
-      USERS.member.sub,
-    );
-    expect(markAllResponse.body).toEqual({
-      data: { updated_count: 4 },
-    });
-  });
+      expect(notificationsService.markAllRead).toHaveBeenCalledWith(userId);
+      expect(markAllResponse.body).toEqual({
+        data: { updated_count: 4 },
+      });
+    },
+  );
 
-  it('marks owned notifications as read and preserves service-level ownership failures', async () => {
-    notificationsService.markRead
-      .mockResolvedValueOnce(
-        createNotificationRecord({
-          read_at: '2026-03-28T06:15:00.000Z',
-          updated_at: '2026-03-28T06:15:00.000Z',
-        }),
-      )
-      .mockRejectedValueOnce(
-        new ForbiddenException({
-          type: 'FORBIDDEN',
-          title: 'Forbidden',
-          status: 403,
-          detail: 'You do not have permission to access this notification.',
-        }),
+  it.each([
+    ['member', USERS.member.sub],
+    ['coach', USERS.coach.sub],
+  ] as const)(
+    'clears only the authenticated %s user inbox and returns stable affected counts',
+    async (token, userId) => {
+      notificationsService.deleteAllNotifications
+        .mockResolvedValueOnce({ deleted_count: 2 })
+        .mockResolvedValueOnce({ deleted_count: 0 });
+
+      const firstResponse = await request(getHttpServer(app))
+        .delete('/v1/notifications')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      expect(
+        notificationsService.deleteAllNotifications,
+      ).toHaveBeenNthCalledWith(1, userId);
+      expect(firstResponse.body).toEqual({
+        data: { deleted_count: 2 },
+      });
+
+      const secondResponse = await request(getHttpServer(app))
+        .delete('/v1/notifications')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      expect(
+        notificationsService.deleteAllNotifications,
+      ).toHaveBeenNthCalledWith(2, userId);
+      expect(secondResponse.body).toEqual({
+        data: { deleted_count: 0 },
+      });
+    },
+  );
+
+  it.each([
+    ['member', USERS.member.sub],
+    ['coach', USERS.coach.sub],
+  ] as const)(
+    'marks owned %s notifications as read and preserves ownership failures',
+    async (token, userId) => {
+      notificationsService.markRead
+        .mockResolvedValueOnce(
+          createNotificationRecord({
+            read_at: '2026-03-28T06:15:00.000Z',
+            updated_at: '2026-03-28T06:15:00.000Z',
+          }),
+        )
+        .mockRejectedValueOnce(
+          new ForbiddenException({
+            type: 'FORBIDDEN',
+            title: 'Forbidden',
+            status: 403,
+            detail: 'You do not have permission to access this notification.',
+          }),
+        );
+
+      const successResponse = await request(getHttpServer(app))
+        .patch('/v1/notifications/77777777-7777-4777-8777-777777777777/read')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      expect(notificationsService.markRead).toHaveBeenNthCalledWith(
+        1,
+        userId,
+        '77777777-7777-4777-8777-777777777777',
       );
+      expect(successResponse.body).toMatchObject({
+        data: {
+          id: '77777777-7777-4777-8777-777777777777',
+          read_at: '2026-03-28T06:15:00.000Z',
+        },
+      });
 
-    const successResponse = await request(getHttpServer(app))
-      .patch('/v1/notifications/77777777-7777-4777-8777-777777777777/read')
-      .set('Authorization', 'Bearer member')
-      .expect(200);
+      const forbiddenResponse = await request(getHttpServer(app))
+        .patch('/v1/notifications/99999999-9999-4999-8999-999999999999/read')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(403);
 
-    expect(notificationsService.markRead).toHaveBeenNthCalledWith(
-      1,
-      USERS.member.sub,
-      '77777777-7777-4777-8777-777777777777',
-    );
-    expect(successResponse.body).toMatchObject({
-      data: {
-        id: '77777777-7777-4777-8777-777777777777',
-        read_at: '2026-03-28T06:15:00.000Z',
-      },
-    });
-
-    const forbiddenResponse = await request(getHttpServer(app))
-      .patch('/v1/notifications/99999999-9999-4999-8999-999999999999/read')
-      .set('Authorization', 'Bearer member')
-      .expect(403);
-
-    expect(notificationsService.markRead).toHaveBeenNthCalledWith(
-      2,
-      USERS.member.sub,
-      '99999999-9999-4999-8999-999999999999',
-    );
-    expect(forbiddenResponse.body).toEqual({
-      type: 'FORBIDDEN',
-      title: 'Forbidden',
-      status: 403,
-      detail: 'You do not have permission to access this notification.',
-    });
-  });
+      expect(notificationsService.markRead).toHaveBeenNthCalledWith(
+        2,
+        userId,
+        '99999999-9999-4999-8999-999999999999',
+      );
+      expect(forbiddenResponse.body).toEqual({
+        type: 'FORBIDDEN',
+        title: 'Forbidden',
+        status: 403,
+        detail: 'You do not have permission to access this notification.',
+      });
+    },
+  );
 
   it('validates notification ids before mark-read reaches the service', async () => {
     const response = await request(getHttpServer(app))
@@ -398,49 +457,43 @@ describe('S12 Notifications Controller (e2e)', () => {
     expect(notificationsService.markRead).not.toHaveBeenCalled();
   });
 
-  it('deletes owned notifications and preserves not-found failures', async () => {
-    notificationsService.deleteNotification
-      .mockResolvedValueOnce(undefined)
-      .mockRejectedValueOnce(
-        new NotFoundException({
-          type: 'NOT_FOUND',
-          title: 'Not Found',
-          status: 404,
-          detail: 'Notification not found.',
-        }),
+  it.each([
+    ['member', USERS.member.sub],
+    ['coach', USERS.coach.sub],
+  ] as const)(
+    'dismisses existing and missing notifications idempotently for the authenticated %s user',
+    async (token, userId) => {
+      notificationsService.deleteNotification.mockResolvedValue(undefined);
+
+      const successResponse = await request(getHttpServer(app))
+        .delete('/v1/notifications/77777777-7777-4777-8777-777777777777')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      expect(notificationsService.deleteNotification).toHaveBeenNthCalledWith(
+        1,
+        userId,
+        '77777777-7777-4777-8777-777777777777',
       );
+      expect(successResponse.body).toEqual({
+        data: { message: 'Notification deleted.' },
+      });
 
-    const successResponse = await request(getHttpServer(app))
-      .delete('/v1/notifications/77777777-7777-4777-8777-777777777777')
-      .set('Authorization', 'Bearer member')
-      .expect(200);
+      const missingResponse = await request(getHttpServer(app))
+        .delete('/v1/notifications/99999999-9999-4999-8999-999999999999')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
 
-    expect(notificationsService.deleteNotification).toHaveBeenNthCalledWith(
-      1,
-      USERS.member.sub,
-      '77777777-7777-4777-8777-777777777777',
-    );
-    expect(successResponse.body).toEqual({
-      data: { message: 'Notification deleted.' },
-    });
-
-    const notFoundResponse = await request(getHttpServer(app))
-      .delete('/v1/notifications/99999999-9999-4999-8999-999999999999')
-      .set('Authorization', 'Bearer member')
-      .expect(404);
-
-    expect(notificationsService.deleteNotification).toHaveBeenNthCalledWith(
-      2,
-      USERS.member.sub,
-      '99999999-9999-4999-8999-999999999999',
-    );
-    expect(notFoundResponse.body).toEqual({
-      type: 'NOT_FOUND',
-      title: 'Not Found',
-      status: 404,
-      detail: 'Notification not found.',
-    });
-  });
+      expect(notificationsService.deleteNotification).toHaveBeenNthCalledWith(
+        2,
+        userId,
+        '99999999-9999-4999-8999-999999999999',
+      );
+      expect(missingResponse.body).toEqual({
+        data: { message: 'Notification deleted.' },
+      });
+    },
+  );
 
   it('validates notification ids before delete reaches the service', async () => {
     const response = await request(getHttpServer(app))

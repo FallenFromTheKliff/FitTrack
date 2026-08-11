@@ -280,20 +280,12 @@ export class UserRepository extends BaseRepository {
       },
     });
 
-    return users.flatMap((user) => {
-      if (!user.profile) {
-        return [];
-      }
-
-      return [
-        {
-          user_id: user.id,
-          first_name: user.profile.first_name,
-          last_name: user.profile.last_name,
-          avatar_url: user.profile.avatar_url ?? null,
-        },
-      ];
-    });
+    return users.map((user) => ({
+      user_id: user.id,
+      first_name: user.profile?.first_name ?? '',
+      last_name: user.profile?.last_name ?? '',
+      avatar_url: user.profile?.avatar_url ?? null,
+    }));
   }
 
   async findGamificationNotificationTargetOrThrow(
@@ -413,6 +405,10 @@ export class UserRepository extends BaseRepository {
     userId: string,
     data: Prisma.UserProfileUpdateInput,
   ): Promise<UserProfile> {
+    if (Object.keys(data).length === 0) {
+      return this.findUserProfileByUserIdOrThrow(userId);
+    }
+
     return this.updateOneOrThrow<UserProfile>(
       this.prisma.userProfile,
       { user_id: userId },

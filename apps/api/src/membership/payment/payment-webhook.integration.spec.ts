@@ -45,6 +45,8 @@ describe('Payment webhook integration', () => {
     findPaymentByGatewayEventId: jest.fn(),
     findPaymentByProviderRefOrThrow: jest.fn(),
     updatePayment: jest.fn(),
+    completePaymongoMembershipCardPayment: jest.fn(),
+    failPaymongoMembershipCardPayment: jest.fn(),
     findPaymentByIdempotencyKey: jest.fn(),
   };
 
@@ -181,18 +183,21 @@ describe('Payment webhook integration', () => {
     paymongoWebhookService.parseAndVerify.mockReturnValue(event);
     paymentRepo.findPaymentByGatewayEventId.mockResolvedValue(null);
     paymentRepo.findPaymentByProviderRefOrThrow.mockResolvedValue(payment);
-    paymentRepo.updatePayment.mockResolvedValue({
-      ...payment,
-      status: 'completed',
-      gateway_event_id: event.data.id,
+    paymentRepo.completePaymongoMembershipCardPayment.mockResolvedValue({
+      payment: {
+        ...payment,
+        status: 'completed',
+        gateway_event_id: event.data.id,
+      },
+      transitioned: true,
+      membershipCardStateChanged: true,
     });
     membershipCardRepo.findMembershipCardWithUserProfileByIdOrThrow.mockResolvedValue(
-      createPendingMembershipCard(),
+      {
+        ...createPendingMembershipCard(),
+        status: 'active',
+      },
     );
-    membershipCardRepo.activateMembershipCard.mockResolvedValue({
-      ...createPendingMembershipCard(),
-      status: 'active',
-    });
 
     const result = await paymentService.handleWebhook(
       Buffer.from(JSON.stringify(event), 'utf8'),
@@ -204,14 +209,16 @@ describe('Payment webhook integration', () => {
     expect(paymentRepo.findPaymentByProviderRefOrThrow).toHaveBeenCalledWith(
       'cs_test_card_checkout',
     );
-    expect(membershipCardRepo.activateMembershipCard).toHaveBeenCalledWith(
-      'card-1',
+    expect(
+      paymentRepo.completePaymongoMembershipCardPayment,
+    ).toHaveBeenCalledWith(
+      payment.id,
       expect.objectContaining({
-        activatedAt: expect.any(Date),
-        verifiedAt: expect.any(Date),
-        verifiedBy: null,
+        gatewayEventId: event.data.id,
+        verifiedAt: expect.any(Date) as unknown as Date,
       }),
     );
+    expect(membershipCardRepo.activateMembershipCard).not.toHaveBeenCalled();
     expect(subscriptionRepo.activateSubscription).not.toHaveBeenCalled();
   });
 });

@@ -32,6 +32,8 @@ import {
   CoachSelfDetailResponseDTO,
   CoachSelfUserResponseDTO,
   CoachSelfUpdateProfileDTO,
+  CoachSpecialtyFilterDTO,
+  CoachSpecialtyResponseDTO,
   CoachUserProfileResponseDTO,
   UpdateCoachProfileDTO,
 } from './dto/coach.dto';
@@ -75,6 +77,7 @@ function paginatedEnvelopeSchema(itemSchemaRef: string) {
   CoachSelfUserResponseDTO,
   CoachUserProfileResponseDTO,
   CoachAvailabilitySlotResponseDTO,
+  CoachSpecialtyResponseDTO,
 )
 @Controller('coaching')
 export class CoachController {
@@ -91,6 +94,19 @@ export class CoachController {
   })
   listCoaches(@Query() dto: CoachFilterDTO) {
     return this.coachService.listCoaches(dto);
+  }
+
+  @Get('specialties')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Browse the searchable coach specialty catalog.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Coach specialties returned.',
+    schema: paginatedEnvelopeSchema(getSchemaPath(CoachSpecialtyResponseDTO)),
+  })
+  listSpecialties(@Query() dto: CoachSpecialtyFilterDTO) {
+    return this.coachService.listSpecialties(dto);
   }
 
   @Get('coaches/me')

@@ -1,0 +1,104 @@
+- generic [ref=e19]:
+  - generic [ref=e20]:
+    - img [ref=e22] [cursor=pointer]
+    - generic [ref=e23]:
+      - generic [ref=e24]: Nutrition
+      - generic [ref=e25]: Fuel your body right!
+    - generic [ref=e26]:
+      - button "Open page help" [ref=e27] [cursor=pointer]:
+        - img [ref=e28]
+      - button "Open notifications" [ref=e31] [cursor=pointer]:
+        - img [ref=e32]
+  - generic [ref=e41]:
+    - generic [ref=e44]:
+      - generic [ref=e45]:
+        - generic [ref=e46]:
+          - generic [ref=e47]: MAINTENANCE
+          - generic [ref=e48]: TODAY'S CALORIES
+        - img [ref=e50]
+      - generic [ref=e52]: "211"
+      - generic [ref=e53]: / 2365 kcal
+      - generic [ref=e56]: 2154 kcal remaining
+      - generic [ref=e57]:
+        - img [ref=e58]
+        - generic [ref=e63]: Use the FAB to update this target.
+    - generic [ref=e66]:
+      - generic [ref=e67]:
+        - generic [ref=e68]: Target Status
+        - generic [ref=e70]:
+          - generic [ref=e71]:
+            - generic:
+              - img [ref=e74]
+              - generic [ref=e78]:
+                - generic [ref=e79]:
+                  - generic [ref=e80]: Daily Target
+                  - generic [ref=e83]: In range
+                - generic [ref=e84]: 9% of today's target logged.
+          - generic [ref=e85]:
+            - generic:
+              - img [ref=e88]
+              - generic [ref=e90]:
+                - generic [ref=e91]:
+                  - generic [ref=e92]: Recent Adherence
+                  - generic [ref=e95]: 9% Below target
+                - generic [ref=e96]: 211 kcal logged against 2365 kcal today.
+          - generic [ref=e97]:
+            - generic:
+              - img [ref=e99]
+              - generic [ref=e104]:
+                - generic [ref=e105]:
+                  - generic [ref=e106]: Target History
+                  - generic [ref=e109]: +255 kcal
+                - generic [ref=e110]: Last calculated Aug 9, 2026. 2 saved calculations on record.
+      - generic [ref=e111]:
+        - generic [ref=e112]: Macro Breakdown
+        - generic [ref=e114]:
+          - 'generic "Protein: 12 grams of 104 grams. Below target, 12 percent of target." [ref=e115]':
+            - generic [ref=e116]:
+              - generic [ref=e118]: Protein
+              - generic [ref=e119]: 12g / 104g
+            - generic [ref=e122]: 92g remaining | Below target (12%)
+          - 'generic "Carbs: 25 grams of 339 grams. Below target, 7 percent of target." [ref=e123]':
+            - generic [ref=e124]:
+              - generic [ref=e126]: Carbs
+              - generic [ref=e127]: 25g / 339g
+            - generic [ref=e130]: 314g remaining | Below target (7%)
+          - 'generic "Fats: 7 grams of 66 grams. Below target, 11 percent of target." [ref=e131]':
+            - generic [ref=e132]:
+              - generic [ref=e134]: Fats
+              - generic [ref=e135]: 7g / 66g
+            - generic [ref=e138]: 59g remaining | Below target (11%)
+      - generic [ref=e139]:
+        - generic [ref=e140]:
+          - generic [ref=e141]: Today's Nutrition Log
+          - button "History" [ref=e144] [cursor=pointer]:
+            - img [ref=e145]
+            - generic [ref=e149]: History
+        - generic [ref=e150]:
+          - generic [ref=e152]:
+            - img [ref=e153]
+            - textbox "Search today's meals" [ref=e156]:
+              - /placeholder: Search today's meals...
+          - button "Snack - Runtime nutrition check updated, 211 kcal | P 12 C 25 F 7, 1 serving" [ref=e161] [cursor=pointer]:
+            - generic [ref=e163]:
+              - generic [ref=e164]:
+                - generic [ref=e165]: Snack - Runtime nutrition check updated
+                - generic [ref=e168]: 1 serving
+              - generic [ref=e169]: 211 kcal | P 12 C 25 F 7
+            - img [ref=e170]
+          - generic [ref=e172]:
+            - generic [ref=e173]:
+              - button "Previous" [disabled]:
+                - img [ref=e174]
+                - generic [ref=e176]: Previous
+            - generic [ref=e177]:
+              - button "Next" [disabled]:
+                - img [ref=e178]
+                - generic [ref=e180]: Next
+          - generic [ref=e181]:
+            - img [ref=e182]
+            - generic [ref=e184]: Use the FAB to log meals.
+  - button "Open quick actions menu" [ref=e186] [cursor=pointer]:
+    - generic [ref=e187]:
+      - img [ref=e189]
+      - img [ref=e191]

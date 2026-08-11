@@ -9,6 +9,7 @@ import {
 } from '@prisma/client';
 
 import { AiPythonClientService } from '../ai/ai-python-client.service';
+import { FilesService } from '../files/files.service';
 import { UserService } from '../user/user.service';
 import { NutritionRepository } from './nutrition.repository';
 import { NutritionService } from './nutrition.service';
@@ -37,6 +38,10 @@ describe('NutritionService', () => {
   const eventEmitter = {
     emit: jest.fn(),
   };
+  const filesService = {
+    assertUserOwnedRasterImage: jest.fn(),
+    isUserOwnedUploadKey: jest.fn().mockReturnValue(true),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -46,6 +51,7 @@ describe('NutritionService', () => {
         { provide: UserService, useValue: userService },
         { provide: AiPythonClientService, useValue: aiClient },
         { provide: EventEmitter2, useValue: eventEmitter },
+        { provide: FilesService, useValue: filesService },
       ],
     }).compile();
 
@@ -366,7 +372,145 @@ describe('NutritionService', () => {
       id: 'log-1',
       macro_target_id: 'macro-1',
       calories: '320.00',
+      icon: {
+        kind: 'library',
+        key: 'coffee',
+        asset_key: null,
+      },
     });
+  });
+
+  it('persists an allowlisted library icon and reads it back', async () => {
+    repo.findActiveMacroTarget.mockResolvedValue(null);
+    repo.createNutritionLog.mockResolvedValue({
+      id: 'log-icon',
+      user_id: 'user-1',
+      macro_target_id: null,
+      log_date: new Date('2026-03-27T00:00:00.000Z'),
+      meal_name: 'Lunch',
+      food_item: 'Salad',
+      icon_kind: 'library',
+      icon_key: 'salad',
+      icon_asset_key: null,
+      calories: new Prisma.Decimal('300'),
+      protein_g: new Prisma.Decimal('12'),
+      carbs_g: new Prisma.Decimal('40'),
+      fat_g: new Prisma.Decimal('8'),
+      quantity: new Prisma.Decimal('1'),
+      unit: NutritionUnit.serving,
+      created_at: new Date('2026-03-27T05:00:00.000Z'),
+      updated_at: new Date('2026-03-27T05:00:00.000Z'),
+    });
+
+    const result = await service.logNutrition('user-1', {
+      log_date: '2026-03-27',
+      meal_name: 'Lunch',
+      food_item: 'Salad',
+      calories: 300,
+      protein_g: 12,
+      carbs_g: 40,
+      fat_g: 8,
+      quantity: 1,
+      unit: NutritionUnit.serving,
+      icon: { kind: 'library', key: 'salad' },
+    });
+
+    expect(repo.createNutritionLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        icon_kind: 'library',
+        icon_key: 'salad',
+        icon_asset_key: null,
+      }),
+    );
+    expect(result.icon).toEqual({
+      kind: 'library',
+      key: 'salad',
+      asset_key: null,
+    });
+  });
+
+  it('updates a custom icon only after managed ownership and raster checks pass', async () => {
+    repo.updateNutritionLog.mockResolvedValue({
+      id: 'log-1',
+      user_id: 'user-1',
+      macro_target_id: null,
+      log_date: new Date('2026-03-27T00:00:00.000Z'),
+      meal_name: 'Dinner',
+      food_item: 'Steak',
+      icon_kind: 'custom',
+      icon_key: null,
+      icon_asset_key: 'uploads/user-1/2026/08/icon.png',
+      calories: new Prisma.Decimal('520'),
+      protein_g: new Prisma.Decimal('48'),
+      carbs_g: new Prisma.Decimal('12'),
+      fat_g: new Prisma.Decimal('24'),
+      quantity: new Prisma.Decimal('1'),
+      unit: NutritionUnit.serving,
+      created_at: new Date('2026-03-27T05:00:00.000Z'),
+      updated_at: new Date('2026-03-27T06:00:00.000Z'),
+    });
+
+    const result = await service.updateNutritionLog('user-1', 'log-1', {
+      icon: {
+        kind: 'custom',
+        asset_key: 'uploads/user-1/2026/08/icon.png',
+      },
+    });
+
+    expect(filesService.assertUserOwnedRasterImage).toHaveBeenCalledWith(
+      'uploads/user-1/2026/08/icon.png',
+      'user-1',
+    );
+    expect(repo.updateNutritionLog).toHaveBeenCalledWith(
+      'user-1',
+      'log-1',
+      expect.objectContaining({
+        icon_kind: 'custom',
+        icon_key: null,
+        icon_asset_key: 'uploads/user-1/2026/08/icon.png',
+      }),
+    );
+    expect(result.icon).toEqual({
+      kind: 'custom',
+      key: null,
+      asset_key: 'uploads/user-1/2026/08/icon.png',
+    });
+  });
+
+  it('rejects invalid library keys before persistence', async () => {
+    await expect(
+      service.logNutrition('user-1', {
+        log_date: '2026-03-27',
+        meal_name: 'Snack',
+        food_item: 'Bar',
+        calories: 100,
+        protein_g: 5,
+        carbs_g: 10,
+        fat_g: 2,
+        quantity: 1,
+        unit: NutritionUnit.serving,
+        icon: { kind: 'library', key: 'arbitrary-component' as never },
+      }),
+    ).rejects.toMatchObject({
+      response: { status: 400, title: 'Invalid Meal Icon' },
+    });
+    expect(repo.createNutritionLog).not.toHaveBeenCalled();
+  });
+
+  it('rejects cross-user custom assets before persistence', async () => {
+    filesService.assertUserOwnedRasterImage.mockRejectedValueOnce(
+      new Error('cross-user asset'),
+    );
+
+    await expect(
+      service.updateNutritionLog('user-1', 'log-1', {
+        icon: {
+          kind: 'custom',
+          asset_key: 'uploads/user-2/2026/08/icon.png',
+        },
+      }),
+    ).rejects.toThrow('cross-user asset');
+    expect(repo.updateNutritionLog).not.toHaveBeenCalled();
   });
 
   it('creates nutrition logs without a macro link when no active target exists', async () => {
@@ -452,8 +596,18 @@ describe('NutritionService', () => {
     const result = await service.getNutritionLogs('user-1', {
       start_date: '2026-03-01',
       end_date: '2026-03-31',
+      search: 'chicken',
+      meal_type: 'Lunch',
+      sort: 'oldest',
     });
 
+    expect(repo.listNutritionLogs).toHaveBeenCalledWith('user-1', {
+      start_date: '2026-03-01',
+      end_date: '2026-03-31',
+      search: 'chicken',
+      meal_type: 'Lunch',
+      sort: 'oldest',
+    });
     expect(result.meta.total).toBe(1);
     expect(result.data[0]).toMatchObject({
       id: 'log-1',
@@ -484,11 +638,13 @@ describe('NutritionService', () => {
     const result = await service.updateNutritionLog('user-1', 'log-1', {
       meal_name: 'Dinner',
       calories: 520,
+      log_date: '2026-03-28',
     });
 
     expect(repo.updateNutritionLog).toHaveBeenCalledWith('user-1', 'log-1', {
       meal_name: 'Dinner',
       calories: 520,
+      log_date: new Date('2026-03-28T00:00:00.000Z'),
     });
     expect(result).toMatchObject({
       id: 'log-1',

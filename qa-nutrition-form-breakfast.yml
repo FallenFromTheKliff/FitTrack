@@ -1,0 +1,192 @@
+- generic [ref=e1]:
+  - generic [ref=e19]:
+    - generic [ref=e20]:
+      - img [ref=e22] [cursor=pointer]
+      - generic [ref=e23]:
+        - generic [ref=e24]: Nutrition
+        - generic [ref=e25]: Fuel your body right!
+      - generic [ref=e26]:
+        - button "Open page help" [ref=e27] [cursor=pointer]:
+          - img [ref=e28]
+        - button "Open notifications" [ref=e31] [cursor=pointer]:
+          - img [ref=e32]
+    - generic [ref=e41]:
+      - generic [ref=e44]:
+        - generic [ref=e45]:
+          - generic [ref=e46]:
+            - generic [ref=e47]: MAINTENANCE
+            - generic [ref=e48]: TODAY'S CALORIES
+          - img [ref=e50]
+        - generic [ref=e52]: "0"
+        - generic [ref=e53]: / 2365 kcal
+        - generic [ref=e55]: 2365 kcal remaining
+        - generic [ref=e56]:
+          - img [ref=e57]
+          - generic [ref=e62]: Use the FAB to update this target.
+      - generic [ref=e65]:
+        - generic [ref=e66]:
+          - generic [ref=e67]: Target Status
+          - generic [ref=e69]:
+            - generic [ref=e70]:
+              - generic:
+                - img [ref=e73]
+                - generic [ref=e77]:
+                  - generic [ref=e78]:
+                    - generic [ref=e79]: Daily Target
+                    - generic [ref=e82]: In range
+                  - generic [ref=e83]: 0% of today's target logged.
+            - generic [ref=e84]:
+              - generic:
+                - img [ref=e87]
+                - generic [ref=e89]:
+                  - generic [ref=e90]:
+                    - generic [ref=e91]: Recent Adherence
+                    - generic [ref=e94]: 0% Below target
+                  - generic [ref=e95]: 0 kcal logged against 2365 kcal today.
+            - generic [ref=e96]:
+              - generic:
+                - img [ref=e98]
+                - generic [ref=e103]:
+                  - generic [ref=e104]:
+                    - generic [ref=e105]: Target History
+                    - generic [ref=e108]: +255 kcal
+                  - generic [ref=e109]: Last calculated Aug 9, 2026. 2 saved calculations on record.
+        - generic [ref=e110]:
+          - generic [ref=e111]: Macro Breakdown
+          - generic [ref=e113]:
+            - 'generic "Protein: 0 grams of 104 grams. Below target, 0 percent of target." [ref=e114]':
+              - generic [ref=e115]:
+                - generic [ref=e117]: Protein
+                - generic [ref=e118]: 0g / 104g
+              - generic [ref=e120]: 104g remaining | Below target (0%)
+            - 'generic "Carbs: 0 grams of 339 grams. Below target, 0 percent of target." [ref=e121]':
+              - generic [ref=e122]:
+                - generic [ref=e124]: Carbs
+                - generic [ref=e125]: 0g / 339g
+              - generic [ref=e127]: 339g remaining | Below target (0%)
+            - 'generic "Fats: 0 grams of 66 grams. Below target, 0 percent of target." [ref=e128]':
+              - generic [ref=e129]:
+                - generic [ref=e131]: Fats
+                - generic [ref=e132]: 0g / 66g
+              - generic [ref=e134]: 66g remaining | Below target (0%)
+        - generic [ref=e135]:
+          - generic [ref=e136]:
+            - generic [ref=e137]: Today's Nutrition Log
+            - button "History" [ref=e139] [cursor=pointer]:
+              - img [ref=e140]
+              - generic [ref=e144]: History
+          - generic [ref=e145]:
+            - generic [ref=e146]:
+              - img [ref=e147]
+              - generic [ref=e152]: Start tracking today
+              - generic [ref=e153]: Save your meals to compare today's intake against your live macro target.
+            - generic [ref=e154]:
+              - img [ref=e155]
+              - generic [ref=e157]: Use the FAB to log meals.
+    - button "Open quick actions menu" [ref=e350] [cursor=pointer]:
+      - generic [ref=e160]:
+        - img [ref=e162]
+        - img [ref=e164]
+  - dialog [ref=e625]:
+    - generic [ref=e355]:
+      - generic [ref=e356]:
+        - img [ref=e358]
+        - generic [ref=e359]:
+          - generic [ref=e360]: Log Meal
+          - generic [ref=e361]: Save today's nutrition to the live backend
+      - generic [ref=e362]:
+        - generic [ref=e364]:
+          - generic [ref=e365]:
+            - generic [ref=e366]: LOG DATE
+            - 'button "Log date: August 12, 2026" [ref=e447] [cursor=pointer]':
+              - img [ref=e448]
+              - generic [ref=e450]: August 12, 2026
+            - generic [ref=e451]: Choose the day this meal should count toward.
+          - generic [ref=e372]:
+            - generic [ref=e373]: MEAL TYPE
+            - 'button "Meal type: Breakfast" [active] [ref=e626] [cursor=pointer]':
+              - img [ref=e453]
+              - generic [ref=e458]: Breakfast
+              - img [ref=e459]
+            - generic [ref=e461]: Pick the meal bucket first so your saved log is easier to scan later.
+          - generic [ref=e462]:
+            - generic [ref=e463]: FOOD ITEM
+            - generic [ref=e464]:
+              - img [ref=e465]
+              - textbox "Food item" [ref=e470]:
+                - /placeholder: What did you eat? e.g. Chicken breast
+            - generic [ref=e471]: Use the actual food, brand, or recipe name you want to remember.
+          - generic [ref=e472]:
+            - generic [ref=e473]: MEAL ICON
+            - generic [ref=e474]:
+              - button "Use Apple meal icon" [ref=e475] [cursor=pointer]:
+                - generic "apple meal icon" [ref=e476]:
+                  - img [ref=e477]
+              - button "Use Beef meal icon" [ref=e480] [cursor=pointer]:
+                - generic "beef meal icon" [ref=e481]:
+                  - img [ref=e482]
+              - button "Use Coffee meal icon" [ref=e486] [cursor=pointer]:
+                - generic "coffee meal icon" [ref=e487]:
+                  - img [ref=e488]
+              - button "Use Cookie meal icon" [ref=e490] [cursor=pointer]:
+                - generic "cookie meal icon" [ref=e491]:
+                  - img [ref=e492]
+              - button "Use Dumbbell meal icon" [ref=e494] [cursor=pointer]:
+                - generic "dumbbell meal icon" [ref=e495]:
+                  - img [ref=e496]
+              - button "Use Milk meal icon" [ref=e502] [cursor=pointer]:
+                - generic "milk meal icon" [ref=e503]:
+                  - img [ref=e504]
+              - button "Use Salad meal icon" [ref=e507] [cursor=pointer]:
+                - generic "salad meal icon" [ref=e508]:
+                  - img [ref=e509]
+              - button "Use Sandwich meal icon" [ref=e514] [cursor=pointer]:
+                - generic "sandwich meal icon" [ref=e515]:
+                  - img [ref=e516]
+              - button "Use Utensils meal icon" [ref=e522] [cursor=pointer]:
+                - generic "utensils meal icon" [ref=e523]:
+                  - img [ref=e524]
+            - generic [ref=e529]:
+              - generic "utensils meal icon" [ref=e531]:
+                - img [ref=e532]
+              - button "Custom Illustration" [ref=e538] [cursor=pointer]:
+                - img [ref=e539]
+                - generic [ref=e543]: Custom Illustration
+            - generic [ref=e544]: Choose a FitTrack icon or upload a managed JPEG, PNG, or WebP illustration.
+          - generic [ref=e545]:
+            - generic [ref=e546]: MACROS
+            - generic [ref=e547]:
+              - generic [ref=e548]: Calories
+              - textbox "Calories" [ref=e550]:
+                - /placeholder: Calories for this meal, e.g. 420
+            - generic [ref=e551]:
+              - generic [ref=e552]: Protein (g)
+              - textbox "Protein (g)" [ref=e554]:
+                - /placeholder: Protein in grams, e.g. 32
+            - generic [ref=e555]:
+              - generic [ref=e556]: Carbs (g)
+              - textbox "Carbs (g)" [ref=e558]:
+                - /placeholder: Carbs in grams, e.g. 48
+            - generic [ref=e559]:
+              - generic [ref=e560]: Fat (g)
+              - textbox "Fat (g)" [ref=e562]:
+                - /placeholder: Fat in grams, e.g. 12
+          - generic [ref=e563]:
+            - generic [ref=e564]: PORTION
+            - textbox "Portion quantity" [ref=e566]:
+              - /placeholder: How much did you have? e.g. 1.5
+              - text: "1"
+            - generic [ref=e567]: Fractions work too, so 0.5 or 1.5 is fine.
+            - 'button "Portion unit: Serving" [ref=e569] [cursor=pointer]':
+              - img [ref=e570]
+              - generic [ref=e574]: Serving
+              - img [ref=e575]
+            - generic [ref=e577]: Pick the unit that matches how you measured the portion.
+        - button "Scroll modal to bottom" [ref=e429] [cursor=pointer]:
+          - img [ref=e430]
+      - generic [ref=e443]:
+        - button "Back" [ref=e578] [cursor=pointer]:
+          - generic [ref=e446]: Back
+        - button "Save Log" [ref=e579] [cursor=pointer]:
+          - img [ref=e580]
+          - generic [ref=e581]: Save Log

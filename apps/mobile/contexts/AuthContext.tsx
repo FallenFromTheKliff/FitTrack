@@ -9,6 +9,7 @@ import {
 } from "react";
 
 import type { AuthUser, LoginFailureReason } from "@fittrack/types";
+import { toApiClientError } from "@fittrack/api-client";
 import {
   createAuthController,
   resolveAccountStatus,
@@ -29,12 +30,26 @@ type RegisterInput = {
   phone?: string;
   password: string;
 };
+
+export type RegistrationProblem = {
+  status?: number;
+  type?: string;
+  remainingAttempts?: number;
+  retryAfterSeconds?: number;
+  lockedUntil?: string;
+};
+
+export type RegistrationOperationResult =
+  | { success: true }
+  | { success: false; error: string; problem?: RegistrationProblem };
+
+export type RegisterResult =
+  | { success: true; challengeId: string }
+  | { success: false; error: string; problem?: RegistrationProblem };
+
 type LoginResult =
   | { user: AuthUser; needsOTP: boolean }
   | { error: string; reason?: LoginFailureReason };
-type RegisterResult =
-  | { user: AuthUser }
-  | { error: string };
 type AuthContextType = {
   user: AuthUser | null;
   isAuthenticated: boolean;
@@ -45,11 +60,12 @@ type AuthContextType = {
   logout: () => Promise<void>;
   deleteUser: () => Promise<void>;
   updateUser: (patch: Partial<AuthUser>) => Promise<void>;
-  sendOTP: (destination: string) => Promise<{ success: boolean }>;
+  sendOTP: (destination: string) => Promise<RegistrationOperationResult>;
   verifyOTP: (
     code: string,
     options?: { persistSession?: boolean },
-  ) => Promise<{ success: boolean; error?: string }>;
+  ) => Promise<RegistrationOperationResult>;
+  clearRegistrationChallenge: () => void;
   verifyCurrentPassword: (password: string) => Promise<boolean>;
   changePassword: (
     currentPassword: string,
@@ -70,9 +86,50 @@ const MOBILE_ROLE_GATE = {
   deniedMessage: "This account can't access the mobile app.",
 };
 
+function getProblemRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function getProblemNumber(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function getProblemString(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function getRegistrationFailure(error: unknown, fallback: string) {
+  const apiError = toApiClientError(error, fallback);
+  const details = getProblemRecord(apiError.details);
+
+  return {
+    error: apiError.message,
+    problem: {
+      status: apiError.status ?? getProblemNumber(details, "status"),
+      type: getProblemString(details, "type"),
+      remainingAttempts: getProblemNumber(details, "remaining_attempts"),
+      retryAfterSeconds: getProblemNumber(details, "retry_after_seconds"),
+      lockedUntil: getProblemString(details, "locked_until"),
+    } satisfies RegistrationProblem,
+  };
+}
+
+function isTerminalRegistrationProblem(type?: string) {
+  return (
+    type === "REGISTRATION_CHALLENGE_EXPIRED" ||
+    type === "REGISTRATION_CHALLENGE_COMPLETED" ||
+    type === "REGISTRATION_UNAVAILABLE"
+  );
+}
+
 export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [registrationChallengeId, setRegistrationChallengeId] = useState<string | null>(null);
   const controller = useMemo(
     () =>
       createAuthController({
@@ -162,34 +219,43 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
 
   const register = useCallback(
     async (data: RegisterInput): Promise<RegisterResult> => {
+      setRegistrationChallengeId(null);
       try {
-        const res = await controller.register(
-          {
-            accepted_terms: data.acceptedTerms,
-            email: data.email,
-            first_name: data.firstName,
-            last_name: data.lastName,
-            legal_version: data.legalVersion,
-            password: data.password,
-            phone: data.phone || undefined,
-          },
-          { placeholderRole: "USER" },
-        );
-        if (!res.success || !res.user) {
-          return { error: res.error ?? "Could not create account." };
+        const response = await mobileApiClient.auth.register({
+          accepted_terms: data.acceptedTerms,
+          email: data.email,
+          first_name: data.firstName,
+          last_name: data.lastName,
+          legal_version: data.legalVersion,
+          password: data.password,
+          phone: data.phone || undefined,
+        });
+        const challengeId = response.user_id?.trim();
+        if (!challengeId) {
+          return {
+            success: false,
+            error: "Could not start registration verification.",
+          };
         }
-        return { user: res.user };
+        setRegistrationChallengeId(challengeId);
+        return { success: true, challengeId };
       } catch (error: unknown) {
+        const failure = getRegistrationFailure(
+          error,
+          "Could not create account. Please try again.",
+        );
         return {
-          error: toActionErrorMessage(
-            error,
-            "Could not create account. Please try again.",
-          ),
+          success: false,
+          ...failure,
         };
       }
     },
-    [controller],
+    [],
   );
+
+  const clearRegistrationChallenge = useCallback(() => {
+    setRegistrationChallengeId(null);
+  }, []);
 
   const logout = useCallback(async () => {
     await controller.logout();
@@ -232,15 +298,40 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
   }, [updateUser]);
 
   const sendOTP = useCallback(
-    async (_destination: string) => {
+    async (_destination: string): Promise<RegistrationOperationResult> => {
+      if (registrationChallengeId) {
+        try {
+          await mobileApiClient.auth.resendOtp({
+            user_id: registrationChallengeId,
+          });
+          return { success: true };
+        } catch (error: unknown) {
+          return {
+            success: false,
+            ...getRegistrationFailure(
+              error,
+              "Could not resend the verification code.",
+            ),
+          };
+        }
+      }
+
       try {
         const success = await controller.sendOTP();
-        return { success };
-      } catch {
-        return { success: false as const };
+        return success
+          ? { success: true }
+          : { success: false, error: "Could not resend the verification code." };
+      } catch (error: unknown) {
+        return {
+          success: false,
+          ...getRegistrationFailure(
+            error,
+            "Could not resend the verification code.",
+          ),
+        };
       }
     },
-    [controller],
+    [controller, registrationChallengeId],
   );
 
   const verifyCurrentPassword = useCallback(
@@ -274,21 +365,50 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
   );
 
   const verifyOTP = useCallback(
-    async (code: string, options?: { persistSession?: boolean }) => {
+    async (
+      code: string,
+      options?: { persistSession?: boolean },
+    ): Promise<RegistrationOperationResult> => {
+      if (registrationChallengeId) {
+        const challengeId = registrationChallengeId;
+        try {
+          await mobileApiClient.auth.verifyEmail({
+            user_id: challengeId,
+            code,
+          });
+          if (options?.persistSession === false) {
+            await mobileSessionStore.clearTokens();
+          }
+          setRegistrationChallengeId(null);
+          return { success: true };
+        } catch (error: unknown) {
+          const failure = getRegistrationFailure(error, "Invalid OTP.");
+          if (isTerminalRegistrationProblem(failure.problem.type)) {
+            setRegistrationChallengeId(null);
+          }
+          return {
+            success: false,
+            ...failure,
+          };
+        }
+      }
+
       try {
         const result = await controller.verifyOTP(code, options);
         if (!result.success && result.error === "No pending session.") {
-          return { success: false as const, error: "No pending email." };
+          return { success: false, error: "No pending email." };
         }
-        return result;
+        return result.success
+          ? { success: true }
+          : { success: false, error: result.error ?? "Invalid OTP." };
       } catch (error: unknown) {
         return {
-          success: false as const,
-          error: toActionErrorMessage(error, "Invalid OTP."),
+          success: false,
+          ...getRegistrationFailure(error, "Invalid OTP."),
         };
       }
     },
-    [controller],
+    [controller, registrationChallengeId],
   );
 
   return (
@@ -305,6 +425,7 @@ export function AuthProvider({ children, onUserLoaded, onUserCleared }: Props) {
         updateUser,
         sendOTP,
         verifyOTP,
+        clearRegistrationChallenge,
         verifyCurrentPassword,
         changePassword,
         acceptPrivacyPolicy,

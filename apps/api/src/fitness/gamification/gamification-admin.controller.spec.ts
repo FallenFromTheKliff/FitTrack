@@ -1,10 +1,13 @@
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { UserRole } from '@prisma/client';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
 
 import type { JwtPayload } from '../../auth/types/jwt-payload.type';
 import { ROLES_KEY } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { AdminManualExpGrantDTO } from './dto/gamification.dto';
 import { GamificationAdminController } from './gamification-admin.controller';
 
 function getGuardMetadata(): unknown[] | undefined {
@@ -28,6 +31,7 @@ describe('GamificationAdminController', () => {
     adminRestoreProgressionGrant: jest.fn(),
     adminApplyRankingOverride: jest.fn(),
     adminCreateIntegrityCase: jest.fn(),
+    adminCreateManualExpGrant: jest.fn(),
     adminResolveIntegrityCase: jest.fn(),
   };
 
@@ -95,6 +99,48 @@ describe('GamificationAdminController', () => {
         admin_notes: 'Monitor next two submissions.',
       },
     );
+  });
+
+  it('passes the multi-allocation grant and idempotency key to the service', async () => {
+    const user = { sub: 'admin-1' } as JwtPayload;
+    const dto = {
+      user_id: 'member-1',
+      rationale: 'Verified session.',
+      allocations: [
+        { muscle_group: 'chest', amount: 75 },
+        { muscle_group: 'triceps', amount: 40 },
+      ],
+    };
+    gamificationService.adminCreateManualExpGrant.mockResolvedValue({
+      grant_id: 'grant-1',
+    });
+
+    await controller.createManualExpGrant(
+      user,
+      dto,
+      '11111111-1111-4111-8111-111111111111',
+    );
+
+    expect(
+      gamificationService.adminCreateManualExpGrant,
+    ).toHaveBeenCalledWith(
+      'admin-1',
+      dto,
+      '11111111-1111-4111-8111-111111111111',
+    );
+  });
+
+  it.each([
+    ['no allocations', []],
+    ['a malformed amount', [{ muscle_group: 'chest', amount: 1.5 }]],
+  ])('rejects manual EXP payloads with %s', async (_label, allocations) => {
+    const dto = plainToInstance(AdminManualExpGrantDTO, {
+      user_id: '11111111-1111-4111-8111-111111111111',
+      rationale: 'Verified session.',
+      allocations,
+    });
+
+    await expect(validate(dto)).resolves.not.toHaveLength(0);
   });
 
   it('voids a progression grant through the service', async () => {

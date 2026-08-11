@@ -67,7 +67,7 @@ describe('NotificationsRepository', () => {
     findUnique: jest.Mock;
     update: jest.Mock;
     updateMany: jest.Mock;
-    delete: jest.Mock;
+    deleteMany: jest.Mock;
   };
 
   type NotificationPreferenceDelegateMock = {
@@ -82,7 +82,7 @@ describe('NotificationsRepository', () => {
     findUnique: jest.fn(),
     update: jest.fn(),
     updateMany: jest.fn(),
-    delete: jest.fn(),
+    deleteMany: jest.fn(),
   } satisfies NotificationDelegateMock;
 
   const notificationPreference = {
@@ -153,6 +153,28 @@ describe('NotificationsRepository', () => {
         read_at: null,
       },
     });
+  });
+
+  it('returns an empty page and zero unread count after dismissal or clear refresh', async () => {
+    notification.deleteMany.mockResolvedValue({ count: 1 });
+    notification.findMany.mockResolvedValue([]);
+    notification.count.mockResolvedValue(0);
+
+    await repo.deleteOwnedInAppNotification('user-1', 'notif-1');
+
+    await expect(
+      repo.listOwnedInAppNotifications('user-1', {
+        unread_only: false,
+        page: 1,
+        limit: 20,
+      }),
+    ).resolves.toEqual({
+      data: [],
+      meta: { page: 1, limit: 20, total: 0, total_pages: 0 },
+    });
+    await expect(
+      repo.countOwnedUnreadInAppNotifications('user-1'),
+    ).resolves.toBe(0);
   });
 
   it('counts unread owned in-app notifications', async () => {
@@ -378,18 +400,83 @@ describe('NotificationsRepository', () => {
     expect(updateManyArgs?.[0].data.read_at).toBeInstanceOf(Date);
   });
 
-  it('deletes only owned in-app notifications after the ownership check passes', async () => {
-    notification.findUnique.mockResolvedValue(createNotificationRecord());
-    notification.delete.mockResolvedValue({ id: 'notif-1' });
+  it('dismisses only the authenticated user in-app notification atomically', async () => {
+    notification.deleteMany.mockResolvedValue({ count: 1 });
 
-    await repo.deleteOwnedInAppNotification('user-1', 'notif-1');
+    await expect(
+      repo.deleteOwnedInAppNotification('user-1', 'notif-1'),
+    ).resolves.toBe(1);
 
-    expect(notification.findUnique).toHaveBeenCalledWith({
-      where: { id: 'notif-1' },
-      include: undefined,
+    expect(notification.deleteMany).toHaveBeenCalledWith({
+      where: {
+        id: 'notif-1',
+        user_id: 'user-1',
+        channel: NotificationChannel.in_app,
+      },
     });
-    expect(notification.delete).toHaveBeenCalledWith({
-      where: { id: 'notif-1' },
+  });
+
+  it('treats missing, already dismissed, and cross-user ids as safe no-ops', async () => {
+    notification.deleteMany.mockResolvedValue({ count: 0 });
+
+    await expect(
+      repo.deleteOwnedInAppNotification('user-1', 'missing-notif'),
+    ).resolves.toBe(0);
+    await expect(
+      repo.deleteOwnedInAppNotification('user-1', 'missing-notif'),
+    ).resolves.toBe(0);
+    await expect(
+      repo.deleteOwnedInAppNotification('user-2', 'notif-1'),
+    ).resolves.toBe(0);
+
+    expect(notification.deleteMany).toHaveBeenNthCalledWith(3, {
+      where: {
+        id: 'notif-1',
+        user_id: 'user-2',
+        channel: NotificationChannel.in_app,
+      },
+    });
+  });
+
+  it('clears the authenticated user inbox and returns the affected count', async () => {
+    notification.deleteMany.mockResolvedValue({ count: 3 });
+
+    await expect(repo.deleteAllOwnedInAppNotifications('user-1')).resolves.toBe(
+      3,
+    );
+
+    expect(notification.deleteMany).toHaveBeenCalledWith({
+      where: {
+        user_id: 'user-1',
+        channel: NotificationChannel.in_app,
+      },
+    });
+  });
+
+  it('keeps concurrent dismiss and clear operations as independent atomic counts', async () => {
+    notification.deleteMany
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 2 });
+
+    await expect(
+      Promise.all([
+        repo.deleteOwnedInAppNotification('user-1', 'notif-1'),
+        repo.deleteAllOwnedInAppNotifications('user-1'),
+      ]),
+    ).resolves.toEqual([1, 2]);
+
+    expect(notification.deleteMany).toHaveBeenNthCalledWith(1, {
+      where: {
+        id: 'notif-1',
+        user_id: 'user-1',
+        channel: NotificationChannel.in_app,
+      },
+    });
+    expect(notification.deleteMany).toHaveBeenNthCalledWith(2, {
+      where: {
+        user_id: 'user-1',
+        channel: NotificationChannel.in_app,
+      },
     });
   });
 

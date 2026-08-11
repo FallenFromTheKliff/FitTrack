@@ -9,7 +9,9 @@
     "lint": "eslint . --ext .ts,.tsx",
     "typecheck": "tsc --noEmit",
     "storybook": "storybook dev -p 6006 --no-open",
-    "storybook:build": "storybook build -o ../../.artifacts/storybook-static"
+    "storybook:build": "storybook build -o ../../.artifacts/storybook-static",
+    "registry:build": "node ../../scripts/build-fittrack-registry.mjs",
+    "registry:validate": "node ../../scripts/validate-fittrack-tooling.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

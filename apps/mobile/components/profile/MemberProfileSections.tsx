@@ -35,20 +35,13 @@ function getRankingPrivacyIcon(value: FitnessRankingVisibility) {
 
 export default function MemberProfileSections({ colors, controller, styles }: MemberProfileSectionsProps) {
   const canShowGamification = controller.hasMemberCardAccess;
-  const membershipCardActionSubtitle = controller.memberAccessLabel === "Pending verification"
-    ? "Your membership card request is already pending verification. QR attendance and member-only app features unlock as soon as staff confirms it."
-    : controller.memberAccessLabel === "Revoked"
+  const membershipCardActionSubtitle = controller.memberAccessLabel === "Revoked"
       ? "Your membership access is revoked. Ask the front desk to restore it; the one-time card payment stays on record and does not need to be paid again."
       : `Permanent ${controller.membershipCardPriceLabel} membership card. Buy once to unlock member-only app access.`;
-  const gamificationMessage = controller.memberAccessLabel === "Pending verification"
-    ? "Your membership card is waiting for verification. Fitness progress, badges, and achievement history unlock as soon as the card becomes active."
-    : `${controller.memberAccessSummary} Fitness progress, badges, and achievement history unlock once this account has an active membership card.`;
+  const gamificationMessage = `${controller.memberAccessSummary} Fitness progress, badges, and achievement history unlock once this account has an active membership card.`;
   const onlinePurchaseLabel = controller.isMembershipCardPurchasePending && controller.membershipCardPurchaseProvider === "paymongo"
     ? "Starting..."
     : "Pay Online";
-  const cashPurchaseLabel = controller.isMembershipCardPurchasePending && controller.membershipCardPurchaseProvider === "cash"
-    ? "Requesting..."
-    : "Pay in Cash";
 
   return (
     <>
@@ -118,7 +111,7 @@ export default function MemberProfileSections({ colors, controller, styles }: Me
             icon={Trophy}
             eyebrow="MEMBERSHIP CARD REQUIRED"
             statusLabel={controller.memberAccessLabel}
-            title={controller.memberAccessLabel === "Pending verification" ? "Membership card verification in progress" : "Stats, badges, and achievements stay locked"}
+            title="Stats, badges, and achievements stay locked"
             message={gamificationMessage}
           />
         </FitSection>
@@ -190,28 +183,21 @@ export default function MemberProfileSections({ colors, controller, styles }: Me
                   By continuing, you accept the active payment policy.{" "}
                   {FITTRACK_PAYMENT_POLICY_SUMMARY}
                 </FitText>
-                <View style={{ flexDirection: "row", gap: 10 }}>
-                  <FitButton
-                    label={onlinePurchaseLabel}
-                    variant="primary"
-                    onPress={() => controller.handlePurchaseMembershipCard("paymongo")}
-                    disabled={controller.isMembershipCardPurchasePending}
-                    flex={1}
-                  />
-                  <FitButton
-                    label={cashPurchaseLabel}
-                    variant="ghost"
-                    onPress={() => controller.handlePurchaseMembershipCard("cash")}
-                    disabled={controller.isMembershipCardPurchasePending}
-                    flex={1}
-                  />
-                </View>
+                <FitButton
+                  label={onlinePurchaseLabel}
+                  variant="primary"
+                  onPress={() => void controller.handlePurchaseMembershipCard()}
+                  disabled={controller.isMembershipCardPurchasePending}
+                />
+                <FitText style={{ fontSize: 12, lineHeight: 18, opacity: 0.78 }}>
+                  Prefer cash? Pay at the lobby. Staff or admin will grant membership access after payment; no in-app request is needed.
+                </FitText>
               </View>
             ) : (
               <FitText style={{ fontSize: 12, lineHeight: 18, opacity: 0.78, marginTop: 12 }}>
                 {controller.memberAccessLabel === "Revoked"
                   ? "This card was already purchased. Staff can restore membership access from the Account Module; no new payment is required."
-                  : "Member-card purchase actions stay paused while this account is already waiting for verification."}
+                  : "Membership-card checkout is unavailable for this account right now. Pay at the lobby if you prefer cash; staff or admin will grant access after payment."}
               </FitText>
             )}
           </>

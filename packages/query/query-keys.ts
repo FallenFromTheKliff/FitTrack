@@ -1,3 +1,4 @@
+import type { CoachSpecialtyListParams } from "@fittrack/api-client";
 import type { MemberDirectoryFilters } from "@fittrack/types";
 
 type BookingScope = "all" | "pending";
@@ -47,6 +48,7 @@ const adminKeys = {
       ? (["admin", "gamification", "muscle-standings", params] as const)
       : (["admin", "gamification", "muscle-standings"] as const),
   gamificationSeasonStandings: (params?: {
+    cursor?: string;
     governanceStatus?: string;
     includeArchived?: boolean;
     limit?: number;
@@ -54,6 +56,7 @@ const adminKeys = {
     page?: number;
     search?: string;
     seasonId?: string;
+    snapshot?: string;
     visibility?: string;
   }) =>
     params
@@ -205,6 +208,10 @@ const recurringCoachingPlanKeys = {
 const coachKeys = {
   list: (filters?: Record<string, unknown>) =>
     filters ? (["coaches", filters] as const) : (["coaches"] as const),
+  specialties: (params?: CoachSpecialtyListParams) =>
+    params
+      ? (["coach-specialties", params] as const)
+      : (["coach-specialties"] as const),
   detail: (coachId?: string) =>
     coachId
       ? (["coaches", coachId] as const)
@@ -244,8 +251,12 @@ const nutritionKeys = {
     userId?: string,
     params?: {
       endDate?: string;
+      infinite?: boolean;
       limit?: number;
+      mealType?: string;
       page?: number;
+      search?: string;
+      sort?: string;
       startDate?: string;
     },
   ) =>
@@ -458,7 +469,10 @@ const fitnessKeys = {
       : params
         ? (["fitness", "mastery", params] as const)
         : (["fitness", "mastery"] as const),
-  leaderboard: (userId?: string, params?: { limit?: number; page?: number }) =>
+  leaderboard: (
+    userId?: string,
+    params?: { cursor?: string; limit?: number; page?: number; snapshot?: string },
+  ) =>
     userId
       ? params
         ? (["fitness", "leaderboard", userId, params] as const)
@@ -474,6 +488,8 @@ const fitnessKeys = {
       page?: number;
       scope: string;
       seasonId?: string;
+      cursor?: string;
+      snapshot?: string;
     },
   ) =>
     userId
@@ -598,6 +614,7 @@ export const queryKeys = {
   notificationUnreadCount: notificationKeys.unreadCount,
   notificationPreferences: notificationKeys.preferences,
   coaches: coachKeys.list,
+  coachSpecialties: coachKeys.specialties,
   coachDetail: coachKeys.detail,
   coachSchedule: coachKeys.schedule,
   coachSelfProfile: coachKeys.selfProfile,

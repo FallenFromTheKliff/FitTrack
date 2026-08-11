@@ -11,19 +11,33 @@ import FitButton from "@/components/fit/FitButton";
 import FitModal from "@/components/modals/FitModal";
 
 const OTP_LEN = 6;
-const RESEND_SECS = 30;
+const RESEND_SECS = 60;
 
 type Props = {
   isOpen: boolean;
   onSuccess: () => void;
   onDismiss: () => void;
   email?: string;
+  neutralMessage?: string;
+  resendSeconds?: number;
   initialError?: string;
   onVerify?: (code: string) => Promise<{ success: boolean; error?: string }>;
   onResend?: () => Promise<void>;
+  onChangeEmail?: () => void;
 };
 
-export default function OTPModal({ isOpen, onSuccess, onDismiss, email, initialError = "", onVerify, onResend }: Props) {
+export default function OTPModal({
+  isOpen,
+  onSuccess,
+  onDismiss,
+  email,
+  neutralMessage,
+  resendSeconds,
+  initialError = "",
+  onVerify,
+  onResend,
+  onChangeEmail
+}: Props) {
   const { colors, onBrandTextColor } = useTheme();
   const { verifyOTP } = useAuth();
   const s = modalStyles(colors);
@@ -31,26 +45,41 @@ export default function OTPModal({ isOpen, onSuccess, onDismiss, email, initialE
   const [errorText, setErrorText] = useState("");
   const [verifying, setVerifying] = useState(false);
   const [verified, setVerified] = useState(false);
-  const [resendSecs, setResendSecs] = useState(RESEND_SECS);
+  const [localResendSecs, setLocalResendSecs] = useState(RESEND_SECS);
   const [resending, setResending] = useState(false);
   const refs = useRef<Array<HTMLInputElement | null>>([]);
   const verifyLabel = useLoadingText("VERIFYING", verifying);
+  const isResendControlled = resendSeconds !== undefined;
+  const effectiveResendSecs = resendSeconds ?? localResendSecs;
 
   useEffect(() => {
     if (!isOpen) {
       setDigits(Array(OTP_LEN).fill(""));
       setErrorText("");
       setVerified(false);
-      setResendSecs(RESEND_SECS);
+      setResending(false);
+      if (!isResendControlled) {
+        setLocalResendSecs(RESEND_SECS);
+      }
       return;
     }
     if (initialError) {
       setErrorText(initialError);
     }
-    const id = setInterval(() => setResendSecs((prev) => (prev > 0 ? prev - 1 : 0)), 1000);
-    setTimeout(() => refs.current[0]?.focus(), 80);
+    const focusTimeout = setTimeout(() => refs.current[0]?.focus(), 80);
+    return () => clearTimeout(focusTimeout);
+  }, [initialError, isOpen, isResendControlled]);
+
+  useEffect(() => {
+    if (!isOpen || isResendControlled) {
+      return;
+    }
+
+    const id = setInterval(() => {
+      setLocalResendSecs((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
     return () => clearInterval(id);
-  }, [isOpen, initialError]);
+  }, [isOpen, isResendControlled]);
 
   const handleChange = (val: string, i: number) => {
     const digit = val.replace(/\D/g, "").slice(-1);
@@ -94,14 +123,25 @@ export default function OTPModal({ isOpen, onSuccess, onDismiss, email, initialE
   };
 
   const handleResend = async () => {
-    if (resendSecs > 0 || resending) return;
+    if (effectiveResendSecs > 0 || resending) return;
     setResending(true);
     setDigits(Array(OTP_LEN).fill(""));
     setErrorText("");
-    if (onResend) await onResend();
-    setResendSecs(RESEND_SECS);
-    setResending(false);
-    refs.current[0]?.focus();
+    try {
+      await onResend?.();
+      if (!isResendControlled) {
+        setLocalResendSecs(RESEND_SECS);
+      }
+      refs.current[0]?.focus();
+    } catch (error: unknown) {
+      setErrorText(
+        error instanceof Error && error.message.trim() !== ""
+          ? error.message
+          : "Unable to resend code. Try again."
+      );
+    } finally {
+      setResending(false);
+    }
   };
 
   return (
@@ -127,9 +167,9 @@ export default function OTPModal({ isOpen, onSuccess, onDismiss, email, initialE
           }
       >
         <FitText as="p" style={s.otpInstruction}>
-          {email
+          {neutralMessage ?? (email
               ? `Enter the 6-digit code sent to ${maskAuthDestination(email)}.`
-              : "Enter the 6-digit code sent to your registered device."}
+              : "Enter the 6-digit code sent to your registered device.")}
         </FitText>
         <div style={s.otpRow}>
           {digits.map((d, i) => (
@@ -138,6 +178,7 @@ export default function OTPModal({ isOpen, onSuccess, onDismiss, email, initialE
                 ref={(el) => { refs.current[i] = el; }}
                 value={d}
                 maxLength={1}
+                aria-label={`Verification code digit ${i + 1}`}
                 onChange={(e) => handleChange(e.target.value, i)}
                 onKeyDown={(e) => handleKeyDown(e, i)}
                 style={s.otpBox(!!d)}
@@ -151,14 +192,26 @@ export default function OTPModal({ isOpen, onSuccess, onDismiss, email, initialE
         )}
         <div style={s.otpResendRow}>
           <FitText style={s.otpResendText}>Didn&apos;t receive it?</FitText>
-          {resendSecs > 0 ? (
-              <FitText style={s.otpResendText}>Resend in {resendSecs}s</FitText>
+          {effectiveResendSecs > 0 ? (
+              <FitText style={s.otpResendText}>Resend in {effectiveResendSecs}s</FitText>
           ) : (
               <FitButton variant="link" onClick={handleResend} disabled={resending} style={s.otpResendBtn}>
                 {resending ? "Sending..." : "Resend Code"}
               </FitButton>
           )}
         </div>
+        {onChangeEmail ? (
+          <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
+            <FitButton
+              variant="link"
+              onClick={onChangeEmail}
+              disabled={verifying || resending}
+              style={s.otpResendBtn}
+            >
+              Change email
+            </FitButton>
+          </div>
+        ) : null}
       </FitModal>
   );
 }

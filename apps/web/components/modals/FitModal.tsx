@@ -33,6 +33,143 @@ type Props = {
   motionPreset?: "slide-right" | "zoom";
 };
 
+type ModalBodyElementSnapshot = {
+  ariaHidden: string | null;
+  element: HTMLElement;
+  hadInert: boolean;
+};
+
+type ModalInteractionSnapshot = {
+  bodyOverflow: string;
+  bodyPointerEvents: string;
+  elements: Map<HTMLElement, ModalBodyElementSnapshot>;
+  previouslyFocused: HTMLElement | null;
+};
+
+type ModalLockEntry = {
+  overlay: HTMLElement | null;
+};
+
+let nextModalLockId = 0;
+const activeModalLocks = new Map<number, ModalLockEntry>();
+let modalInteractionSnapshot: ModalInteractionSnapshot | null = null;
+let modalRestoreFrame: number | null = null;
+
+const getModalBodyElements = () => Array.from(document.body.children).filter(
+  (element): element is HTMLElement =>
+    element instanceof HTMLElement && !["SCRIPT", "STYLE", "LINK"].includes(element.tagName),
+);
+
+const rememberModalBodyElements = (elements: HTMLElement[]) => {
+  if (!modalInteractionSnapshot) return;
+
+  elements.forEach((element) => {
+    if (modalInteractionSnapshot?.elements.has(element)) return;
+    modalInteractionSnapshot?.elements.set(element, {
+      ariaHidden: element.getAttribute("aria-hidden"),
+      element,
+      hadInert: element.hasAttribute("inert"),
+    });
+  });
+};
+
+const getTopModalOverlay = () => {
+  let topOverlay: HTMLElement | null = null;
+  activeModalLocks.forEach(({ overlay }) => {
+    topOverlay = overlay;
+  });
+  return topOverlay;
+};
+
+const applyModalInteractionLock = (activeOverlay: HTMLElement | null) => {
+  const elements = getModalBodyElements();
+  rememberModalBodyElements(elements.filter((element) => element !== activeOverlay));
+
+  document.body.style.overflow = "hidden";
+  document.body.style.pointerEvents = "auto";
+  elements.forEach((element) => {
+    if (element === activeOverlay) {
+      element.removeAttribute("aria-hidden");
+      element.removeAttribute("inert");
+      return;
+    }
+
+    element.setAttribute("aria-hidden", "true");
+    element.setAttribute("inert", "");
+  });
+};
+
+const restoreModalInteraction = () => {
+  const snapshot = modalInteractionSnapshot;
+  modalInteractionSnapshot = null;
+  if (!snapshot) return;
+
+  document.body.style.overflow = snapshot.bodyOverflow;
+  document.body.style.pointerEvents = snapshot.bodyPointerEvents;
+  snapshot.elements.forEach(({ ariaHidden, element, hadInert }) => {
+    if (ariaHidden === null) {
+      element.removeAttribute("aria-hidden");
+    } else {
+      element.setAttribute("aria-hidden", ariaHidden);
+    }
+
+    if (!hadInert) {
+      element.removeAttribute("inert");
+    }
+  });
+
+  if (snapshot.previouslyFocused?.isConnected) {
+    requestAnimationFrame(() => {
+      if (snapshot.previouslyFocused?.isConnected) {
+        snapshot.previouslyFocused.focus({ preventScroll: true });
+      }
+    });
+  }
+};
+
+export const acquireModalInteractionLock = (activeOverlay: HTMLElement | null) => {
+  if (modalRestoreFrame !== null) {
+    cancelAnimationFrame(modalRestoreFrame);
+    modalRestoreFrame = null;
+  }
+
+  if (activeModalLocks.size === 0 && !modalInteractionSnapshot) {
+    modalInteractionSnapshot = {
+      bodyOverflow: document.body.style.overflow,
+      bodyPointerEvents: document.body.style.pointerEvents,
+      elements: new Map(),
+      previouslyFocused:
+        document.activeElement instanceof HTMLElement ? document.activeElement : null,
+    };
+  }
+
+  const lockId = nextModalLockId++;
+  activeModalLocks.set(lockId, { overlay: activeOverlay });
+  applyModalInteractionLock(activeOverlay);
+
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    activeModalLocks.delete(lockId);
+
+    const topOverlay = getTopModalOverlay();
+    if (topOverlay) {
+      applyModalInteractionLock(topOverlay);
+      return;
+    }
+
+    modalRestoreFrame = requestAnimationFrame(() => {
+      modalRestoreFrame = null;
+      if (activeModalLocks.size > 0) {
+        applyModalInteractionLock(getTopModalOverlay());
+        return;
+      }
+      restoreModalInteraction();
+    });
+  };
+};
+
 export default function FitModal({
   isOpen,
   onClose,
@@ -65,7 +202,6 @@ export default function FitModal({
   const modalRef = useRef<HTMLDivElement | null>(null);
   const onCloseRef = useRef(onClose);
   const closeDisabledRef = useRef(closeDisabled);
-  const previousFocusRef = useRef<HTMLElement | null>(null);
   const titleId = useId();
   const subtitleId = useId();
   const Icon = icon ?? Info;
@@ -111,34 +247,11 @@ export default function FitModal({
   useEffect(() => {
     if (!isOpen || !portalRoot) return;
 
-    previousFocusRef.current =
-      document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : null;
-
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
     const activeOverlay =
       modalRef.current?.closest<HTMLElement>(
         '[data-fit-modal-overlay="true"]',
       ) ?? null;
-    const backgroundSnapshots = Array.from(document.body.children)
-      .filter(
-        (element): element is HTMLElement =>
-          element instanceof HTMLElement &&
-          element !== activeOverlay &&
-          !["SCRIPT", "STYLE", "LINK"].includes(element.tagName),
-      )
-      .map((element) => ({
-        ariaHidden: element.getAttribute("aria-hidden"),
-        element,
-        hadInert: element.hasAttribute("inert"),
-      }));
-
-    backgroundSnapshots.forEach(({ element }) => {
-      element.setAttribute("aria-hidden", "true");
-      element.setAttribute("inert", "");
-    });
+    const releaseModalInteractionLock = acquireModalInteractionLock(activeOverlay);
 
     const focusFrame = requestAnimationFrame(() => {
       modalRef.current?.focus({ preventScroll: true });
@@ -196,24 +309,7 @@ export default function FitModal({
     return () => {
       cancelAnimationFrame(focusFrame);
       document.removeEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = previousOverflow;
-      backgroundSnapshots.forEach(({ ariaHidden, element, hadInert }) => {
-        if (ariaHidden === null) {
-          element.removeAttribute("aria-hidden");
-        } else {
-          element.setAttribute("aria-hidden", ariaHidden);
-        }
-
-        if (!hadInert) {
-          element.removeAttribute("inert");
-        }
-      });
-      const previouslyFocused = previousFocusRef.current;
-      requestAnimationFrame(() => {
-        if (previouslyFocused?.isConnected) {
-          previouslyFocused.focus({ preventScroll: true });
-        }
-      });
+      releaseModalInteractionLock();
     };
   }, [isOpen, portalRoot]);
 

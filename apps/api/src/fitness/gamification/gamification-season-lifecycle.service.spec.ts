@@ -11,15 +11,42 @@ describe('GamificationSeasonLifecycleService', () => {
   };
   const lifecycleQueue = {
     add: jest.fn(),
+    getRepeatableJobs: jest.fn(),
+    removeRepeatableByKey: jest.fn(),
   };
 
   let service: GamificationSeasonLifecycleService;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    lifecycleQueue.getRepeatableJobs.mockResolvedValue([]);
     service = new GamificationSeasonLifecycleService(
       gamificationService as never,
       lifecycleQueue as never,
+    );
+  });
+
+  it('reuses the existing repeatable job and removes duplicate registrations', async () => {
+    lifecycleQueue.getRepeatableJobs.mockResolvedValue([
+      {
+        cron: '*/15 * * * *',
+        key: 'primary',
+        name: GAMIFICATION_SEASON_SWEEP_JOB,
+        tz: GAMIFICATION_SEASON_LIFECYCLE_TIMEZONE,
+      },
+      {
+        cron: '*/15 * * * *',
+        key: 'duplicate',
+        name: GAMIFICATION_SEASON_SWEEP_JOB,
+        tz: GAMIFICATION_SEASON_LIFECYCLE_TIMEZONE,
+      },
+    ]);
+
+    await service.onModuleInit();
+
+    expect(lifecycleQueue.add).not.toHaveBeenCalled();
+    expect(lifecycleQueue.removeRepeatableByKey).toHaveBeenCalledWith(
+      'duplicate',
     );
   });
 

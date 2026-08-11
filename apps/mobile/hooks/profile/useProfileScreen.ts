@@ -1,4 +1,4 @@
-import { Clipboard, Platform } from "react-native";
+import { Clipboard, Linking, Platform } from "react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useIsFocused } from "@react-navigation/native";
 import { useRouter } from "expo-router";
@@ -11,7 +11,6 @@ import type {
   CoachAvailabilityRecord,
   CoachProfileRecord,
   MembershipCardStatus,
-  MembershipPaymentProvider,
   MuscleMasteryRecord,
   FitnessRankingVisibility
 } from "@fittrack/types";
@@ -256,7 +255,7 @@ export function useProfileScreen() {
   const [availabilityTimeTarget, setAvailabilityTimeTarget] = useState<"start" | "end">("start");
   const [membershipPaymentConfirmation, setMembershipPaymentConfirmation] =
     useState<MembershipPaymentConfirmation | null>(null);
-  const [membershipCardPurchaseProvider, setMembershipCardPurchaseProvider] = useState<MembershipPaymentProvider | null>(null);
+  const [membershipCardPurchaseProvider, setMembershipCardPurchaseProvider] = useState<"paymongo" | null>(null);
   const [rankingPrivacyTarget, setRankingPrivacyTarget] = useState<FitnessRankingVisibility | null>(null);
 
   useEffect(() => {
@@ -329,16 +328,12 @@ export function useProfileScreen() {
     ? `Member since ${new Date(user.memberSince).toLocaleDateString("en-US", { month: "short", year: "numeric" })}`
     : "";
   const canPurchaseMembershipCard = isMember && membershipCardStatus === "none";
-  const memberAccessLabel = membershipCardStatus === "pending_verification"
-    ? "Pending verification"
-    : membershipCardStatus === "revoked"
+  const memberAccessLabel = membershipCardStatus === "revoked"
       ? "Revoked"
       : hasMemberCardAccess
         ? "Member"
         : "Non-member";
-  const memberAccessColor = membershipCardStatus === "pending_verification"
-    ? colors.warning
-    : membershipCardStatus === "revoked"
+  const memberAccessColor = membershipCardStatus === "revoked"
       ? colors.danger
       : hasMemberCardAccess
         ? colors.success
@@ -347,8 +342,6 @@ export function useProfileScreen() {
     switch (membershipCardStatus as MembershipCardStatus) {
       case "active":
         return "Your membership card is active. Member-only app features are unlocked on this account.";
-      case "pending_verification":
-        return "Your membership card payment is waiting for verification. Member-only app features unlock as soon as staff confirms it.";
       case "revoked":
         return "Your membership card access is currently revoked. Ask the front desk to restore access; your one-time card payment stays on record.";
       default:
@@ -359,27 +352,21 @@ export function useProfileScreen() {
   const attendanceQrReady = user?.attendanceQrReady ?? false;
   const qrCodeStatusLabel = attendanceQrReady
     ? "Ready"
-    : membershipCardStatus === "pending_verification"
-      ? "Pending"
-      : membershipCardStatus === "revoked" || hasQrCodeToken
+    : membershipCardStatus === "revoked" || hasQrCodeToken
         ? "Locked"
         : hasMemberCardAccess
           ? "Preparing"
           : "Unavailable";
   const qrCodeStatusColor = attendanceQrReady
     ? colors.success
-    : membershipCardStatus === "pending_verification"
-      ? colors.warning
-      : membershipCardStatus === "revoked" || hasQrCodeToken
+    : membershipCardStatus === "revoked" || hasQrCodeToken
         ? colors.warning
         : hasMemberCardAccess
           ? colors.brand
           : colors.textMuted;
   const qrCodeSubtitle = attendanceQrReady
     ? "Open your rotating attendance QR for front-desk check-ins."
-    : membershipCardStatus === "pending_verification"
-      ? "Your member card is pending verification. Attendance scans unlock as soon as the card becomes active."
-      : membershipCardStatus === "revoked"
+    : membershipCardStatus === "revoked"
         ? "Your membership card is revoked, so attendance QR access is locked."
         : hasMemberCardAccess
           ? "Your member card is active. Open the modal to load the live rotating QR."
@@ -623,34 +610,34 @@ export function useProfileScreen() {
     }
   }, [attendanceQrQuery.data?.qrValue, attendanceQrQuery.data?.reason, showMessage]);
 
-  const handlePurchaseMembershipCard = useCallback(async (provider: MembershipPaymentProvider) => {
+  const handlePurchaseMembershipCard = useCallback(async () => {
     if (!user?.id || !isMember || purchaseMembershipCardMutation.isPending) return;
 
-    setMembershipCardPurchaseProvider(provider);
+    setMembershipCardPurchaseProvider("paymongo");
 
     try {
       const result = await purchaseMembershipCardMutation.mutateAsync({
-        payload: { provider },
+        payload: { provider: "paymongo" },
         userId: user.id
       });
+      const checkoutUrl = result.checkoutUrl?.trim();
+      if (!checkoutUrl) {
+        throw new Error("PayMongo did not return a checkout link. No membership access was granted.");
+      }
 
+      await Linking.openURL(checkoutUrl);
       await refreshAuthUserFromProfile();
-      showMessage(result.message);
+      showMessage("PayMongo checkout opened.");
 
       setMembershipPaymentConfirmation({
-        title: provider === "paymongo" ? "Payment confirmed" : "Cash payment submitted",
-        message:
-          provider === "paymongo"
-            ? `Testing payment for the ${membershipCardPriceLabel} membership card was confirmed in FitTrack. Stay on Profile while front desk verification updates the member-card status.`
-            : "Your cash membership-card request was recorded for front desk verification. Stay on Profile to track the member-card status.",
+        title: "Checkout opened",
+        message: `Complete the ${membershipCardPriceLabel} payment in PayMongo. FitTrack grants membership access only after the backend confirms a successful payment; a failed or abandoned checkout keeps this account non-member.`,
       });
     } catch (error: unknown) {
       showMessage(
         error instanceof Error
           ? error.message
-          : provider === "cash"
-            ? "Unable to request cash verification for the membership card."
-            : "Unable to confirm the membership-card payment."
+          : "Unable to open PayMongo checkout. No membership access was granted."
       );
     } finally {
       if (isMounted.current) {
@@ -659,10 +646,10 @@ export function useProfileScreen() {
     }
   }, [
     isMember,
+    membershipCardPriceLabel,
     purchaseMembershipCardMutation,
     refreshAuthUserFromProfile,
     showMessage,
-    membershipCardPriceLabel,
     user?.id
   ]);
 

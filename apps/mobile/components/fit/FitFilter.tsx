@@ -20,6 +20,7 @@ type Props = {
   onTopChipChange?: (value: string) => void;
   topChipLabel?: string;
   chipOptions?: FitFilterChipOption[];
+  chipLabel?: string;
   activeChip?: string;
   onChipChange?: (value: string) => void;
   showDateRange?: boolean;
@@ -41,6 +42,7 @@ export default function FitFilter({
   onTopChipChange,
   topChipLabel = "View",
   chipOptions,
+  chipLabel = "Status",
   activeChip,
   onChipChange,
   showDateRange = false,
@@ -129,7 +131,7 @@ export default function FitFilter({
           )}
           {!!chipOptions?.length && (
             <View style={s.filterSection}>
-              <FitText style={s.filterLabel}>Status</FitText>
+              <FitText style={s.filterLabel}>{chipLabel}</FitText>
               <View style={s.filterOptions}>
                 {chipOptions.map((opt) => {
                   const isActive = activeChip === opt.value;

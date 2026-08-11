@@ -1,9 +1,10 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { useLoadingText, useTimedMessage } from "@fittrack/hooks";
+import { maskAuthDestination } from "@fittrack/utils";
 import {
   forgotPasswordMutationOptions,
   resetPasswordMutationOptions,
@@ -16,6 +17,7 @@ import type { ForgotPasswordStep } from "@/data/auth/auth";
 import type { FieldConfig } from "@/components/modals/DetailsModal";
 
 import { FitText } from "@/components/fit/FitText";
+import ConfirmModal from "@/components/modals/ConfirmModal";
 import DetailsModal from "@/components/modals/DetailsModal";
 import OTPModal from "@/components/modals/OTPModal";
 import PasswordRequirements from "@/components/requirements/PasswordRequirements";
@@ -31,6 +33,50 @@ function extractErrorMessage(error: unknown, fallback: string) {
 }
 
 const SAME_PASSWORD_MESSAGE = "Cannot change password to current password.";
+const RESET_REQUEST_MESSAGE = "If an account matches, we'll send a verification code there.";
+const RESET_REQUEST_COOLDOWN_MS = 60_000;
+const RESET_REQUEST_COOLDOWN_STORAGE_KEY = "fittrack:forgot-password:resend-deadline";
+
+function readResetRequestDeadline() {
+  if (typeof window === "undefined") {
+    return 0;
+  }
+
+  try {
+    const deadline = Number(window.sessionStorage.getItem(RESET_REQUEST_COOLDOWN_STORAGE_KEY));
+    if (!Number.isFinite(deadline) || deadline <= Date.now()) {
+      window.sessionStorage.removeItem(RESET_REQUEST_COOLDOWN_STORAGE_KEY);
+      return 0;
+    }
+    return deadline;
+  } catch {
+    return 0;
+  }
+}
+
+function persistResetRequestDeadline(deadline: number) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.sessionStorage.setItem(RESET_REQUEST_COOLDOWN_STORAGE_KEY, String(deadline));
+  } catch {
+    // Session storage can be unavailable in restricted browser contexts.
+  }
+}
+
+function clearResetRequestDeadline() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.sessionStorage.removeItem(RESET_REQUEST_COOLDOWN_STORAGE_KEY);
+  } catch {
+    // Session storage can be unavailable in restricted browser contexts.
+  }
+}
 
 function shouldBounceBackToOtp(error: unknown) {
   const message = extractErrorMessage(error, "");
@@ -60,6 +106,11 @@ export default function ForgotPasswordModal({ isOpen, onClose, portal }: Props) 
   const [passwordValid, setPasswordValid] = useState(false);
   const [errorText, setErrorText] = useState("");
   const [successText, setSuccessText] = useState("");
+  const [resendAvailableAt, setResendAvailableAt] = useState(0);
+  const [resendSeconds, setResendSeconds] = useState(0);
+  const [isSendConfirmationOpen, setIsSendConfirmationOpen] = useState(false);
+  const [confirmationEmail, setConfirmationEmail] = useState("");
+  const sendInFlightRef = useRef(false);
   const forgotPasswordMutation = useMutation(forgotPasswordMutationOptions(webApiClient));
   const verifyResetOtpMutation = useMutation(verifyResetOtpMutationOptions(webApiClient));
   const resetPasswordMutation = useMutation(resetPasswordMutationOptions(webApiClient));
@@ -70,6 +121,12 @@ export default function ForgotPasswordModal({ isOpen, onClose, portal }: Props) 
 
   const sendingLabel = useLoadingText("SENDING CODE", forgotPasswordMutation.isPending);
   const resettingLabel = useLoadingText("RESETTING PASSWORD", resetPasswordMutation.isPending);
+
+  const startResendCooldown = useCallback(() => {
+    const deadline = Date.now() + RESET_REQUEST_COOLDOWN_MS;
+    persistResetRequestDeadline(deadline);
+    setResendAvailableAt(deadline);
+  }, []);
 
   const emailFields = useMemo<FieldConfig[]>(() => [
     {
@@ -99,6 +156,8 @@ export default function ForgotPasswordModal({ isOpen, onClose, portal }: Props) 
     setPasswordValid(false);
     setErrorText("");
     setSuccessText("");
+    setIsSendConfirmationOpen(false);
+    setConfirmationEmail("");
   }, []);
 
   useEffect(() => {
@@ -107,30 +166,111 @@ export default function ForgotPasswordModal({ isOpen, onClose, portal }: Props) 
     }
   }, [isOpen, resetState]);
 
+  useEffect(() => {
+    setResendAvailableAt(readResetRequestDeadline());
+  }, []);
+
+  useEffect(() => {
+    if (!resendAvailableAt) {
+      setResendSeconds(0);
+      return;
+    }
+
+    const updateRemaining = () => {
+      const remaining = Math.max(0, Math.ceil((resendAvailableAt - Date.now()) / 1000));
+      setResendSeconds(remaining);
+      if (remaining === 0) {
+        clearResetRequestDeadline();
+        setResendAvailableAt(0);
+      }
+    };
+
+    updateRemaining();
+    const id = setInterval(updateRemaining, 1000);
+    return () => clearInterval(id);
+  }, [resendAvailableAt]);
+
   const closeModal = () => {
-    if (isSubmitting) {
+    const isInitialRequestPending = step === "email" && (
+      forgotPasswordMutation.isPending || sendInFlightRef.current
+    );
+    if (verifyResetOtpMutation.isPending || resetPasswordMutation.isPending || isInitialRequestPending) {
       return;
     }
     resetState();
     onClose();
   };
 
-  const sendCode = async (data: Record<string, string>) => {
-    if (isSubmitting) {
+  const sendCode = (data: Record<string, string>) => {
+    if (isSubmitting || isSendConfirmationOpen || sendInFlightRef.current) {
+      return;
+    }
+    if (resendSeconds > 0) {
+      setErrorText(`Please wait ${resendSeconds}s before requesting another OTP.`);
       return;
     }
     setErrorText("");
     setSuccessText("");
+    const nextEmail = data.email?.trim() ?? "";
+    if (!nextEmail) {
+      return;
+    }
+    setEmail(nextEmail);
+    setConfirmationEmail(nextEmail);
+    setIsSendConfirmationOpen(true);
+  };
+
+  const cancelSendConfirmation = () => {
+    if (isSubmitting || sendInFlightRef.current) {
+      return;
+    }
+    setIsSendConfirmationOpen(false);
+    setConfirmationEmail("");
+  };
+
+  const confirmSendCode = async () => {
+    const requestedEmail = confirmationEmail.trim();
+    if (!requestedEmail || isSubmitting || sendInFlightRef.current) {
+      return;
+    }
+
+    sendInFlightRef.current = true;
     try {
       await forgotPasswordMutation.mutateAsync({
-        email: data.email?.trim() ?? "",
+        email: requestedEmail,
         portal
       });
-      setEmail(data.email?.trim() ?? "");
-      showMessage("Verification code sent.");
+      startResendCooldown();
+      setEmail(requestedEmail);
+      setConfirmationEmail("");
+      setIsSendConfirmationOpen(false);
+      showMessage(RESET_REQUEST_MESSAGE);
       setStep("otp");
-    } catch (error: unknown) {
-      setErrorText(extractErrorMessage(error, "Unable to send verification code."));
+    } catch {
+      setIsSendConfirmationOpen(false);
+      setConfirmationEmail("");
+      setErrorText("Unable to start account recovery. Please try again.");
+    } finally {
+      sendInFlightRef.current = false;
+    }
+  };
+
+  const resendCode = async () => {
+    if (resendSeconds > 0 || forgotPasswordMutation.isPending || sendInFlightRef.current) {
+      return;
+    }
+    sendInFlightRef.current = true;
+    try {
+      await forgotPasswordMutation.mutateAsync({
+        email,
+        portal
+      });
+      startResendCooldown();
+      showMessage(RESET_REQUEST_MESSAGE);
+    } catch {
+      throw new Error("Unable to resend code. Try again.");
+    } finally {
+      sendInFlightRef.current = false;
     }
   };
 
@@ -203,15 +343,26 @@ export default function ForgotPasswordModal({ isOpen, onClose, portal }: Props) 
       <DetailsModal
         isOpen={isOpen && step === "email"}
         title="Forgot Password"
-        subtitle="Enter your account email and we will send a verification code."
+        subtitle="Enter your email. We'll send a verification code if an account matches."
         fields={emailFields}
         initialValues={{ email }}
         onSubmit={sendCode}
         onCancel={closeModal}
-        submitLabel={forgotPasswordMutation.isPending ? sendingLabel : "SEND CODE"}
+        submitLabel={
+          resendSeconds > 0
+            ? `WAIT ${resendSeconds}S`
+            : forgotPasswordMutation.isPending
+              ? sendingLabel
+              : "SEND CODE"
+        }
         isLoading={isSubmitting}
+        submitDisabled={resendSeconds > 0}
       >
-        {errorText ? (
+        {resendSeconds > 0 ? (
+          <FitText style={s.hintText}>
+            Please wait {resendSeconds}s before requesting another OTP.
+          </FitText>
+        ) : errorText ? (
           <FitText style={s.errorText}>{errorText}</FitText>
         ) : message ? (
           <FitText style={s.hintText}>{message}</FitText>
@@ -220,12 +371,20 @@ export default function ForgotPasswordModal({ isOpen, onClose, portal }: Props) 
       <OTPModal
         isOpen={isOpen && step === "otp"}
         email={email}
+        resendSeconds={resendSeconds}
         initialError={step === "otp" ? errorText : ""}
         onVerify={captureOtp}
+        onResend={resendCode}
         onSuccess={() => {
           setStep("password");
           setErrorText("");
           setSuccessText("");
+        }}
+        onChangeEmail={() => {
+          setErrorText("");
+          setCode("");
+          setConfirmationEmail("");
+          setStep("email");
         }}
         onDismiss={closeModal}
       />
@@ -253,6 +412,18 @@ export default function ForgotPasswordModal({ isOpen, onClose, portal }: Props) 
           <FitText style={s.hintText}>{message}</FitText>
         ) : null}
       </DetailsModal>
+      <ConfirmModal
+        isOpen={isOpen && isSendConfirmationOpen}
+        title="Send verification code?"
+        message={`We'll send a verification code to ${maskAuthDestination(confirmationEmail)} if an account matches.`}
+        onConfirm={() => void confirmSendCode()}
+        onCancel={cancelSendConfirmation}
+        cancelLabel="Cancel"
+        confirmLabel={forgotPasswordMutation.isPending ? sendingLabel : "Confirm"}
+        loadingLabel="Sending code"
+        loadingTitle="Sending verification code"
+        isLoading={forgotPasswordMutation.isPending}
+      />
     </>
   );
 }

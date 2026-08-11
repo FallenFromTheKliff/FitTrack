@@ -498,6 +498,17 @@ export function adminMilestonesQueryOptions(
   });
 }
 
+async function invalidateMilestoneDefinitionQueries(queryClient: QueryClient) {
+  await Promise.all([
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.fitnessAdminMilestones(),
+    }),
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.fitnessMilestones(),
+    }),
+  ]);
+}
+
 export function adminMilestoneEvidenceQueryOptions(
   client: Pick<ApiClient, "fitness">,
   params?: AdminMilestoneEvidenceListParams,
@@ -524,11 +535,7 @@ export function createAdminMilestoneMutationOptions(
   return mutationOptions({
     mutationFn: (payload: UpsertAdminMilestoneDefinitionInput) =>
       client.fitness.createAdminMilestone(payload),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.fitnessAdminMilestones(),
-      });
-    },
+    onSuccess: () => invalidateMilestoneDefinitionQueries(queryClient),
   });
 }
 
@@ -544,11 +551,7 @@ export function updateAdminMilestoneMutationOptions(
       milestoneDefinitionId: string;
       payload: UpsertAdminMilestoneDefinitionInput;
     }) => client.fitness.updateAdminMilestone(milestoneDefinitionId, payload),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.fitnessAdminMilestones(),
-      });
-    },
+    onSuccess: () => invalidateMilestoneDefinitionQueries(queryClient),
   });
 }
 
@@ -559,11 +562,7 @@ export function archiveAdminMilestoneMutationOptions(
   return mutationOptions({
     mutationFn: (milestoneDefinitionId: string) =>
       client.fitness.archiveAdminMilestone(milestoneDefinitionId),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.fitnessAdminMilestones(),
-      });
-    },
+    onSuccess: () => invalidateMilestoneDefinitionQueries(queryClient),
   });
 }
 
@@ -574,11 +573,7 @@ export function restoreAdminMilestoneMutationOptions(
   return mutationOptions({
     mutationFn: (milestoneDefinitionId: string) =>
       client.fitness.restoreAdminMilestone(milestoneDefinitionId),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.fitnessAdminMilestones(),
-      });
-    },
+    onSuccess: () => invalidateMilestoneDefinitionQueries(queryClient),
   });
 }
 

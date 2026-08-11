@@ -1,0 +1,30 @@
+- generic [ref=e22]:
+  - generic [ref=e23]:
+    - img [ref=e25]
+    - generic [ref=e31]:
+      - generic [ref=e32]: FitTrack
+      - generic [ref=e33]: SertFit Gym Member Portal
+  - generic [ref=e34]:
+    - generic [ref=e35]:
+      - generic [ref=e36]:
+        - generic [ref=e37]:
+          - generic [ref=e39]: Email
+          - generic [ref=e40]:
+            - img [ref=e41]
+            - textbox "Email" [ref=e44]:
+              - /placeholder: your.email@example.com
+        - generic [ref=e46]:
+          - generic [ref=e48]: Password
+          - generic [ref=e49]:
+            - img [ref=e50]
+            - textbox "Password" [ref=e53]:
+              - /placeholder: "********"
+            - button "Show password" [ref=e54] [cursor=pointer]:
+              - img [ref=e55]
+        - button "Forgot Password?" [ref=e59] [cursor=pointer]
+      - button "Sign In" [ref=e60] [cursor=pointer]:
+        - generic [ref=e61]: Sign In
+    - generic [ref=e64]: New to SertFit?
+    - button "Create Account" [ref=e67] [cursor=pointer]:
+      - generic [ref=e68]: Create Account
+    - generic [ref=e69]: (c) 2026 SertFit Gym. All rights reserved.

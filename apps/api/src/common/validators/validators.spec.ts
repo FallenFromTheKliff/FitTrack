@@ -4,6 +4,7 @@ import {
   IsAllowedEmail,
   IsOnOrAfter,
   IsOtpCode,
+  IsPersonName,
   IsPhilippineMobileNumber,
   IsStrongPasswordField,
 } from './index';
@@ -26,6 +27,11 @@ class OtpCodeTestDto {
 class PhoneTestDto {
   @IsPhilippineMobileNumber('phone')
   phone!: string;
+}
+
+class PersonNameTestDto {
+  @IsPersonName('name')
+  name!: string;
 }
 
 class DateRangeTestDto {
@@ -92,6 +98,26 @@ describe('shared validators', () => {
     expect(await validate(valid)).toHaveLength(0);
     expect(extractMessages(await validate(invalid))).toContain(
       'phone must be a valid Philippine mobile number in +639XXXXXXXXX format',
+    );
+  });
+
+  it('allows Unicode letter names but rejects digits and symbols', async () => {
+    const unicodeName = plainToInstance(PersonNameTestDto, {
+      name: 'Élodie 张三',
+    });
+    const digitName = plainToInstance(PersonNameTestDto, {
+      name: 'Maria2',
+    });
+    const symbolName = plainToInstance(PersonNameTestDto, {
+      name: "O'Neil",
+    });
+
+    expect(await validate(unicodeName)).toHaveLength(0);
+    expect(extractMessages(await validate(digitName))).toContain(
+      'name may contain only Unicode letters and spaces',
+    );
+    expect(extractMessages(await validate(symbolName))).toContain(
+      'name may contain only Unicode letters and spaces',
     );
   });
 

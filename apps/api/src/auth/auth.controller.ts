@@ -121,9 +121,12 @@ export class AuthController {
 
   @Post('register')
   @Throttle({ default: { limit: 5, ttl: 60 } })
-  @ApiOperation({ summary: 'Self-register a member account. Sends email OTP.' })
-  @ApiResponse({ status: 201, description: '{ user_id }' })
-  @ApiResponse({ status: 409, description: 'Email already registered.' })
+  @ApiOperation({
+    summary:
+      'Start self-registration. Stores an expiring server-side challenge and sends email OTP.',
+  })
+  @ApiResponse({ status: 201, description: '{ user_id: challenge_id }' })
+  @ApiResponse({ status: 423, description: 'Registration identity is locked.' })
   register(@Body() dto: RegisterDTO) {
     return this.authService.register(dto);
   }
@@ -131,7 +134,8 @@ export class AuthController {
   @Post('verify-email')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Submit OTP → activate account → return token pair.',
+    summary:
+      'Submit registration OTP → atomically create or activate the account → return token pair.',
   })
   @ApiResponse({
     status: 200,
@@ -357,8 +361,10 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: { limit: 3, ttl: 60 } })
   @ApiOperation({
-    summary: 'Resend registration OTP. Always 200 — enumeration-safe.',
+    summary:
+      'Resend registration OTP for an available self-registration challenge.',
   })
+  @ApiResponse({ status: 423, description: 'Registration identity is locked.' })
   async resendOtp(@Body() dto: ResendOtpDTO) {
     await this.authService.resendOtp(dto);
     return {

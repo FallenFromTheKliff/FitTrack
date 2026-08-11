@@ -14,16 +14,19 @@ import type {
   AdminGamificationSeasonSummaryRecord,
   AdminGamificationSeasonStatusInput,
   AdminGamificationSeasonUpdateInput,
+  AdminManualExpAllocationInput,
   AdminManualExpGrantInput,
   AdminProgressionGrantRecord,
   FitnessMuscleLeaderboardEntryRecord,
   AttendanceCheckInRecord,
   CreateUserInput,
+  MemberAccountStatus,
   MemberDirectoryFilters,
   MemberRecord,
   RestoreUserResult as RestoreUserResultType,
   UpdateMembershipCardInput,
 } from "@fittrack/types";
+import { getFitnessExpProgressionState } from "@fittrack/types";
 import { normalizePhilippineMobileNumber } from "@fittrack/validators";
 import type { ApiTransport } from "../transport/createAxiosTransport";
 import {
@@ -54,6 +57,7 @@ export type {
   AdminGamificationSeasonSummaryRecord,
   AdminGamificationSeasonStatusInput,
   AdminGamificationSeasonUpdateInput,
+  AdminManualExpAllocationInput,
   AdminManualExpGrantInput,
   AdminProgressionGrantRecord,
   FitnessMuscleLeaderboardEntryRecord,
@@ -93,6 +97,41 @@ export type VerifyNonMemberResult = {
   message: string;
   user: Pick<MemberRecord, "emailVerified" | "id" | "status">;
 };
+
+const LEGACY_PUBLIC_REGISTRATION_STATUS = "PENDING_OTP";
+const NORMAL_MEMBER_ACCOUNT_STATUSES = new Set<MemberAccountStatus>([
+  "pending",
+  "active",
+  "suspended",
+  "banned",
+]);
+
+type AdminMemberApiRecord = Omit<MemberRecord, "status"> & {
+  status?: string | null;
+};
+
+function normalizeAdminMemberRecord(
+  record: AdminMemberApiRecord,
+): MemberRecord | null {
+  const normalizedStatus = record.status?.trim().toLowerCase();
+
+  // Public OTP challenges used to leave PENDING_OTP user rows behind. They
+  // remain untouched in storage but must not enter the complete account model.
+  if (
+    !normalizedStatus ||
+    normalizedStatus === LEGACY_PUBLIC_REGISTRATION_STATUS.toLowerCase() ||
+    !NORMAL_MEMBER_ACCOUNT_STATUSES.has(
+      normalizedStatus as MemberAccountStatus,
+    )
+  ) {
+    return null;
+  }
+
+  return {
+    ...record,
+    status: normalizedStatus as MemberAccountStatus,
+  };
+}
 
 type AdminGamificationOverviewApiRecord = {
   active_season: {
@@ -206,7 +245,11 @@ type AdminGamificationSeasonListApiRecord = {
 };
 
 type MuscleLeaderboardApiRecord = {
+  avatar_url?: string | null;
   display_name: string;
+  icon_asset_key?: string | null;
+  icon_key?: string | null;
+  icon_kind?: FitnessMuscleLeaderboardEntryRecord["iconKind"];
   is_current_user?: boolean;
   last_earned_at: string | null;
   muscle_key: string;
@@ -405,11 +448,16 @@ function mapMuscleLeaderboardEntry(
   record: MuscleLeaderboardApiRecord,
 ): FitnessMuscleLeaderboardEntryRecord {
   return {
+    avatarUrl: record.avatar_url ?? null,
     displayName: record.display_name,
+    iconAssetKey: record.icon_asset_key ?? null,
+    iconKey: record.icon_key ?? "dumbbell",
+    iconKind: record.icon_kind ?? "library",
     isCurrentUser: record.is_current_user,
     lastEarnedAt: record.last_earned_at,
     muscleKey: record.muscle_key,
     rankPosition: record.rank_position,
+    progression: getFitnessExpProgressionState(record.xp_points),
     scope: record.scope,
     seasonId: record.season_id,
     seasonTitle: record.season_title,
@@ -426,6 +474,7 @@ function mapAdminSeasonStanding(
     governanceStatus: record.governance_status,
     isDisqualified: record.is_disqualified,
     isHidden: record.is_hidden,
+    lifetimeProgression: getFitnessExpProgressionState(record.total_xp),
     lastEarnedAt: record.last_earned_at,
     memberName: record.member_name,
     milestoneClaimedCount: record.milestone_claimed_count,
@@ -433,6 +482,7 @@ function mapAdminSeasonStanding(
     rankPosition: record.rank_position,
     seasonId: record.season_id,
     seasonPoints: record.season_points,
+    seasonProgression: getFitnessExpProgressionState(record.season_points),
     seasonStatus: record.season_status,
     seasonTitle: record.season_title,
     topMuscle: record.top_muscle,
@@ -443,13 +493,24 @@ function mapAdminSeasonStanding(
   };
 }
 
+const UUID_V4_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function normalizeAdminSeasonId(value?: string) {
+  const candidate = value?.trim();
+  return candidate && UUID_V4_PATTERN.test(candidate) ? candidate : undefined;
+}
+
 function toAdminSeasonStandingParams(
   params?: AdminGamificationSeasonStandingListParams,
 ) {
+  const seasonId = normalizeAdminSeasonId(params?.seasonId);
+
   return {
+    ...(params?.cursor ? { cursor: params.cursor } : {}),
     ...(params?.page !== undefined ? { page: params.page } : {}),
     ...(params?.limit !== undefined ? { limit: params.limit } : {}),
-    ...(params?.seasonId ? { season_id: params.seasonId } : {}),
+    ...(seasonId ? { season_id: seasonId } : {}),
     ...(params?.muscleKey ? { muscle_key: params.muscleKey } : {}),
     ...(params?.search ? { search: params.search } : {}),
     ...(params?.visibility ? { visibility: params.visibility } : {}),
@@ -457,20 +518,25 @@ function toAdminSeasonStandingParams(
       ? { governance_status: params.governanceStatus }
       : {}),
     ...(params?.includeArchived ? { include_archived: true } : {}),
+    ...(params?.snapshot ? { snapshot: params.snapshot } : {}),
   };
 }
 
 function toAdminMuscleStandingParams(
   params: AdminGamificationMuscleLeaderboardListParams,
 ) {
+  const seasonId = normalizeAdminSeasonId(params.seasonId);
+
   return {
+    ...(params.cursor ? { cursor: params.cursor } : {}),
     scope: params.scope,
     muscle_key: params.muscleKey,
     ...(params.page !== undefined ? { page: params.page } : {}),
     ...(params.limit !== undefined ? { limit: params.limit } : {}),
-    ...(params.seasonId ? { season_id: params.seasonId } : {}),
+    ...(seasonId ? { season_id: seasonId } : {}),
     ...(params.search ? { search: params.search } : {}),
     ...(params.includeHidden ? { include_hidden: true } : {}),
+    ...(params.snapshot ? { snapshot: params.snapshot } : {}),
   };
 }
 
@@ -534,9 +600,14 @@ function mapAdminProgressionGrant(
 export function createAdminApi(transport: ApiTransport) {
   return {
     listMembers(params?: MemberDirectoryFilters) {
-      return unwrapResponse<MemberRecord[]>(
+      return unwrapResponse<AdminMemberApiRecord[]>(
         transport.get("/admin/users", { params }),
         "Unable to load members.",
+      ).then((records) =>
+        records.flatMap((record) => {
+          const normalized = normalizeAdminMemberRecord(record);
+          return normalized ? [normalized] : [];
+        }),
       );
     },
     createUser(payload: CreateUserInput) {
@@ -883,19 +954,27 @@ export function createAdminApi(transport: ApiTransport) {
       );
       return mapAdminRankingOverride(data);
     },
-    async createManualExpGrant(payload: AdminManualExpGrantInput) {
+    async createManualExpGrant(
+      payload: AdminManualExpGrantInput,
+      idempotencyKey: string,
+    ) {
       const data = await unwrapResponse<AdminProgressionGrantApiRecord>(
-        transport.post("/admin/gamification/manual-exp-grants", {
-          user_id: payload.userId,
-          amount: payload.amount,
-          rationale: payload.rationale,
-          ...(payload.muscleGroup !== undefined
-            ? { muscle_group: payload.muscleGroup }
-            : {}),
-          ...(payload.appointmentId !== undefined
-            ? { appointment_id: payload.appointmentId }
-            : {}),
-        }),
+        transport.post(
+          "/admin/gamification/manual-exp-grants",
+          {
+            user_id: payload.userId,
+            allocations: payload.allocations.map((allocation) => ({
+              amount: allocation.amount,
+              muscle_group: allocation.muscleGroup,
+            })),
+            rationale: payload.rationale,
+          },
+          {
+            headers: {
+              "Idempotency-Key": idempotencyKey,
+            },
+          },
+        ),
         "Unable to create manual EXP grant.",
       );
       return mapAdminProgressionGrant(data);

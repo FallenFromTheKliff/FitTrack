@@ -130,16 +130,36 @@ describe('MembershipCardService', () => {
     });
   });
 
-  it('activates pending membership cards when a matching payment completes', async () => {
-    const membershipCard = createPendingMembershipCard();
+  it('retires member cash membership-card requests without creating access or payment records', async () => {
+    repo.findMembershipOwnerByIdOrThrow.mockResolvedValue({
+      id: 'member-1',
+      role: UserRole.member,
+      deletedAt: null,
+    });
+
+    await expect(
+      service.purchase(
+        'member-1',
+        { provider: PaymentProvider.cash },
+        '44444444-4444-4444-8444-444444444444',
+      ),
+    ).rejects.toMatchObject({
+      status: 410,
+    });
+
+    expect(repo.createOrRefreshPendingPurchase).not.toHaveBeenCalled();
+    expect(paymentRepo.updatePayment).not.toHaveBeenCalled();
+  });
+
+  it('notifies after a matching PayMongo completion has atomically activated the card', async () => {
+    const membershipCard = {
+      ...createPendingMembershipCard(),
+      status: MembershipCardStatus.active,
+    };
 
     repo.findMembershipCardWithUserProfileByIdOrThrow.mockResolvedValue({
       ...membershipCard,
       user: { profile: { first_name: 'Khristiane', last_name: 'Alistair' } },
-    });
-    repo.activateMembershipCard.mockResolvedValue({
-      ...membershipCard,
-      status: MembershipCardStatus.active,
     });
 
     await service.handlePaymentCompleted({
@@ -149,21 +169,10 @@ describe('MembershipCardService', () => {
       payableId: membershipCard.id,
       amount: '400',
       verifiedBy: null,
+      membershipCardActivationCommitted: true,
     });
 
-    const [activatedCardId, activationInput] = repo.activateMembershipCard.mock
-      .calls[0] as [
-      string,
-      {
-        activatedAt: Date;
-        verifiedAt: Date;
-        verifiedBy: string | null;
-      },
-    ];
-    expect(activatedCardId).toBe(membershipCard.id);
-    expect(activationInput.activatedAt).toBeInstanceOf(Date);
-    expect(activationInput.verifiedAt).toBeInstanceOf(Date);
-    expect(activationInput.verifiedBy).toBeNull();
+    expect(repo.activateMembershipCard).not.toHaveBeenCalled();
 
     const [notificationUserId, notificationType, notificationPayload] =
       notificationsService.dispatch.mock.calls[0] as [
@@ -191,16 +200,15 @@ describe('MembershipCardService', () => {
     expect(eventEmitter.emitAsync).not.toHaveBeenCalled();
   });
 
-  it('emits a management activity notification when a staff review approves the card payment', async () => {
-    const membershipCard = createPendingMembershipCard();
+  it('emits a management activity notification for a trusted grant event', async () => {
+    const membershipCard = {
+      ...createPendingMembershipCard(),
+      status: MembershipCardStatus.active,
+    };
 
     repo.findMembershipCardWithUserProfileByIdOrThrow.mockResolvedValue({
       ...membershipCard,
       user: { profile: { first_name: 'Khristiane', last_name: 'Alistair' } },
-    });
-    repo.activateMembershipCard.mockResolvedValue({
-      ...membershipCard,
-      status: MembershipCardStatus.active,
     });
 
     await service.handlePaymentCompleted({
@@ -210,6 +218,7 @@ describe('MembershipCardService', () => {
       payableId: membershipCard.id,
       amount: '400',
       verifiedBy: 'staff-1',
+      membershipCardActivationCommitted: true,
     });
 
     expect(eventEmitter.emitAsync).toHaveBeenCalledWith(
@@ -222,6 +231,27 @@ describe('MembershipCardService', () => {
         targetUserId: 'member-1',
       }),
     );
+  });
+
+  it('does not activate or notify from an unmarked completion event', async () => {
+    const membershipCard = createPendingMembershipCard();
+
+    repo.findMembershipCardWithUserProfileByIdOrThrow.mockResolvedValue({
+      ...membershipCard,
+      user: { profile: { first_name: 'Khristiane', last_name: 'Alistair' } },
+    });
+
+    await service.handlePaymentCompleted({
+      paymentId: 'payment-card-3',
+      userId: 'member-1',
+      payableType: PayableType.membership_card,
+      payableId: membershipCard.id,
+      amount: '400',
+      verifiedBy: null,
+    });
+
+    expect(repo.activateMembershipCard).not.toHaveBeenCalled();
+    expect(notificationsService.dispatch).not.toHaveBeenCalled();
   });
 });
 

@@ -7,10 +7,16 @@ import { OtpChannel, OtpPurpose } from '@prisma/client';
 import { AuthRepository } from '../auth.repository';
 import { QUEUE_MAIL } from '../../queue/queue.constants';
 import { AuthOtpService } from './auth-otp.service';
-import { OTP_HASH_ROUNDS } from './otp.constants';
+import {
+  OTP_HASH_ROUNDS,
+  REGISTRATION_CHALLENGE_LOCK_SECONDS,
+  REGISTRATION_CHALLENGE_TTL_SECONDS,
+} from './otp.constants';
 
 describe('AuthOtpService', () => {
   let service: AuthOtpService;
+
+  type RedisSetexCall = [key: string, ttl: number, value: string];
 
   const repo = {
     findLatestOtp: jest.fn(),
@@ -22,12 +28,70 @@ describe('AuthOtpService', () => {
     add: jest.fn(),
   };
 
+  let redisValues = new Map<string, string>();
+  let redisTtls = new Map<string, number>();
+  const redis = {
+    del: jest.fn(),
+    eval: jest.fn(),
+    get: jest.fn(),
+    set: jest.fn(),
+    setex: jest.fn(),
+    ttl: jest.fn(),
+  };
+
   beforeEach(async () => {
+    redisValues = new Map();
+    redisTtls = new Map();
+
+    redis.get.mockImplementation((key: string) =>
+      Promise.resolve(redisValues.get(key) ?? null),
+    );
+    redis.ttl.mockImplementation((key: string) =>
+      Promise.resolve(redisValues.has(key) ? (redisTtls.get(key) ?? -1) : -2),
+    );
+    redis.setex.mockImplementation(
+      (key: string, ttl: number, value: string) => {
+        redisValues.set(key, value);
+        redisTtls.set(key, ttl);
+        return Promise.resolve('OK');
+      },
+    );
+    redis.set.mockImplementation(
+      (key: string, value: string, ...args: Array<string | number>) => {
+        if (args.includes('NX') && redisValues.has(key)) {
+          return Promise.resolve(null);
+        }
+        redisValues.set(key, value);
+        return Promise.resolve('OK');
+      },
+    );
+    redis.del.mockImplementation((...keys: string[]) => {
+      let deleted = 0;
+      for (const key of keys) {
+        if (redisValues.delete(key)) {
+          deleted += 1;
+        }
+        redisTtls.delete(key);
+      }
+      return Promise.resolve(deleted);
+    });
+    redis.eval.mockImplementation(
+      (_script: string, _keyCount: number, key: string, token: string) => {
+        if (redisValues.get(key) !== token) {
+          return Promise.resolve(0);
+        }
+        redisValues.delete(key);
+        redisTtls.delete(key);
+        return Promise.resolve(1);
+      },
+    );
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthOtpService,
         { provide: AuthRepository, useValue: repo },
         { provide: getQueueToken(QUEUE_MAIL), useValue: mailQueue },
+        { provide: 'default_IORedisModuleConnectionToken', useValue: redis },
       ],
     }).compile();
 
@@ -76,10 +140,10 @@ describe('AuthOtpService', () => {
         'member@example.com',
       ),
     ).rejects.toMatchObject({
-      response: expect.objectContaining({
+      response: {
         type: 'OTP_DELIVERY_QUEUE_UNAVAILABLE',
         status: 503,
-      }),
+      },
       status: 503,
     });
   });
@@ -248,5 +312,258 @@ describe('AuthOtpService', () => {
 
     expect(repo.updateOtp).toHaveBeenCalledWith('otp-1', updateOtpData);
     expect(updateOtpData?.consumed_at).toBeInstanceOf(Date);
+  });
+
+  it('stores a registration challenge without password or raw OTP material', async () => {
+    await service.startRegistrationChallenge('challenge-1', {
+      acceptedPrivacyAt: new Date().toISOString(),
+      credentialHash: 'bcrypt-password-hash',
+      email: 'member@example.com',
+      firstName: 'Fit',
+      lastName: 'Track',
+      phone: '+639171234567',
+    });
+
+    const challengeCall = (redis.setex.mock.calls as RedisSetexCall[]).find(
+      ([key]) => key === 'auth:registration:challenge:challenge-1',
+    );
+    expect(challengeCall).toBeDefined();
+    const stored = JSON.parse(String(challengeCall?.[2])) as Record<
+      string,
+      unknown
+    >;
+
+    expect(challengeCall?.[1]).toBe(REGISTRATION_CHALLENGE_TTL_SECONDS);
+    expect(stored.credentialHash).toBe('bcrypt-password-hash');
+    expect(stored).not.toHaveProperty('password');
+    expect(stored.otpHash).toEqual(expect.any(String));
+    expect(stored).not.toHaveProperty('otp');
+    expect(mailQueue.add).toHaveBeenCalledWith(
+      'send-otp',
+      expect.objectContaining({
+        purpose: OtpPurpose.registration,
+        to: 'member@example.com',
+      }),
+      expect.any(Object),
+    );
+  });
+
+  it('keeps the challenge available when the mail provider fails', async () => {
+    mailQueue.add.mockRejectedValue(new Error('mail provider unavailable'));
+
+    await expect(
+      service.startRegistrationChallenge('challenge-provider-failure', {
+        acceptedPrivacyAt: new Date().toISOString(),
+        credentialHash: 'bcrypt-password-hash',
+        email: 'member@example.com',
+        firstName: 'Fit',
+        lastName: 'Track',
+      }),
+    ).rejects.toMatchObject({
+      response: {
+        type: 'OTP_DELIVERY_QUEUE_UNAVAILABLE',
+        status: 503,
+      },
+    });
+
+    expect(
+      redisValues.has('auth:registration:challenge:challenge-provider-failure'),
+    ).toBe(true);
+  });
+
+  it('returns a safe expired response for malformed or expired challenges', async () => {
+    redisValues.set('auth:registration:challenge:malformed', '{not-json');
+
+    await expect(
+      service.completeRegistrationChallenge('malformed', '123456', () =>
+        Promise.resolve('should-not-complete'),
+      ),
+    ).rejects.toMatchObject({
+      response: {
+        type: 'REGISTRATION_CHALLENGE_EXPIRED',
+        status: 422,
+      },
+    });
+
+    redisValues.set(
+      'auth:registration:challenge:expired',
+      JSON.stringify({
+        acceptedPrivacyAt: new Date().toISOString(),
+        credentialHash: 'bcrypt-password-hash',
+        email: 'member@example.com',
+        firstName: 'Fit',
+        lastName: 'Track',
+        otpHash: await bcrypt.hash('123456', 4),
+        otpExpiresAt: new Date(Date.now() - 1_000).toISOString(),
+        attempts: 0,
+      }),
+    );
+
+    await expect(
+      service.completeRegistrationChallenge('expired', '123456', () =>
+        Promise.resolve('should-not-complete'),
+      ),
+    ).rejects.toMatchObject({
+      response: {
+        type: 'REGISTRATION_CHALLENGE_EXPIRED',
+        status: 422,
+      },
+    });
+  });
+
+  it('locks the normalized registration identity after five wrong codes and blocks resend', async () => {
+    const challengeId = 'challenge-lock';
+    redisValues.set(
+      `auth:registration:challenge:${challengeId}`,
+      JSON.stringify({
+        acceptedPrivacyAt: new Date().toISOString(),
+        credentialHash: 'bcrypt-password-hash',
+        email: 'member@example.com',
+        firstName: 'Fit',
+        lastName: 'Track',
+        phone: '+639171234567',
+        otpHash: await bcrypt.hash('123456', 4),
+        otpExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+        attempts: 0,
+      }),
+    );
+
+    for (let attempt = 1; attempt < 5; attempt += 1) {
+      await expect(
+        service.completeRegistrationChallenge(challengeId, '000000', () =>
+          Promise.resolve('should-not-complete'),
+        ),
+      ).rejects.toMatchObject({
+        response: {
+          type: 'REGISTRATION_OTP_INVALID',
+          status: 422,
+        },
+      });
+    }
+
+    await expect(
+      service.completeRegistrationChallenge(challengeId, '000000', () =>
+        Promise.resolve('should-not-complete'),
+      ),
+    ).rejects.toMatchObject({
+      response: {
+        type: 'REGISTRATION_OTP_LOCKED',
+        status: 423,
+        retry_after_seconds: REGISTRATION_CHALLENGE_LOCK_SECONDS,
+      },
+    });
+
+    await expect(
+      service.resendRegistrationChallenge(challengeId),
+    ).rejects.toMatchObject({
+      response: {
+        type: 'REGISTRATION_OTP_LOCKED',
+        status: 423,
+      },
+    });
+
+    await expect(
+      service.startRegistrationChallenge('challenge-bypass', {
+        acceptedPrivacyAt: new Date().toISOString(),
+        credentialHash: 'bcrypt-password-hash',
+        email: 'member@example.com',
+        firstName: 'Fit',
+        lastName: 'Track',
+        phone: '+639171234567',
+      }),
+    ).rejects.toMatchObject({
+      response: {
+        type: 'REGISTRATION_OTP_LOCKED',
+        status: 423,
+      },
+    });
+  });
+
+  it('carries failed attempts into a replacement challenge', async () => {
+    const payload = {
+      acceptedPrivacyAt: new Date().toISOString(),
+      credentialHash: 'bcrypt-password-hash',
+      email: 'member@example.com',
+      firstName: 'Fit',
+      lastName: 'Track',
+      phone: '+639171234567',
+    };
+
+    await service.startRegistrationChallenge('challenge-first', payload);
+
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      await expect(
+        service.completeRegistrationChallenge('challenge-first', '000000', () =>
+          Promise.resolve('should-not-complete'),
+        ),
+      ).rejects.toMatchObject({
+        response: {
+          type: 'REGISTRATION_OTP_INVALID',
+          status: 422,
+        },
+      });
+    }
+
+    await service.startRegistrationChallenge('challenge-replacement', payload);
+
+    const replacement = JSON.parse(
+      String(
+        redisValues.get('auth:registration:challenge:challenge-replacement'),
+      ),
+    ) as { attempts: number };
+
+    expect(replacement.attempts).toBe(4);
+
+    await expect(
+      service.completeRegistrationChallenge(
+        'challenge-replacement',
+        '000000',
+        () => Promise.resolve('should-not-complete'),
+      ),
+    ).rejects.toMatchObject({
+      response: {
+        type: 'REGISTRATION_OTP_LOCKED',
+        status: 423,
+      },
+    });
+  });
+
+  it('consumes a valid challenge once and makes replay safe', async () => {
+    const challengeId = 'challenge-replay';
+    redisValues.set(
+      `auth:registration:challenge:${challengeId}`,
+      JSON.stringify({
+        acceptedPrivacyAt: new Date().toISOString(),
+        credentialHash: 'bcrypt-password-hash',
+        email: 'member@example.com',
+        firstName: 'Fit',
+        lastName: 'Track',
+        otpHash: await bcrypt.hash('123456', 4),
+        otpExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+        attempts: 0,
+      }),
+    );
+
+    const complete = jest.fn().mockResolvedValue('user-1');
+
+    await expect(
+      service.completeRegistrationChallenge(challengeId, '123456', complete),
+    ).resolves.toBe('user-1');
+    await expect(
+      service.completeRegistrationChallenge(challengeId, '123456', complete),
+    ).rejects.toMatchObject({
+      response: {
+        type: 'REGISTRATION_CHALLENGE_COMPLETED',
+        status: 422,
+      },
+    });
+
+    expect(complete).toHaveBeenCalledTimes(1);
+    expect(redisValues.get(`auth:registration:completed:${challengeId}`)).toBe(
+      '1',
+    );
+    expect(redisValues.has(`auth:registration:challenge:${challengeId}`)).toBe(
+      false,
+    );
   });
 });

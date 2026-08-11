@@ -22,6 +22,7 @@ describe('UserService', () => {
   const repo = {
     findUserAggregateOrThrow: jest.fn(),
     findUserByIdOrThrow: jest.fn(),
+    findUserProfileByUserIdOrThrow: jest.fn(),
     updateProfile: jest.fn(),
     updatePhoneAndResetVerification: jest.fn(),
     createProgressMetric: jest.fn(),
@@ -68,7 +69,7 @@ describe('UserService', () => {
       first_name: 'Fit',
       avatar_url: 'https://cdn.fittrack.test/avatars/fit.png',
       height_cm: 180,
-      date_of_birth: '1998-03-22T00:00:00.000Z',
+      date_of_birth: '1998-03-22',
     });
 
     expect(repo.updateProfile).toHaveBeenCalledWith('user-1', {
@@ -77,6 +78,46 @@ describe('UserService', () => {
       height_cm: 180,
       date_of_birth: new Date('1998-03-22T00:00:00.000Z'),
     });
+  });
+
+  it('rejects an explicit null birthdate with a field-local problem', async () => {
+    repo.findUserByIdOrThrow.mockResolvedValue({ id: 'user-1' });
+
+    await expect(
+      service.updateMyProfile('user-1', {
+        date_of_birth: null as unknown as string,
+      }),
+    ).rejects.toMatchObject({
+      response: {
+        field: 'date_of_birth',
+        type: 'BUSINESS_RULE_VIOLATION',
+        title: 'Invalid Date Of Birth',
+        status: HttpStatus.UNPROCESSABLE_ENTITY,
+      },
+    });
+    expect(repo.updateProfile).not.toHaveBeenCalled();
+  });
+
+  it('does not persist an empty profile patch', async () => {
+    repo.findUserByIdOrThrow.mockResolvedValue({ id: 'user-1' });
+    repo.findUserProfileByUserIdOrThrow.mockResolvedValue({
+      first_name: 'Fit',
+      last_name: 'Track',
+      phone: '+639171234567',
+      date_of_birth: new Date('1998-03-22T00:00:00.000Z'),
+      weight_kg: { toNumber: () => 78 },
+      height_cm: { toNumber: () => 180 },
+    });
+
+    await expect(service.updateMyProfile('user-1', {})).resolves.toEqual(
+      expect.objectContaining({
+        first_name: 'Fit',
+        dateOfBirth: '1998-03-22',
+        currentWeightKg: 78,
+        heightCm: 180,
+      }),
+    );
+    expect(repo.updateProfile).not.toHaveBeenCalled();
   });
 
   it('rejects future or underage member profile birth dates', async () => {
@@ -151,6 +192,46 @@ describe('UserService', () => {
         phoneVerified: false,
         qrCodeReady: true,
         attendanceQrReady: true,
+      }),
+    );
+  });
+
+  it('returns canonical profile values for client diffing', async () => {
+    repo.findUserAggregateOrThrow.mockResolvedValue({
+      id: 'user-1',
+      role: UserRole.member,
+      status: UserStatus.active,
+      email_verified_at: null,
+      phone_verified_at: null,
+      has_accepted_privacy: true,
+      privacy_accepted_at: null,
+      qr_code_token: 'qr-token',
+      auth_identities: [],
+      profile: {
+        first_name: ' Fit ',
+        last_name: ' Track ',
+        phone: ' +639171234567 ',
+        date_of_birth: new Date('1998-03-22T00:00:00.000Z'),
+        weight_kg: { toNumber: () => 78 },
+        height_cm: { toNumber: () => 180 },
+      },
+      membership_card: null,
+      notification_prefs: {},
+    });
+
+    await expect(service.getMyProfile('user-1')).resolves.toEqual(
+      expect.objectContaining({
+        phone: '+639171234567',
+        phone_no: '+639171234567',
+        profile: expect.objectContaining({
+          first_name: 'Fit',
+          last_name: 'Track',
+          phone: '+639171234567',
+          date_of_birth: new Date('1998-03-22T00:00:00.000Z'),
+          dateOfBirth: '1998-03-22',
+          currentWeightKg: 78,
+          heightCm: 180,
+        }),
       }),
     );
   });

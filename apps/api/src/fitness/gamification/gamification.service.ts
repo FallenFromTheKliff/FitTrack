@@ -1,11 +1,11 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
-import { randomUUID } from 'node:crypto';
 import {
   CreatorState,
   ExerciseReviewSubmissionStatus,
@@ -17,6 +17,7 @@ import {
   MilestoneProgressStatus,
   MilestoneVerificationPolicy,
   ModerationActionType,
+  ProgressionIconKind,
   type MuscleMasteryProgress,
   Prisma,
   ProgressionSourceStatus,
@@ -24,8 +25,10 @@ import {
   RankingVisibility,
   SeasonStatus,
 } from '@prisma/client';
+import { isUUID } from 'class-validator';
 
 import { type PaginatedResult } from '../../common/base-repository/base-repository';
+import { FilesService } from '../../files/files.service';
 import { type PaginationDTO } from '../../user/dto/user-dto';
 import {
   UserService,
@@ -66,6 +69,7 @@ import {
   IntegritySummaryResponseDTO,
   CreateIntegrityCaseDTO,
   LeaderboardEntryResponseDTO,
+  LeaderboardFilterDTO,
   MasteryFilterDTO,
   MilestoneEvidenceSubmissionResponseDTO,
   MilestoneListFilterDTO,
@@ -86,9 +90,13 @@ import {
   UpdateRankingProfileDTO,
 } from './dto/gamification.dto';
 import {
+  DEFAULT_MILESTONE_ICON_KEY,
   evaluateMasteryRank,
   formatMasteryRankDisplay,
+  getCompetitionRankPositions,
   isHigherMasteryRank,
+  isAllowedProgressionLibraryIconKey,
+  resolveProgressionIcon,
 } from './gamification.constants';
 import {
   GAMIFICATION_RANK_UP_EVENT,
@@ -119,6 +127,11 @@ import {
   type SeasonHistoryRecord,
   type WorkoutProgressionDeltaRecord,
 } from './gamification.repository';
+import {
+  decodeLeaderboardCursor,
+  encodeLeaderboardCursor,
+  isAfterLeaderboardCursor,
+} from './leaderboard-pagination';
 
 export interface MuscleMasteryDelta {
   xp: number;
@@ -173,6 +186,8 @@ function toStringArray(value: unknown): string[] {
 
 @Injectable()
 export class GamificationService {
+  @Inject(FilesService)
+  private readonly filesService!: FilesService;
   private readonly logger = new Logger(GamificationService.name);
 
   constructor(
@@ -294,10 +309,22 @@ export class GamificationService {
   }
 
   async getLeaderboard(
-    dto: PaginationDTO,
-  ): Promise<PaginatedResult<LeaderboardEntryResponseDTO>> {
+    dto: LeaderboardFilterDTO | PaginationDTO,
+  ): Promise<PaginatedResult<LeaderboardEntryResponseDTO> & { meta: PaginatedResult<LeaderboardEntryResponseDTO>['meta'] & { next_cursor: string | null; snapshot: string } }> {
     const page = dto.page ?? 1;
     const limit = dto.limit ?? 20;
+    const filter = dto as LeaderboardFilterDTO;
+    const cursor = decodeLeaderboardCursor(filter.cursor);
+    if (filter.cursor && !cursor) {
+      throw new BadRequestException('Invalid leaderboard cursor.');
+    }
+    const snapshot = filter.snapshot ?? cursor?.snapshot ?? new Date().toISOString();
+    if (Number.isNaN(new Date(snapshot).getTime())) {
+      throw new BadRequestException('Invalid leaderboard snapshot.');
+    }
+    if (cursor && cursor.snapshot !== snapshot) {
+      throw new BadRequestException('Leaderboard cursor does not match snapshot.');
+    }
     const [participants, totals] = await Promise.all([
       this.userService.listGamificationParticipants(),
       this.repo.listLeaderboardTotals(),
@@ -312,15 +339,40 @@ export class GamificationService {
       rankingProfiles,
     );
     const total = leaderboard.length;
-    const start = (page - 1) * limit;
+    const cursorRows = cursor
+      ? leaderboard.filter((entry) =>
+          isAfterLeaderboardCursor(
+            {
+              score: entry.total_xp,
+              tie_breaker: entry.display_name,
+              user_id: entry.user_id,
+            },
+            cursor,
+          ),
+        )
+      : leaderboard;
+    const start = cursor ? 0 : (page - 1) * limit;
+    const data = cursorRows.slice(start, start + limit);
+    const last = data[data.length - 1];
+    const nextCursor =
+      last && cursorRows.length > data.length
+        ? encodeLeaderboardCursor({
+            snapshot,
+            score: last.total_xp,
+            tie_breaker: last.display_name,
+            user_id: last.user_id,
+          })
+        : null;
 
     return {
-      data: leaderboard.slice(start, start + limit),
+      data,
       meta: {
         page,
         limit,
         total,
         total_pages: Math.ceil(total / limit),
+        next_cursor: nextCursor,
+        snapshot,
       },
     };
   }
@@ -469,7 +521,10 @@ export class GamificationService {
     actorUserId: string,
     dto: AdminMilestoneDefinitionDTO,
   ): Promise<AdminMilestoneDefinitionResponseDTO> {
-    const normalized = this.normalizeMilestoneDefinitionInput(dto);
+    const normalized = await this.normalizeMilestoneDefinitionInput(
+      actorUserId,
+      dto,
+    );
     const record = await this.repo.createAdminMilestoneDefinition({
       actorUserId,
       ...normalized,
@@ -491,7 +546,10 @@ export class GamificationService {
       throw new NotFoundException('Milestone definition was not found.');
     }
 
-    const normalized = this.normalizeMilestoneDefinitionInput(dto);
+    const normalized = await this.normalizeMilestoneDefinitionInput(
+      actorUserId,
+      dto,
+    );
     const record = await this.repo.updateAdminMilestoneDefinition({
       actorUserId,
       id: milestoneDefinitionId,
@@ -708,22 +766,65 @@ export class GamificationService {
   async listMuscleLeaderboard(
     dto: MuscleLeaderboardFilterDTO | AdminMuscleLeaderboardFilterDTO,
     currentUserId?: string,
-  ): Promise<PaginatedResult<MuscleLeaderboardRowDTO>> {
+  ): Promise<
+    PaginatedResult<MuscleLeaderboardRowDTO> & {
+      meta: PaginatedResult<MuscleLeaderboardRowDTO>['meta'] & {
+        next_cursor: string | null;
+        snapshot: string;
+      };
+    }
+  > {
     const adminDto = dto as AdminMuscleLeaderboardFilterDTO;
+    const cursor = decodeLeaderboardCursor(dto.cursor);
+    if (dto.cursor && !cursor) {
+      throw new BadRequestException('Invalid muscle leaderboard cursor.');
+    }
+    const snapshot = dto.snapshot ?? cursor?.snapshot ?? new Date().toISOString();
+    if (cursor && cursor.snapshot !== snapshot) {
+      throw new BadRequestException('Muscle leaderboard cursor does not match snapshot.');
+    }
     const result = await this.repo.listMuscleLeaderboard({
       includeHidden: adminDto.include_hidden ?? false,
-      limit: dto.limit,
+      limit: 10000,
       muscleKey: dto.muscle_key,
-      page: dto.page,
+      page: 1,
       scope: dto.scope,
       search: adminDto.search,
       seasonId: dto.season_id,
+      snapshot,
     });
+    const rows = result.data.map((row) =>
+      this.toMuscleLeaderboardResponse(row, currentUserId),
+    );
+    const cursorRows = cursor
+      ? rows.filter((row) =>
+          isAfterLeaderboardCursor(
+            { score: row.xp_points, tie_breaker: row.user_id, user_id: row.user_id },
+            cursor,
+          ),
+        )
+      : rows;
+    const limit = dto.limit ?? 20;
+    const data = cursorRows.slice(cursor ? 0 : ((dto.page ?? 1) - 1) * limit, cursor ? limit : (dto.page ?? 1) * limit);
+    const last = data[data.length - 1];
+    const nextCursor =
+      last && cursorRows.length > data.length
+        ? encodeLeaderboardCursor({
+            snapshot,
+            score: last.xp_points,
+            tie_breaker: last.user_id,
+            user_id: last.user_id,
+          })
+        : null;
     return {
-      ...result,
-      data: result.data.map((row) =>
-        this.toMuscleLeaderboardResponse(row, currentUserId),
-      ),
+      data,
+      meta: {
+        ...result.meta,
+        page: dto.page ?? 1,
+        limit,
+        next_cursor: nextCursor,
+        snapshot,
+      },
     };
   }
 
@@ -873,14 +974,20 @@ export class GamificationService {
   async adminCreateManualExpGrant(
     actorUserId: string,
     dto: AdminManualExpGrantDTO,
+    idempotencyKey: string | undefined,
   ): Promise<AdminProgressionGrantResponseDTO> {
+    const normalizedIdempotencyKey = idempotencyKey?.trim();
+    if (!normalizedIdempotencyKey || !isUUID(normalizedIdempotencyKey, '4')) {
+      throw new BadRequestException(
+        'Idempotency-Key header must be a valid UUID v4.',
+      );
+    }
+
     const result = await this.repo.createManualExpGrant({
       actorUserId,
-      amount: dto.amount,
-      appointmentId: dto.appointment_id ?? null,
-      muscleGroup: dto.muscle_group?.trim() || null,
+      allocations: dto.allocations,
       rationale: dto.rationale,
-      sourceId: `manual_exp:${dto.appointment_id ?? randomUUID()}`,
+      sourceId: `manual_exp:${normalizedIdempotencyKey}`,
       userId: dto.user_id,
     });
 
@@ -891,13 +998,17 @@ export class GamificationService {
       entityId: result.grantId,
       after: {
         user_id: dto.user_id,
-        amount: dto.amount,
-        appointment_id: dto.appointment_id ?? null,
+        allocations: dto.allocations,
+        total_amount: dto.allocations.reduce(
+          (total, allocation) => total + allocation.amount,
+          0,
+        ),
       },
     });
 
     return {
       grant_id: result.grantId,
+      grant_ids: result.grantIds,
       user_id: result.userId,
       grant_status: result.grantStatus,
       moderation_action_type: ModerationActionType.manual_exp_grant,
@@ -1064,7 +1175,7 @@ export class GamificationService {
       rankingProfiles.map((profile) => [profile.user_id, profile]),
     );
 
-    return participants
+    const orderedEntries = participants
       .flatMap((participant) => {
         const rankingProfile = rankingProfileByUserId.get(participant.user_id);
 
@@ -1079,7 +1190,12 @@ export class GamificationService {
               participant,
               rankingProfile,
             ),
-            avatar_url: participant.avatar_url,
+            avatar_url:
+              rankingProfile?.visibility === RankingVisibility.anonymous ||
+              rankingProfile?.governance_status ===
+                RankingGovernanceStatus.anonymized_by_user
+                ? null
+                : participant.avatar_url,
             total_xp: totalXpByUserId.get(participant.user_id) ?? 0,
           },
         ];
@@ -1089,10 +1205,15 @@ export class GamificationService {
           right.total_xp - left.total_xp ||
           left.display_name.localeCompare(right.display_name) ||
           left.user_id.localeCompare(right.user_id),
-      )
-      .map((entry, index) => ({
+      );
+
+    const rankPositions = getCompetitionRankPositions(
+      orderedEntries,
+      (entry) => entry.total_xp,
+    );
+    return orderedEntries.map((entry, index) => ({
         ...entry,
-        rank_position: index + 1,
+        rank_position: rankPositions[index],
       }));
   }
 
@@ -1152,6 +1273,12 @@ export class GamificationService {
     milestone: MilestoneProgressRecord,
   ): MilestoneProgressResponseDTO {
     const progress = milestone.user_progress[0] ?? null;
+    const icon = resolveProgressionIcon({
+      assetKey: milestone.icon_asset_key,
+      defaultIconKey: DEFAULT_MILESTONE_ICON_KEY,
+      iconKey: milestone.icon_key,
+      kind: milestone.icon_kind,
+    });
     const targetValue = this.readMilestoneTargetValue(
       milestone.condition_payload,
     );
@@ -1181,6 +1308,9 @@ export class GamificationService {
       status: progress?.status ?? MilestoneProgressStatus.in_progress,
       is_hidden: milestone.is_hidden,
       reward_payload: this.toJsonObject(milestone.reward_payload),
+      icon_kind: icon.iconKind,
+      icon_key: icon.iconKey,
+      icon_asset_key: icon.iconAssetKey,
       unlocked_at: progress?.unlocked_at?.toISOString() ?? null,
       claimed_at: progress?.claimed_at?.toISOString() ?? null,
       updated_at: progress?.updated_at?.toISOString() ?? null,
@@ -1233,6 +1363,12 @@ export class GamificationService {
   private toAdminMilestoneDefinitionResponse(
     record: AdminMilestoneDefinitionRecord,
   ): AdminMilestoneDefinitionResponseDTO {
+    const icon = resolveProgressionIcon({
+      assetKey: record.icon_asset_key,
+      defaultIconKey: DEFAULT_MILESTONE_ICON_KEY,
+      iconKey: record.icon_key,
+      kind: record.icon_kind,
+    });
     return {
       id: record.id,
       key: record.key,
@@ -1245,6 +1381,9 @@ export class GamificationService {
       evidence_requirement: MilestoneEvidenceRequirement.none,
       condition_payload: this.toJsonObject(record.condition_payload),
       reward_payload: this.toJsonObject(record.reward_payload),
+      icon_kind: icon.iconKind,
+      icon_key: icon.iconKey,
+      icon_asset_key: icon.iconAssetKey,
       is_active: record.is_active,
       is_hidden: record.is_hidden,
       sort_order: record.sort_order,
@@ -1297,7 +1436,10 @@ export class GamificationService {
     };
   }
 
-  private normalizeMilestoneDefinitionInput(dto: AdminMilestoneDefinitionDTO) {
+  private async normalizeMilestoneDefinitionInput(
+    actorUserId: string,
+    dto: AdminMilestoneDefinitionDTO,
+  ) {
     const startsAt = this.parseOptionalDate(dto.starts_at, 'starts_at');
     const endsAt = this.parseOptionalDate(dto.ends_at, 'ends_at');
 
@@ -1319,6 +1461,13 @@ export class GamificationService {
       verificationPolicy,
       evidenceRequirement,
     );
+    const icon = await this.normalizeProgressionIconInput({
+      actorUserId,
+      assetKey: dto.icon_asset_key,
+      defaultIconKey: DEFAULT_MILESTONE_ICON_KEY,
+      iconKey: dto.icon_key,
+      iconKind: dto.icon_kind,
+    });
 
     return {
       category: dto.category,
@@ -1326,6 +1475,9 @@ export class GamificationService {
       description: dto.description ?? null,
       endsAt,
       evidenceRequirement,
+      iconAssetKey: icon.iconAssetKey,
+      iconKey: icon.iconKey,
+      iconKind: icon.iconKind,
       isHidden: dto.is_hidden ?? false,
       key: dto.key,
       rewardPayload: dto.reward_payload ?? null,
@@ -1336,6 +1488,58 @@ export class GamificationService {
       triggerType: dto.trigger_type,
       verificationPolicy,
     };
+  }
+
+  private async normalizeProgressionIconInput(input: {
+    actorUserId: string;
+    assetKey?: string | null;
+    defaultIconKey: string;
+    iconKey?: string | null;
+    iconKind?: ProgressionIconKind | null;
+  }) {
+    const iconKind = input.iconKind ?? ProgressionIconKind.library;
+    const iconKey = input.iconKey?.trim() || null;
+    const assetKey = input.assetKey?.trim() || null;
+
+    if (iconKind === ProgressionIconKind.library) {
+      if (assetKey) {
+        throw new BadRequestException(
+          'Library progression icons cannot include icon_asset_key.',
+        );
+      }
+      const resolvedIconKey = iconKey ?? input.defaultIconKey;
+      if (!isAllowedProgressionLibraryIconKey(resolvedIconKey)) {
+        throw new BadRequestException(
+          'icon_key must be an allowlisted progression library icon.',
+        );
+      }
+      return resolveProgressionIcon({
+        defaultIconKey: input.defaultIconKey,
+        iconKey: resolvedIconKey,
+        kind: ProgressionIconKind.library,
+      });
+    }
+
+    if (!assetKey) {
+      throw new BadRequestException(
+        'Custom progression icons require icon_asset_key.',
+      );
+    }
+    if (iconKey) {
+      throw new BadRequestException(
+        'Custom progression icons cannot include icon_key.',
+      );
+    }
+
+    await this.filesService.assertUserOwnedRasterImage(
+      assetKey,
+      input.actorUserId,
+    );
+    return resolveProgressionIcon({
+      assetKey,
+      defaultIconKey: input.defaultIconKey,
+      kind: ProgressionIconKind.custom,
+    });
   }
 
   private parseOptionalDate(
@@ -1609,9 +1813,13 @@ export class GamificationService {
       rank_position: row.rankPosition,
       user_id: row.userId,
       display_name: row.displayName,
+      avatar_url: row.avatarUrl,
       muscle_key: row.muscleKey,
       scope: row.seasonId ? 'season' : 'lifetime',
       xp_points: row.xpPoints,
+      icon_kind: row.iconKind,
+      icon_key: row.iconKey,
+      icon_asset_key: row.iconAssetKey,
       season_id: row.seasonId,
       season_title: row.seasonTitle,
       last_earned_at: row.lastEarnedAt?.toISOString() ?? null,
@@ -1640,7 +1848,11 @@ export class GamificationService {
   }
 
   private validateSeasonWindow(startsAt: Date, endsAt: Date): void {
-    if (endsAt <= startsAt) {
+    if (
+      Number.isNaN(startsAt.getTime()) ||
+      Number.isNaN(endsAt.getTime()) ||
+      endsAt <= startsAt
+    ) {
       throw new BadRequestException('Season end must be after its start.');
     }
   }

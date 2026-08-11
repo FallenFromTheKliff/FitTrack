@@ -5,12 +5,11 @@ export const MINIMUM_MEMBER_AGE_YEARS = 5;
 const ISO_DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 function parseDateOnly(value: string) {
-  const dateOnly = value.slice(0, 10);
-  if (!ISO_DATE_ONLY_PATTERN.test(dateOnly)) {
+  if (!ISO_DATE_ONLY_PATTERN.test(value)) {
     return null;
   }
 
-  const [yearText, monthText, dayText] = dateOnly.split('-');
+  const [yearText, monthText, dayText] = value.split('-');
   const year = Number(yearText);
   const month = Number(monthText);
   const day = Number(dayText);
@@ -59,6 +58,7 @@ function calculateAge(input: { day: number; month: number; year: number }) {
 function throwInvalidDateOfBirth(detail: string): never {
   throw new HttpException(
     {
+      field: 'date_of_birth',
       type: 'BUSINESS_RULE_VIOLATION',
       title: 'Invalid Date Of Birth',
       status: HttpStatus.UNPROCESSABLE_ENTITY,
@@ -68,14 +68,20 @@ function throwInvalidDateOfBirth(detail: string): never {
   );
 }
 
-export function assertValidMemberDateOfBirth(value: string | Date): Date {
+export function assertValidMemberDateOfBirth(
+  value: string | Date | null | undefined,
+): Date {
   const rawValue =
-    value instanceof Date ? value.toISOString().slice(0, 10) : value.trim();
+    typeof value === 'string'
+      ? value.trim()
+      : value instanceof Date && !Number.isNaN(value.getTime())
+        ? value.toISOString().slice(0, 10)
+        : '';
   const parsed = parseDateOnly(rawValue);
 
   if (!parsed) {
     throwInvalidDateOfBirth(
-      'date_of_birth must be a real ISO calendar date.',
+      'date_of_birth must be a valid date in YYYY-MM-DD format.',
     );
   }
 

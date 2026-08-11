@@ -1,9 +1,15 @@
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  HttpException,
+  HttpStatus,
+  Injectable,
+} from '@nestjs/common';
 import {
   ActivityLevel,
   FitnessGoal,
   Gender,
+  NutritionIconKind,
   Prisma,
   type MacroTarget,
   type NutritionLog,
@@ -13,8 +19,9 @@ import {
 import { AiPythonClientService } from '../ai/ai-python-client.service';
 import { type PaginatedResult } from '../common/base-repository/base-repository';
 import { assertValidMemberDateOfBirth } from '../common/validators';
+import { FilesService } from '../files/files.service';
 import { UserService } from '../user/user.service';
-import { DateRangeDTO, type PaginationDTO } from '../user/dto/user-dto';
+import { type PaginationDTO } from '../user/dto/user-dto';
 import {
   ActiveTdeeResponseDTO,
   DailyMacroTotalsResponseDTO,
@@ -22,7 +29,12 @@ import {
   DailySummaryDateQueryDTO,
   LogNutritionDTO,
   MacroTargetResponseDTO,
+  NUTRITION_MEAL_ICON_FALLBACKS,
+  NUTRITION_MEAL_ICON_LIBRARY_KEYS,
   NutritionCoachingInsightResponseDTO,
+  NutritionLogIconResponseDTO,
+  type NutritionLogIconInputDTO,
+  type NutritionLogFilterDTO,
   NutritionLogResponseDTO,
   RecalculateTdeeDTO,
   TdeeProfileResponseDTO,
@@ -75,6 +87,12 @@ type DailyTotalsSource = {
   fat_g: Prisma.Decimal | number | null;
 };
 
+type NutritionLogIconWriteData = {
+  icon_kind?: NutritionIconKind | null;
+  icon_key?: string | null;
+  icon_asset_key?: string | null;
+};
+
 function pickDefined<T extends object, K extends keyof T>(
   source: T,
   keys: readonly K[],
@@ -98,6 +116,7 @@ export class NutritionService {
     private readonly userService: UserService,
     private readonly aiClient: AiPythonClientService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly filesService: FilesService,
   ) {}
 
   async getActiveTdee(userId: string): Promise<ActiveTdeeResponseDTO | null> {
@@ -175,6 +194,7 @@ export class NutritionService {
     dto: LogNutritionDTO,
   ): Promise<NutritionLogResponseDTO> {
     const activeMacroTarget = await this.repo.findActiveMacroTarget(userId);
+    const iconData = await this.toNutritionLogIconData(userId, dto.icon);
     const record = await this.repo.createNutritionLog({
       user: {
         connect: { id: userId },
@@ -195,6 +215,7 @@ export class NutritionService {
       fat_g: dto.fat_g,
       quantity: dto.quantity,
       unit: dto.unit,
+      ...iconData,
     });
 
     return this.toNutritionLogResponse(record);
@@ -202,7 +223,7 @@ export class NutritionService {
 
   async getNutritionLogs(
     userId: string,
-    dto: DateRangeDTO,
+    dto: NutritionLogFilterDTO,
   ): Promise<PaginatedResult<NutritionLogResponseDTO>> {
     const result = await this.repo.listNutritionLogs(userId, dto);
 
@@ -217,10 +238,14 @@ export class NutritionService {
     logId: string,
     dto: UpdateNutritionLogDTO,
   ): Promise<NutritionLogResponseDTO> {
+    const iconData = await this.toNutritionLogIconData(userId, dto.icon);
     const record = await this.repo.updateNutritionLog(
       userId,
       logId,
-      this.toNutritionLogUpdateInput(dto),
+      {
+        ...this.toNutritionLogUpdateInput(dto),
+        ...iconData,
+      },
     );
 
     return this.toNutritionLogResponse(record);
@@ -305,6 +330,7 @@ export class NutritionService {
       log_date: record.log_date.toISOString(),
       meal_name: record.meal_name,
       food_item: record.food_item,
+      icon: this.toNutritionLogIconResponse(record),
       calories: record.calories.toFixed(2),
       protein_g: record.protein_g.toFixed(2),
       carbs_g: record.carbs_g.toFixed(2),
@@ -368,7 +394,118 @@ export class NutritionService {
   ): Prisma.NutritionLogUpdateInput {
     return {
       ...pickDefined(dto, NUTRITION_LOG_UPDATE_FIELDS),
+      ...(dto.log_date !== undefined
+        ? { log_date: this.parseDateOnly(dto.log_date) }
+        : {}),
     };
+  }
+
+  private async toNutritionLogIconData(
+    userId: string,
+    icon: NutritionLogIconInputDTO | null | undefined,
+  ): Promise<NutritionLogIconWriteData> {
+    if (icon === undefined) {
+      return {};
+    }
+
+    if (icon === null) {
+      return {
+        icon_kind: null,
+        icon_key: null,
+        icon_asset_key: null,
+      };
+    }
+
+    if (icon.kind === 'library') {
+      if (
+        !icon.key ||
+        !NUTRITION_MEAL_ICON_LIBRARY_KEYS.includes(icon.key) ||
+        icon.asset_key
+      ) {
+        throw this.invalidNutritionIcon(
+          'Library meal icons require one allowlisted key and no custom asset.',
+        );
+      }
+
+      return {
+        icon_kind: 'library',
+        icon_key: icon.key,
+        icon_asset_key: null,
+      };
+    }
+
+    if (icon.kind === 'custom') {
+      if (icon.key || !icon.asset_key) {
+        throw this.invalidNutritionIcon(
+          'Custom meal icons require one managed asset and no library key.',
+        );
+      }
+
+      await this.filesService.assertUserOwnedRasterImage(
+        icon.asset_key,
+        userId,
+      );
+
+      return {
+        icon_kind: 'custom',
+        icon_key: null,
+        icon_asset_key: icon.asset_key,
+      };
+    }
+
+    throw this.invalidNutritionIcon('The meal icon kind is invalid.');
+  }
+
+  private toNutritionLogIconResponse(
+    record: NutritionLog,
+  ): NutritionLogIconResponseDTO {
+    if (
+      record.icon_kind === 'custom' &&
+      record.icon_asset_key &&
+      this.filesService.isUserOwnedUploadKey(
+        record.icon_asset_key,
+        record.user_id,
+      )
+    ) {
+      return {
+        kind: 'custom',
+        key: null,
+        asset_key: record.icon_asset_key,
+      };
+    }
+
+    if (
+      record.icon_kind === 'library' &&
+      record.icon_key &&
+      NUTRITION_MEAL_ICON_LIBRARY_KEYS.includes(
+        record.icon_key as (typeof NUTRITION_MEAL_ICON_LIBRARY_KEYS)[number],
+      )
+    ) {
+      return {
+        kind: 'library',
+        key: record.icon_key as (typeof NUTRITION_MEAL_ICON_LIBRARY_KEYS)[number],
+        asset_key: null,
+      };
+    }
+
+    const fallback =
+      NUTRITION_MEAL_ICON_FALLBACKS[record.meal_name.trim().toLowerCase()] ??
+      'utensils';
+
+    return {
+      kind: 'library',
+      key: fallback,
+      asset_key: null,
+    };
+  }
+
+  private invalidNutritionIcon(detail: string): BadRequestException {
+    return new BadRequestException({
+      type: 'BUSINESS_RULE_VIOLATION',
+      title: 'Invalid Meal Icon',
+      status: 400,
+      detail,
+    });
   }
 
   private toDailyTotals(

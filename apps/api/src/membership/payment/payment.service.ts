@@ -1,5 +1,6 @@
 import {
   ForbiddenException,
+  GoneException,
   HttpException,
   HttpStatus,
   Injectable,
@@ -38,7 +39,11 @@ import {
   PaymongoWebhookEvent,
   PaymongoWebhookService,
 } from './paymongo-webhook.service';
-import { PaymentRepository } from './payment.repository';
+import {
+  PaymentRepository,
+  PaymongoMembershipCardFailureInput,
+  PaymongoMembershipCardWebhookInput,
+} from './payment.repository';
 
 type PaymentDetails = Awaited<
   ReturnType<PaymentRepository['findPaymentByIdForStaffOrThrow']>
@@ -90,6 +95,7 @@ export class PaymentService {
     requesterRole: UserRole,
     dto: ManualPaymentDTO,
   ): Promise<Payment> {
+    this.assertMembershipCardPaymentRouteRetired(dto.payable_type);
     const paymentOwnerId = await this.resolvePaymentOwnerId(dto);
     const isStaffReviewer = this.isStaffReviewer(requesterRole);
 
@@ -112,9 +118,9 @@ export class PaymentService {
     dto: VerifyPaymentDTO,
     adminId: string,
   ): Promise<void> {
-    this.assertRejectionReason(dto);
-
     const payment = await this.repo.findPaymentByIdForStaffOrThrow(paymentId);
+    this.assertMembershipCardPaymentRouteRetired(payment.payable_type);
+    this.assertRejectionReason(dto);
     this.assertAwaitingVerification(payment);
 
     const nextStatus = dto.action === 'approve' ? 'completed' : 'failed';
@@ -211,6 +217,38 @@ export class PaymentService {
       checkoutSession.id,
     );
 
+    if (payment.provider !== PaymentProvider.paymongo) {
+      return this.successAck();
+    }
+
+    if (payment.payable_type === PayableType.membership_card) {
+      const verifiedAt = this.extractWebhookPaidAt(event) ?? new Date();
+      const gatewayMetadata = this.toWebhookGatewayMetadata(payment, event);
+      const transition = await this.repo.completePaymongoMembershipCardPayment(
+        payment.id,
+        {
+          gatewayEventId: event.data.id,
+          gatewayMetadata,
+          verifiedAt,
+        } satisfies PaymongoMembershipCardWebhookInput,
+      );
+
+      if (transition.transitioned) {
+        this.emitPaymentCompleted({
+          paymentId: payment.id,
+          userId: payment.user_id,
+          payableType: payment.payable_type,
+          payableId: payment.payable_id,
+          amount: payment.amount.toString(),
+          verifiedBy: null,
+          membershipCardActivationCommitted:
+            transition.membershipCardStateChanged,
+        });
+      }
+
+      return this.successAck();
+    }
+
     try {
       await this.repo.updatePayment(
         payment.id,
@@ -251,6 +289,10 @@ export class PaymentService {
 
     const payment = await this.findWebhookPayment(event);
 
+    if (payment.provider !== PaymentProvider.paymongo) {
+      return this.successAck();
+    }
+
     if (payment.status === 'completed' || payment.status === 'failed') {
       return this.successAck();
     }
@@ -259,6 +301,31 @@ export class PaymentService {
     const failureReason =
       this.extractPaymongoFailureReason(event) ??
       'PayMongo reported that this payment failed.';
+
+    if (payment.payable_type === PayableType.membership_card) {
+      const transition = await this.repo.failPaymongoMembershipCardPayment(
+        payment.id,
+        {
+          gatewayEventId: event.data.id,
+          gatewayMetadata: this.toWebhookGatewayMetadata(payment, event),
+          rejectionReason: failureReason,
+        } satisfies PaymongoMembershipCardFailureInput,
+      );
+
+      if (transition.transitioned) {
+        this.emitPaymentFailed({
+          paymentId: payment.id,
+          userId: payment.user_id,
+          payableType: payment.payable_type,
+          payableId: payment.payable_id,
+          amount: payment.amount.toString(),
+          reason: failureReason,
+          failedAt,
+        });
+      }
+
+      return this.successAck();
+    }
 
     try {
       await this.repo.updatePayment(
@@ -386,6 +453,22 @@ export class PaymentService {
           'Only payments awaiting verification can be approved or rejected.',
       });
     }
+  }
+
+  private assertMembershipCardPaymentRouteRetired(
+    payableType: PayableType,
+  ): void {
+    if (payableType !== PayableType.membership_card) {
+      return;
+    }
+
+    throw new GoneException({
+      type: 'GONE',
+      title: 'Membership Card Payment Verification Retired',
+      status: 410,
+      detail:
+        'Member cash membership-card payment requests and payment verification are retired. Authorized admin or staff users must grant membership-card access from the members directory.',
+    });
   }
 
   private emitAudit(event: AuditEvent): void {

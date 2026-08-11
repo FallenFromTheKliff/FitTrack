@@ -23,12 +23,12 @@ import { CurrentUser, Roles } from '../../common/decorators';
 import { ActiveMemberCardGuard } from '../../common/guards/active-member-card.guard';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
-import { PaginationDTO } from '../../user/dto/user-dto';
 import {
   AchievementReviewResponseDTO,
   AdminMilestoneEvidenceFilterDTO,
   IntegritySummaryResponseDTO,
   LeaderboardEntryResponseDTO,
+  LeaderboardFilterDTO,
   MasteryFilterDTO,
   MilestoneEvidenceSubmissionResponseDTO,
   MilestoneListFilterDTO,
@@ -76,6 +76,8 @@ function paginatedEnvelopeSchema(itemSchemaRef: string) {
           limit: { type: 'number', example: 20 },
           total: { type: 'number', example: 1 },
           total_pages: { type: 'number', example: 1 },
+          next_cursor: { type: 'string', nullable: true },
+          snapshot: { type: 'string', format: 'date-time' },
         },
       },
     },
@@ -425,7 +427,7 @@ export class GamificationController {
     description: 'Leaderboard returned.',
     schema: paginatedEnvelopeSchema(getSchemaPath(LeaderboardEntryResponseDTO)),
   })
-  listLeaderboard(@Query() dto: PaginationDTO) {
+  listLeaderboard(@Query() dto: LeaderboardFilterDTO) {
     return this.gamificationService.getLeaderboard(dto);
   }
 }

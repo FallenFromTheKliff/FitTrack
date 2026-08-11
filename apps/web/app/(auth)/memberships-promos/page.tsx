@@ -14,7 +14,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   GymPromotionRecord,
   MembershipOperationsDashboardRecord,
-  MembershipPaymentDetailsRecord,
   MembershipPlanRecord,
 } from "@fittrack/api-client";
 import type { MembershipCatalogSettingsRecord } from "@fittrack/types";
@@ -27,7 +26,6 @@ import {
   membershipCatalogSettingsQueryOptions,
   membershipOperationsDashboardQueryOptions,
   membershipPlansQueryOptions,
-  reviewMembershipPaymentsQueryOptions,
   updateMembershipCatalogSettingsMutationOptions,
   updateMembershipPlanMutationOptions,
 } from "@fittrack/query";
@@ -271,13 +269,6 @@ export default function MembershipsPromosPage() {
   const promotionsQuery = useQuery(
     gymPromotionsQueryOptions(webApiClient, { limit: 20, page: 1 }),
   );
-  const membershipReviewPaymentsQuery = useQuery(
-    reviewMembershipPaymentsQueryOptions(webApiClient, {
-      limit: 6,
-      page: 1,
-      status: "awaiting_verification",
-    }),
-  );
   const createPlanMutation = useMutation(
     createMembershipPlanMutationOptions(webApiClient, queryClient),
   );
@@ -315,7 +306,6 @@ export default function MembershipsPromosPage() {
     membershipCatalogSettingsQuery.error ??
     operationsQuery.error ??
     promotionsQuery.error ??
-    membershipReviewPaymentsQuery.error ??
     createPlanMutation.error ??
     updatePlanMutation.error ??
     updateMembershipCatalogSettingsMutation.error ??
@@ -509,8 +499,6 @@ export default function MembershipsPromosPage() {
         offeringsLoading={
           plansQuery.isFetching || membershipCatalogSettingsQuery.isFetching
         }
-        pendingPayments={membershipReviewPaymentsQuery.data?.data ?? []}
-        paymentsLoading={membershipReviewPaymentsQuery.isFetching}
         onRefresh={() =>
           void Promise.all([
             operationsQuery.refetch(),
@@ -518,7 +506,6 @@ export default function MembershipsPromosPage() {
             membershipCatalogSettingsQuery.refetch(),
           ])
         }
-        onRefreshPayments={() => void membershipReviewPaymentsQuery.refetch()}
         onOpenPlans={() => setPlansModalOpen(true)}
         panelStyle={panelStyle}
         mutedStyle={muted}
@@ -1209,11 +1196,8 @@ function MembershipOperationsDashboard({
   mutedStyle,
   onOpenPlans,
   offeringsLoading,
-  onRefreshPayments,
   onRefresh,
   panelStyle,
-  paymentsLoading,
-  pendingPayments,
   serviceOfferings,
 }: {
   colors: ReturnType<typeof useTheme>["colors"];
@@ -1221,12 +1205,9 @@ function MembershipOperationsDashboard({
   loading: boolean;
   mutedStyle: CSSProperties;
   onOpenPlans: () => void;
-  offeringsLoading: boolean;
-  onRefreshPayments: () => void;
   onRefresh: () => void;
   panelStyle: CSSProperties;
-  paymentsLoading: boolean;
-  pendingPayments: MembershipPaymentDetailsRecord[];
+  offeringsLoading: boolean;
   serviceOfferings: MembershipServiceOffering[];
 }) {
   const metricCards = [
@@ -1234,11 +1215,6 @@ function MembershipOperationsDashboard({
       label: "Active Members",
       value: dashboard?.totalActiveMembersCount ?? 0,
       helper: "Subscriptions currently marked active.",
-    },
-    {
-      label: "Payment Reviews Awaiting Verification",
-      value: pendingPayments.length,
-      helper: "Cash or manual membership submissions waiting for staff review.",
     },
   ];
 
@@ -1282,7 +1258,7 @@ function MembershipOperationsDashboard({
           style={{
             display: "grid",
             gap: 12,
-            gridTemplateColumns: "repeat(2, minmax(180px, 1fr))",
+            gridTemplateColumns: "minmax(180px, 320px)",
           }}
         >
           {metricCards.map((card) => (
@@ -1338,100 +1314,6 @@ function MembershipOperationsDashboard({
           )}
         </div>
 
-        <div style={panelStyle}>
-          <div
-            style={{
-              alignItems: "center",
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 8,
-              justifyContent: "space-between",
-            }}
-          >
-            <div>
-              <FitText style={{ fontSize: 14, fontWeight: 900 }}>
-                Payment reviews awaiting verification
-              </FitText>
-              <FitText as="p" style={mutedStyle}>
-                These are the latest manual or cash submissions awaiting approval before member access updates.
-              </FitText>
-            </div>
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <a
-                href="/accounts"
-                style={{
-                  alignItems: "center",
-                  color: colors.brand,
-                  display: "inline-flex",
-                  fontSize: 12,
-                  fontWeight: 900,
-                  textDecoration: "none",
-                }}
-              >
-                OPEN ACCOUNTS REVIEW
-              </a>
-              <FitButton
-                icon={RefreshCcw}
-                label="REFRESH REVIEWS"
-                variant="ghost"
-                onClick={onRefreshPayments}
-                loading={paymentsLoading}
-              />
-            </div>
-          </div>
-          <div
-            style={{
-              display: "grid",
-              gap: 8,
-              marginTop: 10,
-              maxHeight: "min(360px, 42vh)",
-              overflowY: "auto",
-              paddingRight: 4,
-            }}
-          >
-            {pendingPayments.length ? (
-              pendingPayments.map((payment) => (
-                <div
-                  key={payment.id}
-                  style={{
-                    ...panelStyle,
-                    backgroundColor: colors.surface,
-                    display: "grid",
-                    gap: 6,
-                    gridTemplateColumns: "minmax(0, 1fr) auto",
-                    padding: 12,
-                  }}
-                >
-                  <div style={{ minWidth: 0 }}>
-                    <FitText style={{ fontSize: 13.5, fontWeight: 850 }}>
-                      {payment.user?.profile
-                        ? `${payment.user.profile.first_name ?? ""} ${payment.user.profile.last_name ?? ""}`.trim() ||
-                          `User ${payment.user_id.slice(0, 8)}`
-                        : `User ${payment.user_id.slice(0, 8)}`}
-                    </FitText>
-                    <FitText as="p" style={mutedStyle}>
-                      {payment.payable_type.replaceAll("_", " ")} / PHP{" "}
-                      {Number(payment.amount ?? 0).toLocaleString("en-PH", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
-                    </FitText>
-                  </div>
-                  <FitPill
-                    mode="status"
-                    label={payment.status.replaceAll("_", " ")}
-                    color={colors.warning}
-                    style={{ justifySelf: "end" }}
-                  />
-                </div>
-              ))
-            ) : (
-              <FitText as="p" style={mutedStyle}>
-                No membership-card or subscription payment reviews awaiting verification right now.
-              </FitText>
-            )}
-          </div>
-        </div>
       </div>
     </MembershipSurface>
   );

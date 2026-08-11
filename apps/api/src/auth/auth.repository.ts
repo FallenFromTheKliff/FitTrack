@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   User,
   UserProfile,
@@ -333,7 +337,7 @@ export class AuthRepository extends BaseRepository {
 
   /**
    * Atomically creates User + AuthIdentity(email) + UserProfile + NotificationPreference.
-   * Used by self-registration (pending) and admin-create (active).
+   * Used by post-verification self-registration and trusted account creation.
    */
   createUserWithProfile(data: {
     acceptedPrivacyAt?: Date;
@@ -346,6 +350,7 @@ export class AuthRepository extends BaseRepository {
     phone?: string;
     emailVerifiedAt?: Date;
     qrCodeToken?: string;
+    enforceIdentityUniquenessAtCommit?: boolean;
     createCoachProfile?: boolean;
     coachProfile?: {
       displayName?: string | null;
@@ -359,7 +364,43 @@ export class AuthRepository extends BaseRepository {
       isAvailableForBooking?: boolean;
     };
   }): Promise<User> {
-    return this.transaction(async (tx) => {
+    const createAggregate = async (tx: Prisma.TransactionClient) => {
+      if (data.enforceIdentityUniquenessAtCommit) {
+        const [emailIdentity, phoneIdentity, phoneProfile] = await Promise.all([
+          tx.authIdentity.findFirst({
+            where: {
+              provider: AuthProvider.email,
+              identifier: data.email,
+            },
+            select: { id: true },
+          }),
+          data.phone
+            ? tx.authIdentity.findFirst({
+                where: {
+                  provider: AuthProvider.phone,
+                  identifier: data.phone,
+                },
+                select: { id: true },
+              })
+            : null,
+          data.phone
+            ? tx.userProfile.findFirst({
+                where: { phone: data.phone },
+                select: { user_id: true },
+              })
+            : null,
+        ]);
+
+        if (emailIdentity || phoneIdentity || phoneProfile) {
+          throw new ConflictException({
+            type: 'IDENTITY_ALREADY_EXISTS',
+            title: 'Registration Identity Already Exists',
+            status: 409,
+            detail: 'The registration identity is no longer available.',
+          });
+        }
+      }
+
       const user = await tx.user.create({
         data: {
           role: data.role,
@@ -378,6 +419,7 @@ export class AuthRepository extends BaseRepository {
           identifier: data.email,
           credential_hash: data.credentialHash,
           is_primary: true,
+          verified_at: data.emailVerifiedAt,
         },
       });
 
@@ -421,7 +463,13 @@ export class AuthRepository extends BaseRepository {
       }
 
       return user;
-    });
+    };
+
+    if (!data.enforceIdentityUniquenessAtCommit) {
+      return this.transaction(createAggregate);
+    }
+
+    return this.runSerializableTransaction(createAggregate);
   }
 
   /**
@@ -472,6 +520,28 @@ export class AuthRepository extends BaseRepository {
 
       return user;
     });
+  }
+
+  private async runSerializableTransaction<T>(
+    work: (tx: Prisma.TransactionClient) => Promise<T>,
+  ): Promise<T> {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        return await this.prisma.$transaction(work, {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        });
+      } catch (error) {
+        const isSerializationConflict =
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2034';
+
+        if (!isSerializationConflict || attempt === 2) {
+          throw error;
+        }
+      }
+    }
+
+    throw new Error('Serializable auth transaction retry limit exceeded.');
   }
 
   private requireUserProfile(

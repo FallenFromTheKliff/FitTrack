@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { CSSProperties, ReactNode } from "react";
+import type { ChangeEvent, ReactNode } from "react";
 import {
+  Badge,
   AlertTriangle,
   Apple,
   Archive,
@@ -25,8 +26,10 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
+  Star,
   Target,
   Trophy,
+  Upload,
   Users,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -36,9 +39,8 @@ import type {
   AdminMilestoneDefinitionRecord,
   FitnessMilestoneCategory,
   FitnessMilestoneDefinitionStatus,
-  FitnessMilestoneEvidenceRequirement,
   FitnessMilestoneTriggerType,
-  FitnessMilestoneVerificationPolicy,
+  ProgressionIconKind,
   UpsertAdminMilestoneDefinitionInput,
 } from "@fittrack/types";
 import {
@@ -46,10 +48,12 @@ import {
   archiveAdminMilestoneMutationOptions,
   createAdminMilestoneMutationOptions,
   restoreAdminMilestoneMutationOptions,
+  uploadImageMutationOptions,
   updateAdminMilestoneMutationOptions,
 } from "@fittrack/query";
+import { buildRenderableAssetUrl } from "@fittrack/utils";
 
-import { webApiClient } from "@/lib/api-client";
+import { WEB_API_BASE_URL, webApiClient } from "@/lib/api-client";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
 import {
@@ -77,7 +81,8 @@ type DefinitionDraft = {
   conditionJson: string;
   description: string;
   endsAt: string;
-  evidenceRequirement: FitnessMilestoneEvidenceRequirement;
+  iconAssetKey: string | null;
+  iconKind: ProgressionIconKind;
   isHidden: boolean;
   key: string;
   metric: string;
@@ -88,7 +93,6 @@ type DefinitionDraft = {
   target: string;
   title: string;
   triggerType: FitnessMilestoneTriggerType;
-  verificationPolicy: FitnessMilestoneVerificationPolicy;
   xpBonus: string;
 };
 
@@ -263,13 +267,44 @@ const BADGE_TONE_OPTIONS = [
   { label: "Violet", value: "violet" },
 ];
 
-const BADGE_ICON_OPTIONS = [
+type DefaultBadgeIconKey =
+  | "badge"
+  | "dumbbell"
+  | "flame"
+  | "medal"
+  | "star"
+  | "target"
+  | "trophy";
+
+const BADGE_ICON_OPTIONS: Array<{
+  label: string;
+  value: DefaultBadgeIconKey;
+}> = [
+  { label: "Badge", value: "badge" },
+  { label: "Dumbbell", value: "dumbbell" },
+  { label: "Flame", value: "flame" },
   { label: "Medal", value: "medal" },
+  { label: "Star", value: "star" },
+  { label: "Target", value: "target" },
   { label: "Trophy", value: "trophy" },
-  { label: "Shield", value: "shield" },
-  { label: "Spark", value: "spark" },
-  { label: "Bolt", value: "bolt" },
 ];
+
+const BADGE_ICON_COMPONENTS: Record<DefaultBadgeIconKey, LucideIcon> = {
+  badge: Badge,
+  dumbbell: Dumbbell,
+  flame: Flame,
+  medal: Medal,
+  star: Star,
+  target: Target,
+  trophy: Trophy,
+};
+
+const ALLOWED_ICON_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
+const ALLOWED_ICON_FILE_PATTERN = /\.(?:jpe?g|png|webp)$/i;
 
 const QUICK_TARGETS = [1, 10, 50, 100];
 
@@ -299,14 +334,6 @@ function formatLabel(value: string | null | undefined) {
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
-}
-
-function formatDate(value: string | null | undefined) {
-  if (!value) return "Not set";
-  return new Intl.DateTimeFormat("en", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
 }
 
 function toJsonText(value: Record<string, unknown> | null | undefined) {
@@ -352,7 +379,7 @@ function buildRewardPayload(
 ) {
   return {
     badge_tone: draft.badgeTone || "ember",
-    icon: draft.badgeIcon || "medal",
+    icon: draft.badgeIcon || "trophy",
     xp_bonus: Math.max(0, Math.round(parsePositiveNumber(draft.xpBonus, 0))),
   };
 }
@@ -376,8 +403,18 @@ function describeCondition(value: Record<string, unknown> | null | undefined) {
 function describeReward(value: Record<string, unknown> | null | undefined) {
   const xpBonus = typeof value?.xp_bonus === "number" ? value.xp_bonus : 0;
   const badgeTone = typeof value?.badge_tone === "string" ? value.badge_tone : "ember";
-  const icon = typeof value?.icon === "string" ? value.icon : "medal";
+  const icon = typeof value?.icon === "string" ? value.icon : "trophy";
   return `${xpBonus.toLocaleString()} XP bonus, ${formatLabel(badgeTone)} ${formatLabel(icon)} badge.`;
+}
+
+function getDefaultBadgeIcon(value: string | null | undefined): DefaultBadgeIconKey {
+  return BADGE_ICON_OPTIONS.some((option) => option.value === value)
+    ? (value as DefaultBadgeIconKey)
+    : "trophy";
+}
+
+function getBadgeIcon(value: string | null | undefined): LucideIcon {
+  return BADGE_ICON_COMPONENTS[getDefaultBadgeIcon(value)];
 }
 
 function getMetricIcon(metric: string | null | undefined): LucideIcon {
@@ -441,24 +478,24 @@ function getRecordProgress(record: AdminMilestoneDefinitionRecord) {
 function createDefaultDraft(): DefinitionDraft {
   return {
     advancedOpen: false,
-    badgeIcon: "medal",
+    badgeIcon: "trophy",
     badgeTone: "ember",
     category: "training",
     conditionJson: toJsonText({ metric: "completed_workout_sessions", target: 1 }),
     description: "",
     endsAt: "",
-    evidenceRequirement: "none",
+    iconAssetKey: null,
+    iconKind: "library",
     isHidden: false,
     key: "",
     metric: "completed_workout_sessions",
-    rewardJson: toJsonText({ badge_tone: "ember", icon: "medal", xp_bonus: 0 }),
+    rewardJson: toJsonText({ badge_tone: "ember", icon: "trophy", xp_bonus: 0 }),
     sortOrder: "0",
     startsAt: "",
     status: "active",
     target: "1",
     title: "",
     triggerType: "source_event",
-    verificationPolicy: "auto",
     xpBonus: "0",
   };
 }
@@ -472,16 +509,23 @@ function draftFromRecord(record: AdminMilestoneDefinitionRecord): DefinitionDraf
   const target =
     typeof condition.target === "number" ? String(condition.target) : "1";
   const reward = record.rewardPayload ?? {};
+  const recordIconKey =
+    typeof record.iconKey === "string"
+      ? record.iconKey
+      : typeof reward.icon === "string"
+        ? reward.icon
+        : "trophy";
 
   return {
     advancedOpen: record.triggerType === "composite" || isAdvancedCondition(condition),
-    badgeIcon: typeof reward.icon === "string" ? reward.icon : "medal",
+    badgeIcon: getDefaultBadgeIcon(recordIconKey),
     badgeTone: typeof reward.badge_tone === "string" ? reward.badge_tone : "ember",
     category: record.category,
     conditionJson: toJsonText(record.conditionPayload),
     description: record.description ?? "",
     endsAt: record.endsAt ?? "",
-    evidenceRequirement: record.evidenceRequirement,
+    iconAssetKey: record.iconAssetKey ?? null,
+    iconKind: record.iconKind ?? (record.iconAssetKey ? "custom" : "library"),
     isHidden: record.isHidden,
     key: record.key,
     metric,
@@ -492,7 +536,6 @@ function draftFromRecord(record: AdminMilestoneDefinitionRecord): DefinitionDraf
     target,
     title: record.title,
     triggerType: record.triggerType,
-    verificationPolicy: record.verificationPolicy,
     xpBonus: typeof reward.xp_bonus === "number" ? String(reward.xp_bonus) : "0",
   };
 }
@@ -513,7 +556,13 @@ function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Action failed.";
 }
 
-function buildPayload(draft: DefinitionDraft): UpsertAdminMilestoneDefinitionInput {
+function buildPayload(
+  draft: DefinitionDraft,
+  iconOverride?: Pick<
+    UpsertAdminMilestoneDefinitionInput,
+    "iconAssetKey" | "iconKey" | "iconKind"
+  >,
+): UpsertAdminMilestoneDefinitionInput {
   const usesAdvancedRule = draft.triggerType === "composite";
   const conditionPayload = usesAdvancedRule
     ? parseJsonObject(draft.conditionJson, "Advanced unlock rule")
@@ -521,6 +570,14 @@ function buildPayload(draft: DefinitionDraft): UpsertAdminMilestoneDefinitionInp
   const rewardPayload = usesAdvancedRule
     ? parseJsonObject(draft.rewardJson, "Advanced reward")
     : buildRewardPayload(draft);
+  const iconKind = iconOverride?.iconKind ?? draft.iconKind;
+  const iconAssetKey = iconOverride?.iconAssetKey ?? draft.iconAssetKey;
+  const iconKey = iconOverride?.iconKey ?? draft.badgeIcon;
+  const normalizedIconAssetKey = iconAssetKey?.trim() || null;
+
+  if (iconKind === "custom" && !normalizedIconAssetKey) {
+    throw new Error("Upload a managed PNG, JPEG, or WebP icon before saving.");
+  }
 
   return {
     category: draft.category,
@@ -528,6 +585,9 @@ function buildPayload(draft: DefinitionDraft): UpsertAdminMilestoneDefinitionInp
     description: draft.description.trim() || null,
     endsAt: draft.endsAt || null,
     evidenceRequirement: "none",
+    iconAssetKey: iconKind === "custom" ? normalizedIconAssetKey : null,
+    iconKey: iconKind === "custom" ? null : getDefaultBadgeIcon(iconKey),
+    iconKind: iconKind === "custom" ? "custom" : "library",
     isHidden: draft.isHidden,
     key: draft.key.trim() || slugifyMilestoneKey(draft.title),
     rewardPayload,
@@ -553,10 +613,6 @@ export default function MilestonesPage() {
     useState<AdminMilestoneDefinitionListParams["category"]>("all");
   const [definitionTrigger, setDefinitionTrigger] =
     useState<AdminMilestoneDefinitionListParams["triggerType"]>("all");
-  const [definitionVerification, setDefinitionVerification] =
-    useState<AdminMilestoneDefinitionListParams["verificationPolicy"]>("all");
-  const [definitionEvidence, setDefinitionEvidence] =
-    useState<AdminMilestoneDefinitionListParams["evidenceRequirement"]>("all");
   const [selectedDefinitionId, setSelectedDefinitionId] = useState<string | null>(null);
   const [isDefinitionDetailsOpen, setIsDefinitionDetailsOpen] = useState(false);
   const [editingDefinition, setEditingDefinition] =
@@ -566,13 +622,14 @@ export default function MilestonesPage() {
   const [isDefinitionModalOpen, setIsDefinitionModalOpen] = useState(false);
   const [definitionStep, setDefinitionStep] = useState<1 | 2 | 3>(1);
   const [draft, setDraft] = useState<DefinitionDraft>(createDefaultDraft);
+  const [pendingIconFile, setPendingIconFile] = useState<File | null>(null);
+  const [iconUploadError, setIconUploadError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   const definitionParams = useMemo<AdminMilestoneDefinitionListParams>(
     () => ({
       category: definitionCategory,
-      evidenceRequirement: definitionEvidence,
       includeArchived: definitionStatus === "archived" || definitionStatus === "all",
       limit: 10,
       page: definitionPage,
@@ -580,16 +637,13 @@ export default function MilestonesPage() {
       sort: "updated_at",
       status: definitionStatus,
       triggerType: definitionTrigger,
-      verificationPolicy: definitionVerification,
     }),
     [
       definitionCategory,
-      definitionEvidence,
       definitionPage,
       definitionSearch,
       definitionStatus,
       definitionTrigger,
-      definitionVerification,
     ],
   );
 
@@ -605,11 +659,9 @@ export default function MilestonesPage() {
     setDefinitionPage(1);
   }, [
     definitionCategory,
-    definitionEvidence,
     definitionSearch,
     definitionStatus,
     definitionTrigger,
-    definitionVerification,
   ]);
 
   const createMutation = useMutation(
@@ -624,13 +676,26 @@ export default function MilestonesPage() {
   const restoreMutation = useMutation(
     restoreAdminMilestoneMutationOptions(webApiClient, queryClient),
   );
+  const uploadImageMutation = useMutation(uploadImageMutationOptions(webApiClient));
   const definitionRows = definitions;
   const activeCount = definitions.filter((item) => item.status === "active").length;
   const archivedCount = definitions.filter((item) => item.status === "archived").length;
 
+  const resetIconUploadState = () => {
+    setPendingIconFile(null);
+    setIconUploadError(null);
+  };
+
+  const handleIconFileChange = (file: File | null, error?: string) => {
+    setPendingIconFile(file);
+    setIconUploadError(error ?? null);
+    setFormError(null);
+  };
+
   const openCreateModal = () => {
     setEditingDefinition(null);
     setDraft(createDefaultDraft());
+    resetIconUploadState();
     setDefinitionStep(1);
     setFormError(null);
     setIsDefinitionModalOpen(true);
@@ -639,6 +704,7 @@ export default function MilestonesPage() {
   const openEditModal = (record: AdminMilestoneDefinitionRecord) => {
     setEditingDefinition(record);
     setDraft(draftFromRecord(record));
+    resetIconUploadState();
     setDefinitionStep(1);
     setFormError(null);
     setIsDefinitionModalOpen(true);
@@ -653,6 +719,7 @@ export default function MilestonesPage() {
       status: "draft",
       title: `${sourceDraft.title} Copy`,
     });
+    resetIconUploadState();
     setDefinitionStep(1);
     setFormError(null);
     setIsDefinitionModalOpen(true);
@@ -662,6 +729,7 @@ export default function MilestonesPage() {
     setIsDefinitionModalOpen(false);
     setEditingDefinition(null);
     setDefinitionStep(1);
+    resetIconUploadState();
     setFormError(null);
   };
 
@@ -674,16 +742,49 @@ export default function MilestonesPage() {
     }));
   };
 
-  const submitDefinition = () => {
+  const isSavingDefinition =
+    createMutation.isPending || updateMutation.isPending || uploadImageMutation.isPending;
+
+  const submitDefinition = async () => {
+    if (isSavingDefinition) return;
     setFormError(null);
     setActionMessage(null);
     let payload: UpsertAdminMilestoneDefinitionInput;
 
+    if (iconUploadError) {
+      setFormError(iconUploadError);
+      return;
+    }
+
     try {
-      payload = buildPayload(draft);
+      payload = buildPayload(
+        draft,
+        pendingIconFile
+          ? { iconAssetKey: "pending-upload", iconKey: null, iconKind: "custom" }
+          : undefined,
+      );
     } catch (error) {
       setFormError(getErrorMessage(error));
       return;
+    }
+
+    if (pendingIconFile) {
+      try {
+        const formData = new FormData();
+        formData.append("file", pendingIconFile);
+        const uploadResult = await uploadImageMutation.mutateAsync(formData);
+        if (!uploadResult.fileKey) {
+          throw new Error("Managed icon upload did not return a file key.");
+        }
+        payload = buildPayload(draft, {
+          iconAssetKey: uploadResult.fileKey,
+          iconKey: null,
+          iconKind: "custom",
+        });
+      } catch (error) {
+        setIconUploadError(getErrorMessage(error));
+        return;
+      }
     }
 
     if (editingDefinition) {
@@ -736,9 +837,11 @@ export default function MilestonesPage() {
     });
   };
 
-  const isSavingDefinition = createMutation.isPending || updateMutation.isPending;
   const canSaveDefinition =
-    draft.title.trim().length > 0 && parsePositiveNumber(draft.target, 0) > 0;
+    draft.title.trim().length > 0 &&
+    parsePositiveNumber(draft.target, 0) > 0 &&
+    !iconUploadError &&
+    (draft.iconKind !== "custom" || Boolean(draft.iconAssetKey) || Boolean(pendingIconFile));
   const canContinueDefinition =
     definitionStep === 1
       ? canSaveDefinition
@@ -749,8 +852,6 @@ export default function MilestonesPage() {
     definitionCategory !== "all" ||
     definitionStatus !== "active" ||
     definitionTrigger !== "all" ||
-    definitionVerification !== "all" ||
-    definitionEvidence !== "all" ||
     definitionSearch.trim().length > 0;
 
   return (
@@ -831,8 +932,6 @@ export default function MilestonesPage() {
                   setDefinitionStatus("active");
                   setDefinitionCategory("all");
                   setDefinitionTrigger("all");
-                  setDefinitionVerification("all");
-                  setDefinitionEvidence("all");
                 }}
               />
             }
@@ -994,8 +1093,11 @@ export default function MilestonesPage() {
         <DefinitionForm
           draft={draft}
           error={formError}
+          iconUploadError={iconUploadError}
+          pendingIconFile={pendingIconFile}
           onApplyQuickRule={applyQuickRule}
           onChange={setDraft}
+          onIconFileChange={handleIconFileChange}
           step={definitionStep}
         />
       </FitModal>
@@ -1237,13 +1339,6 @@ export default function MilestonesPage() {
     </div>
   );
 }
-
-const stackStyle: CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 2,
-  minWidth: 0,
-};
 
 function MetricCard({
   hint,
@@ -2246,258 +2341,23 @@ function MilestoneInsightsPanel({
   );
 }
 
-/*
- * Legacy manual-proof inspector retained only as historical source until the
- * corresponding API surface is removed. It is intentionally not compiled or
- * reachable: milestones now unlock from recorded activity without uploads.
-function EvidenceInspector({
-  isPending,
-  onApprove,
-  onReject,
-  onReviewNotesChange,
-  record,
-  reviewNotes,
-}: {
-  isPending: boolean;
-  onApprove: (record: FitnessMilestoneEvidenceSubmissionRecord) => void;
-  onReject: (record: FitnessMilestoneEvidenceSubmissionRecord) => void;
-  onReviewNotesChange: (value: string) => void;
-  record: FitnessMilestoneEvidenceSubmissionRecord | null;
-  reviewNotes: string;
-}) {
-  const { colors } = useTheme();
-
-  if (!record) {
-    return (
-      <FitSection className="milestones-inspector-section" heading="Proof inspector">
-        <div className="milestone-proof-empty">
-          <div className="milestone-proof-empty-icon">
-            <ClipboardCheck size={24} color={colors.brand} />
-          </div>
-          <FitText style={{ display: "block", fontSize: 16, fontWeight: 900 }}>
-            Select a proof review
-          </FitText>
-          <FitText
-            style={{
-              display: "block",
-              maxWidth: 300,
-              color: colors.textSecondary,
-              fontSize: 13,
-              lineHeight: 1.5,
-              textAlign: "center",
-            }}
-          >
-            Manual proof appears only for legacy or evidence-based milestones. Choose a queue item to inspect its image or video.
-          </FitText>
-        </div>
-        <style>{`
-          .milestone-proof-empty {
-            min-height: clamp(280px, 46vh, 520px);
-            display: grid;
-            place-content: center;
-            justify-items: center;
-            gap: 10px;
-            border: 1px dashed ${colors.border};
-            border-radius: 12px;
-            background: ${colors.surfaceRaised};
-            padding: 24px;
-          }
-
-          .milestone-proof-empty-icon {
-            width: 48px;
-            height: 48px;
-            display: grid;
-            place-items: center;
-            border: 1px solid ${colors.brand}55;
-            border-radius: 12px;
-            background: ${colors.brand}12;
-          }
-        `}</style>
-      </FitSection>
-    );
-  }
-
-  const canReview = record.status === "pending";
-  const hasUsableEvidenceUrl = !isPlaceholderEvidenceUrl(record.fileUrl);
-  const mediaContent = record.evidenceType === "image" && hasUsableEvidenceUrl ? (
-    <img src={record.fileUrl} alt={`${record.milestoneTitle ?? "Milestone"} proof`} />
-  ) : (
-    <div className="evidence-video-placeholder">
-      <FileVideo size={36} color={colors.brand} />
-      <FitText style={{ display: "block", marginTop: 10, fontWeight: 900 }}>
-        {hasUsableEvidenceUrl ? "Open MP4 evidence" : "Evidence file unavailable"}
-      </FitText>
-      <FitText style={{ display: "block", marginTop: 4, fontSize: 12, color: colors.textSecondary }}>
-        {hasUsableEvidenceUrl
-          ? "MP4 uploads are capped at 15 MiB."
-          : "Seeded placeholder media is not available in this environment."}
-      </FitText>
-    </div>
-  );
-
-  return (
-    <FitSection className="milestones-inspector-section" heading="Proof inspector">
-      <div className="evidence-review-card">
-        <div className="evidence-review-person">
-          <div className="evidence-avatar">
-            {(record.memberName ?? "FT")
-              .split(" ")
-              .map((part) => part[0])
-              .join("")
-              .slice(0, 2)
-              .toUpperCase()}
-          </div>
-          <div>
-            <FitText style={{ display: "block", fontSize: 18, fontWeight: 950 }}>
-              {record.milestoneTitle ?? "Milestone proof"}
-            </FitText>
-            <FitText style={{ display: "block", marginTop: 3, fontSize: 13, color: colors.textSecondary }}>
-              {record.memberName ?? "FitTrack member"} - {formatDate(record.createdAt)}
-            </FitText>
-          </div>
-        </div>
-
-        {hasUsableEvidenceUrl ? (
-          <a href={record.fileUrl} target="_blank" rel="noreferrer" className="evidence-media-card">
-            {mediaContent}
-          </a>
-        ) : (
-          <div className="evidence-media-card" aria-label="Evidence file unavailable">
-            {mediaContent}
-          </div>
-        )}
-
-        <div className="evidence-meta-grid">
-          <InspectorFact label="Evidence type" value={formatLabel(record.evidenceType)} />
-          <InspectorFact label="File size" value={`${Math.round(record.sizeBytes / 1024)} KB`} />
-          <InspectorFact label="Decision" value={formatLabel(record.status)} />
-          <InspectorFact label="Member" value={record.memberName ?? "FitTrack member"} />
-        </div>
-
-        {record.caption ? (
-          <div className="evidence-caption">
-            <FitText style={{ display: "block", fontSize: 12, color: colors.textSecondary, fontWeight: 900 }}>
-              Member caption
-            </FitText>
-            <FitText style={{ display: "block", marginTop: 5, fontSize: 13 }}>
-              {record.caption}
-            </FitText>
-          </div>
-        ) : null}
-
-        <FitTextArea
-          id="milestone-evidence-review-notes"
-          name="milestoneEvidenceReviewNotes"
-          value={reviewNotes}
-          onChange={(event) => onReviewNotesChange(event.target.value)}
-          placeholder="Add a short note for this decision"
-          style={{ minHeight: 96 }}
-        />
-
-        <div className="evidence-decision-row">
-          <FitButton
-            label="Approve"
-            icon={CheckCircle2}
-            disabled={!canReview}
-            loading={isPending}
-            onClick={() => onApprove(record)}
-          />
-          <FitButton
-            label="Reject"
-            icon={XCircle}
-            variant="danger"
-            disabled={!canReview}
-            loading={isPending}
-            onClick={() => onReject(record)}
-          />
-        </div>
-      </div>
-      <style>{`
-        .evidence-review-card {
-          display: flex;
-          flex-direction: column;
-          gap: 14px;
-        }
-
-        .evidence-review-person {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          min-width: 0;
-        }
-
-        .evidence-avatar {
-          width: 48px;
-          height: 48px;
-          border-radius: 12px;
-          display: grid;
-          place-items: center;
-          flex-shrink: 0;
-          border: 1px solid ${colors.brand}55;
-          background: ${colors.brand}18;
-          color: ${colors.brand};
-          font-weight: 950;
-        }
-
-        .evidence-media-card {
-          min-height: 240px;
-          display: grid;
-          place-items: center;
-          overflow: hidden;
-          border: 1px solid ${colors.border};
-          border-radius: 14px;
-          background: ${colors.surfaceRaised};
-          color: ${colors.textPrimary};
-          text-decoration: none;
-        }
-
-        .evidence-media-card img {
-          width: 100%;
-          height: 100%;
-          max-height: 340px;
-          object-fit: cover;
-        }
-
-        .evidence-video-placeholder {
-          text-align: center;
-          padding: 18px;
-        }
-
-        .evidence-meta-grid {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 8px;
-        }
-
-        .evidence-caption {
-          border: 1px solid ${colors.border};
-          border-radius: 12px;
-          background: ${colors.surfaceRaised};
-          padding: 12px;
-        }
-
-        .evidence-decision-row {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 10px;
-        }
-      `}</style>
-    </FitSection>
-  );
-}
-*/
-
 function DefinitionForm({
   draft,
   error,
+  iconUploadError,
+  pendingIconFile,
   onApplyQuickRule,
   onChange,
+  onIconFileChange,
   step,
 }: {
   draft: DefinitionDraft;
   error: string | null;
+  iconUploadError: string | null;
+  pendingIconFile: File | null;
   onApplyQuickRule: () => void;
   onChange: (next: DefinitionDraft) => void;
+  onIconFileChange: (file: File | null, error?: string) => void;
   step: 1 | 2 | 3;
 }) {
   const { colors } = useTheme();
@@ -2511,6 +2371,28 @@ function DefinitionForm({
     : describeReward(buildRewardPayload(draft));
   const goalReady = draft.title.trim().length > 0 && parsePositiveNumber(draft.target, 0) > 0;
   const rewardReady = goalReady;
+  const [iconPreviewUrl, setIconPreviewUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!pendingIconFile) {
+      setIconPreviewUrl(null);
+      return;
+    }
+
+    const nextUrl = URL.createObjectURL(pendingIconFile);
+    setIconPreviewUrl(nextUrl);
+    return () => URL.revokeObjectURL(nextUrl);
+  }, [pendingIconFile]);
+
+  const persistedIconPreviewUrl =
+    draft.iconKind === "custom" && draft.iconAssetKey
+      ? buildRenderableAssetUrl({
+          apiBaseUrl: WEB_API_BASE_URL,
+          assetKey: draft.iconAssetKey,
+        })
+      : null;
+  const resolvedIconPreviewUrl = iconPreviewUrl ?? persistedIconPreviewUrl;
+  const PreviewIcon = getBadgeIcon(draft.badgeIcon);
 
   const commitDraft = (nextDraft: DefinitionDraft) => {
     let next = { ...nextDraft };
@@ -2547,6 +2429,41 @@ function DefinitionForm({
     commitDraft({
       ...draft,
       advancedOpen: nextAdvancedOpen,
+    });
+  };
+
+  const handleIconFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    if (!file) return;
+
+    if (
+      !ALLOWED_ICON_MIME_TYPES.has(file.type) ||
+      !ALLOWED_ICON_FILE_PATTERN.test(file.name)
+    ) {
+      event.target.value = "";
+      onIconFileChange(
+        null,
+        "Choose a managed PNG, JPEG, or WebP image. SVG files are not supported.",
+      );
+      return;
+    }
+
+    onIconFileChange(file);
+    commitDraft({
+      ...draft,
+      badgeIcon: getDefaultBadgeIcon(draft.badgeIcon),
+      iconAssetKey: null,
+      iconKind: "custom",
+    });
+  };
+
+  const selectLibraryIcon = (value: string) => {
+    onIconFileChange(null);
+    commitDraft({
+      ...draft,
+      badgeIcon: getDefaultBadgeIcon(value),
+      iconAssetKey: null,
+      iconKind: "library",
     });
   };
 
@@ -2706,7 +2623,13 @@ function DefinitionForm({
             <FitText style={{ fontSize: 12, color: colors.textSecondary, fontWeight: 850 }}>
               Member preview
             </FitText>
-            <div className="milestone-preview-medallion"><Dumbbell size={32} /></div>
+            <div className="milestone-preview-medallion">
+              {resolvedIconPreviewUrl ? (
+                <img src={resolvedIconPreviewUrl} alt="Selected milestone icon" />
+              ) : (
+                <PreviewIcon size={32} />
+              )}
+            </div>
             <FitText as="h3" style={{ fontSize: 18, fontWeight: 950, textAlign: "center" }}>
               {draft.title.trim() || "Untitled milestone"}
             </FitText>
@@ -2746,9 +2669,33 @@ function DefinitionForm({
                 fullWidth
                 options={BADGE_ICON_OPTIONS}
                 value={draft.badgeIcon}
-                onChange={(event) => update("badgeIcon", event.target.value)}
+                onChange={(event) => selectLibraryIcon(event.target.value)}
               />
             </Field>
+            <div className="milestone-icon-upload-field">
+              <div className="milestone-icon-upload-heading">
+                <FitText style={{ fontSize: 12, fontWeight: 850 }}>
+                  Custom managed icon
+                </FitText>
+                <FitText style={{ fontSize: 11, color: colors.textSecondary }}>
+                  PNG, JPEG, or WebP only
+                </FitText>
+              </div>
+              <label className="milestone-icon-upload-control">
+                <Upload size={15} color={colors.brand} />
+                <span>{pendingIconFile ? pendingIconFile.name : "Choose image"}</span>
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"
+                  onChange={handleIconFileChange}
+                />
+              </label>
+              {iconUploadError ? (
+                <FitText style={{ fontSize: 11, color: colors.danger, fontWeight: 750 }}>
+                  {iconUploadError}
+                </FitText>
+              ) : null}
+            </div>
             <Field label="Badge tone">
               <FitSelect
                 fullWidth
@@ -2794,7 +2741,13 @@ function DefinitionForm({
             <FitText style={{ fontSize: 12, color: colors.textSecondary, fontWeight: 850 }}>
               Member preview
             </FitText>
-            <div className="milestone-preview-medallion"><Dumbbell size={34} /></div>
+            <div className="milestone-preview-medallion">
+              {resolvedIconPreviewUrl ? (
+                <img src={resolvedIconPreviewUrl} alt="Selected milestone icon" />
+              ) : (
+                <PreviewIcon size={34} />
+              )}
+            </div>
             <FitText as="h3" style={{ fontSize: 18, fontWeight: 950, textAlign: "center" }}>
               {draft.title.trim() || "Untitled milestone"}
             </FitText>
@@ -2977,6 +2930,13 @@ function DefinitionForm({
           transform: rotate(-45deg);
         }
 
+        .milestone-preview-medallion img {
+          width: 48px;
+          height: 48px;
+          border-radius: 12px;
+          object-fit: cover;
+        }
+
         .milestone-preview-reward {
           display: inline-flex;
           align-items: center;
@@ -2990,6 +2950,47 @@ function DefinitionForm({
           justify-content: flex-start;
           gap: 12px;
           padding: 18px;
+        }
+
+        .milestone-icon-upload-field {
+          display: flex;
+          flex-direction: column;
+          gap: 7px;
+        }
+
+        .milestone-icon-upload-heading {
+          display: flex;
+          align-items: baseline;
+          justify-content: space-between;
+          gap: 12px;
+        }
+
+        .milestone-icon-upload-control {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          min-height: 38px;
+          border: 1px dashed ${colors.border};
+          border-radius: 10px;
+          background: ${colors.surface};
+          color: ${colors.textPrimary};
+          padding: 8px 10px;
+          cursor: pointer;
+          font-size: 12px;
+          font-weight: 750;
+        }
+
+        .milestone-icon-upload-control:hover {
+          border-color: ${colors.brand};
+          background: ${colors.brand}0D;
+        }
+
+        .milestone-icon-upload-control input {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          opacity: 0;
+          pointer-events: none;
         }
 
         .milestone-visibility-row {

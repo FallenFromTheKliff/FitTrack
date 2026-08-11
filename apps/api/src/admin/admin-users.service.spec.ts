@@ -421,6 +421,69 @@ describe('AdminUsersService', () => {
     expect(prisma.payment.create).not.toHaveBeenCalled();
   });
 
+  it('keeps admin/staff grant as the canonical completed cash membership path', async () => {
+    const now = new Date('2026-08-11T00:00:00.000Z');
+    const membershipCard = {
+      id: 'card-1',
+      activated_at: now,
+      purchased_at: now,
+      revoke_reason: null,
+      revoked_at: null,
+      source: 'admin_grant',
+      status: 'active',
+      updated_at: now,
+      verified_at: now,
+    };
+    const tx = {
+      membershipCard: { upsert: prisma.membershipCard.upsert },
+      user: { update: prisma.user.update },
+      payment: {
+        findFirst: prisma.payment.findFirst,
+        update: prisma.payment.update,
+        create: prisma.payment.create,
+      },
+    };
+    prisma.$transaction.mockImplementation(
+      (callback: (value: unknown) => unknown) => callback(tx),
+    );
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'member-1',
+      role: UserRole.member,
+      status: UserStatus.active,
+      qr_code_token: null,
+      deletedAt: null,
+      auth_identities: [],
+      membership_card: null,
+      profile: { first_name: 'Ava', last_name: 'Rivera' },
+    });
+    prisma.membershipCard.upsert.mockResolvedValue(membershipCard);
+    prisma.user.update.mockResolvedValue({ id: 'member-1' });
+    prisma.payment.findFirst.mockResolvedValue(null);
+    prisma.payment.create.mockResolvedValue({
+      id: 'payment-1',
+      amount: { toString: () => '400' },
+      payable_id: 'card-1',
+      payable_type: 'membership_card',
+    });
+
+    await expect(
+      service.updateMembershipCard('member-1', { action: 'grant' }, 'admin-1'),
+    ).resolves.toMatchObject({
+      message: 'Membership card access granted.',
+      membershipCard: { status: 'active', source: 'admin_grant' },
+    });
+
+    expect(prisma.payment.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          provider: 'cash',
+          status: 'completed',
+          payable_type: 'membership_card',
+        }),
+      }),
+    );
+  });
+
   it.each([
     ['member', UserRole.member],
     ['admin', UserRole.admin],

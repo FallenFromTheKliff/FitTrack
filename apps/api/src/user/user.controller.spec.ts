@@ -4,7 +4,9 @@ import { UserService } from './user.service';
 
 describe('UserController', () => {
   let controller: UserController;
-  const userService = {};
+  const userService = {
+    updateMyProfile: jest.fn(),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -17,5 +19,15 @@ describe('UserController', () => {
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
+  });
+
+  it('passes the authenticated user and partial profile DTO to the service', () => {
+    const dto = { height_cm: 180 };
+    userService.updateMyProfile.mockReturnValue({ ok: true });
+
+    expect(
+      controller.updateMyProfile({ sub: 'user-1' } as never, dto as never),
+    ).toEqual({ ok: true });
+    expect(userService.updateMyProfile).toHaveBeenCalledWith('user-1', dto);
   });
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, Dispatch, ReactNode, SetStateAction } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -9,17 +9,25 @@ import {
   CheckCircle2,
   Crown,
   EyeOff,
+  Pencil,
   PlusCircle,
   RefreshCcw,
   ShieldAlert,
   ShieldCheck,
+  Trash2,
   Trophy,
   type LucideIcon,
 } from "lucide-react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import type {
   AdminGamificationMuscleLeaderboardListParams,
   AdminGamificationSeasonCreateInput,
+  AdminGamificationSeasonUpdateInput,
   AdminManualExpGrantInput,
   AdminGamificationSeasonStandingListParams,
   FitnessRankingGovernanceStatus,
@@ -29,11 +37,16 @@ import type {
   AdminGamificationRankingProfileRecord,
   AdminGamificationSeasonStandingRecord,
   AdminGamificationSeasonSummaryRecord,
+  FitnessMasteryRank,
   FitnessMuscleLeaderboardEntryRecord,
   FitnessRankingVisibility,
   FitnessSeasonStatus,
   MemberRecord,
   MuscleDefinitionRecord,
+} from "@fittrack/types";
+import {
+  getFitnessExpProgressionState,
+  getFitnessTargetExpDelta,
 } from "@fittrack/types";
 import {
   adminGamificationManualExpMembersQueryOptions,
@@ -47,6 +60,7 @@ import {
   fitnessMuscleDefinitionsQueryOptions,
   resolveAdminGamificationIntegrityCaseMutationOptions,
   updateAdminGamificationRankingOverrideMutationOptions,
+  updateAdminGamificationSeasonMutationOptions,
   updateAdminGamificationSeasonStatusMutationOptions,
 } from "@fittrack/query";
 
@@ -84,6 +98,20 @@ import styles from "./gamification.module.css";
 
 export const dynamic = "force-dynamic";
 const legacyGovernanceQueueEnabled = false;
+const MASTERY_RANK_OPTIONS: FitnessMasteryRank[] = [
+  "bronze",
+  "silver",
+  "gold",
+  "platinum",
+  "adamantite",
+];
+const MASTERY_RANK_COLORS: Record<FitnessMasteryRank, string> = {
+  adamantite: "#a78bfa",
+  bronze: "#b7794b",
+  gold: "#d9a441",
+  platinum: "#5fc9d7",
+  silver: "#94a3b8",
+};
 
 const RANKING_GOVERNANCE_OPTIONS: {
   label: string;
@@ -128,12 +156,39 @@ const MILESTONE_STATUS_OPTIONS: Array<{
 ];
 
 type GamificationTab = "overview" | "milestones";
+type ManualExpAllocationDraft = {
+  amount: number;
+  muscleGroup: string;
+};
 type ManualExpDraft = {
   amount: string;
-  appointmentId: string;
+  allocations: ManualExpAllocationDraft[];
+  editingAllocationIndex: number | null;
   muscleGroup: string;
   rationale: string;
+  targetLevel: FitnessMasteryRank | "";
   userId: string;
+};
+type ManualExpFieldErrors = {
+  allocations: string | null;
+  amount: string | null;
+  member: string | null;
+  muscle: string | null;
+  rationale: string | null;
+  targetLevel: string | null;
+};
+type CursorPaginationMeta = {
+  limit: number;
+  next_cursor?: string | null;
+  page: number;
+  snapshot?: string | null;
+  total: number;
+  total_pages: number;
+};
+type ManualExpTargetLevelPreview = {
+  currentLifetimeExp: number | null;
+  delta: number | null;
+  targetLevel: FitnessMasteryRank;
 };
 type SeasonDraft = {
   autoStartNext: boolean;
@@ -150,6 +205,183 @@ type AdminConfirmationState = {
   onConfirm: () => void;
   title: string;
 };
+
+function normalizeSeasonSelection(value: string) {
+  const candidate = value.trim();
+  return ["", "all", "current", "empty", "none"].includes(
+    candidate.toLowerCase(),
+  )
+    ? ""
+    : candidate;
+}
+
+function getSeasonScheduleValidation(draft: SeasonDraft) {
+  if (draft.title.trim().length < 3) {
+    return "Season name must be at least 3 characters.";
+  }
+
+  const startsAt = new Date(draft.startsAt);
+  const endsAt = new Date(draft.endsAt);
+  if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime())) {
+    return "Enter a valid start and end date for the season.";
+  }
+  if (endsAt <= startsAt) {
+    return "The season end must be after the season start.";
+  }
+
+  return null;
+}
+
+function createManualExpDraft(): ManualExpDraft {
+  return {
+    allocations: [],
+    amount: "",
+    editingAllocationIndex: null,
+    muscleGroup: "",
+    rationale:
+      "Coach verified the member completed the post-session work without camera tracking.",
+    userId: "",
+    targetLevel: "",
+  };
+}
+
+function getManualExpTargetLevelPreview(
+  targetLevel: ManualExpDraft["targetLevel"],
+  currentLifetimeExp: number | null,
+): ManualExpTargetLevelPreview | null {
+  if (!targetLevel) return null;
+
+  if (
+    currentLifetimeExp === null ||
+    !Number.isFinite(currentLifetimeExp)
+  ) {
+    return {
+      currentLifetimeExp: null,
+      delta: null,
+      targetLevel,
+    };
+  }
+
+  const normalizedCurrentLifetimeExp = Math.max(
+    0,
+    Math.floor(currentLifetimeExp),
+  );
+
+  return {
+    currentLifetimeExp: normalizedCurrentLifetimeExp,
+    delta: getFitnessTargetExpDelta(
+      normalizedCurrentLifetimeExp,
+      targetLevel,
+    ),
+    targetLevel,
+  };
+}
+
+function getManualExpTargetLevelAuditSuffix(
+  targetPreview: ManualExpTargetLevelPreview | null,
+) {
+  if (
+    !targetPreview ||
+    targetPreview.currentLifetimeExp === null ||
+    !targetPreview.delta ||
+    targetPreview.delta < 1
+  ) {
+    return "";
+  }
+
+  return (
+    "Target-level audit: " +
+    targetPreview.currentLifetimeExp.toLocaleString("en-US") +
+    " lifetime EXP -> " +
+    labelize(targetPreview.targetLevel) +
+    "; +" +
+    targetPreview.delta.toLocaleString("en-US") +
+    " EXP."
+  );
+}
+
+function getManualExpGrantRationale(
+  rationale: string,
+  targetPreview: ManualExpTargetLevelPreview | null,
+) {
+  const auditSuffix = getManualExpTargetLevelAuditSuffix(targetPreview);
+  return auditSuffix ? rationale + "\n" + auditSuffix : rationale;
+}
+
+function getManualExpFieldErrors(
+  draft: ManualExpDraft,
+  selectedMember: MemberRecord | undefined,
+  muscleDefinitions: MuscleDefinitionRecord[],
+  targetPreview: ManualExpTargetLevelPreview | null,
+): ManualExpFieldErrors {
+  const muscleGroup = draft.muscleGroup.trim();
+  const amountIsDigitsOnly = /^\d+$/.test(draft.amount);
+  const amount = amountIsDigitsOnly ? Number(draft.amount) : Number.NaN;
+  const totalAllocatedExp = draft.allocations.reduce(
+    (total, allocation) => total + allocation.amount,
+    0,
+  );
+  const muscleDefinition = muscleDefinitions.find(
+    (definition) =>
+      definition.key.toLowerCase() === muscleGroup.toLowerCase(),
+  );
+  const duplicateAllocation = draft.allocations.some(
+    (allocation, index) =>
+      index !== draft.editingAllocationIndex &&
+      allocation.muscleGroup.toLowerCase() === muscleGroup.toLowerCase(),
+  );
+  const rationale = draft.rationale.trim();
+  const submittedRationale = getManualExpGrantRationale(
+    rationale,
+    targetPreview,
+  );
+
+  return {
+    allocations:
+      draft.editingAllocationIndex !== null
+        ? "Save or cancel the allocation edit before review."
+        : draft.allocations.length === 0
+          ? "Add at least one muscle allocation."
+          : null,
+    amount:
+      !amountIsDigitsOnly || !Number.isInteger(amount) || amount < 1 || amount > 1_000
+        ? "Enter digits only for a whole-number amount from 1 to 1,000."
+        : null,
+    member:
+      draft.userId && selectedMember
+        ? null
+        : "Choose an eligible active member.",
+    muscle: !muscleGroup
+      ? "Choose a muscle group."
+      : !muscleDefinition
+        ? "Choose a muscle group from the loaded definitions."
+        : duplicateAllocation
+          ? "This muscle already has an allocation. Edit the existing row instead."
+          : null,
+    rationale:
+      rationale.length < 3
+        ? "Reviewer rationale must be at least 3 characters."
+        : submittedRationale.length > 500
+          ? "Reviewer rationale, including the target-level audit, must be 500 characters or fewer."
+          : null,
+    targetLevel:
+      targetPreview === null
+        ? null
+        : targetPreview.currentLifetimeExp === null
+          ? "Current lifetime EXP is unavailable for this member, so a target level cannot be audited."
+          : targetPreview.delta === null || targetPreview.delta < 1
+            ? "Choose a target level above the member's current lifetime level."
+            : totalAllocatedExp !== targetPreview.delta
+              ? "Target " +
+                labelize(targetPreview.targetLevel) +
+                " requires exactly " +
+                targetPreview.delta.toLocaleString("en-US") +
+                " EXP across the muscle allocations. Current total: " +
+                totalAllocatedExp.toLocaleString("en-US") +
+                " EXP."
+              : null,
+  };
+}
 
 function formatDateTime(value?: string | null) {
   if (!value) return "No timestamp yet";
@@ -184,6 +416,14 @@ function labelize(value: string) {
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function masteryRankColor(rank: FitnessMasteryRank) {
+  return MASTERY_RANK_COLORS[rank];
+}
+
+function masteryRankLabel(rank: FitnessMasteryRank) {
+  return labelize(rank);
 }
 
 function getMemberDisplayName(member: MemberRecord) {
@@ -414,6 +654,7 @@ function AdminGamificationPage() {
     useState<AdminConfirmationState | null>(null);
   const [manualExpOpen, setManualExpOpen] = useState(false);
   const [seasonManagerOpen, setSeasonManagerOpen] = useState(false);
+  const [seasonEditId, setSeasonEditId] = useState<string | null>(null);
   const [seasonDraft, setSeasonDraft] = useState<SeasonDraft>({
     autoStartNext: true,
     description: "",
@@ -429,12 +670,16 @@ function AdminGamificationPage() {
   );
   const [seasonClock, setSeasonClock] = useState(() => Date.now());
   const [seasonStandingPage, setSeasonStandingPage] = useState(1);
+  const [seasonStandingCursor, setSeasonStandingCursor] = useState<string>();
+  const [seasonStandingSnapshot, setSeasonStandingSnapshot] = useState<string>();
   const [leaderboardMode, setLeaderboardMode] =
     useState<"overall" | "muscle">("overall");
   const [muscleStandingPage, setMuscleStandingPage] = useState(1);
+  const [muscleStandingCursor, setMuscleStandingCursor] = useState<string>();
+  const [muscleStandingSnapshot, setMuscleStandingSnapshot] = useState<string>();
   const [muscleStandingScope, setMuscleStandingScope] =
     useState<"lifetime" | "season">("season");
-  const [selectedStandingMuscle, setSelectedStandingMuscle] = useState("chest");
+  const [selectedStandingMuscle, setSelectedStandingMuscle] = useState("");
   const [seasonStandingSearch, setSeasonStandingSearch] = useState("");
   const [seasonFilterId, setSeasonFilterId] = useState("");
   const [seasonMuscleFilter, setSeasonMuscleFilter] = useState("");
@@ -455,14 +700,10 @@ function AdminGamificationPage() {
   const [rankingNotes, setRankingNotes] = useState<DraftMap>({});
   const [rankingStateDrafts, setRankingStateDrafts] =
     useState<RankingStateDraftMap>({});
-  const [manualExpDraft, setManualExpDraft] = useState<ManualExpDraft>({
-    amount: "75",
-    appointmentId: "",
-    muscleGroup: "",
-    rationale:
-      "Coach verified the member completed the post-session work without camera tracking.",
-    userId: "",
-  });
+  const [manualExpDraft, setManualExpDraft] = useState<ManualExpDraft>(
+    createManualExpDraft,
+  );
+  const manualExpSubmittingRef = useRef(false);
 
   useEffect(() => {
     const timer = window.setInterval(() => setSeasonClock(Date.now()), 60_000);
@@ -491,12 +732,25 @@ function AdminGamificationPage() {
     () => muscleDefinitionsQuery.data ?? [],
     [muscleDefinitionsQuery.data],
   );
+  useEffect(() => {
+    if (manualExpMuscleDefinitions.length === 0) return;
+    setSelectedStandingMuscle((current) =>
+      manualExpMuscleDefinitions.some((definition) => definition.key === current)
+        ? current
+        : manualExpMuscleDefinitions[0].key,
+    );
+  }, [manualExpMuscleDefinitions]);
+  const normalizedSeasonFilterId = normalizeSeasonSelection(seasonFilterId);
   const seasonFilterParams = useMemo<AdminGamificationSeasonStandingListParams>(
     () => ({
       includeArchived: seasonIncludeArchived,
       limit: 10,
       page: seasonStandingPage,
-      ...(seasonFilterId ? { seasonId: seasonFilterId } : {}),
+      ...(seasonStandingCursor ? { cursor: seasonStandingCursor } : {}),
+      ...(seasonStandingSnapshot ? { snapshot: seasonStandingSnapshot } : {}),
+      ...(normalizedSeasonFilterId
+        ? { seasonId: normalizedSeasonFilterId }
+        : {}),
       ...(seasonMuscleFilter.trim()
         ? { muscleKey: seasonMuscleFilter.trim() }
         : {}),
@@ -511,24 +765,27 @@ function AdminGamificationPage() {
         : {}),
     }),
     [
-      seasonFilterId,
       seasonGovernanceFilter,
       seasonIncludeArchived,
       seasonMuscleFilter,
       seasonStandingPage,
+      seasonStandingCursor,
+      seasonStandingSnapshot,
       seasonStandingSearch,
       seasonVisibilityFilter,
+      normalizedSeasonFilterId,
     ],
   );
   const seasonsQuery = useQuery(
     adminGamificationSeasonsQueryOptions(webApiClient),
   );
-  const seasonStandingsQuery = useQuery(
-    adminGamificationSeasonStandingsQueryOptions(
+  const seasonStandingsQuery = useQuery({
+    ...adminGamificationSeasonStandingsQueryOptions(
       webApiClient,
       seasonFilterParams,
     ),
-  );
+    placeholderData: keepPreviousData,
+  });
   const muscleStandingParams =
     useMemo<AdminGamificationMuscleLeaderboardListParams>(
       () => ({
@@ -536,8 +793,10 @@ function AdminGamificationPage() {
         muscleKey: selectedStandingMuscle,
         page: muscleStandingPage,
         scope: muscleStandingScope,
-        ...(muscleStandingScope === "season" && seasonFilterId
-          ? { seasonId: seasonFilterId }
+        ...(muscleStandingCursor ? { cursor: muscleStandingCursor } : {}),
+        ...(muscleStandingSnapshot ? { snapshot: muscleStandingSnapshot } : {}),
+        ...(muscleStandingScope === "season" && normalizedSeasonFilterId
+          ? { seasonId: normalizedSeasonFilterId }
           : {}),
         ...(seasonStandingSearch.trim()
           ? { search: seasonStandingSearch.trim() }
@@ -545,8 +804,10 @@ function AdminGamificationPage() {
       }),
       [
         muscleStandingPage,
+        muscleStandingCursor,
+        muscleStandingSnapshot,
         muscleStandingScope,
-        seasonFilterId,
+        normalizedSeasonFilterId,
         seasonStandingSearch,
         selectedStandingMuscle,
       ],
@@ -556,7 +817,12 @@ function AdminGamificationPage() {
       webApiClient,
       muscleStandingParams,
     ),
-    enabled: leaderboardMode === "muscle",
+    placeholderData: keepPreviousData,
+    enabled:
+      leaderboardMode === "muscle" &&
+      manualExpMuscleDefinitions.some(
+        (definition) => definition.key === selectedStandingMuscle,
+      ),
   });
   const milestoneReviewsQuery = useQuery({
     ...fitnessAchievementReviewsQueryOptions(webApiClient),
@@ -570,6 +836,9 @@ function AdminGamificationPage() {
   );
   const createSeasonMutation = useMutation(
     createAdminGamificationSeasonMutationOptions(webApiClient, queryClient),
+  );
+  const updateSeasonMutation = useMutation(
+    updateAdminGamificationSeasonMutationOptions(webApiClient, queryClient),
   );
   const integrityMutation = useMutation(
     resolveAdminGamificationIntegrityCaseMutationOptions(
@@ -586,6 +855,78 @@ function AdminGamificationPage() {
   const manualExpMutation = useMutation(
     createAdminManualExpGrantMutationOptions(webApiClient, queryClient),
   );
+  const seasonMutationPending =
+    seasonMutation.isPending ||
+    createSeasonMutation.isPending ||
+    updateSeasonMutation.isPending;
+  const selectedManualExpMember = manualExpEligibleMembers.find(
+    (member) => member.id === manualExpDraft.userId,
+  );
+  const selectedManualExpStanding = seasonStandingsQuery.data?.data.find(
+    (standing) => standing.userId === manualExpDraft.userId,
+  );
+  const selectedManualExpLifetimeExp =
+    selectedManualExpStanding?.totalXp ?? null;
+  const manualExpTargetLevelPreview = getManualExpTargetLevelPreview(
+    manualExpDraft.targetLevel,
+    selectedManualExpLifetimeExp,
+  );
+  const manualExpFieldErrors = getManualExpFieldErrors(
+    manualExpDraft,
+    selectedManualExpMember,
+    manualExpMuscleDefinitions,
+    manualExpTargetLevelPreview,
+  );
+  const manualExpComposerActive =
+    manualExpDraft.editingAllocationIndex !== null ||
+    Boolean(manualExpDraft.amount.trim() || manualExpDraft.muscleGroup.trim());
+  const manualExpReviewBlocked = Boolean(
+    manualExpFieldErrors.member ||
+      manualExpFieldErrors.allocations ||
+      manualExpFieldErrors.rationale ||
+      manualExpFieldErrors.targetLevel ||
+      (manualExpComposerActive &&
+        (manualExpFieldErrors.muscle || manualExpFieldErrors.amount)),
+  );
+  const seasonDraftValidation = getSeasonScheduleValidation(seasonDraft);
+  const refreshGamificationViews = () =>
+    Promise.all([
+      overviewQuery.refetch(),
+      seasonsQuery.refetch(),
+      seasonStandingsQuery.refetch(),
+      ...(leaderboardMode === "muscle" ? [muscleStandingsQuery.refetch()] : []),
+    ]);
+  const rankingViewsFetching =
+    overviewQuery.isFetching ||
+    seasonsQuery.isFetching ||
+    seasonStandingsQuery.isFetching ||
+    (leaderboardMode === "muscle" && muscleStandingsQuery.isFetching);
+  const changeSeasonStandingPage = (nextPage: number) => {
+    setSeasonStandingCursor(undefined);
+    setSeasonStandingSnapshot(undefined);
+    setSeasonStandingPage(nextPage);
+  };
+  const advanceSeasonStandingCursor = (
+    cursor: string,
+    snapshot?: string | null,
+  ) => {
+    setSeasonStandingCursor(cursor);
+    setSeasonStandingSnapshot(snapshot ?? undefined);
+    setSeasonStandingPage((current) => current + 1);
+  };
+  const changeMuscleStandingPage = (nextPage: number) => {
+    setMuscleStandingCursor(undefined);
+    setMuscleStandingSnapshot(undefined);
+    setMuscleStandingPage(nextPage);
+  };
+  const advanceMuscleStandingCursor = (
+    cursor: string,
+    snapshot?: string | null,
+  ) => {
+    setMuscleStandingCursor(cursor);
+    setMuscleStandingSnapshot(snapshot ?? undefined);
+    setMuscleStandingPage((current) => current + 1);
+  };
   useEffect(() => {
     if (searchParams.get("tab") === "milestones") {
       router.replace("/milestones");
@@ -604,20 +945,24 @@ function AdminGamificationPage() {
 
   useEffect(() => {
     setSeasonStandingPage(1);
+    setSeasonStandingCursor(undefined);
+    setSeasonStandingSnapshot(undefined);
   }, [
-    seasonFilterId,
     seasonGovernanceFilter,
     seasonIncludeArchived,
     seasonMuscleFilter,
     seasonStandingSearch,
     seasonVisibilityFilter,
+    normalizedSeasonFilterId,
   ]);
 
   useEffect(() => {
     setMuscleStandingPage(1);
+    setMuscleStandingCursor(undefined);
+    setMuscleStandingSnapshot(undefined);
   }, [
     muscleStandingScope,
-    seasonFilterId,
+    normalizedSeasonFilterId,
     seasonStandingSearch,
     selectedStandingMuscle,
   ]);
@@ -630,19 +975,6 @@ function AdminGamificationPage() {
         : [],
     [overview?.activeSeason],
   );
-  const pageError =
-    overviewQuery.error ??
-    seasonsQuery.error ??
-    seasonStandingsQuery.error ??
-    muscleStandingsQuery.error ??
-    membersQuery.error ??
-    milestoneReviewsQuery.error ??
-    seasonMutation.error ??
-    createSeasonMutation.error ??
-    integrityMutation.error ??
-    manualExpMutation.error ??
-    rankingMutation.error;
-
   const panelStyle = {
     border: `1px solid ${colors.border}`,
     backgroundColor: colors.surfaceRaised,
@@ -764,6 +1096,8 @@ function AdminGamificationPage() {
   };
 
   const openSeasonManager = () => {
+    if (seasonMutationPending) return;
+    setSeasonEditId(null);
     if (!seasonDraft.startsAt || !seasonDraft.endsAt) {
       const startsAt = new Date();
       startsAt.setDate(startsAt.getDate() + 7);
@@ -780,23 +1114,57 @@ function AdminGamificationPage() {
     setSeasonManagerOpen(true);
   };
 
+  const openSeasonEditor = (season: AdminGamificationSeasonSummaryRecord) => {
+    if (seasonMutationPending) return;
+    setSeasonEditId(season.id);
+    setSeasonDraft({
+      autoStartNext: season.autoStartNext,
+      description: "",
+      endsAt: toLocalDateTimeInput(new Date(season.endsAt)),
+      startsAt: toLocalDateTimeInput(new Date(season.startsAt)),
+      title: season.title,
+    });
+    setSeasonManagerOpen(true);
+  };
+
   const submitSeasonDraft = () => {
-    const startsAt = new Date(seasonDraft.startsAt);
-    const endsAt = new Date(seasonDraft.endsAt);
-    if (
-      !seasonDraft.title.trim() ||
-      Number.isNaN(startsAt.getTime()) ||
-      Number.isNaN(endsAt.getTime()) ||
-      endsAt <= startsAt
-    ) {
+    const validationMessage = getSeasonScheduleValidation(seasonDraft);
+    if (validationMessage) {
       setConfirmationState({
         confirmIcon: ShieldAlert,
         confirmLabel: "Close",
-        message:
-          "Add a season title and a valid date window where the end is after the start.",
+        message: validationMessage,
         title: "Season Schedule Needs Attention",
         onConfirm: () => undefined,
       });
+      return;
+    }
+
+    const startsAt = new Date(seasonDraft.startsAt);
+    const endsAt = new Date(seasonDraft.endsAt);
+    if (seasonEditId) {
+      const payload: AdminGamificationSeasonUpdateInput = {
+        autoStartNext: seasonDraft.autoStartNext,
+        endsAt: endsAt.toISOString(),
+        startsAt: startsAt.toISOString(),
+        title: seasonDraft.title.trim(),
+      };
+      updateSeasonMutation.mutate(
+        { payload, seasonId: seasonEditId },
+        {
+          onSuccess: () => {
+            setSeasonEditId(null);
+            setSeasonManagerOpen(false);
+            setSeasonDraft({
+              autoStartNext: true,
+              description: "",
+              endsAt: "",
+              startsAt: "",
+              title: "",
+            });
+          },
+        },
+      );
       return;
     }
 
@@ -809,6 +1177,8 @@ function AdminGamificationPage() {
     };
     createSeasonMutation.mutate(payload, {
       onSuccess: () => {
+        setSeasonEditId(null);
+        setSeasonManagerOpen(false);
         setSeasonDraft({
           autoStartNext: true,
           description: "",
@@ -820,68 +1190,87 @@ function AdminGamificationPage() {
     });
   };
 
+  const openManualExpModal = () => {
+    manualExpMutation.reset();
+    setManualExpOpen(true);
+  };
+
+  const closeManualExpModal = () => {
+    if (manualExpMutation.isPending) return;
+    manualExpMutation.reset();
+    setManualExpOpen(false);
+    setManualMemberSearch("");
+    setManualExpDraft(createManualExpDraft());
+  };
+
+  const updateManualExpDraft: Dispatch<SetStateAction<ManualExpDraft>> = (
+    value,
+  ) => {
+    manualExpMutation.reset();
+    setManualExpDraft(value);
+  };
+
+  const updateManualMemberSearch = (value: string) => {
+    manualExpMutation.reset();
+    setManualMemberSearch(value);
+  };
+
   const submitManualExpGrant = () => {
-    const amount = Number(manualExpDraft.amount);
-    const selectedMember = manualExpEligibleMembers.find(
-      (member) => member.id === manualExpDraft.userId,
-    );
+    const selectedMember = selectedManualExpMember;
     const rationale = manualExpDraft.rationale.trim();
 
-    if (!manualExpDraft.userId || !selectedMember || !Number.isInteger(amount) || amount < 1) {
-      setConfirmationState({
-        confirmIcon: ShieldAlert,
-        confirmLabel: "Close",
-        message:
-          "Choose an active member with verified membership-card access and enter a whole-number EXP amount before applying a manual grant.",
-        title: "Manual EXP Needs A Valid Amount",
-        onConfirm: () => undefined,
-      });
-      return;
-    }
+    if (manualExpReviewBlocked || !selectedMember) return;
 
-    if (!rationale) {
-      setConfirmationState({
-        confirmIcon: ShieldAlert,
-        confirmLabel: "Close",
-        message:
-          "Add a reviewer rationale so the manual grant is audit-ready.",
-        title: "Manual EXP Needs A Rationale",
-        onConfirm: () => undefined,
-      });
-      return;
-    }
-
-    const payload: AdminManualExpGrantInput = {
-      amount,
+    const submittedRationale = getManualExpGrantRationale(
       rationale,
+      manualExpTargetLevelPreview,
+    );
+    const payload: AdminManualExpGrantInput = {
+      allocations: manualExpDraft.allocations,
+      rationale: submittedRationale,
       userId: manualExpDraft.userId,
-      ...(manualExpDraft.muscleGroup.trim()
-        ? { muscleGroup: manualExpDraft.muscleGroup.trim() }
-        : {}),
-      ...(manualExpDraft.appointmentId.trim()
-        ? { appointmentId: manualExpDraft.appointmentId.trim() }
-        : {}),
     };
+    const totalExp = payload.allocations.reduce(
+      (total, allocation) => total + allocation.amount,
+      0,
+    );
+    const allocationSummary = payload.allocations
+      .map((allocation) => {
+        const definition = manualExpMuscleDefinitions.find(
+          (candidate) => candidate.key === allocation.muscleGroup,
+        );
+        return `${definition?.name ?? labelize(allocation.muscleGroup)} ${allocation.amount.toLocaleString("en-US")} EXP`;
+      })
+      .join("; ");
 
-    setManualExpOpen(false);
     setConfirmationState({
       confirmIcon: PlusCircle,
       confirmLabel: "Grant EXP",
-      message: `${amount} EXP will be added to ${selectedMember ? getMemberDisplayName(selectedMember) : "this member"} and logged as a manual post-session correction.`,
+      message:
+        "Member: " +
+        getMemberDisplayName(selectedMember) +
+        ". Allocations: " +
+        allocationSummary +
+        ". Total EXP: " +
+        totalExp.toLocaleString("en-US") +
+        ". Rationale: " +
+        submittedRationale,
       title: "Apply Manual EXP Grant?",
       onConfirm: () => {
+        if (manualExpSubmittingRef.current || manualExpMutation.isPending) {
+          return;
+        }
+        manualExpSubmittingRef.current = true;
         manualExpMutation.mutate(
-          { payload },
+          { idempotencyKey: crypto.randomUUID(), payload },
           {
             onSuccess: () => {
-              setManualExpDraft((current) => ({
-                ...current,
-                amount: "75",
-                appointmentId: "",
-                muscleGroup: "",
-                userId: "",
-              }));
+              setManualExpOpen(false);
+              setManualExpDraft(createManualExpDraft());
               setManualMemberSearch("");
+            },
+            onSettled: () => {
+              manualExpSubmittingRef.current = false;
             },
           },
         );
@@ -987,7 +1376,7 @@ function AdminGamificationPage() {
                   variant="primary"
                   icon={PlusCircle}
                   label="Grant EXP"
-                  onClick={() => setManualExpOpen(true)}
+                  onClick={openManualExpModal}
                   style={{ minHeight: 36, minWidth: 112, paddingInline: 14 }}
                 />
               </span>
@@ -995,8 +1384,8 @@ function AdminGamificationPage() {
                 variant="ghost"
                 icon={RefreshCcw}
                 label="Refresh"
-                loading={overviewQuery.isFetching}
-                onClick={() => overviewQuery.refetch()}
+                loading={rankingViewsFetching}
+                onClick={() => void refreshGamificationViews()}
                 style={{ minHeight: 34, paddingInline: 10 }}
               />
             </div>
@@ -1076,7 +1465,7 @@ function AdminGamificationPage() {
                                 ? "Close"
                                 : labelize(status)
                           }
-                          loading={seasonMutation.isPending}
+                          loading={seasonMutationPending}
                           style={{ minHeight: 34, minWidth: 86, paddingInline: 10 }}
                           textStyle={{ fontSize: 12, whiteSpace: "nowrap" }}
                           onClick={() =>
@@ -1117,21 +1506,15 @@ function AdminGamificationPage() {
               </FitText>
             )}
           </div>
-        </div>
-
-        {pageError ? (
-          <div
-            style={{
-              ...panelStyle,
-              borderColor: `${colors.danger}55`,
-              backgroundColor: `${colors.danger}10`,
-            }}
-          >
-            <FitText style={{ color: colors.danger, fontWeight: 800 }}>
-              {getErrorMessage(pageError, "Gamification admin action failed.")}
+          {overviewQuery.error ? (
+            <FitText role="alert" style={{ color: colors.danger, fontSize: 12 }}>
+              {getErrorMessage(
+                overviewQuery.error,
+                "Unable to load ranking governance overview.",
+              )}
             </FitText>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
 
         {activeTab === "overview" ? (
           <div
@@ -1150,67 +1533,69 @@ function AdminGamificationPage() {
             <div style={{ minHeight: 0, overflow: "visible" }}>
               {leaderboardMode === "overall" ? (
                 <SeasonPerformanceTable
+                actionError={rankingMutation.error}
                 includeArchived={seasonIncludeArchived}
                 leaderboardMode={leaderboardMode}
+                loadError={seasonStandingsQuery.error ?? seasonsQuery.error}
                 muscleFilter={seasonMuscleFilter}
                 onIncludeArchivedChange={setSeasonIncludeArchived}
                 onLeaderboardModeChange={setLeaderboardMode}
                 onMuscleFilterChange={setSeasonMuscleFilter}
-                onPageChange={setSeasonStandingPage}
+                onNextCursor={advanceSeasonStandingCursor}
+                onPageChange={changeSeasonStandingPage}
                 onSearchChange={setSeasonStandingSearch}
-                onSeasonChange={setSeasonFilterId}
+                onSeasonChange={(value) =>
+                  setSeasonFilterId(normalizeSeasonSelection(value))
+                }
                 onVisibilityChange={setSeasonVisibilityFilter}
                 onGovernanceChange={setSeasonGovernanceFilter}
                 onModerate={moderateStanding}
-                onOpenManualExp={() => setManualExpOpen(true)}
+                onOpenManualExp={openManualExpModal}
                 onOpenSeasonManager={openSeasonManager}
-                onRefresh={() => {
-                  void Promise.all([
-                    overviewQuery.refetch(),
-                    seasonStandingsQuery.refetch(),
-                  ]);
-                }}
+                onRefresh={() => void refreshGamificationViews()}
                 moderationPending={rankingMutation.isPending}
                 page={seasonStandingPage}
-                refreshing={
-                  overviewQuery.isFetching || seasonStandingsQuery.isFetching
-                }
+                refreshing={rankingViewsFetching}
                 search={seasonStandingSearch}
                 selectedGovernance={seasonGovernanceFilter}
-                selectedSeasonId={seasonFilterId}
+                selectedSeasonId={normalizedSeasonFilterId}
                 selectedVisibility={seasonVisibilityFilter}
                 seasons={seasonsQuery.data ?? []}
                 standings={seasonStandingsQuery.data}
               />
               ) : (
                 <MusclePerformanceTable
+                  actionError={rankingMutation.error}
                   governanceProfiles={overview?.rankings.profiles ?? []}
                   leaderboardMode={leaderboardMode}
+                  loadError={
+                    muscleStandingsQuery.error ??
+                    seasonsQuery.error ??
+                    muscleDefinitionsQuery.error
+                  }
                   moderationPending={rankingMutation.isPending}
                   muscleDefinitions={manualExpMuscleDefinitions}
                   onLeaderboardModeChange={setLeaderboardMode}
                   onModerate={moderateStanding}
                   onMuscleChange={setSelectedStandingMuscle}
-                  onOpenManualExp={() => setManualExpOpen(true)}
+                  onOpenManualExp={openManualExpModal}
                   onOpenSeasonManager={openSeasonManager}
-                  onPageChange={setMuscleStandingPage}
-                  onRefresh={() => {
-                    void Promise.all([
-                      overviewQuery.refetch(),
-                      muscleStandingsQuery.refetch(),
-                    ]);
-                  }}
+                  onNextCursor={advanceMuscleStandingCursor}
+                  onPageChange={changeMuscleStandingPage}
+                  onRefresh={() => void refreshGamificationViews()}
                   onScopeChange={setMuscleStandingScope}
                   onSearchChange={setSeasonStandingSearch}
-                  onSeasonChange={setSeasonFilterId}
+                  onSeasonChange={(value) =>
+                    setSeasonFilterId(normalizeSeasonSelection(value))
+                  }
                   page={muscleStandingPage}
                   refreshing={
-                    overviewQuery.isFetching || muscleStandingsQuery.isFetching
+                    rankingViewsFetching
                   }
                   scope={muscleStandingScope}
                   search={seasonStandingSearch}
                   selectedMuscle={selectedStandingMuscle}
-                  selectedSeasonId={seasonFilterId}
+                  selectedSeasonId={normalizedSeasonFilterId}
                   seasons={seasonsQuery.data ?? []}
                   standings={muscleStandingsQuery.data}
                 />
@@ -1716,7 +2101,12 @@ function AdminGamificationPage() {
       `}</style>
       <FitModal
         isOpen={seasonManagerOpen}
-        onClose={() => setSeasonManagerOpen(false)}
+        onClose={() => {
+          if (!seasonMutationPending) {
+            setSeasonManagerOpen(false);
+            setSeasonEditId(null);
+          }
+        }}
         title="Season planner"
         icon={Crown}
         maxWidth={760}
@@ -1741,22 +2131,21 @@ function AdminGamificationPage() {
             <FitButton
               variant="ghost"
               label="Close"
-              disabled={createSeasonMutation.isPending}
-              onClick={() => setSeasonManagerOpen(false)}
+              disabled={seasonMutationPending}
+              onClick={() => {
+                setSeasonManagerOpen(false);
+                setSeasonEditId(null);
+              }}
               style={{ minHeight: 36, minWidth: 88 }}
             />
             <FitButton
               variant="primary"
-              icon={PlusCircle}
-              label="Create draft"
-              loading={createSeasonMutation.isPending}
-              disabled={
-                !seasonDraft.title.trim() ||
-                !seasonDraft.startsAt ||
-                !seasonDraft.endsAt
-              }
+              icon={seasonEditId ? CheckCircle2 : PlusCircle}
+              label={seasonEditId ? "Save changes" : "Create draft"}
+              loading={seasonMutationPending}
+              disabled={Boolean(seasonDraftValidation)}
               onClick={submitSeasonDraft}
-              style={{ minHeight: 36, minWidth: 126 }}
+              style={{ minHeight: 36, minWidth: seasonEditId ? 132 : 126 }}
             />
           </div>
         }
@@ -1816,7 +2205,7 @@ function AdminGamificationPage() {
                 variant="danger"
                 icon={CheckCircle2}
                 label="Close season"
-                loading={seasonMutation.isPending}
+                loading={seasonMutationPending}
                 onClick={() =>
                   setConfirmationState({
                     confirmIcon: CheckCircle2,
@@ -1865,10 +2254,12 @@ function AdminGamificationPage() {
                 as="h3"
                 style={{ fontSize: 16, fontWeight: 900, lineHeight: 1.2 }}
               >
-                Schedule a season
+                {seasonEditId ? "Edit scheduled season" : "Schedule a season"}
               </FitText>
               <FitText style={{ ...muted, marginTop: 3 }}>
-                Drafts start automatically at their scheduled time when no other season is active.
+                {seasonEditId
+                  ? "Update the schedule before the draft starts."
+                  : "Drafts start automatically at their scheduled time when no other season is active."}
               </FitText>
             </div>
             <label style={{ display: "grid", gap: 6 }}>
@@ -1901,6 +2292,25 @@ function AdminGamificationPage() {
                 }
               />
             </label>
+            {seasonDraftValidation ? (
+              <FitText role="alert" style={{ color: colors.danger, fontSize: 12 }}>
+                {seasonDraftValidation}
+              </FitText>
+            ) : null}
+            {seasonsQuery.error ||
+            createSeasonMutation.error ||
+            updateSeasonMutation.error ||
+            seasonMutation.error ? (
+              <FitText role="alert" style={{ color: colors.danger, fontSize: 12 }}>
+                {getErrorMessage(
+                  createSeasonMutation.error ??
+                    updateSeasonMutation.error ??
+                    seasonMutation.error ??
+                    seasonsQuery.error,
+                  "Unable to load or update seasons.",
+                )}
+              </FitText>
+            ) : null}
             <div
               style={{
                 display: "grid",
@@ -2022,23 +2432,33 @@ function AdminGamificationPage() {
                           {season.autoStartNext ? "Auto-start enabled" : "Manual start only"}
                         </FitText>
                       </div>
-                      <FitButton
-                        variant="ghost"
-                        icon={CheckCircle2}
-                        label={overview?.activeSeason ? "Active season running" : "Force start"}
-                        disabled={Boolean(overview?.activeSeason)}
-                        loading={seasonMutation.isPending}
-                        onClick={() =>
-                          seasonMutation.mutate({
-                            seasonId: season.id,
-                            payload: {
-                              status: "active",
-                              rationale: "Admin manually started the scheduled season.",
-                            },
-                          })
-                        }
-                        style={{ minHeight: 34, minWidth: 116 }}
-                      />
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                        <FitButton
+                          variant="ghost"
+                          icon={Pencil}
+                          label="Edit"
+                          disabled={seasonMutationPending}
+                          onClick={() => openSeasonEditor(season)}
+                          style={{ minHeight: 34, minWidth: 76 }}
+                        />
+                        <FitButton
+                          variant="ghost"
+                          icon={CheckCircle2}
+                          label={overview?.activeSeason ? "Active season running" : "Force start"}
+                          disabled={Boolean(overview?.activeSeason) || seasonMutationPending}
+                          loading={seasonMutationPending}
+                          onClick={() =>
+                            seasonMutation.mutate({
+                              seasonId: season.id,
+                              payload: {
+                                status: "active",
+                                rationale: "Admin manually started the scheduled season.",
+                              },
+                            })
+                          }
+                          style={{ minHeight: 34, minWidth: 116 }}
+                        />
+                      </div>
                     </div>
                   ))}
               </div>
@@ -2059,10 +2479,7 @@ function AdminGamificationPage() {
       </FitModal>
       <FitModal
         isOpen={manualExpOpen}
-        onClose={() => {
-          setManualExpOpen(false);
-          setManualMemberSearch("");
-        }}
+        onClose={closeManualExpModal}
         title="Grant Manual EXP"
         subtitle="Apply an audited correction after verified member activity."
         icon={PlusCircle}
@@ -2089,10 +2506,7 @@ function AdminGamificationPage() {
               variant="ghost"
               label="Cancel"
               disabled={manualExpMutation.isPending}
-              onClick={() => {
-                setManualExpOpen(false);
-                setManualMemberSearch("");
-              }}
+              onClick={closeManualExpModal}
               style={{ minHeight: 36, minWidth: 88 }}
               textStyle={{ fontSize: 12, fontWeight: 750 }}
             />
@@ -2100,13 +2514,13 @@ function AdminGamificationPage() {
               data-ui="gamification-manual-exp-submit"
               style={{ display: "block" }}
             >
-              <FitButton
-                variant="primary"
-                icon={PlusCircle}
-                label="Grant EXP"
-                loading={manualExpMutation.isPending}
-                disabled={!manualExpDraft.userId}
-                onClick={submitManualExpGrant}
+            <FitButton
+              variant="primary"
+              icon={PlusCircle}
+              label="Review grant"
+              loading={manualExpMutation.isPending}
+              disabled={manualExpReviewBlocked || manualExpMutation.isPending}
+              onClick={submitManualExpGrant}
                 style={{ minHeight: 36, minWidth: 124 }}
                 textStyle={{ fontSize: 12, fontWeight: 800 }}
               />
@@ -2121,8 +2535,12 @@ function AdminGamificationPage() {
           membersLoading={membersQuery.isFetching}
           muscleDefinitions={manualExpMuscleDefinitions}
           musclesLoading={muscleDefinitionsQuery.isFetching}
-          onDraftChange={setManualExpDraft}
-          onMemberSearchChange={setManualMemberSearch}
+          fieldErrors={manualExpFieldErrors}
+          loadError={membersQuery.error ?? muscleDefinitionsQuery.error}
+          mutationError={manualExpMutation.error}
+          currentLifetimeExp={selectedManualExpLifetimeExp}
+          onDraftChange={updateManualExpDraft}
+          onMemberSearchChange={updateManualMemberSearch}
         />
       </FitModal>
       <ConfirmModal
@@ -2133,7 +2551,7 @@ function AdminGamificationPage() {
         confirmIcon={confirmationState?.confirmIcon}
         isDanger={confirmationState?.isDanger}
         isLoading={
-          seasonMutation.isPending ||
+          seasonMutationPending ||
           integrityMutation.isPending ||
           manualExpMutation.isPending ||
           rankingMutation.isPending
@@ -2150,8 +2568,10 @@ function AdminGamificationPage() {
 }
 
 function SeasonPerformanceTable({
+  actionError,
   includeArchived,
   leaderboardMode,
+  loadError,
   moderationPending,
   muscleFilter,
   onGovernanceChange,
@@ -2161,6 +2581,7 @@ function SeasonPerformanceTable({
   onMuscleFilterChange,
   onOpenManualExp,
   onOpenSeasonManager,
+  onNextCursor,
   onPageChange,
   onRefresh,
   onSearchChange,
@@ -2175,8 +2596,10 @@ function SeasonPerformanceTable({
   seasons,
   standings,
 }: {
+  actionError: unknown;
   includeArchived: boolean;
   leaderboardMode: "overall" | "muscle";
+  loadError: unknown;
   moderationPending: boolean;
   muscleFilter: string;
   onGovernanceChange: (value: FitnessRankingGovernanceStatus | "") => void;
@@ -2193,6 +2616,7 @@ function SeasonPerformanceTable({
   onMuscleFilterChange: (value: string) => void;
   onOpenManualExp: () => void;
   onOpenSeasonManager: () => void;
+  onNextCursor: (cursor: string, snapshot?: string | null) => void;
   onPageChange: (page: number) => void;
   onRefresh: () => void;
   onSearchChange: (value: string) => void;
@@ -2206,9 +2630,9 @@ function SeasonPerformanceTable({
   selectedVisibility: FitnessRankingVisibility | "";
   seasons: AdminGamificationSeasonSummaryRecord[];
   standings:
-    | {
+      | {
         data: AdminGamificationSeasonStandingRecord[];
-        meta: { limit: number; page: number; total: number; total_pages: number };
+        meta: CursorPaginationMeta;
       }
     | undefined;
 }) {
@@ -2222,20 +2646,21 @@ function SeasonPerformanceTable({
     total: 0,
     total_pages: 1,
   };
+  const defaultSeason =
+    seasons.find((season) => season.status === "active") ??
+    seasons.find((season) => season.status === "closed") ??
+    null;
   const displayedSeason = rows[0]
     ? { status: rows[0].seasonStatus, title: rows[0].seasonTitle }
-    : seasons.find((season) => season.id === selectedSeasonId) ?? null;
-  const isHistoricalSeason = displayedSeason?.status === "closed";
+    : seasons.find((season) => season.id === selectedSeasonId) ?? defaultSeason;
+  const isHistoricalSeason =
+    displayedSeason?.status === "closed" || displayedSeason?.status === "archived";
   const hasSeasonHistory = seasons.some((season) => season.status === "closed");
   const hasActiveSeason = seasons.some((season) => season.status === "active");
   const emptyMessage =
     seasons.length > 0 && !hasSeasonHistory && !hasActiveSeason
       ? "No season history yet. Create and start a season to populate standings."
       : "No season standings match the current filters.";
-  const defaultSeason =
-    seasons.find((season) => season.status === "active") ??
-    seasons.find((season) => season.status === "closed") ??
-    null;
   const seasonOptions = [
     {
       label: defaultSeason
@@ -2243,43 +2668,53 @@ function SeasonPerformanceTable({
         : "No season history",
       value: "",
     },
-    ...seasons.map((season) => ({
-      label: `${season.title} (${labelize(season.status)})`,
-      value: season.id,
-    })),
+    ...seasons
+      .filter(
+        (season) =>
+          season.status === "active" ||
+          season.status === "closed" ||
+          (includeArchived && season.status === "archived"),
+      )
+      .map((season) => ({
+        label: `${season.title} (${labelize(season.status)})`,
+        value: season.id,
+      })),
   ];
   const tableColumns: FitTableColumn<AdminGamificationSeasonStandingRecord>[] = [
     {
       key: "rank",
-      heading: "Rank",
-      render: (row) => (
-        <FitText
-          style={{
-            alignItems: "center",
-            backgroundColor:
-              row.rankPosition && row.rankPosition <= 3
-                ? `${colors.brand}18`
-                : "transparent",
-            border:
-              row.rankPosition && row.rankPosition <= 3
-                ? `1px solid ${colors.brand}55`
-                : "1px solid transparent",
-            borderRadius: 8,
-            color:
-              row.rankPosition && row.rankPosition <= 3
-                ? colors.brand
-                : colors.textPrimary,
-            display: "inline-flex",
-            fontSize: 12,
-            fontWeight: 900,
-            height: 28,
-            justifyContent: "center",
-            minWidth: 32,
-          }}
-        >
-          {row.rankPosition ? `#${row.rankPosition}` : "--"}
-        </FitText>
-      ),
+      heading: "Overall rank",
+      render: (row) => {
+        const rowIndex = rows.indexOf(row);
+        const displayRank =
+          row.rankPosition ??
+          (meta.page - 1) * meta.limit + (rowIndex >= 0 ? rowIndex : 0) + 1;
+
+        return (
+          <FitText
+            style={{
+              alignItems: "center",
+              backgroundColor:
+                displayRank <= 3 ? `${colors.brand}18` : "transparent",
+              border:
+                displayRank <= 3
+                  ? `1px solid ${colors.brand}55`
+                  : "1px solid transparent",
+              borderRadius: 8,
+              color:
+                displayRank <= 3 ? colors.brand : colors.textPrimary,
+              display: "inline-flex",
+              fontSize: 12,
+              fontWeight: 900,
+              height: 28,
+              justifyContent: "center",
+              minWidth: 32,
+            }}
+          >
+            #{displayRank}
+          </FitText>
+        );
+      },
     },
     {
       key: "participant",
@@ -2332,24 +2767,40 @@ function SeasonPerformanceTable({
     },
     {
       key: "exp",
-      heading: "Season score",
+      heading: "Total EXP (rank basis)",
       align: "right",
-      render: (row, themeColors) => (
-        <div style={{ display: "grid", gap: 2, justifyItems: "end" }}>
-          <FitText style={{ display: "block", fontSize: 13, fontWeight: 850 }}>
-            {row.seasonPoints.toLocaleString("en-US")} pts
-          </FitText>
-          <FitText
-            style={{
-              color: themeColors.textMuted,
-              display: "block",
-              fontSize: 11,
-            }}
-          >
-            {row.totalXp.toLocaleString("en-US")} total XP
-          </FitText>
-        </div>
-      ),
+      render: (row, themeColors) => {
+        const lifetime =
+          row.lifetimeProgression ?? getFitnessExpProgressionState(row.totalXp);
+        const season =
+          row.seasonProgression ??
+          getFitnessExpProgressionState(row.seasonPoints);
+        const rankColor = masteryRankColor(lifetime.level);
+
+        return (
+          <div style={{ display: "grid", gap: 3, justifyItems: "end" }}>
+            <FitText
+              style={{ color: rankColor, display: "block", fontSize: 13, fontWeight: 900 }}
+            >
+              {masteryRankLabel(lifetime.level)} · {row.totalXp.toLocaleString("en-US")} EXP
+            </FitText>
+            <FitText
+              style={{
+                color: themeColors.textSecondary,
+                display: "block",
+                fontSize: 11,
+              }}
+            >
+              Lifetime {lifetime.progressPercent}% to next level
+            </FitText>
+            <FitText
+              style={{ color: masteryRankColor(season.level), display: "block", fontSize: 11 }}
+            >
+              Season {masteryRankLabel(season.level)} · {season.progressPercent}% ({row.seasonPoints.toLocaleString("en-US")} pts)
+            </FitText>
+          </div>
+        );
+      },
     },
     {
       key: "topMuscle",
@@ -2398,7 +2849,7 @@ function SeasonPerformanceTable({
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
           <FitPill
             mode="status"
-            label={labelize(row.visibility)}
+            label={row.visibility === "private" ? "Private · excluded" : labelize(row.visibility)}
             color={row.visibility === "private" ? themeColors.warning : themeColors.brand}
             style={{ borderRadius: 6 }}
           />
@@ -2446,6 +2897,7 @@ function SeasonPerformanceTable({
   ];
   const rangeStart = meta.total ? (meta.page - 1) * meta.limit + 1 : 0;
   const rangeEnd = Math.min(meta.total, meta.page * meta.limit);
+  const nextCursor = meta.next_cursor ?? null;
 
   return (
     <>
@@ -2504,7 +2956,7 @@ function SeasonPerformanceTable({
               ) : null}
             </div>
             <FitText style={{ color: colors.textMuted, fontSize: 12 }}>
-              Compare member momentum, earned EXP, milestones, and ranking eligibility.
+              Overall rank uses canonical total EXP. Selected-season score remains context.
             </FitText>
           </div>
           <div className={styles.leaderboardActions}>
@@ -2551,6 +3003,19 @@ function SeasonPerformanceTable({
             />
           </div>
         </div>
+        {loadError || actionError ? (
+          <FitText
+            role="alert"
+            style={{ color: colors.danger, fontSize: 12, padding: "0 10px 8px" }}
+          >
+            {getErrorMessage(
+              actionError ?? loadError,
+              actionError
+                ? "Unable to update this ranking entry."
+                : "Unable to load season standings.",
+            )}
+          </FitText>
+        ) : null}
         <div
           className={styles.filterToolbar}
           style={{
@@ -2704,13 +3169,31 @@ function SeasonPerformanceTable({
             Showing {rangeStart} to {rangeEnd} of {meta.total} results
           </FitText>
           {meta.total > 0 ? (
-            <FitPagination
-              currentPage={meta.page}
-              totalPages={Math.max(1, meta.total_pages)}
-              onPageChange={onPageChange}
-              ariaLabel="Season standing pagination"
-              showSinglePage
-            />
+            <div style={{ alignItems: "center", display: "flex", gap: 8 }}>
+              {nextCursor ? (
+                <FitButton
+                  label="Load next"
+                  variant="ghost"
+                  disabled={refreshing}
+                  onClick={() => onNextCursor(nextCursor, meta.snapshot)}
+                  style={{ minHeight: 32 }}
+                  textStyle={{ fontSize: 11, fontWeight: 800 }}
+                />
+              ) : null}
+              <FitPagination
+                currentPage={meta.page}
+                totalPages={Math.max(1, meta.total_pages)}
+                onPageChange={(nextPage) => {
+                  if (nextPage === meta.page + 1 && nextCursor) {
+                    onNextCursor(nextCursor, meta.snapshot);
+                    return;
+                  }
+                  onPageChange(nextPage);
+                }}
+                ariaLabel="Season standing pagination"
+                showSinglePage
+              />
+            </div>
           ) : (
             <span aria-hidden="true" />
           )}
@@ -2736,8 +3219,10 @@ function toLocalDateTimeInput(value: Date) {
 }
 
 function MusclePerformanceTable({
+  actionError,
   governanceProfiles,
   leaderboardMode,
+  loadError,
   moderationPending,
   muscleDefinitions,
   onLeaderboardModeChange,
@@ -2745,6 +3230,7 @@ function MusclePerformanceTable({
   onMuscleChange,
   onOpenManualExp,
   onOpenSeasonManager,
+  onNextCursor,
   onPageChange,
   onRefresh,
   onScopeChange,
@@ -2759,8 +3245,10 @@ function MusclePerformanceTable({
   seasons,
   standings,
 }: {
+  actionError: unknown;
   governanceProfiles: AdminGamificationRankingProfileRecord[];
   leaderboardMode: "overall" | "muscle";
+  loadError: unknown;
   moderationPending: boolean;
   muscleDefinitions: MuscleDefinitionRecord[];
   onLeaderboardModeChange: (value: "overall" | "muscle") => void;
@@ -2775,6 +3263,7 @@ function MusclePerformanceTable({
   onMuscleChange: (value: string) => void;
   onOpenManualExp: () => void;
   onOpenSeasonManager: () => void;
+  onNextCursor: (cursor: string, snapshot?: string | null) => void;
   onPageChange: (page: number) => void;
   onRefresh: () => void;
   onScopeChange: (value: "lifetime" | "season") => void;
@@ -2790,7 +3279,7 @@ function MusclePerformanceTable({
   standings:
     | {
         data: FitnessMuscleLeaderboardEntryRecord[];
-        meta: { limit: number; page: number; total: number; total_pages: number };
+        meta: CursorPaginationMeta;
       }
     | undefined;
 }) {
@@ -2806,6 +3295,7 @@ function MusclePerformanceTable({
   };
   const rangeStart = meta.total === 0 ? 0 : (meta.page - 1) * meta.limit + 1;
   const rangeEnd = Math.min(meta.page * meta.limit, meta.total);
+  const nextCursor = meta.next_cursor ?? null;
   const muscleOptions = muscleDefinitions.map((definition) => ({
     label: definition.name,
     value: definition.key,
@@ -2907,13 +3397,22 @@ function MusclePerformanceTable({
       key: "participant",
       heading: "Participant",
       render: (row) => (
-        <div style={{ display: "grid", gap: 2 }}>
-          <FitText style={{ color: colors.textPrimary, fontSize: 13, fontWeight: 850 }}>
-            {row.displayName}
-          </FitText>
-          <FitText style={{ color: colors.textMuted, fontSize: 11 }}>
-            {row.isCurrentUser ? "Current account" : "Gym member"}
-          </FitText>
+        <div style={{ alignItems: "center", display: "flex", gap: 8 }}>
+          {row.avatarUrl ? (
+            <img
+              alt={`${row.displayName} profile`}
+              src={row.avatarUrl}
+              style={{ borderRadius: "50%", height: 28, objectFit: "cover", width: 28 }}
+            />
+          ) : null}
+          <div style={{ display: "grid", gap: 2 }}>
+            <FitText style={{ color: colors.textPrimary, fontSize: 13, fontWeight: 850 }}>
+              {row.displayName}
+            </FitText>
+            <FitText style={{ color: colors.textMuted, fontSize: 11 }}>
+              {row.isCurrentUser ? "Current account" : "Gym member"}
+            </FitText>
+          </div>
         </div>
       ),
     },
@@ -2956,11 +3455,22 @@ function MusclePerformanceTable({
       key: "experience",
       heading: "Muscle EXP",
       align: "right",
-      render: (row) => (
-        <FitText style={{ color: colors.brand, fontSize: 13, fontWeight: 900 }}>
-          {row.xpPoints.toLocaleString("en-US")} EXP
-        </FitText>
-      ),
+      render: (row) => {
+        const progression =
+          row.progression ?? getFitnessExpProgressionState(row.xpPoints);
+        const rankColor = masteryRankColor(progression.level);
+
+        return (
+          <div style={{ display: "grid", gap: 2, justifyItems: "end" }}>
+            <FitText style={{ color: rankColor, fontSize: 13, fontWeight: 900 }}>
+              {masteryRankLabel(progression.level)} · {row.xpPoints.toLocaleString("en-US")} EXP
+            </FitText>
+            <FitText style={{ color: colors.textMuted, fontSize: 11 }}>
+              {progression.progressPercent}% to next level
+            </FitText>
+          </div>
+        );
+      },
     },
     {
       key: "last-earned",
@@ -3090,6 +3600,19 @@ function MusclePerformanceTable({
           </div>
         </div>
 
+        {loadError || actionError ? (
+          <FitText
+            role="alert"
+            style={{ color: colors.danger, fontSize: 12, padding: "0 10px 8px" }}
+          >
+            {getErrorMessage(
+              actionError ?? loadError,
+              actionError
+                ? "Unable to update this ranking entry."
+                : "Unable to load muscle standings.",
+            )}
+          </FitText>
+        ) : null}
         <div
           className={styles.muscleFilterToolbar}
           style={{
@@ -3188,13 +3711,31 @@ function MusclePerformanceTable({
             Showing {rangeStart} to {rangeEnd} of {meta.total} results
           </FitText>
           {meta.total > 0 ? (
-            <FitPagination
-              currentPage={meta.page}
-              totalPages={Math.max(1, meta.total_pages)}
-              onPageChange={onPageChange}
-              ariaLabel="Muscle standing pagination"
-              showSinglePage
-            />
+            <div style={{ alignItems: "center", display: "flex", gap: 8 }}>
+              {nextCursor ? (
+                <FitButton
+                  label="Load next"
+                  variant="ghost"
+                  disabled={refreshing}
+                  onClick={() => onNextCursor(nextCursor, meta.snapshot)}
+                  style={{ minHeight: 32 }}
+                  textStyle={{ fontSize: 11, fontWeight: 800 }}
+                />
+              ) : null}
+              <FitPagination
+                currentPage={meta.page}
+                totalPages={Math.max(1, meta.total_pages)}
+                onPageChange={(nextPage) => {
+                  if (nextPage === meta.page + 1 && nextCursor) {
+                    onNextCursor(nextCursor, meta.snapshot);
+                    return;
+                  }
+                  onPageChange(nextPage);
+                }}
+                ariaLabel="Muscle standing pagination"
+                showSinglePage
+              />
+            </div>
           ) : (
             <span aria-hidden="true" />
           )}
@@ -3644,27 +4185,48 @@ function MetricGrid({
   );
 }
 function ManualExpGrantPanel({
+  currentLifetimeExp,
   draft,
+  fieldErrors,
+  loadError,
   members,
   memberSearch,
   membersLoading,
   muscleDefinitions,
   musclesLoading,
+  mutationError,
   onDraftChange,
   onMemberSearchChange,
 }: {
+  currentLifetimeExp: number | null;
   draft: ManualExpDraft;
+  fieldErrors: ManualExpFieldErrors;
+  loadError: unknown;
   members: MemberRecord[];
   memberSearch: string;
   membersLoading: boolean;
   muscleDefinitions: MuscleDefinitionRecord[];
   musclesLoading: boolean;
+  mutationError: unknown;
   onDraftChange: Dispatch<SetStateAction<ManualExpDraft>>;
   onMemberSearchChange: (value: string) => void;
 }) {
   const { colors } = useTheme();
   const selectedMember = members.find((member) => member.id === draft.userId);
   const visibleMembers = members.slice(0, 20);
+  const isActivelySearching =
+    !selectedMember && memberSearch.trim().length >= 2;
+  const composerActive =
+    draft.editingAllocationIndex !== null ||
+    Boolean(draft.amount.trim() || draft.muscleGroup.trim());
+  const totalExp = draft.allocations.reduce(
+    (total, allocation) => total + allocation.amount,
+    0,
+  );
+  const targetPreview = getManualExpTargetLevelPreview(
+    draft.targetLevel,
+    currentLifetimeExp,
+  );
   const inputShell: CSSProperties = {
     alignItems: "center",
     backgroundColor: colors.fieldBg,
@@ -3686,6 +4248,39 @@ function ManualExpGrantPanel({
 
   const updateDraft = (patch: Partial<ManualExpDraft>) =>
     onDraftChange((current) => ({ ...current, ...patch }));
+  const clearComposer = () =>
+    updateDraft({
+      amount: "",
+      editingAllocationIndex: null,
+      muscleGroup: "",
+    });
+  const commitAllocation = () => {
+    if (fieldErrors.amount || fieldErrors.muscle) return;
+
+    const nextAllocation: ManualExpAllocationDraft = {
+      amount: Number(draft.amount),
+      muscleGroup: draft.muscleGroup,
+    };
+    const nextAllocations = [...draft.allocations];
+    if (draft.editingAllocationIndex === null) {
+      nextAllocations.push(nextAllocation);
+    } else {
+      nextAllocations[draft.editingAllocationIndex] = nextAllocation;
+    }
+    onDraftChange((current) => ({
+      ...current,
+      allocations: nextAllocations,
+      amount: "",
+      editingAllocationIndex: null,
+      muscleGroup: "",
+    }));
+  };
+  const errorText = (message: string | null) =>
+    message ? (
+      <FitText role="alert" style={{ color: colors.danger, fontSize: 11 }}>
+        {message}
+      </FitText>
+    ) : null;
 
   return (
     <div
@@ -3696,56 +4291,83 @@ function ManualExpGrantPanel({
         data-ui="gamification-manual-exp-workflow"
         style={{ display: "grid", gap: 8 }}
       >
-         <FitText style={{ color: colors.textMuted, fontSize: 11 }}>
-           Search eligible active members by name or email.
+        <FitText style={{ color: colors.textMuted, fontSize: 11 }}>
+          Search eligible active members by name or email.
         </FitText>
-        <FitSearch
-          ariaLabel="Search eligible member for manual EXP"
-          placeholder="Search member name or email"
-          value={memberSearch}
-          onChangeText={(value) => {
-            onMemberSearchChange(value);
-            updateDraft({ userId: "" });
-          }}
-        />
-        <div
-          data-ui="gamification-manual-exp-member-results"
-          role="listbox"
-          aria-label="Eligible member search results"
-          style={{
-            border: `1px solid ${colors.border}`,
-            borderRadius: 8,
-            display: "grid",
-             maxHeight: 176,
-            overflowY: "auto",
-          }}
-        >
-          {memberSearch.trim().length < 2 ? (
-            <FitText style={{ color: colors.textMuted, padding: 12 }}>
-              Enter at least 2 characters to search.
-            </FitText>
-          ) : membersLoading ? (
-            <FitText style={{ color: colors.textMuted, padding: 12 }}>
-              Searching eligible members...
-            </FitText>
-          ) : visibleMembers.length === 0 ? (
-            <FitText style={{ color: colors.textMuted, padding: 12 }}>
-              No eligible members match this search.
-            </FitText>
-          ) : (
-            visibleMembers.map((member) => {
-              const selected = member.id === draft.userId;
-              return (
+        {selectedMember ? (
+          <div
+            style={{
+              alignItems: "center",
+              backgroundColor: `${colors.brand}12`,
+              border: `1px solid ${colors.brand}45`,
+              borderRadius: 8,
+              display: "flex",
+              justifyContent: "space-between",
+              minHeight: 42,
+              padding: "8px 10px",
+            }}
+          >
+            <div style={{ display: "grid", gap: 2 }}>
+              <FitText style={{ fontSize: 12, fontWeight: 800 }}>
+                {getMemberDisplayName(selectedMember)}
+              </FitText>
+              <FitText style={{ color: colors.textMuted, fontSize: 11 }}>
+                {selectedMember.email}
+              </FitText>
+            </div>
+            <FitButton
+              label="Change"
+              variant="ghost"
+              onClick={() => {
+                onMemberSearchChange("");
+                updateDraft({ userId: "" });
+              }}
+              style={{ minHeight: 30 }}
+              textStyle={{ fontSize: 11, fontWeight: 800 }}
+            />
+          </div>
+        ) : (
+          <FitSearch
+            ariaLabel="Search eligible member for manual EXP"
+            placeholder="Search member name or email"
+            value={memberSearch}
+            onChangeText={(value) => {
+              onMemberSearchChange(value);
+              updateDraft({ userId: "" });
+            }}
+          />
+        )}
+        {isActivelySearching ? (
+          <div
+            data-ui="gamification-manual-exp-member-results"
+            role="listbox"
+            aria-label="Eligible member search results"
+            style={{
+              border: `1px solid ${colors.border}`,
+              borderRadius: 8,
+              display: "grid",
+              maxHeight: 176,
+              overflowY: "auto",
+            }}
+          >
+            {membersLoading ? (
+              <FitText style={{ color: colors.textMuted, padding: 12 }}>
+                Searching eligible members...
+              </FitText>
+            ) : visibleMembers.length === 0 ? (
+              <FitText style={{ color: colors.textMuted, padding: 12 }}>
+                No eligible members match this search.
+              </FitText>
+            ) : (
+              visibleMembers.map((member) => (
                 <button
                   key={member.id}
                   type="button"
                   role="option"
-                  aria-selected={selected}
+                  aria-selected={false}
                   onClick={() => updateDraft({ userId: member.id })}
                   style={{
-                    backgroundColor: selected
-                      ? `${colors.brand}18`
-                      : "transparent",
+                    backgroundColor: "transparent",
                     border: 0,
                     borderBottom: `1px solid ${colors.border}`,
                     color: colors.textPrimary,
@@ -3763,44 +4385,141 @@ function ManualExpGrantPanel({
                     {member.email}
                   </span>
                 </button>
-              );
-            })
-          )}
-        </div>
-        {members.length > visibleMembers.length ? (
+              ))
+            )}
+          </div>
+        ) : null}
+        {isActivelySearching && members.length > visibleMembers.length ? (
           <FitText style={{ color: colors.textMuted, fontSize: 12 }}>
             Showing the first 20 matches. Refine the search to narrow the list.
           </FitText>
         ) : null}
-         {selectedMember ? (
-           <div
-             style={{
-               alignItems: "center",
-               backgroundColor: `${colors.brand}12`,
-               border: `1px solid ${colors.brand}45`,
-               borderRadius: 6,
-               display: "flex",
-               justifyContent: "space-between",
-               minHeight: 36,
-               padding: "7px 10px",
-             }}
-           >
-             <FitText style={{ fontSize: 12, fontWeight: 800 }}>
-               {getMemberDisplayName(selectedMember)}
-             </FitText>
-             <FitText style={{ color: colors.textMuted, fontSize: 11 }}>
-               Selected member
-             </FitText>
-           </div>
-         ) : null}
+        {errorText(fieldErrors.member)}
+        {loadError ? (
+          <FitText role="alert" style={{ color: colors.danger, fontSize: 11 }}>
+            {getErrorMessage(
+              loadError,
+              "Unable to load eligible members or muscle definitions.",
+            )}
+          </FitText>
+        ) : null}
       </div>
+      <div
+        data-ui="gamification-manual-exp-target-level"
+        style={{
+          backgroundColor: colors.surfaceRaised,
+          border: "1px solid " + colors.border,
+          borderRadius: 8,
+          display: "grid",
+          gap: 8,
+          padding: 10,
+        }}
+      >
         <div
           style={{
-            display: "grid",
-            gap: 8,
-            gridTemplateColumns: "110px minmax(0, 1fr)",
+            alignItems: "center",
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 6,
+            justifyContent: "space-between",
           }}
         >
+          <FitText style={{ fontSize: 12, fontWeight: 850 }}>
+            Target lifetime level
+          </FitText>
+          <FitText style={{ color: colors.textMuted, fontSize: 11 }}>
+            Optional
+          </FitText>
+        </div>
+        <FitDropdown
+          ariaLabel="Optional target lifetime level"
+          disabled={!selectedMember || currentLifetimeExp === null}
+          fullWidth
+          options={[
+            { label: "No target level (manual EXP only)", value: "" },
+            ...MASTERY_RANK_OPTIONS.map((rank) => ({
+              label: masteryRankLabel(rank),
+              value: rank,
+            })),
+          ]}
+          value={draft.targetLevel}
+          onChange={(value) =>
+            updateDraft({
+              targetLevel: value as ManualExpDraft["targetLevel"],
+            })
+          }
+          style={{ minHeight: 36 }}
+        />
+        {!selectedMember ? (
+          <FitText style={{ color: colors.textMuted, fontSize: 11 }}>
+            Choose a member before calculating a target-level delta.
+          </FitText>
+        ) : currentLifetimeExp === null ? (
+          <FitText role="status" style={{ color: colors.warning, fontSize: 11 }}>
+            Current lifetime EXP is not in the loaded overall standings. EXP-only
+            grants remain available; target-level auditing is unavailable for this
+            member.
+          </FitText>
+        ) : targetPreview ? (
+          <div style={{ display: "grid", gap: 3 }}>
+            <FitText style={{ color: colors.textSecondary, fontSize: 11 }}>
+              Current lifetime EXP: {targetPreview.currentLifetimeExp?.toLocaleString("en-US")}
+              {" · "}Target: {masteryRankLabel(targetPreview.targetLevel)}
+            </FitText>
+            {targetPreview.delta && targetPreview.delta > 0 ? (
+              <FitText style={{ color: colors.brand, fontSize: 12, fontWeight: 850 }}>
+                Audited delta: +{targetPreview.delta.toLocaleString("en-US")} EXP.
+                Allocate this exact total across one or more muscle groups.
+              </FitText>
+            ) : (
+              <FitText role="alert" style={{ color: colors.warning, fontSize: 11 }}>
+                This member is already at or above the selected target level.
+              </FitText>
+            )}
+            {targetPreview.delta && targetPreview.delta > 0 ? (
+              <FitText style={{ color: colors.textMuted, fontSize: 11 }}>
+                The submitted reviewer rationale will record the starting lifetime
+                EXP, target level, and EXP delta. The grant remains EXP-based.
+              </FitText>
+            ) : null}
+          </div>
+        ) : (
+          <FitText style={{ color: colors.textMuted, fontSize: 11 }}>
+            Set a target level only when this audited EXP grant should land on an
+            exact lifetime threshold.
+          </FitText>
+        )}
+        {errorText(fieldErrors.targetLevel)}
+      </div>
+      <div style={{ display: "grid", gap: 8 }}>
+        <FitText style={{ fontSize: 12, fontWeight: 850 }}>
+          EXP allocations
+        </FitText>
+        <div
+          style={{
+            alignItems: "start",
+            display: "grid",
+            gap: 8,
+            gridTemplateColumns: "minmax(0, 1fr) 120px auto",
+          }}
+        >
+          <div style={fieldShell}>
+            <FitText style={fieldLabel}>Muscle group</FitText>
+            <FitDropdown
+              ariaLabel="Manual EXP muscle group"
+              disabled={musclesLoading || muscleDefinitions.length === 0}
+              fullWidth
+              options={muscleDefinitions.map((definition) => ({
+                label: definition.name,
+                value: definition.key,
+              }))}
+              placeholder={musclesLoading ? "Loading muscles..." : "Select muscle"}
+              value={draft.muscleGroup}
+              onChange={(muscleGroup) => updateDraft({ muscleGroup })}
+              style={{ minHeight: 36 }}
+            />
+            {composerActive ? errorText(fieldErrors.muscle) : null}
+          </div>
           <label style={fieldShell}>
             <FitText style={fieldLabel}>EXP amount</FitText>
             <span style={inputShell}>
@@ -3810,60 +4529,124 @@ function ManualExpGrantPanel({
                 inputMode="numeric"
                 pattern="[0-9]*"
                 value={draft.amount}
-                placeholder="e.g. 75"
+                placeholder="1-1,000"
                 onChange={(event) =>
                   updateDraft({
-                    amount: event.target.value.replace(/[^0-9]/g, ""),
+                    amount: event.target.value,
                   })
                 }
               />
             </span>
+            {errorText(fieldErrors.amount)}
           </label>
-          <label style={fieldShell}>
-            <FitText style={fieldLabel}>Muscle group (optional)</FitText>
-            <span
-              data-ui="gamification-manual-exp-muscle"
-              style={inputShell}
-            >
-              <FitTextInput
-                aria-label="Manual EXP muscle group"
-                aria-autocomplete="list"
-                aria-controls="gamification-manual-exp-muscle-options"
-                id="gamification-manual-exp-muscle-group"
-                list="gamification-manual-exp-muscle-options"
-                role="combobox"
-                value={draft.muscleGroup}
-                placeholder={
-                  musclesLoading ? "Loading muscles..." : "Search or select"
-                }
-                onChange={(event) =>
-                  updateDraft({ muscleGroup: event.target.value })
-                }
+          <div style={{ alignSelf: "end", display: "flex", gap: 6 }}>
+            {draft.editingAllocationIndex !== null ? (
+              <FitButton
+                label="Cancel"
+                variant="ghost"
+                onClick={clearComposer}
+                style={{ minHeight: 36 }}
+                textStyle={{ fontSize: 11, fontWeight: 800 }}
               />
-              <datalist id="gamification-manual-exp-muscle-options">
-                {muscleDefinitions.map((definition) => (
-                  <option key={definition.id} value={definition.key}>
-                    {definition.name}
-                  </option>
-                ))}
-              </datalist>
-            </span>
-          </label>
-        </div>
-        <label style={fieldShell}>
-          <FitText style={fieldLabel}>Related appointment (optional)</FitText>
-          <span style={inputShell}>
-            <FitTextInput
-              aria-label="Manual EXP appointment ID"
-              id="gamification-manual-exp-appointment-id"
-              value={draft.appointmentId}
-              placeholder="Paste the verified appointment ID when available"
-              onChange={(event) =>
-                updateDraft({ appointmentId: event.target.value })
-              }
+            ) : null}
+            <FitButton
+              icon={draft.editingAllocationIndex === null ? PlusCircle : Pencil}
+              label={draft.editingAllocationIndex === null ? "Add" : "Save"}
+              variant="ghost"
+              disabled={Boolean(fieldErrors.amount || fieldErrors.muscle)}
+              onClick={commitAllocation}
+              style={{ minHeight: 36 }}
+              textStyle={{ fontSize: 11, fontWeight: 800 }}
             />
-          </span>
-        </label>
+          </div>
+        </div>
+        <div
+          data-ui="gamification-manual-exp-allocation-list"
+          style={{
+            border: `1px solid ${colors.border}`,
+            borderRadius: 8,
+            display: "grid",
+            overflow: "hidden",
+          }}
+        >
+          {draft.allocations.length === 0 ? (
+            <FitText style={{ color: colors.textMuted, fontSize: 11, padding: 10 }}>
+              No allocations added yet.
+            </FitText>
+          ) : (
+            draft.allocations.map((allocation, index) => {
+              const definition = muscleDefinitions.find(
+                (candidate) => candidate.key === allocation.muscleGroup,
+              );
+              return (
+                <div
+                  key={allocation.muscleGroup}
+                  style={{
+                    alignItems: "center",
+                    borderBottom:
+                      index < draft.allocations.length - 1
+                        ? `1px solid ${colors.border}`
+                        : undefined,
+                    display: "grid",
+                    gap: 8,
+                    gridTemplateColumns: "minmax(0, 1fr) auto auto auto",
+                    padding: "8px 10px",
+                  }}
+                >
+                  <FitText style={{ fontSize: 12, fontWeight: 800 }}>
+                    {definition?.name ?? labelize(allocation.muscleGroup)}
+                  </FitText>
+                  <FitText style={{ color: colors.brand, fontSize: 12, fontWeight: 900 }}>
+                    {allocation.amount.toLocaleString("en-US")} EXP
+                  </FitText>
+                  <FitButton
+                    icon={Pencil}
+                    label="Edit"
+                    variant="ghost"
+                    onClick={() =>
+                      updateDraft({
+                        amount: String(allocation.amount),
+                        editingAllocationIndex: index,
+                        muscleGroup: allocation.muscleGroup,
+                      })
+                    }
+                    style={{ minHeight: 28 }}
+                    textStyle={{ fontSize: 10, fontWeight: 800 }}
+                  />
+                  <FitButton
+                    icon={Trash2}
+                    label="Remove"
+                    variant="ghost"
+                    onClick={() =>
+                      onDraftChange((current) => ({
+                        ...current,
+                        allocations: current.allocations.filter(
+                          (_, allocationIndex) => allocationIndex !== index,
+                        ),
+                        amount:
+                          current.editingAllocationIndex === index
+                            ? ""
+                            : current.amount,
+                        editingAllocationIndex: null,
+                        muscleGroup:
+                          current.editingAllocationIndex === index
+                            ? ""
+                            : current.muscleGroup,
+                      }))
+                    }
+                    style={{ minHeight: 28 }}
+                    textStyle={{ fontSize: 10, fontWeight: 800 }}
+                  />
+                </div>
+              );
+            })
+          )}
+        </div>
+        {errorText(fieldErrors.allocations)}
+        <FitText style={{ color: colors.textSecondary, fontSize: 12, fontWeight: 850 }}>
+          Total: {totalExp.toLocaleString("en-US")} EXP
+        </FitText>
+      </div>
         <label style={fieldShell}>
           <FitText style={fieldLabel}>Reviewer rationale</FitText>
           <span
@@ -3885,26 +4668,15 @@ function ManualExpGrantPanel({
               }
             />
           </span>
+          {errorText(fieldErrors.rationale)}
         </label>
-        {selectedMember ? (
-          <div
-            style={{
-              backgroundColor: colors.surfaceRaised,
-              border: `1px solid ${colors.border}`,
-              borderRadius: 6,
-              display: "grid",
-              gap: 3,
-              padding: "9px 10px",
-            }}
-          >
-            <FitText style={{ fontSize: 11, fontWeight: 800 }}>
-              Grant summary
-            </FitText>
-            <FitText style={{ color: colors.textMuted, fontSize: 11 }}>
-              {draft.amount || "0"} EXP to {getMemberDisplayName(selectedMember)}
-              {draft.muscleGroup ? ` · ${draft.muscleGroup}` : " · General"}
-            </FitText>
-          </div>
+        {mutationError ? (
+          <FitText role="alert" style={{ color: colors.danger, fontSize: 12 }}>
+            {getErrorMessage(
+              mutationError,
+              "Unable to apply the manual EXP grant. Review the allocations and try again.",
+            )}
+          </FitText>
         ) : null}
     </div>
   );

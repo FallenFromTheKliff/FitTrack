@@ -1,6 +1,7 @@
 import { BullModule } from '@nestjs/bull';
 import { Module } from '@nestjs/common';
 
+import { FilesModule } from '../../files/files.module';
 import { MembershipModule } from '../../membership/membership.module';
 import { NotificationsModule } from '../../notifications/notifications.module';
 import { QueueModule } from '../../queue/queue.module';
@@ -16,6 +17,7 @@ import { GamificationService } from './gamification.service';
 
 @Module({
   imports: [
+    FilesModule,
     UserModule,
     NotificationsModule,
     MembershipModule,

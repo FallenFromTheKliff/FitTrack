@@ -27,6 +27,16 @@ export function makeFitInputFieldStyles(colors: ThemeColors, compact = false) {
       backgroundColor: colors.surfaceRaised,
       borderColor: colors.border,
     },
+    fixedPrefix: {
+      marginRight: 10,
+      paddingVertical: 14,
+      justifyContent: "center",
+    },
+    fixedPrefixText: {
+      fontSize: 15,
+      fontWeight: "700",
+      color: colors.textSecondary,
+    },
     prefixToggle: {
       flexDirection: "row",
       alignItems: "center",
@@ -250,6 +260,7 @@ export const makeFitSearchStyles = (
     searchInput: {
       flex: 1,
       fontSize: 15,
+      minWidth: 0,
       paddingVertical: 0,
       paddingHorizontal: 0,
     },

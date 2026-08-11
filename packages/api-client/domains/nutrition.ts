@@ -11,11 +11,26 @@ import type {
   NutritionMacroTotalsRecord,
   NutritionTdeeRecord,
   NutritionUnit,
-  PaginatedResult
+  PaginatedResult,
+  NutritionIconKind,
+  NutritionLogIconInput,
+  NutritionLogIconRecord,
+  NutritionMealIconLibraryKey
+} from "@fittrack/types";
+import {
+  NUTRITION_MEAL_ICON_FALLBACKS,
+  NUTRITION_MEAL_ICON_LIBRARY_KEYS
 } from "@fittrack/types";
 import { toApiClientError } from "../errors/api-client-error";
 import type { ApiTransport } from "../transport/createAxiosTransport";
 import { unwrapPaginatedResponse, unwrapResponse, unwrapVoidResponse } from "../request";
+
+export type {
+  NutritionIconKind,
+  NutritionLogIconInput,
+  NutritionLogIconRecord,
+  NutritionMealIconLibraryKey
+};
 
 export type NutritionHistoryParams = {
   limit?: number;
@@ -24,8 +39,21 @@ export type NutritionHistoryParams = {
 
 export type NutritionLogListParams = NutritionHistoryParams & {
   endDate?: string;
+  mealType?: NutritionMealType;
+  search?: string;
+  sort?: NutritionLogSort;
   startDate?: string;
 };
+
+export type NutritionMealType =
+  | "Breakfast"
+  | "Lunch"
+  | "Dinner"
+  | "Snack"
+  | "Pre-workout"
+  | "Post-workout";
+
+export type NutritionLogSort = "newest" | "oldest";
 
 export type RecalculateNutritionPayload = {
   activityLevel?: NutritionActivityLevel;
@@ -45,6 +73,7 @@ export type CreateNutritionLogPayload = {
   proteinG: number;
   quantity: number;
   unit: NutritionUnit;
+  icon?: NutritionLogIconInput | null;
 };
 
 export type UpdateNutritionLogPayload = Partial<CreateNutritionLogPayload>;
@@ -99,6 +128,13 @@ type NutritionLogApiRecord = {
   unit: NutritionUnit | string | null;
   updated_at: string;
   user_id: string;
+  icon?: NutritionLogIconApiRecord | null;
+};
+
+type NutritionLogIconApiRecord = {
+  asset_key: string | null;
+  key: string | null;
+  kind: NutritionIconKind;
 };
 
 type DailyMacroTotalsApiRecord = {
@@ -202,6 +238,8 @@ function mapMacroTargetRecord(record: MacroTargetApiRecord): NutritionMacroTarge
 }
 
 function mapNutritionLog(record: NutritionLogApiRecord): NutritionLogRecord {
+  const mealName = toSafeString(record.meal_name, "Snack");
+
   return {
     calories: toNumber(record.calories),
     carbsG: toNumber(record.carbs_g),
@@ -211,12 +249,44 @@ function mapNutritionLog(record: NutritionLogApiRecord): NutritionLogRecord {
     id: toSafeString(record.id, ""),
     logDate: toSafeString(record.log_date, toSafeString(record.created_at, "")),
     macroTargetId: record.macro_target_id,
-    mealName: toSafeString(record.meal_name, "Snack"),
+    mealName,
+    icon: mapNutritionLogIcon(record.icon, mealName),
     proteinG: toNumber(record.protein_g),
     quantity: toNumber(record.quantity),
     unit: toNutritionUnit(record.unit),
     updatedAt: toSafeString(record.updated_at, ""),
     userId: toSafeString(record.user_id, "")
+  };
+}
+
+function mapNutritionLogIcon(
+  record: NutritionLogIconApiRecord | null | undefined,
+  mealName: string
+): NutritionLogIconRecord {
+  if (record?.kind === "custom" && record.asset_key?.trim()) {
+    return {
+      assetKey: record.asset_key,
+      key: null,
+      kind: "custom"
+    };
+  }
+
+  if (
+    record?.kind === "library" &&
+    typeof record.key === "string" &&
+    NUTRITION_MEAL_ICON_LIBRARY_KEYS.includes(record.key as NutritionMealIconLibraryKey)
+  ) {
+    return {
+      assetKey: null,
+      key: record.key as NutritionMealIconLibraryKey,
+      kind: "library"
+    };
+  }
+
+  return {
+    assetKey: null,
+    key: NUTRITION_MEAL_ICON_FALLBACKS[mealName.trim().toLowerCase()] ?? "utensils",
+    kind: "library"
   };
 }
 
@@ -230,7 +300,21 @@ function toLogRequest(payload: CreateNutritionLogPayload | UpdateNutritionLogPay
     ...(payload.carbsG !== undefined ? { carbs_g: payload.carbsG } : {}),
     ...(payload.fatG !== undefined ? { fat_g: payload.fatG } : {}),
     ...(payload.quantity !== undefined ? { quantity: payload.quantity } : {}),
-    ...(payload.unit !== undefined ? { unit: payload.unit } : {})
+    ...(payload.unit !== undefined ? { unit: payload.unit } : {}),
+    ...(payload.icon !== undefined
+      ? {
+          icon:
+            payload.icon === null
+              ? null
+              : {
+                  kind: payload.icon.kind,
+                  ...(payload.icon.key !== undefined ? { key: payload.icon.key } : {}),
+                  ...(payload.icon.assetKey !== undefined
+                    ? { asset_key: payload.icon.assetKey }
+                    : {})
+                }
+        }
+      : {})
   };
 }
 
@@ -314,7 +398,10 @@ export function createNutritionApi(transport: ApiTransport) {
             ...(params?.page !== undefined ? { page: params.page } : {}),
             ...(params?.limit !== undefined ? { limit: params.limit } : {}),
             ...(params?.startDate ? { start_date: params.startDate } : {}),
-            ...(params?.endDate ? { end_date: params.endDate } : {})
+            ...(params?.endDate ? { end_date: params.endDate } : {}),
+            ...(params?.search ? { search: params.search } : {}),
+            ...(params?.mealType ? { meal_type: params.mealType } : {}),
+            ...(params?.sort ? { sort: params.sort } : {})
           }
         }),
         "Unable to load nutrition logs."

@@ -77,6 +77,7 @@ import type {
   WorkoutSessionListParams,
   WorkoutSessionSummaryRecord,
 } from "@fittrack/types";
+import { getFitnessExpProgressionState } from "@fittrack/types";
 import { unwrapPaginatedResponse, unwrapResponse } from "../request";
 import type { ApiTransport } from "../transport/createAxiosTransport";
 
@@ -180,6 +181,9 @@ type MuscleDefinitionApiRecord = {
   aliases: string[] | null;
   body_region: string;
   created_at: string;
+  icon_asset_key?: string | null;
+  icon_key?: string | null;
+  icon_kind?: MuscleDefinitionRecord["iconKind"];
   id: string;
   is_active: boolean;
   is_system: boolean;
@@ -484,7 +488,11 @@ type LeaderboardEntryApiRecord = {
 };
 
 type MuscleLeaderboardApiRecord = {
+  avatar_url?: string | null;
   display_name: string;
+  icon_asset_key?: string | null;
+  icon_key?: string | null;
+  icon_kind?: FitnessMuscleLeaderboardEntryRecord["iconKind"];
   is_current_user?: boolean;
   last_earned_at: string | null;
   muscle_key: string;
@@ -582,6 +590,9 @@ type MilestoneProgressApiRecord = {
   condition_payload?: Record<string, unknown> | null;
   description: string | null;
   evidence_requirement?: FitnessMilestoneProgressRecord["evidenceRequirement"];
+  icon_asset_key?: string | null;
+  icon_key?: string | null;
+  icon_kind?: FitnessMilestoneProgressRecord["iconKind"];
   is_hidden: boolean;
   latest_evidence_submission?: MilestoneEvidenceSubmissionApiRecord | null;
   key: string;
@@ -609,6 +620,9 @@ type AdminMilestoneDefinitionApiRecord = {
   ends_at: string | null;
   evidence_requirement: AdminMilestoneDefinitionRecord["evidenceRequirement"];
   id: string;
+  icon_asset_key?: string | null;
+  icon_key?: string | null;
+  icon_kind?: AdminMilestoneDefinitionRecord["iconKind"];
   is_active: boolean;
   is_hidden: boolean;
   key: string;
@@ -737,6 +751,10 @@ function mapMuscleDefinition(
     aliases: Array.isArray(record.aliases) ? record.aliases : [],
     bodyRegion: record.body_region,
     createdAt: record.created_at,
+    iconAssetKey: record.icon_asset_key ?? null,
+    iconKey: record.icon_key ?? "dumbbell",
+    iconKind:
+      record.icon_kind ?? (record.icon_asset_key ? "custom" : "library"),
     id: record.id,
     isActive: record.is_active,
     isSystem: record.is_system,
@@ -1156,6 +1174,7 @@ function mapLeaderboardEntry(
     avatarUrl: record.avatar_url,
     displayName: record.display_name,
     rankPosition: record.rank_position,
+    progression: getFitnessExpProgressionState(record.total_xp),
     totalXp: record.total_xp,
     userId: record.user_id,
   };
@@ -1165,11 +1184,16 @@ function mapMuscleLeaderboardEntry(
   record: MuscleLeaderboardApiRecord,
 ): FitnessMuscleLeaderboardEntryRecord {
   return {
+    avatarUrl: record.avatar_url ?? null,
     displayName: record.display_name,
+    iconAssetKey: record.icon_asset_key ?? null,
+    iconKey: record.icon_key ?? "dumbbell",
+    iconKind: record.icon_kind ?? "library",
     isCurrentUser: record.is_current_user,
     lastEarnedAt: record.last_earned_at,
     muscleKey: record.muscle_key,
     rankPosition: record.rank_position,
+    progression: getFitnessExpProgressionState(record.xp_points),
     scope: record.scope,
     seasonId: record.season_id,
     seasonTitle: record.season_title,
@@ -1223,8 +1247,10 @@ function mapProgressionProfile(
     integrityRiskLevel: record.integrity_risk_level,
     lastProgressedAt: record.last_progressed_at,
     longestStreak: record.longest_streak,
+    lifetimeProgression: getFitnessExpProgressionState(record.total_xp),
     rankingGovernanceStatus: record.ranking_governance_status,
     rankingVisibility: record.ranking_visibility,
+    seasonProgression: getFitnessExpProgressionState(record.current_season_points),
     totalXp: record.total_xp,
     updatedAt: record.updated_at,
     userId: record.user_id,
@@ -1293,6 +1319,9 @@ function mapMilestoneProgress(
     conditionPayload: record.condition_payload ?? null,
     description: record.description,
     evidenceRequirement: record.evidence_requirement,
+    iconAssetKey: record.icon_asset_key ?? null,
+    iconKey: record.icon_key ?? null,
+    iconKind: record.icon_kind ?? "library",
     isHidden: record.is_hidden,
     key: record.key,
     latestEvidenceSubmission: record.latest_evidence_submission
@@ -1326,6 +1355,9 @@ function mapAdminMilestoneDefinition(
     endsAt: record.ends_at,
     evidenceRequirement: record.evidence_requirement,
     id: record.id,
+    iconAssetKey: record.icon_asset_key ?? null,
+    iconKey: record.icon_key ?? null,
+    iconKind: record.icon_kind ?? "library",
     isActive: record.is_active,
     isHidden: record.is_hidden,
     key: record.key,
@@ -1450,6 +1482,11 @@ function toMuscleDefinitionPayload(
     ...(input.bodyRegion?.trim()
       ? { body_region: input.bodyRegion.trim() }
       : {}),
+    ...(input.iconAssetKey !== undefined
+      ? { icon_asset_key: input.iconAssetKey }
+      : {}),
+    ...(input.iconKey !== undefined ? { icon_key: input.iconKey } : {}),
+    ...(input.iconKind !== undefined ? { icon_kind: input.iconKind } : {}),
     ...("aliases" in input && input.aliases !== undefined
       ? { aliases: input.aliases }
       : {}),
@@ -1610,9 +1647,20 @@ function toMuscleLeaderboardParams(params: FitnessMuscleLeaderboardListParams) {
   return {
     scope: params.scope,
     muscle_key: params.muscleKey,
+    ...(params.cursor ? { cursor: params.cursor } : {}),
     ...(params.page !== undefined ? { page: params.page } : {}),
     ...(params.limit !== undefined ? { limit: params.limit } : {}),
     ...(params.seasonId ? { season_id: params.seasonId } : {}),
+    ...(params.snapshot ? { snapshot: params.snapshot } : {}),
+  };
+}
+
+function toLeaderboardListParams(params?: FitnessLeaderboardListParams) {
+  return {
+    ...(params?.cursor ? { cursor: params.cursor } : {}),
+    ...(params?.page !== undefined ? { page: params.page } : {}),
+    ...(params?.limit !== undefined ? { limit: params.limit } : {}),
+    ...(params?.snapshot ? { snapshot: params.snapshot } : {}),
   };
 }
 
@@ -1700,6 +1748,11 @@ function toAdminMilestoneDefinitionPayload(
     description: input.description,
     ends_at: input.endsAt,
     evidence_requirement: input.evidenceRequirement,
+    ...(input.iconAssetKey !== undefined
+      ? { icon_asset_key: input.iconAssetKey }
+      : {}),
+    ...(input.iconKey !== undefined ? { icon_key: input.iconKey } : {}),
+    ...(input.iconKind !== undefined ? { icon_kind: input.iconKind } : {}),
     is_hidden: input.isHidden,
     key: input.key,
     reward_payload: input.rewardPayload,
@@ -2020,7 +2073,7 @@ export function createFitnessApi(transport: ApiTransport) {
     ): Promise<FitnessPaginatedResult<FitnessLeaderboardEntryRecord>> {
       const result = await unwrapPaginatedResponse<LeaderboardEntryApiRecord>(
         transport.get("/fitness/leaderboard", {
-          params: toPlanListParams(params),
+          params: toLeaderboardListParams(params),
         }),
         "Unable to load mastery leaderboard.",
       );

@@ -57,7 +57,6 @@ export const MEMBER_FILTER_OPTIONS = [
 export const MEMBER_TIER_FILTER_OPTIONS = [
   { label: "All Tiers", value: "all" },
   { label: "Member", value: "active_member" },
-  { label: "Pending membership", value: "pending_membership" },
   { label: "Not Verified", value: "pending_verification" },
   { label: "Non-member", value: "verified_non_member" },
   { label: "Revoked", value: "revoked" },

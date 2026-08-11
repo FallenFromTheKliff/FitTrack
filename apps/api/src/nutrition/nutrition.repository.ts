@@ -14,7 +14,8 @@ import {
   type PaginatedResult,
 } from '../common/base-repository/base-repository';
 import { PrismaService } from '../prisma/prisma.service';
-import { DateRangeDTO, type PaginationDTO } from '../user/dto/user-dto';
+import { type PaginationDTO } from '../user/dto/user-dto';
+import { type NutritionLogFilterDTO } from './dto/nutrition.dto';
 
 export type ActiveTdeeAggregateRecord = TdeeProfile & {
   macro_targets: MacroTarget[];
@@ -168,8 +169,10 @@ export class NutritionRepository extends BaseRepository {
 
   listNutritionLogs(
     userId: string,
-    dto: DateRangeDTO,
+    dto: NutritionLogFilterDTO,
   ): Promise<PaginatedResult<NutritionLog>> {
+    const sortDirection = dto.sort === 'oldest' ? 'asc' : 'desc';
+
     return this.paginateByUserIdWithDateRange<NutritionLog>(
       this.prisma.nutritionLog,
       userId,
@@ -179,7 +182,32 @@ export class NutritionRepository extends BaseRepository {
         dateField: 'log_date',
       },
       {
-        orderBy: [{ log_date: 'desc' }, { created_at: 'desc' }],
+        additionalWhere: {
+          ...(dto.meal_type ? { meal_name: dto.meal_type } : {}),
+          ...(dto.search
+            ? {
+                OR: [
+                  {
+                    meal_name: {
+                      contains: dto.search,
+                      mode: 'insensitive',
+                    },
+                  },
+                  {
+                    food_item: {
+                      contains: dto.search,
+                      mode: 'insensitive',
+                    },
+                  },
+                ],
+              }
+            : {}),
+        },
+        orderBy: [
+          { log_date: sortDirection },
+          { created_at: sortDirection },
+          { id: sortDirection },
+        ],
       },
       { page: dto.page, limit: dto.limit },
     );

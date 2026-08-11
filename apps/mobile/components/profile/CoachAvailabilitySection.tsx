@@ -41,7 +41,16 @@ export default function CoachAvailabilitySection({ colors, controller, styles }:
       }
     >
       {controller.availabilityLocked ? (
-        <FitText style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18, marginBottom: 10 }}>
+        <FitText
+          style={{
+            color: colors.textMuted,
+            fontSize: 12,
+            lineHeight: 18,
+            marginBottom: 10,
+            paddingHorizontal: 16,
+            paddingTop: 14
+          }}
+        >
           Full-time working days and hours are managed by admin. These windows generate hourly member booking slots automatically.
         </FitText>
       ) : null}

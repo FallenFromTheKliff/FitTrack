@@ -10,7 +10,6 @@ import { ConfirmModal, DetailsModal, FitModal } from "@/components/modals";
 import { useTheme } from "@/contexts/ThemeContext";
 import { EDIT_MEMBER_FIELDS } from "@/data/members/members";
 import {
-  formatReviewPayableLabel,
   getDirectoryAccessLabel,
   getDirectoryRoleLabel,
   getEditDraftValues,
@@ -41,14 +40,12 @@ export default function AccountsModalLayer() {
     editModalOpen,
     editTarget,
     grantCardTarget,
-    handleApproveMembershipPayment,
     handleArchiveMember,
     handleAttendanceScan,
     handleDelete,
     handleEdit,
     handleGrantMembershipCard,
     handleRejectDeleteRequest,
-    handleRejectMembershipPayment,
     handleRemoveMembership,
     handleRestoreMember,
     handleRevokeMembershipCard,
@@ -57,15 +54,11 @@ export default function AccountsModalLayer() {
     isApproveDeletionPending,
     isRejectDeletionPending,
     isMembershipCardPending,
-    isMembershipPaymentReviewPending,
     isScanAttendancePending,
     membershipCardLoadingLabel,
     mobileInspectorOpen,
     noticeModal,
-    paymentReviewAction,
-    paymentReviewLoadingLabel,
     pendingEditSubmission,
-    pendingMembershipPayment,
     pendingRequestsByUserId,
     rejectLoadingLabel,
     rejectTerminationTarget,
@@ -86,7 +79,6 @@ export default function AccountsModalLayer() {
     setRejectTerminationTarget,
     setRemoveMembershipTarget,
     setNoticeModal,
-    setPaymentReviewAction,
     setPendingEditSubmission,
     setRestoreTarget,
     setRevokeCardTarget,
@@ -228,38 +220,6 @@ export default function AccountsModalLayer() {
             setPendingEditSubmission(null);
             setEditModalOpen(true);
           }}
-        />
-      ) : null}
-      {canManageAccounts ? (
-        <ConfirmModal
-          isOpen={paymentReviewAction !== null && !!pendingMembershipPayment}
-          title={paymentReviewAction === "reject" ? "Reject Payment Review" : "Approve Payment Review"}
-          message={
-            pendingMembershipPayment
-              ? paymentReviewAction === "reject"
-                ? `Reject this ${formatReviewPayableLabel(
-                    pendingMembershipPayment.payable_type ?? undefined,
-                  ).toLowerCase()} review? The payment will remain blocked until the member submits a new valid proof.`
-                : `Approve this ${formatReviewPayableLabel(
-                    pendingMembershipPayment.payable_type ?? undefined,
-                  ).toLowerCase()} for PHP ${Number(pendingMembershipPayment.amount).toLocaleString("en-PH", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}?`
-              : "Review this payment action before continuing."
-          }
-          confirmLabel={paymentReviewAction === "reject" ? "REJECT PAYMENT" : "APPROVE PAYMENT"}
-          loadingLabel={paymentReviewLoadingLabel}
-          isDanger={paymentReviewAction === "reject"}
-          isLoading={isMembershipPaymentReviewPending}
-          onConfirm={() => {
-            if (paymentReviewAction === "reject") {
-              void handleRejectMembershipPayment();
-              return;
-            }
-            void handleApproveMembershipPayment();
-          }}
-          onCancel={() => setPaymentReviewAction(null)}
         />
       ) : null}
       {canManageAccounts ? (

@@ -12,6 +12,7 @@ import { GamificationService } from './gamification.service';
 @Injectable()
 export class GamificationSeasonLifecycleService implements OnModuleInit {
   private readonly logger = new Logger(GamificationSeasonLifecycleService.name);
+  private lifecycleJobEnsured = false;
 
   constructor(
     private readonly gamificationService: GamificationService,
@@ -36,17 +37,53 @@ export class GamificationSeasonLifecycleService implements OnModuleInit {
   }
 
   private async ensureLifecycleJob(): Promise<void> {
+    if (this.lifecycleJobEnsured) {
+      return;
+    }
+
+    const repeat = {
+      cron: '*/15 * * * *',
+      tz: GAMIFICATION_SEASON_LIFECYCLE_TIMEZONE,
+    };
+    const queueWithRepeatableJobs = this.lifecycleQueue as Queue & {
+      getRepeatableJobs?: () => Promise<
+        Array<{ cron?: string; key?: string; name?: string; tz?: string }>
+      >;
+      removeRepeatableByKey?: (key: string) => Promise<unknown>;
+    };
+
+    if (queueWithRepeatableJobs.getRepeatableJobs) {
+      const repeatableJobs = await queueWithRepeatableJobs.getRepeatableJobs();
+      const matchingJobs = repeatableJobs.filter(
+        (job) =>
+          job.name === GAMIFICATION_SEASON_SWEEP_JOB &&
+          job.cron === repeat.cron &&
+          job.tz === repeat.tz,
+      );
+      if (matchingJobs.length > 0) {
+        if (queueWithRepeatableJobs.removeRepeatableByKey) {
+          for (const duplicate of matchingJobs.slice(1)) {
+            if (duplicate.key) {
+              await queueWithRepeatableJobs.removeRepeatableByKey(
+                duplicate.key,
+              );
+            }
+          }
+        }
+        this.lifecycleJobEnsured = true;
+        return;
+      }
+    }
+
     await this.lifecycleQueue.add(
       GAMIFICATION_SEASON_SWEEP_JOB,
       {},
       {
         jobId: GAMIFICATION_SEASON_SWEEP_JOB,
         removeOnComplete: true,
-        repeat: {
-          cron: '*/15 * * * *',
-          tz: GAMIFICATION_SEASON_LIFECYCLE_TIMEZONE,
-        },
+        repeat,
       },
     );
+    this.lifecycleJobEnsured = true;
   }
 }

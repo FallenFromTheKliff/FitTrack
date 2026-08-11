@@ -129,6 +129,11 @@ export class PaymentController {
     status: 201,
     description: 'Payment submitted for verification.',
   })
+  @ApiResponse({
+    status: 410,
+    description:
+      'Member cash membership-card payment requests are retired; use the authorized admin/staff grant flow.',
+  })
   submitManualPayment(
     @CurrentUser() user: JwtPayload,
     @Body() dto: ManualPaymentDTO,
@@ -140,9 +145,15 @@ export class PaymentController {
   @UseGuards(RolesGuard)
   @Roles(UserRole.admin, UserRole.staff)
   @ApiOperation({
-    summary: 'Approve or reject a manual payment. Admin/Staff only.',
+    summary:
+      'Approve or reject a non-membership-card manual payment. Admin/Staff only.',
   })
   @ApiResponse({ status: 200, description: 'Payment verification recorded.' })
+  @ApiResponse({
+    status: 410,
+    description:
+      'Membership-card payment verification is retired; use the authorized admin/staff grant flow.',
+  })
   verifyPayment(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: VerifyPaymentDTO,

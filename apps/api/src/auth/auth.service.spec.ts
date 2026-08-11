@@ -13,7 +13,10 @@ import * as bcrypt from 'bcrypt';
 import { USER_REGISTERED_EVENT } from './events/user-registered.event';
 import { AuthRepository } from './auth.repository';
 import { AuthService } from './auth.service';
-import { AuthOtpService } from './otp/auth-otp.service';
+import {
+  AuthOtpService,
+  type RegistrationChallengePayload,
+} from './otp/auth-otp.service';
 import { ACCOUNT_ACTIVITY_EVENT } from '../user/events/account-activity.event';
 
 describe('AuthService', () => {
@@ -51,8 +54,13 @@ describe('AuthService', () => {
 
   const otpService = {
     assertOtpValid: jest.fn(),
+    completeRegistrationChallenge: jest.fn(),
     issueOtp: jest.fn(),
+    discardRegistrationChallenge: jest.fn(),
+    hasRegistrationChallenge: jest.fn(),
     consumeOtp: jest.fn(),
+    resendRegistrationChallenge: jest.fn(),
+    startRegistrationChallenge: jest.fn(),
   };
 
   const redis = {
@@ -120,12 +128,14 @@ describe('AuthService', () => {
 
     service = module.get<AuthService>(AuthService);
     jest.clearAllMocks();
+    otpService.hasRegistrationChallenge.mockResolvedValue(false);
+    otpService.resendRegistrationChallenge.mockResolvedValue(false);
+    otpService.discardRegistrationChallenge.mockResolvedValue(undefined);
   });
 
-  it('registers a pending member and delegates OTP issuance', async () => {
+  it('starts a Redis-backed registration challenge without persisting an account', async () => {
     repo.findIdentity.mockResolvedValue(null);
-    repo.createUserWithProfile.mockResolvedValue({ id: 'user-1' });
-    otpService.issueOtp.mockResolvedValue(undefined);
+    otpService.startRegistrationChallenge.mockResolvedValue(undefined);
 
     const result = await service.register({
       accepted_terms: true,
@@ -137,40 +147,43 @@ describe('AuthService', () => {
       phone: '+639171234567',
     });
 
-    expect(result).toEqual({ user_id: 'user-1' });
-    expect(repo.createUserWithProfile).toHaveBeenCalledWith(
-      expect.objectContaining({
-        role: UserRole.member,
-        status: UserStatus.pending,
-        email: 'member@example.com',
-      }),
-    );
-    expect(otpService.issueOtp).toHaveBeenCalledWith(
-      'user-1',
-      'registration',
-      'email',
-      'member@example.com',
-    );
+    expect(result.user_id).toEqual(expect.any(String));
+    expect(repo.createUserWithProfile).not.toHaveBeenCalled();
+    expect(otpService.issueOtp).not.toHaveBeenCalled();
+    expect(otpService.startRegistrationChallenge).toHaveBeenCalledTimes(1);
+    const [challengeId, challenge] = otpService.startRegistrationChallenge.mock
+      .calls[0] as [string, RegistrationChallengePayload];
+    expect(challengeId).toBe(result.user_id);
+    expect(challenge).toMatchObject({
+      email: 'member@example.com',
+      firstName: 'Fit',
+      lastName: 'Track',
+      phone: '+639171234567',
+    });
+    expect(typeof challenge.credentialHash).toBe('string');
+    expect(challenge).not.toHaveProperty('password');
   });
 
-  it('throws ConflictException when registering an existing email', async () => {
+  it('keeps registration enumeration-safe when an email already exists', async () => {
     repo.findIdentity.mockResolvedValue({ id: 'identity-1' });
 
-    await expect(
-      service.register({
-        accepted_terms: true,
-        email: 'member@example.com',
-        password: 'Password1',
-        first_name: 'Fit',
-        last_name: 'Track',
-        legal_version: '2026-07-28',
-      }),
-    ).rejects.toThrow(ConflictException);
+    const result = await service.register({
+      accepted_terms: true,
+      email: 'member@example.com',
+      password: 'Password1',
+      first_name: 'Fit',
+      last_name: 'Track',
+      legal_version: '2026-07-28',
+    });
+
+    expect(result.user_id).toEqual(expect.any(String));
+    expect(otpService.startRegistrationChallenge).not.toHaveBeenCalled();
+    expect(repo.createUserWithProfile).not.toHaveBeenCalled();
   });
 
   it('emits a user-registered event when email verification activates the account', async () => {
     otpService.consumeOtp.mockResolvedValue(undefined);
-    repo.findUserByIdOrThrow.mockResolvedValue({
+    repo.findUserById.mockResolvedValue({
       id: 'user-1',
       role: UserRole.member,
     });
@@ -194,6 +207,109 @@ describe('AuthService', () => {
         source: 'email_verification',
       }),
     );
+  });
+
+  it('creates the self-registered aggregate only after a valid Redis challenge', async () => {
+    otpService.hasRegistrationChallenge.mockResolvedValue(true);
+    otpService.completeRegistrationChallenge.mockImplementation(
+      async (
+        _challengeId: string,
+        _code: string,
+        complete: (payload: {
+          acceptedPrivacyAt: string;
+          credentialHash: string;
+          email: string;
+          firstName: string;
+          lastName: string;
+          phone?: string;
+        }) => Promise<unknown>,
+      ) =>
+        complete({
+          acceptedPrivacyAt: new Date().toISOString(),
+          credentialHash: 'bcrypt-password-hash',
+          email: 'member@example.com',
+          firstName: 'Fit',
+          lastName: 'Track',
+          phone: '+639171234567',
+        }),
+    );
+    repo.createUserWithProfile.mockResolvedValue({
+      id: 'user-after-otp',
+      role: UserRole.member,
+    });
+    repo.findUserWithProfileOrThrow.mockResolvedValue({
+      id: 'user-after-otp',
+      role: UserRole.member,
+      status: UserStatus.active,
+      email_verified_at: new Date(),
+      profile: { first_name: 'Fit', last_name: 'Track', avatar_url: null },
+    });
+
+    const result = await service.verifyEmail({
+      user_id: 'challenge-1',
+      code: '123456',
+    });
+
+    expect(result.access_token).toBe('access-token');
+    expect(repo.createUserWithProfile).toHaveBeenCalledTimes(1);
+    const [createdAccount] = repo.createUserWithProfile.mock.calls[0] as [
+      Parameters<AuthRepository['createUserWithProfile']>[0],
+    ];
+    expect(createdAccount).toMatchObject({
+      email: 'member@example.com',
+      enforceIdentityUniquenessAtCommit: true,
+      role: UserRole.member,
+      status: UserStatus.active,
+    });
+    expect(createdAccount.emailVerifiedAt).toBeInstanceOf(Date);
+    expect(repo.updateUser).not.toHaveBeenCalled();
+    expect(otpService.consumeOtp).not.toHaveBeenCalled();
+  });
+
+  it('discards a challenge and preserves rollback semantics on duplicate-at-commit', async () => {
+    otpService.hasRegistrationChallenge.mockResolvedValue(true);
+    otpService.completeRegistrationChallenge.mockImplementation(
+      async (
+        _challengeId: string,
+        _code: string,
+        complete: (payload: {
+          acceptedPrivacyAt: string;
+          credentialHash: string;
+          email: string;
+          firstName: string;
+          lastName: string;
+        }) => Promise<unknown>,
+      ) =>
+        complete({
+          acceptedPrivacyAt: new Date().toISOString(),
+          credentialHash: 'bcrypt-password-hash',
+          email: 'member@example.com',
+          firstName: 'Fit',
+          lastName: 'Track',
+        }),
+    );
+    repo.createUserWithProfile.mockRejectedValue(
+      new ConflictException({
+        type: 'IDENTITY_ALREADY_EXISTS',
+        title: 'Registration Identity Already Exists',
+        status: 409,
+        detail: 'The registration identity is no longer available.',
+      }),
+    );
+
+    await expect(
+      service.verifyEmail({ user_id: 'challenge-duplicate', code: '123456' }),
+    ).rejects.toMatchObject({
+      response: {
+        type: 'REGISTRATION_UNAVAILABLE',
+        status: 409,
+      },
+    });
+
+    expect(otpService.discardRegistrationChallenge).toHaveBeenCalledWith(
+      'challenge-duplicate',
+    );
+    expect(repo.updateUser).not.toHaveBeenCalled();
   });
 
   it('rejects login with missing identity as unauthorized', async () => {
@@ -1100,17 +1216,19 @@ describe('AuthService', () => {
       email: 'coach@example.com',
       role: 'coach',
     });
-    expect(repo.createUserWithProfile).toHaveBeenCalledWith(
-      expect.objectContaining({
-        coachProfile: expect.objectContaining({
-          contactEmail: 'coach@example.com',
-          displayName: 'Coach One',
-        }),
-        createCoachProfile: true,
-        role: UserRole.coach,
-        status: UserStatus.pending,
-      }),
-    );
+    expect(repo.createUserWithProfile).toHaveBeenCalledTimes(1);
+    const [createdCoach] = repo.createUserWithProfile.mock.calls[0] as [
+      Parameters<AuthRepository['createUserWithProfile']>[0],
+    ];
+    expect(createdCoach).toMatchObject({
+      createCoachProfile: true,
+      role: UserRole.coach,
+      status: UserStatus.pending,
+    });
+    expect(createdCoach.coachProfile).toMatchObject({
+      contactEmail: 'coach@example.com',
+      displayName: 'Coach One',
+    });
     expect(repo.createCoachProfile).not.toHaveBeenCalled();
     expect(otpService.issueOtp).not.toHaveBeenCalled();
   });

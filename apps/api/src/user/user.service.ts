@@ -75,6 +75,97 @@ function toIsoStringOrNull(value: Date | null | undefined) {
   return value ? value.toISOString() : null;
 }
 
+function toDateOnlyOrNull(value: unknown): string | null {
+  const date =
+    value instanceof Date
+      ? value
+      : typeof value === 'string'
+        ? new Date(value)
+        : null;
+
+  return date && !Number.isNaN(date.getTime())
+    ? date.toISOString().slice(0, 10)
+    : null;
+}
+
+function toNumberOrNull(value: unknown): number | null {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    'toNumber' in value &&
+    typeof value.toNumber === 'function'
+  ) {
+    const parsed = value.toNumber();
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+}
+
+type ProfileResponseSource = {
+  first_name: string;
+  last_name: string;
+  phone: string | null;
+  avatar_url: string | null;
+  activity_level: unknown;
+  fitness_goal: unknown;
+  date_of_birth: unknown;
+  weight_kg: unknown;
+  height_cm: unknown;
+};
+
+function toCanonicalProfileResponse<T extends ProfileResponseSource>(
+  profile: T,
+): T & {
+  activityLevel: T['activity_level'] | null;
+  avatarUrl: string | null;
+  currentWeightKg: number | null;
+  dateOfBirth: string | null;
+  fitnessGoal: T['fitness_goal'] | null;
+  firstName: string;
+  heightCm: number | null;
+  lastName: string;
+} {
+  const firstName =
+    typeof profile.first_name === 'string' ? profile.first_name.trim() : '';
+  const lastName =
+    typeof profile.last_name === 'string' ? profile.last_name.trim() : '';
+  const phone = typeof profile.phone === 'string' ? profile.phone.trim() : null;
+
+  return {
+    ...profile,
+    first_name: firstName,
+    last_name: lastName,
+    phone,
+    activityLevel: profile.activity_level ?? null,
+    avatarUrl: profile.avatar_url ?? null,
+    currentWeightKg: toNumberOrNull(profile.weight_kg),
+    dateOfBirth: toDateOnlyOrNull(profile.date_of_birth),
+    fitnessGoal: profile.fitness_goal ?? null,
+    firstName,
+    heightCm: toNumberOrNull(profile.height_cm),
+    lastName,
+  } as T & {
+    activityLevel: T['activity_level'] | null;
+    avatarUrl: string | null;
+    currentWeightKg: number | null;
+    dateOfBirth: string | null;
+    fitnessGoal: T['fitness_goal'] | null;
+    firstName: string;
+    heightCm: number | null;
+    lastName: string;
+  };
+}
+
 function getUserDisplayName(profile?: {
   first_name?: string | null;
   last_name?: string | null;
@@ -111,7 +202,7 @@ function pickDefined<T extends object, K extends keyof T>(
 
   for (const key of keys) {
     const value = source[key];
-    if (value !== undefined) {
+    if (value !== undefined && value !== null) {
       result[key] = value as T[K];
     }
   }
@@ -146,12 +237,13 @@ export class UserService {
 
   async getMyProfile(userId: string) {
     const user = await this.repo.findUserAggregateOrThrow(userId);
+    const profile = toCanonicalProfileResponse(user.profile);
     const email =
       getIdentityIdentifier(user.auth_identities, [
         AuthProvider.email,
         AuthProvider.google,
       ]) ?? '';
-    const phone = user.profile.phone ?? null;
+    const phone = profile.phone;
     const hasQrCodeToken =
       typeof user.qr_code_token === 'string' &&
       user.qr_code_token.trim() !== '';
@@ -161,6 +253,7 @@ export class UserService {
 
     return {
       ...user,
+      profile,
       email,
       phone,
       phone_no: phone,
@@ -182,7 +275,8 @@ export class UserService {
 
   async updateMyProfile(userId: string, dto: UpdateProfileDTO) {
     await this.repo.findUserByIdOrThrow(userId);
-    return this.updateExistingUserProfile(userId, dto);
+    const profile = await this.updateExistingUserProfile(userId, dto);
+    return toCanonicalProfileResponse(profile);
   }
 
   async acceptPrivacyPolicy(userId: string) {
@@ -403,7 +497,9 @@ export class UserService {
 
     return participants.map((participant) => ({
       user_id: participant.user_id,
-      display_name: `${participant.first_name} ${participant.last_name}`.trim(),
+      display_name:
+        `${participant.first_name} ${participant.last_name}`.trim() ||
+        'FitTrack member',
       avatar_url: participant.avatar_url,
     }));
   }
@@ -494,7 +590,12 @@ export class UserService {
   }
 
   private updateExistingUserProfile(userId: string, dto: UpdateProfileDTO) {
-    return this.repo.updateProfile(userId, this.toProfileUpdateInput(dto));
+    const data = this.toProfileUpdateInput(dto);
+    if (Object.keys(data).length === 0) {
+      return this.repo.findUserProfileByUserIdOrThrow(userId);
+    }
+
+    return this.repo.updateProfile(userId, data);
   }
 
   private toProfileUpdateInput(

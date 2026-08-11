@@ -9,6 +9,7 @@ import {
   IsString,
   IsUrl,
   IsUUID,
+  Matches,
   Max,
   MaxLength,
   Min,
@@ -64,45 +65,53 @@ export class DateRangeDTO extends PaginationDTO {
 
 export class UpdateProfileDTO {
   @ApiPropertyOptional({ example: 'Juan' })
-  @IsOptional()
+  @ValidateIf((_, value) => value !== undefined)
   @IsPersonName('first_name')
   first_name?: string;
 
   @ApiPropertyOptional({ example: 'Dela Cruz' })
-  @IsOptional()
+  @ValidateIf((_, value) => value !== undefined)
   @IsPersonName('last_name')
   last_name?: string;
 
-  @ApiPropertyOptional({ example: '1995-06-15' })
-  @IsOptional()
+  @ApiPropertyOptional({
+    example: '1995-06-15',
+    description: 'Canonical date-only value in YYYY-MM-DD format.',
+    pattern: '^\\d{4}-\\d{2}-\\d{2}$',
+  })
+  @ValidateIf((_, value) => value !== undefined)
+  @TrimString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, {
+    message: 'date_of_birth must be a valid date in YYYY-MM-DD format',
+  })
   @IsISO8601(
-    {},
-    { message: 'date_of_birth must be a valid ISO 8601 date string' },
+    { strict: true, strictSeparator: true },
+    { message: 'date_of_birth must be a valid date in YYYY-MM-DD format' },
   )
   date_of_birth?: string;
 
   @ApiPropertyOptional({
     example: 'https://cdn.fittrack.test/avatars/user.png',
   })
-  @IsOptional()
+  @ValidateIf((_, value) => value !== undefined)
   @IsUrl({ require_tld: false }, { message: 'avatar_url must be a valid URL' })
   avatar_url?: string;
 
   @ApiPropertyOptional({ enum: Gender })
-  @IsOptional()
+  @ValidateIf((_, value) => value !== undefined)
   @IsEnum(Gender, {
     message: `gender must be one of: ${Object.values(Gender).join(', ')}`,
   })
   gender?: Gender;
 
-  @ApiPropertyOptional({ example: 75.5 })
-  @IsOptional()
+  @ApiPropertyOptional({ example: 75.5, maximum: 700 })
+  @ValidateIf((_, value) => value !== undefined)
   @IsPositive({ message: 'weight_kg must be a positive number' })
-  @Max(500, { message: 'weight_kg must not exceed 500' })
+  @Max(700, { message: 'weight_kg must not exceed 700' })
   weight_kg?: number;
 
-  @ApiPropertyOptional({ example: 175 })
-  @IsOptional()
+  @ApiPropertyOptional({ example: 175, maximum: 300 })
+  @ValidateIf((_, value) => value !== undefined)
   @IsPositive({ message: 'height_cm must be a positive number' })
   @Max(300, { message: 'height_cm must not exceed 300' })
   height_cm?: number;
@@ -112,14 +121,14 @@ export class UpdateProfileDTO {
     description:
       'Manual overrides are accepted, but this value is overwritten on the next activity-level recalculation.',
   })
-  @IsOptional()
+  @ValidateIf((_, value) => value !== undefined)
   @IsEnum(ActivityLevel, {
     message: `activity_level must be one of: ${Object.values(ActivityLevel).join(', ')}`,
   })
   activity_level?: ActivityLevel;
 
   @ApiPropertyOptional({ enum: FitnessGoal })
-  @IsOptional()
+  @ValidateIf((_, value) => value !== undefined)
   @IsEnum(FitnessGoal, {
     message: `fitness_goal must be one of: ${Object.values(FitnessGoal).join(', ')}`,
   })

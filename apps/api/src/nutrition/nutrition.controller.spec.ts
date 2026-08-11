@@ -128,6 +128,9 @@ describe('NutritionController', () => {
       end_date: '2026-03-31',
       page: 1,
       limit: 20,
+      search: 'chicken',
+      meal_type: 'Lunch',
+      sort: 'oldest',
     });
 
     expect(nutritionService.getNutritionLogs).toHaveBeenCalledWith('user-1', {
@@ -135,12 +138,16 @@ describe('NutritionController', () => {
       end_date: '2026-03-31',
       page: 1,
       limit: 20,
+      search: 'chicken',
+      meal_type: 'Lunch',
+      sort: 'oldest',
     });
   });
 
   it('updates nutrition logs through the service', async () => {
     const dto = {
       calories: 480,
+      log_date: '2026-03-28',
     };
 
     await controller.updateNutritionLog(

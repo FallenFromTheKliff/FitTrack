@@ -17,10 +17,8 @@ import {
   approveDeletionRequestMutationOptions,
   manualAttendanceCheckInMutationOptions,
   rejectDeletionRequestMutationOptions,
-  reviewMembershipPaymentsQueryOptions,
   scanAttendanceQrMutationOptions,
   updateAdminMembershipCardMutationOptions,
-  verifyMembershipPaymentMutationOptions,
   verifyNonMemberMutationOptions,
 } from "@fittrack/query";
 import { useDebounce, useLoadingText } from "@fittrack/hooks";
@@ -52,12 +50,10 @@ import {
   MIN_ACTION_DELAY_MS,
   filterMembers,
   formatLastCheckIn,
-  formatReviewPayableLabel,
   getActionErrorMessage,
   getDirectoryMemberStatus,
   getEditDraftValues,
   getMembershipFieldValue,
-  getMembershipPaymentReviewLabel,
   getPendingRequestsByUserId,
   normalizeDraftValue,
   parseOptionalNumber,
@@ -72,16 +68,7 @@ type NoticeModalState = {
   title: string;
   tone: ToastTone;
 } | null;
-type PaymentReviewAction = "approve" | "reject" | null;
 export type CoachClientPanelMode = "overview" | "schedule" | "feedback";
-type PendingMembershipPayment = {
-  id: string;
-  user_id: string;
-  amount: number | string;
-  payable_type?: string | null;
-  provider?: string | null;
-  status: string;
-};
 
 const MANUAL_VERIFICATION_ROLE_NAMES = new Set(["ADMIN", "STAFF", "USER", "COACH"]);
 
@@ -147,7 +134,6 @@ type AccountsPageContextValue = {
   filtered: MemberRecord[];
   grantCardTarget: MemberRecord | null;
   handleAdd: (data: AdminCreateUserData) => Promise<void>;
-  handleApproveMembershipPayment: () => Promise<void>;
   handleArchiveMember: () => Promise<void>;
   handleAttendanceScan: (qrValue: string) => Promise<void>;
   handleDelete: () => Promise<void>;
@@ -156,7 +142,6 @@ type AccountsPageContextValue = {
   handleManualCheckIn: (member: MemberRecord) => Promise<void>;
   handleMessageMember: (member: MemberRecord) => void;
   handleRejectDeleteRequest: () => Promise<void>;
-  handleRejectMembershipPayment: () => Promise<void>;
   handleRemoveMembership: () => Promise<void>;
   handleRestoreMember: () => Promise<void>;
   handleRevokeMembershipCard: () => Promise<void>;
@@ -169,7 +154,6 @@ type AccountsPageContextValue = {
   isEditTargetArchived: boolean;
   isManualAttendancePending: boolean;
   isMembershipCardPending: boolean;
-  isMembershipPaymentReviewPending: boolean;
   isRejectDeletionPending: boolean;
   isScanAttendancePending: boolean;
   isSelfEdit: boolean;
@@ -185,10 +169,7 @@ type AccountsPageContextValue = {
   page: number;
   pageLoading: boolean;
   paginatedRows: MemberRecord[];
-  paymentReviewAction: PaymentReviewAction;
-  paymentReviewLoadingLabel: string;
   pendingEditSubmission: Record<string, string> | null;
-  pendingMembershipPayment: PendingMembershipPayment | undefined;
   pendingRequestsByUserId: Map<string, DeletionRequest>;
   q: string;
   queueEditConfirmation: (data: Record<string, string>) => void;
@@ -219,7 +200,6 @@ type AccountsPageContextValue = {
   setGrantCardTarget: Dispatch<SetStateAction<MemberRecord | null>>;
   setNoticeModal: Dispatch<SetStateAction<NoticeModalState>>;
   setPage: Dispatch<SetStateAction<number>>;
-  setPaymentReviewAction: Dispatch<SetStateAction<PaymentReviewAction>>;
   setPendingEditSubmission: Dispatch<SetStateAction<Record<string, string> | null>>;
   setQ: Dispatch<SetStateAction<string>>;
   setRejectTerminationTarget: Dispatch<SetStateAction<MemberRecord | null>>;
@@ -350,7 +330,6 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
   const [scanFeedback, setScanFeedback] = useState<AttendanceScanFeedback | null>(null);
   const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
   const [isAccountsHamburgerMode, setIsAccountsHamburgerMode] = useState(false);
-  const [paymentReviewAction, setPaymentReviewAction] = useState<PaymentReviewAction>(null);
   const notify = useCallback((tone: ToastTone, title: string, description?: string) => {
     setNoticeModal({ description, title, tone });
   }, []);
@@ -359,20 +338,6 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
   }, [notify]);
   const { data: deletionRequests = [], error: deletionRequestsError } = useQuery({
     ...adminDeletionRequestsQueryOptions<DeletionRequest>(webApiClient),
-    enabled: canManageAccounts,
-  });
-  const {
-    data: pendingMembershipPayments = {
-      data: [],
-      meta: { page: 1, limit: 0, total: 0, total_pages: 0 },
-    },
-    error: pendingMembershipPaymentsError,
-  } = useQuery({
-    ...reviewMembershipPaymentsQueryOptions(webApiClient, {
-      limit: 50,
-      page: 1,
-      status: "awaiting_verification",
-    }),
     enabled: canManageAccounts,
   });
 
@@ -429,15 +394,6 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
     );
   }, [canManageAccounts, deletionRequestsError, notifyActionError]);
 
-  useEffect(() => {
-    if (!pendingMembershipPaymentsError || !canManageAccounts) return;
-    notifyActionError(
-      "Payment reviews could not be loaded",
-      pendingMembershipPaymentsError,
-      "Failed to load membership payment reviews awaiting verification.",
-    );
-  }, [canManageAccounts, pendingMembershipPaymentsError, notifyActionError]);
-
   const roleScopedMembers = useMemo(() => {
     return members.filter((member) => {
       if (isCoach) return member.role?.name === "USER";
@@ -452,22 +408,6 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
         ? getPendingRequestsByUserId(deletionRequests)
         : new Map<string, DeletionRequest>(),
     [canManageAccounts, deletionRequests],
-  );
-  const membershipReviewPayments = useMemo(
-    () =>
-      pendingMembershipPayments.data.filter(
-        (payment) =>
-          payment.payable_type === "subscription" ||
-          payment.payable_type === "membership_card",
-      ),
-    [pendingMembershipPayments.data],
-  );
-  const pendingMembershipPayment = useMemo(
-    () =>
-      editTarget
-        ? membershipReviewPayments.find((payment) => payment.user_id === editTarget.id)
-        : undefined,
-    [editTarget, membershipReviewPayments],
   );
   const [contentMode, setContentMode] = useState<ContentMode>("directory");
 
@@ -637,9 +577,6 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
   const manualAttendanceMutation = useMutation(
     manualAttendanceCheckInMutationOptions(webApiClient, queryClient),
   );
-  const membershipPaymentReviewMutation = useMutation(
-    verifyMembershipPaymentMutationOptions(webApiClient, queryClient),
-  );
   const rejectLoadingLabel = useLoadingText("REJECTING REQUEST", rejectDeletionMutation.isPending);
   const approveRequestLoadingLabel = useLoadingText(
     "APPROVING REQUEST",
@@ -652,10 +589,6 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
   const manualCheckInLoadingLabel = useLoadingText(
     "CHECKING IN",
     manualAttendanceMutation.isPending,
-  );
-  const paymentReviewLoadingLabel = useLoadingText(
-    "UPDATING PAYMENT",
-    membershipPaymentReviewMutation.isPending,
   );
   const editLoadingLabel = useLoadingText("UPDATING MEMBER", editLoading);
   const restoreLoadingLabel = useLoadingText("RESTORING ACCOUNT", restoreLoading);
@@ -997,84 +930,6 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const handleApproveMembershipPayment = async () => {
-    if (!pendingMembershipPayment) return;
-    const reviewLabel = getMembershipPaymentReviewLabel(pendingMembershipPayment.payable_type ?? undefined);
-    try {
-      await membershipPaymentReviewMutation.mutateAsync({
-        paymentId: pendingMembershipPayment.id,
-        payload: { action: "approve" },
-        affectedUserId: pendingMembershipPayment.user_id,
-      });
-      if (pendingMembershipPayment.payable_type === "membership_card") {
-        patchOpenMember(pendingMembershipPayment.user_id, {
-          membershipCard: {
-            ...(editTarget?.membershipCard ?? { status: "active" }),
-            activatedAt: new Date().toISOString(),
-            revokeReason: null,
-            revokedAt: null,
-            source: pendingMembershipPayment.provider,
-            status: "active",
-            verifiedAt: new Date().toISOString(),
-          } as MembershipCardRecord,
-        });
-        await fetchMembers();
-      }
-      notify(
-        "success",
-        "Payment review approved",
-        `${formatReviewPayableLabel(pendingMembershipPayment.payable_type ?? undefined)} has been marked as approved.`,
-      );
-    } catch {
-      notify(
-        "error",
-        "Could not approve the payment review",
-        `Try again while the ${reviewLabel} request is still awaiting verification.`,
-      );
-    } finally {
-      setPaymentReviewAction(null);
-    }
-  };
-
-  const handleRejectMembershipPayment = async () => {
-    if (!pendingMembershipPayment) return;
-    const reviewLabel = getMembershipPaymentReviewLabel(pendingMembershipPayment.payable_type ?? undefined);
-    try {
-      await membershipPaymentReviewMutation.mutateAsync({
-        paymentId: pendingMembershipPayment.id,
-        payload: {
-          action: "reject",
-          rejectionReason: "Rejected via account module.",
-        },
-        affectedUserId: pendingMembershipPayment.user_id,
-      });
-      if (pendingMembershipPayment.payable_type === "membership_card") {
-        patchOpenMember(pendingMembershipPayment.user_id, {
-          membershipCard: {
-            ...(editTarget?.membershipCard ?? { status: "revoked" }),
-            revokeReason: "Rejected via account module.",
-            revokedAt: new Date().toISOString(),
-            status: "revoked",
-          } as MembershipCardRecord,
-        });
-        await fetchMembers();
-      }
-      notify(
-        "success",
-        "Payment review declined",
-        `${formatReviewPayableLabel(pendingMembershipPayment.payable_type ?? undefined)} remains blocked for now.`,
-      );
-    } catch {
-      notify(
-        "error",
-        "Could not decline the payment review",
-        `Try again while the ${reviewLabel} request is still awaiting verification.`,
-      );
-    } finally {
-      setPaymentReviewAction(null);
-    }
-  };
-
   const queueEditConfirmation = (data: Record<string, string>) => {
     if (!hasEditChanges) return;
     setEditDraft(data);
@@ -1218,7 +1073,6 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
         filtered,
         grantCardTarget,
         handleAdd,
-        handleApproveMembershipPayment,
         handleArchiveMember,
         handleAttendanceScan,
         handleDelete,
@@ -1227,7 +1081,6 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
         handleManualCheckIn,
         handleMessageMember,
         handleRejectDeleteRequest,
-        handleRejectMembershipPayment,
         handleRemoveMembership,
         handleRestoreMember,
         handleRevokeMembershipCard,
@@ -1240,7 +1093,6 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
         isEditTargetArchived,
         isManualAttendancePending: manualAttendanceMutation.isPending,
         isMembershipCardPending: membershipCardMutation.isPending,
-        isMembershipPaymentReviewPending: membershipPaymentReviewMutation.isPending,
         isRejectDeletionPending: rejectDeletionMutation.isPending,
         isScanAttendancePending: scanAttendanceMutation.isPending,
         isSelfEdit,
@@ -1256,10 +1108,7 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
         page,
         pageLoading,
         paginatedRows,
-        paymentReviewAction,
-        paymentReviewLoadingLabel,
         pendingEditSubmission,
-        pendingMembershipPayment,
         pendingRequestsByUserId,
         q,
         queueEditConfirmation,
@@ -1290,7 +1139,6 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
         setGrantCardTarget,
         setNoticeModal,
         setPage,
-        setPaymentReviewAction,
         setPendingEditSubmission,
         setQ,
         setRejectTerminationTarget,

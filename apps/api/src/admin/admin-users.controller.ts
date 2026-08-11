@@ -31,7 +31,7 @@ import { AdminUsersService } from './admin-users.service';
 @ApiTags('Admin')
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(UserRole.admin, UserRole.staff, UserRole.coach)
+@Roles(UserRole.admin, UserRole.staff)
 @Controller('admin/users')
 export class AdminUsersController {
   constructor(private readonly adminUsersService: AdminUsersService) {}

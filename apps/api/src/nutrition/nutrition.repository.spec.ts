@@ -166,7 +166,7 @@ describe('NutritionRepository', () => {
     });
   });
 
-  it('lists nutrition logs with the shared date-range pagination helper', async () => {
+  it('filters nutrition logs with deterministic oldest-first paging', async () => {
     nutritionLog.count.mockResolvedValue(1);
     nutritionLog.findMany.mockResolvedValue([{ id: 'log-1' }]);
 
@@ -176,6 +176,9 @@ describe('NutritionRepository', () => {
         end_date: '2026-03-31',
         page: 2,
         limit: 10,
+        search: 'chicken',
+        meal_type: 'Lunch',
+        sort: 'oldest',
       }),
     ).resolves.toEqual({
       data: [{ id: 'log-1' }],
@@ -190,17 +193,54 @@ describe('NutritionRepository', () => {
     expect(nutritionLog.findMany).toHaveBeenCalledWith({
       where: {
         user_id: 'user-1',
+        meal_name: 'Lunch',
+        OR: [
+          {
+            meal_name: {
+              contains: 'chicken',
+              mode: 'insensitive',
+            },
+          },
+          {
+            food_item: {
+              contains: 'chicken',
+              mode: 'insensitive',
+            },
+          },
+        ],
         log_date: {
           gte: new Date('2026-03-01'),
           lte: new Date('2026-03-31'),
         },
       },
-      orderBy: [{ log_date: 'desc' }, { created_at: 'desc' }],
+      orderBy: [
+        { log_date: 'asc' },
+        { created_at: 'asc' },
+        { id: 'asc' },
+      ],
       include: undefined,
       select: undefined,
       skip: 10,
       take: 10,
     });
+  });
+
+  it('keeps newest-first log ordering by default with an id tie-break', async () => {
+    nutritionLog.count.mockResolvedValue(0);
+    nutritionLog.findMany.mockResolvedValue([]);
+
+    await repo.listNutritionLogs('user-1', {});
+
+    expect(nutritionLog.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { user_id: 'user-1' },
+        orderBy: [
+          { log_date: 'desc' },
+          { created_at: 'desc' },
+          { id: 'desc' },
+        ],
+      }),
+    );
   });
 
   it('updates only logs owned by the caller', async () => {
@@ -224,6 +264,24 @@ describe('NutritionRepository', () => {
       data: { calories: 480 },
       include: undefined,
     });
+  });
+
+  it('rejects updates to nutrition logs owned by another user', async () => {
+    nutritionLog.findUnique.mockResolvedValue({
+      id: 'log-1',
+      user_id: 'user-2',
+    });
+
+    await expect(
+      repo.updateNutritionLog('user-1', 'log-1', { calories: 480 }),
+    ).rejects.toMatchObject({
+      response: {
+        type: 'FORBIDDEN',
+        title: 'Forbidden',
+        status: 403,
+      },
+    });
+    expect(nutritionLog.update).not.toHaveBeenCalled();
   });
 
   it('deletes only logs owned by the caller', async () => {

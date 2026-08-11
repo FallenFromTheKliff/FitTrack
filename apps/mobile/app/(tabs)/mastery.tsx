@@ -6,7 +6,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { useIsFocused } from "@react-navigation/native";
 import { useFocusEffect } from "expo-router";
-import { Apple, Bot, Dumbbell, Trophy } from "lucide-react-native";
+import { Apple, Bot, Dumbbell, History, Trophy } from "lucide-react-native";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { type FABMenuItem, useFABState } from "@/contexts/FABStateContext";
@@ -63,7 +63,21 @@ export default function MuscleMasteryScreen() {
       iconBg: colors.brand + "18",
       onPress: controller.onOpenChatbot,
     },
-  ], [colors.brand, controller.onOpenChatbot, controller.onOpenNutrition, controller.onOpenWorkout]);
+    {
+      label: "Season history",
+      sub: "Review top performers",
+      icon: History,
+      iconColor: colors.brand,
+      iconBg: colors.brand + "18",
+      onPress: controller.onOpenSeasonHistory,
+    },
+  ], [
+    colors.brand,
+    controller.onOpenChatbot,
+    controller.onOpenNutrition,
+    controller.onOpenSeasonHistory,
+    controller.onOpenWorkout,
+  ]);
 
   useFocusEffect(useCallback(() => {
     registerFAB({

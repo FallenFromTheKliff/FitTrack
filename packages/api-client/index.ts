@@ -8,6 +8,7 @@ import { createVenuesApi } from "./domains/venues";
 import { createBookingsApi } from "./domains/bookings";
 import { createAppointmentsApi } from "./domains/appointments";
 import { createCoachesApi } from "./domains/coaches";
+import { createCoachSpecialtiesApi } from "./domains/coach-specialties";
 import { createAdminApi } from "./domains/admin";
 import { createFitnessApi } from "./domains/fitness";
 import { createFilesApi } from "./domains/files";
@@ -122,6 +123,10 @@ export type {
   UpdateCoachProfilePayload,
   UpsertCoachAvailabilityPayload,
 } from "./domains/coaches";
+export type {
+  CoachSpecialtyListParams,
+  CoachSpecialtyRecord,
+} from "./domains/coach-specialties";
 export type {
   AdminMilestoneDefinitionListParams,
   AdminMilestoneDefinitionRecord,
@@ -282,7 +287,11 @@ export type {
 export type {
   CreateNutritionLogPayload,
   NutritionHistoryParams,
+  NutritionIconKind,
+  NutritionLogIconInput,
+  NutritionLogIconRecord,
   NutritionLogListParams,
+  NutritionMealIconLibraryKey,
   RecalculateNutritionPayload,
   UpdateNutritionLogPayload,
 } from "./domains/nutrition";
@@ -332,6 +341,7 @@ export type {
   AdminGamificationSeasonSummaryRecord,
   AdminGamificationSeasonStatusInput,
   AdminGamificationSeasonUpdateInput,
+  AdminManualExpAllocationInput,
   AdminManualExpGrantInput,
   AdminProgressionGrantRecord,
   ManualAttendanceCheckInInput,
@@ -372,6 +382,7 @@ export function createApiClient(config: CreateApiClientConfig) {
     bookings: createBookingsApi(transport),
     appointments: createAppointmentsApi(transport),
     coaches: createCoachesApi(transport),
+    coachSpecialties: createCoachSpecialtiesApi(transport),
     admin: createAdminApi(transport),
     fitness: createFitnessApi(transport),
     files: createFilesApi(transport),

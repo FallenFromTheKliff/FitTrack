@@ -139,8 +139,11 @@ export class NotificationsService {
     };
   }
 
-  deleteNotification(userId: string, notificationId: string): Promise<void> {
-    return this.repo.deleteOwnedInAppNotification(userId, notificationId);
+  async deleteNotification(
+    userId: string,
+    notificationId: string,
+  ): Promise<void> {
+    await this.repo.deleteOwnedInAppNotification(userId, notificationId);
   }
 
   async deleteAllNotifications(
@@ -192,8 +195,7 @@ export class NotificationsService {
       subscription_expired_email: preferences.subscription_expired_email,
       booking_confirmed_email: preferences.booking_confirmed_email,
       booking_cancelled_email: preferences.booking_cancelled_email,
-      venue_booking_reminder_email:
-        preferences.venue_booking_reminder_email,
+      venue_booking_reminder_email: preferences.venue_booking_reminder_email,
       booking_no_show_email: preferences.booking_no_show_email,
       appointment_confirmed_email: preferences.appointment_confirmed_email,
       coach_appointment_reminder_email:

@@ -205,6 +205,18 @@ describe('GamificationController', () => {
     );
   });
 
+  it('passes the include-locked milestone filter for the current user', async () => {
+    const user = { sub: 'user-1' } as JwtPayload;
+    gamificationService.getMilestoneProgress.mockResolvedValue([]);
+
+    await controller.listMilestones(user, { include_locked: true });
+
+    expect(gamificationService.getMilestoneProgress).toHaveBeenCalledWith(
+      'user-1',
+      { include_locked: true },
+    );
+  });
+
   it('loads integrity summary through the service for the current user', async () => {
     const user = { sub: 'user-1' } as JwtPayload;
     gamificationService.getIntegritySummary.mockResolvedValue({

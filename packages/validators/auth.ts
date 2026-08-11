@@ -165,8 +165,8 @@ function buildAuthPersonNameSchema(fieldLabel: string) {
     .trim()
     .min(2, `${fieldLabel} must be at least 2 characters long`)
     .max(100, `${fieldLabel} must not exceed 100 characters`)
-    .refine((value) => /^[\p{L}]+(?:[ '-][\p{L}]+)*$/u.test(value), {
-      message: `${fieldLabel} may only use letters, spaces, apostrophes, and hyphens`,
+    .refine((value) => /^[\p{L}]+(?:[ \p{L}]*[\p{L}])?$/u.test(value), {
+      message: `${fieldLabel} may contain only Unicode letters and spaces`,
     });
 }
 
@@ -260,6 +260,28 @@ export const registerSchema = z
     path: ["confirmPassword"]
   });
 
+// Registration uses the canonical challenge contract. Keep registerSchema's
+// permissive phone compatibility for existing profile/admin consumers; mobile
+// registration must validate exactly what the registration DTO accepts.
+export const mobileRegisterSchema = z
+  .object({
+    firstName: buildAuthPersonNameSchema("First name"),
+    lastName: buildAuthPersonNameSchema("Last name"),
+    email: buildAuthAllowedEmailSchema("Email"),
+    phone: z.string().trim().refine(
+      (value) => value.length === 0 || authCanonicalPhilippineMobilePattern.test(value),
+      {
+        message: "Enter a valid PH mobile number in +639XXXXXXXXX format",
+      },
+    ),
+    password: buildAuthStrongPasswordSchema("Password"),
+    confirmPassword: z.string().trim().min(1, "Please confirm your password"),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  });
+
 export const changePasswordSchema = z
   .object({
     currentPassword: z.string().trim().min(1, "Current password is required"),
@@ -290,5 +312,6 @@ export const changePasswordSchema = z
 
 export type LoginData = z.infer<typeof loginSchema>;
 export type RegisterData = z.infer<typeof registerSchema>;
+export type MobileRegisterData = z.infer<typeof mobileRegisterSchema>;
 export type ChangePasswordData = z.infer<typeof changePasswordSchema>;
 export type AdminCreateUserData = z.infer<typeof adminCreateUserSchema>;

@@ -176,9 +176,14 @@ export class NotificationsRepository extends BaseRepository {
   async deleteOwnedInAppNotification(
     userId: string,
     notificationId: string,
-  ): Promise<void> {
-    await this.findOwnedInAppNotificationByIdOrThrow(userId, notificationId);
-    await this.deleteById(this.prisma.notification, notificationId);
+  ): Promise<number> {
+    const result = await this.deleteMany(this.prisma.notification, {
+      id: notificationId,
+      user_id: userId,
+      channel: NotificationChannel.in_app,
+    });
+
+    return result.count;
   }
 
   async deleteAllOwnedInAppNotifications(userId: string): Promise<number> {

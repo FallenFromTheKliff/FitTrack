@@ -507,23 +507,26 @@ function CoachProfileSnapshotPanel() {
       >
         <div style={{ minWidth: 0 }}>
           <FitText
+            as="h3"
             excludeGlobalScale
             style={{
               color: colors.textPrimary,
               fontSize: 24,
               fontWeight: 900,
               lineHeight: 1.05,
-              marginBottom: 6,
+              margin: 0,
             }}
           >
             {displayName}
           </FitText>
           <FitText
+            as="p"
             excludeGlobalScale
             style={{
               color: colors.textMuted,
               fontSize: 12,
               lineHeight: 1.4,
+              margin: "6px 0 0",
             }}
           >
             {contactLabel}
@@ -1049,20 +1052,86 @@ function OperationsProfileSettingsPage() {
   return (
     <FitSection as="section" heading="" hideHeading bare noPadding className={themeTransition} style={fadeIn}>
       <div style={s.outerWrap}>
-        <div style={{ ...s.innerWrap, width: "min(100%, 760px)" }}>
+        <div
+          style={{
+            ...s.innerWrap,
+            width: isCoach ? "min(100%, 1440px)" : "min(100%, 760px)",
+          }}
+        >
           {message ? (
-            <div style={{ marginBottom: 10, display: "flex", justifyContent: "flex-end" }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: isCoach ? "flex-start" : "flex-end",
+                marginBottom: 10,
+              }}
+            >
               <FitText style={{ fontSize: 13, color: colors.success, fontWeight: 600 }}>{message}</FitText>
             </div>
           ) : null}
-          <div style={{ ...s.shell, padding: 12 }}>
+          <div
+            style={{
+              ...s.shell,
+              ...(isCoach
+                ? {
+                    backgroundColor: colors.surface,
+                    borderRadius: 22,
+                    padding: 20,
+                  }
+                : { padding: 12 }),
+            }}
+          >
+            {isCoach ? (
+              <div
+                style={{
+                  alignItems: "flex-start",
+                  display: "flex",
+                  gap: 16,
+                  justifyContent: "space-between",
+                  marginBottom: 20,
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <FitText as="h2" style={{ fontSize: 24, fontWeight: 900, margin: 0 }}>
+                    Coach workspace
+                  </FitText>
+                  <FitText as="p" style={{ color: colors.textMuted, fontSize: 13, lineHeight: 1.5, margin: "6px 0 0" }}>
+                    Keep your personal details separate from the professional profile members see when booking.
+                  </FitText>
+                </div>
+                <FitPill
+                  mode="status"
+                  label="COACH PORTAL"
+                  color={colors.brand}
+                  fontSize={10}
+                  fontWeight={800}
+                  borderOpacity="35"
+                  bgOpacity="14"
+                  style={{ borderRadius: 6, flexShrink: 0 }}
+                />
+              </div>
+            ) : null}
             <div
               style={{
                 ...s.twoColGrid,
-                ...(isCoach ? {} : { gridTemplateColumns: "minmax(0, 1fr)" }),
+                ...(isCoach
+                  ? {
+                      gap: 18,
+                      gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 520px), 1fr))",
+                    }
+                  : { gridTemplateColumns: "minmax(0, 1fr)" }),
               }}
             >
-              <div style={{ ...s.panel, display: "flex", flexDirection: "column" }}>
+              <div
+                data-profile-section="personal"
+                style={{
+                  ...s.panel,
+                  display: "flex",
+                  flexDirection: "column",
+                  minWidth: 0,
+                  padding: isCoach ? 20 : 14,
+                }}
+              >
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginTop: 10, marginBottom: 12 }}>
                   <input
                     ref={avatarInputRef}
@@ -1267,9 +1336,13 @@ function OperationsProfileSettingsPage() {
                 </div>
               </div>
               {isCoach ? (
-                <div style={{ display: "grid", gap: 12, alignContent: "start" }}>
+                <div style={{ alignContent: "start", display: "grid", gap: 14, minWidth: 0 }}>
                   <CoachProfileSnapshotPanel />
                   <CoachProfileManagementPanel />
+                </div>
+              ) : null}
+              {isCoach ? (
+                <div data-profile-section="feedback" style={{ gridColumn: "1 / -1", minWidth: 0 }}>
                   <CoachReceivedReviewsPanel />
                 </div>
               ) : null}

@@ -9,6 +9,7 @@ import { CoachController } from './coach.controller';
 function getGuardMetadata(
   methodName:
     | 'listCoaches'
+    | 'listSpecialties'
     | 'getMyProfile'
     | 'getCoachById'
     | 'updateMyProfile'
@@ -32,6 +33,7 @@ function getRolesMetadata(
 describe('CoachController', () => {
   const coachService = {
     listCoaches: jest.fn(),
+    listSpecialties: jest.fn(),
     getMyProfile: jest.fn(),
     getCoachById: jest.fn(),
     updateMyProfile: jest.fn(),
@@ -63,18 +65,25 @@ describe('CoachController', () => {
     },
   );
 
-  it('marks authenticated coach self-profile reads as gone', () => {
-    expect(() => controller.getMyProfile()).toThrow(
-      'Coach user accounts are no longer supported.',
-    );
+  it('lists specialties through the authenticated catalog seam', async () => {
+    coachService.listSpecialties.mockResolvedValue({ data: [], meta: {} });
+
+    await controller.listSpecialties({ page: 1, limit: 20, search: 'strength' });
+
+    expect(coachService.listSpecialties).toHaveBeenCalledWith({
+      page: 1,
+      limit: 20,
+      search: 'strength',
+    });
+    expect(getGuardMetadata('listSpecialties')).toEqual([JwtAuthGuard]);
+  });
+
+  it('locks authenticated coach self-profile reads to coach accounts', () => {
     expect(getGuardMetadata('getMyProfile')).toEqual([
       JwtAuthGuard,
       RolesGuard,
     ]);
-    expect(getRolesMetadata('getMyProfile')).toEqual([
-      UserRole.admin,
-      UserRole.staff,
-    ]);
+    expect(getRolesMetadata('getMyProfile')).toEqual([UserRole.coach]);
   });
 
   it('loads a single coach profile through the service', async () => {
@@ -85,18 +94,12 @@ describe('CoachController', () => {
     expect(coachService.getCoachById).toHaveBeenCalledWith('coach-1');
   });
 
-  it('marks authenticated coach self-profile updates as gone', () => {
-    expect(() => controller.updateMyProfile()).toThrow(
-      'Coach user accounts are no longer supported.',
-    );
+  it('locks authenticated coach self-profile updates to coach accounts', () => {
     expect(getGuardMetadata('updateMyProfile')).toEqual([
       JwtAuthGuard,
       RolesGuard,
     ]);
-    expect(getRolesMetadata('updateMyProfile')).toEqual([
-      UserRole.admin,
-      UserRole.staff,
-    ]);
+    expect(getRolesMetadata('updateMyProfile')).toEqual([UserRole.coach]);
   });
 
   it('locks admin coach updates to admin users', async () => {

@@ -1,21 +1,30 @@
 "use client";
 
-import { Plus, RefreshCcw } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Plus, RefreshCcw, Upload } from "lucide-react";
+import { buildRenderableAssetUrl } from "@fittrack/utils";
 import {
   FitButton,
   FitPagination,
   FitPill,
   FitSearch,
+  FitSelect,
   FitTable,
   FitText,
   FitTextInput,
 } from "@/components/fit";
 import { FitModal } from "@/components/modals";
 import { getErrorMessage } from "@/components/exercise-lab/exerciseLabShared";
+import { WEB_API_BASE_URL } from "@/lib/api-client";
 
 import { ExerciseLabSurfaceFrame } from "./ExerciseLabSurfaceFrame";
 import { ExerciseLabField } from "./ExerciseLabShell";
-import { useExerciseLabPage } from "./ExerciseLabPageContext";
+import {
+  MUSCLE_ICON_ACCEPT,
+  MUSCLE_ICON_OPTIONS,
+  MuscleDefinitionIcon,
+  useExerciseLabPage,
+} from "./ExerciseLabPageContext";
 
 export function ExerciseLabMuscleSurface() {
   const {
@@ -24,10 +33,12 @@ export function ExerciseLabMuscleSurface() {
     createMuscleDefinitionMutation,
     editingMuscleId,
     handleSaveMuscleDefinition,
+    handleMuscleIconFileChange,
     isCompact,
     muscleDefinitions,
     muscleDefinitionsQuery,
     muscleDraft,
+    muscleIconUploadError,
     muscleEditorOpen,
     musclePage,
     muscleSearch,
@@ -35,12 +46,47 @@ export function ExerciseLabMuscleSurface() {
     muscleTableColumns,
     muscleTotalPages,
     openMuscleEditor,
+    pendingMuscleIconFile,
+    selectMuscleLibraryIcon,
     setMuscleDraft,
     setMusclePage,
     setMuscleSearch,
     updateMuscleDefinitionMutation,
+    uploadMuscleIconMutation,
     visibleMuscleDefinitions,
   } = useExerciseLabPage();
+
+  const [localIconPreviewUrl, setLocalIconPreviewUrl] = useState<string | null>(
+    null,
+  );
+  const [iconPreviewError, setIconPreviewError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!pendingMuscleIconFile) {
+      setLocalIconPreviewUrl(null);
+      return;
+    }
+
+    const nextUrl = URL.createObjectURL(pendingMuscleIconFile);
+    setLocalIconPreviewUrl(nextUrl);
+    return () => URL.revokeObjectURL(nextUrl);
+  }, [pendingMuscleIconFile]);
+
+  const persistedIconPreviewUrl =
+    muscleDraft.iconKind === "custom" && muscleDraft.iconAssetKey
+      ? buildRenderableAssetUrl({
+          apiBaseUrl: WEB_API_BASE_URL,
+          assetKey: muscleDraft.iconAssetKey,
+        })
+      : null;
+  const iconPreviewUrl =
+    muscleDraft.iconKind === "custom"
+      ? localIconPreviewUrl ?? persistedIconPreviewUrl
+      : null;
+
+  useEffect(() => {
+    setIconPreviewError(null);
+  }, [iconPreviewUrl]);
 
   const fieldStyle = {
     border: `1px solid ${colors.border}`,
@@ -147,14 +193,19 @@ export function ExerciseLabMuscleSurface() {
         onClose={closeMuscleEditor}
         title={editingMuscleId ? "Edit muscle definition" : "Create muscle definition"}
         subtitle="Maintain the canonical muscle names used by exercise targeting, rankings, and workout analytics."
-        maxWidth={680}
+        maxWidth={720}
         containerStyle={{
           borderRadius: 8,
-          height: "min(560px, calc(100dvh - 40px))",
+          height: "min(660px, calc(100dvh - 40px))",
           maxHeight: "calc(100dvh - 40px)",
         }}
         headerStyle={{ padding: "14px 18px" }}
-        contentStyle={{ maxHeight: "none", minHeight: 0, padding: "16px 18px" }}
+        contentStyle={{
+          maxHeight: "none",
+          minHeight: 0,
+          overflowY: "auto",
+          padding: "16px 18px",
+        }}
         footerStyle={{ padding: "12px 18px" }}
         footer={
           <div
@@ -170,7 +221,8 @@ export function ExerciseLabMuscleSurface() {
               label={editingMuscleId ? "Save muscle" : "Create muscle"}
               loading={
                 createMuscleDefinitionMutation.isPending ||
-                updateMuscleDefinitionMutation.isPending
+                updateMuscleDefinitionMutation.isPending ||
+                uploadMuscleIconMutation.isPending
               }
               onClick={() => void handleSaveMuscleDefinition()}
             />
@@ -260,6 +312,121 @@ export function ExerciseLabMuscleSurface() {
               style={fieldStyle}
             />
           </ExerciseLabField>
+          <div
+            style={{
+              display: "grid",
+              gap: 12,
+              gridTemplateColumns: isCompact
+                ? "minmax(0, 1fr)"
+                : "repeat(2, minmax(0, 1fr))",
+            }}
+          >
+            <ExerciseLabField
+              label="Default icon"
+              hint="Only allowlisted FitTrack library icons are persisted."
+            >
+              <FitSelect
+                compact
+                fullWidth
+                name="muscle-definition-icon"
+                options={MUSCLE_ICON_OPTIONS}
+                value={muscleDraft.iconKey}
+                onChange={(event) => selectMuscleLibraryIcon(event.target.value)}
+                style={fieldStyle}
+              />
+            </ExerciseLabField>
+            <ExerciseLabField
+              label="Managed icon"
+              hint="PNG, JPEG, or WebP only. SVG is rejected."
+            >
+              <label
+                htmlFor="muscle-definition-icon-upload"
+                style={{
+                  alignItems: "center",
+                  backgroundColor: colors.surface,
+                  border: `1px dashed ${colors.border}`,
+                  borderRadius: 8,
+                  color: colors.textSecondary,
+                  cursor: "pointer",
+                  display: "flex",
+                  gap: 8,
+                  minHeight: 42,
+                  padding: "8px 10px",
+                }}
+              >
+                <Upload color={colors.brand} size={16} />
+                <span
+                  style={{
+                    minWidth: 0,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {pendingMuscleIconFile?.name ??
+                    (muscleDraft.iconKind === "custom"
+                      ? "Replace managed image"
+                      : "Choose managed image")}
+                </span>
+                <input
+                  accept={MUSCLE_ICON_ACCEPT}
+                  id="muscle-definition-icon-upload"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0] ?? null;
+                    event.target.value = "";
+                    if (file) handleMuscleIconFileChange(file);
+                  }}
+                  style={{ display: "none" }}
+                  type="file"
+                />
+              </label>
+            </ExerciseLabField>
+          </div>
+          <div
+            style={{
+              alignItems: "center",
+              backgroundColor: colors.surface,
+              border: `1px solid ${colors.border}`,
+              borderRadius: 10,
+              display: "flex",
+              gap: 12,
+              minHeight: 72,
+              padding: 10,
+            }}
+          >
+            <MuscleDefinitionIcon
+              assetUrl={iconPreviewUrl}
+              colors={{
+                accent: colors.brand,
+                background: colors.surfaceRaised,
+                border: colors.border,
+              }}
+              definition={muscleDraft}
+              onImageError={() =>
+                setIconPreviewError("This managed icon could not be previewed.")
+              }
+              onImageLoad={() => setIconPreviewError(null)}
+              size={52}
+            />
+            <div style={{ display: "grid", gap: 3, minWidth: 0 }}>
+              <FitText style={{ color: colors.textPrimary, fontSize: 13, fontWeight: 850 }}>
+                {muscleDraft.iconKind === "custom"
+                  ? "Managed icon preview"
+                  : `${muscleDraft.iconKey} library icon`}
+              </FitText>
+              <FitText style={{ color: colors.textSecondary, fontSize: 11.5 }}>
+                {pendingMuscleIconFile?.name ??
+                  (muscleDraft.iconKind === "custom"
+                    ? "Existing managed asset"
+                    : "The selected icon is used until a managed image is uploaded.")}
+              </FitText>
+            </div>
+          </div>
+          {muscleIconUploadError || iconPreviewError ? (
+            <FitText style={{ color: colors.danger, fontSize: 12, fontWeight: 750 }}>
+              {muscleIconUploadError ?? iconPreviewError}
+            </FitText>
+          ) : null}
           <FitText as="p" style={{ color: colors.textSecondary, fontSize: 12.5 }}>
             Aliases help normalize imported exercise data. The key becomes immutable after
             creation so historical rankings and workout records stay connected.

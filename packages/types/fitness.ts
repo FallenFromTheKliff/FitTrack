@@ -20,6 +20,103 @@ export type FitnessMasteryRank =
   | "gold"
   | "platinum"
   | "adamantite";
+export type ProgressionIconKind = "library" | "custom";
+
+export const FITNESS_MASTERY_EXP_THRESHOLDS: Record<
+  FitnessMasteryRank,
+  number
+> = {
+  adamantite: 10000,
+  bronze: 0,
+  gold: 2000,
+  platinum: 5000,
+  silver: 500,
+};
+
+export const FITNESS_PROGRESSION_LIBRARY_ICON_KEYS = [
+  "badge",
+  "dumbbell",
+  "flame",
+  "medal",
+  "star",
+  "target",
+  "trophy",
+] as const;
+
+export type ProgressionIconRecord = {
+  iconAssetKey: string | null;
+  iconKey: string | null;
+  iconKind: ProgressionIconKind;
+};
+
+export type FitnessExpProgressionRecord = {
+  currentExp: number;
+  isUncapped: boolean;
+  level: FitnessMasteryRank;
+  nextLevelExp: number | null;
+  progressPercent: number;
+  remainingExp: number | null;
+};
+
+function normalizeFitnessExp(value: number) {
+  return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+}
+
+export function getFitnessExpProgressionState(
+  value: number,
+): FitnessExpProgressionRecord {
+  const currentExp = normalizeFitnessExp(value);
+  const ranks: FitnessMasteryRank[] = [
+    "adamantite",
+    "platinum",
+    "gold",
+    "silver",
+    "bronze",
+  ];
+  const level =
+    ranks.find(
+      (rank) => currentExp >= FITNESS_MASTERY_EXP_THRESHOLDS[rank],
+    ) ?? "bronze";
+  const currentLevelExp = FITNESS_MASTERY_EXP_THRESHOLDS[level];
+  const nextLevel =
+    level === "adamantite"
+      ? null
+      : (ranks[ranks.indexOf(level) - 1] ?? "adamantite");
+  const nextLevelExp = nextLevel
+    ? FITNESS_MASTERY_EXP_THRESHOLDS[nextLevel]
+    : null;
+  const levelSpan = nextLevelExp === null ? 0 : nextLevelExp - currentLevelExp;
+  const progressPercent =
+    nextLevelExp === null || levelSpan <= 0
+      ? 100
+      : Math.min(
+          100,
+          Math.max(
+            0,
+            Math.round(((currentExp - currentLevelExp) / levelSpan) * 100),
+          ),
+        );
+
+  return {
+    currentExp,
+    isUncapped: nextLevelExp === null,
+    level,
+    nextLevelExp,
+    progressPercent,
+    remainingExp:
+      nextLevelExp === null ? null : Math.max(0, nextLevelExp - currentExp),
+  };
+}
+
+export function getFitnessTargetExpDelta(
+  currentExp: number,
+  targetLevel: FitnessMasteryRank,
+) {
+  return Math.max(
+    0,
+    FITNESS_MASTERY_EXP_THRESHOLDS[targetLevel] - normalizeFitnessExp(currentExp),
+  );
+}
 export type WorkoutSessionStatus = "cancelled" | "completed" | "in_progress";
 export type PoseSessionEndReason =
   | "client_disconnect"
@@ -156,6 +253,9 @@ export type MuscleDefinitionRecord = {
   aliases: string[];
   bodyRegion: string;
   createdAt: string;
+  iconAssetKey?: string | null;
+  iconKey?: string | null;
+  iconKind?: ProgressionIconKind;
   id: string;
   isActive: boolean;
   isSystem: boolean;
@@ -168,6 +268,9 @@ export type MuscleDefinitionRecord = {
 export type CreateMuscleDefinitionInput = {
   aliases?: string[];
   bodyRegion: string;
+  iconAssetKey?: string | null;
+  iconKey?: string | null;
+  iconKind?: ProgressionIconKind;
   key?: string;
   name: string;
   sortOrder?: number;
@@ -243,16 +346,20 @@ export type FitnessMasteryListParams = {
 };
 
 export type FitnessLeaderboardListParams = {
+  cursor?: string;
   limit?: number;
   page?: number;
+  snapshot?: string;
 };
 
 export type FitnessMuscleLeaderboardListParams = {
+  cursor?: string;
   limit?: number;
   muscleKey: string;
   page?: number;
   scope: "lifetime" | "season";
   seasonId?: string;
+  snapshot?: string;
 };
 
 export type AdminGamificationMuscleLeaderboardListParams =
@@ -341,15 +448,19 @@ export type AdminGamificationIntegrityResolutionInput = {
   >;
 };
 
-export type AdminManualExpGrantInput = {
+export type AdminManualExpAllocationInput = {
   amount: number;
-  appointmentId?: string | null;
-  muscleGroup?: string | null;
+  muscleGroup: string;
+};
+
+export type AdminManualExpGrantInput = {
+  allocations: AdminManualExpAllocationInput[];
   rationale: string;
   userId: string;
 };
 
 export type AdminGamificationSeasonStandingListParams = {
+  cursor?: string;
   governanceStatus?: FitnessRankingGovernanceStatus;
   includeArchived?: boolean;
   limit?: number;
@@ -357,6 +468,7 @@ export type AdminGamificationSeasonStandingListParams = {
   page?: number;
   search?: string;
   seasonId?: string;
+  snapshot?: string;
   visibility?: FitnessRankingVisibility;
 };
 
@@ -1055,16 +1167,22 @@ export type FitnessLeaderboardEntryRecord = {
   avatarUrl: string | null;
   displayName: string;
   rankPosition: number;
+  progression?: FitnessExpProgressionRecord;
   totalXp: number;
   userId: string;
 };
 
 export type FitnessMuscleLeaderboardEntryRecord = {
+  avatarUrl?: string | null;
   displayName: string;
+  iconAssetKey?: string | null;
+  iconKey?: string | null;
+  iconKind?: ProgressionIconKind;
   isCurrentUser?: boolean;
   lastEarnedAt: string | null;
   muscleKey: string;
   rankPosition: number;
+  progression?: FitnessExpProgressionRecord;
   scope: "lifetime" | "season";
   seasonId: string | null;
   seasonTitle: string | null;
@@ -1106,6 +1224,8 @@ export type FitnessProgressionProfileRecord = {
   longestStreak: number;
   rankingGovernanceStatus: FitnessRankingGovernanceStatus;
   rankingVisibility: FitnessRankingVisibility;
+  lifetimeProgression?: FitnessExpProgressionRecord;
+  seasonProgression?: FitnessExpProgressionRecord;
   totalXp: number;
   updatedAt: string | null;
   userId: string;
@@ -1159,6 +1279,9 @@ export type FitnessMilestoneProgressRecord = {
   description: string | null;
   evidenceRequirement?: FitnessMilestoneEvidenceRequirement;
   isHidden: boolean;
+  iconAssetKey?: string | null;
+  iconKey?: string | null;
+  iconKind?: ProgressionIconKind;
   key: string;
   latestEvidenceSubmission?: FitnessMilestoneEvidenceSubmissionRecord | null;
   milestoneDefinitionId: string;
@@ -1185,6 +1308,9 @@ export type AdminMilestoneDefinitionRecord = {
   endsAt: string | null;
   evidenceRequirement: FitnessMilestoneEvidenceRequirement;
   id: string;
+  iconAssetKey?: string | null;
+  iconKey?: string | null;
+  iconKind?: ProgressionIconKind;
   isActive: boolean;
   isHidden: boolean;
   key: string;
@@ -1209,6 +1335,9 @@ export type UpsertAdminMilestoneDefinitionInput = {
   endsAt?: string | null;
   evidenceRequirement?: FitnessMilestoneEvidenceRequirement;
   isHidden?: boolean;
+  iconAssetKey?: string | null;
+  iconKey?: string | null;
+  iconKind?: ProgressionIconKind;
   key: string;
   rewardPayload?: Record<string, unknown> | null;
   sortOrder?: number;
@@ -1314,6 +1443,7 @@ export type AdminGamificationSeasonStandingRecord = {
   governanceStatus: FitnessRankingGovernanceStatus;
   isDisqualified: boolean;
   isHidden: boolean;
+  lifetimeProgression?: FitnessExpProgressionRecord;
   lastEarnedAt: string | null;
   memberName: string;
   milestoneClaimedCount: number;
@@ -1321,6 +1451,7 @@ export type AdminGamificationSeasonStandingRecord = {
   rankPosition: number | null;
   seasonId: string;
   seasonPoints: number;
+  seasonProgression?: FitnessExpProgressionRecord;
   seasonStatus: FitnessSeasonStatus;
   seasonTitle: string;
   topMuscle: string | null;

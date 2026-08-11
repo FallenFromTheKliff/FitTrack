@@ -181,10 +181,12 @@ export class NotificationsController {
   }
 
   @Delete()
-  @ApiOperation({ summary: 'Delete all owned in-app notifications.' })
+  @ApiOperation({
+    summary: "Clear the authenticated user's in-app notification inbox.",
+  })
   @ApiResponse({
     status: 200,
-    description: 'All owned in-app notifications deleted.',
+    description: 'The inbox was cleared and the affected count was returned.',
     schema: apiEnvelopeSchema(getSchemaPath(DeleteAllNotificationsResponseDTO)),
   })
   deleteAllNotifications(@CurrentUser() user: JwtPayload) {
@@ -192,7 +194,9 @@ export class NotificationsController {
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete one owned in-app notification.' })
+  @ApiOperation({
+    summary: 'Dismiss one notification from the authenticated user inbox.',
+  })
   @ApiParam({
     name: 'id',
     type: String,
@@ -202,11 +206,10 @@ export class NotificationsController {
   })
   @ApiResponse({
     status: 200,
-    description: 'Notification deleted.',
+    description:
+      'Dismissal was accepted; missing or already dismissed ids are safe no-ops.',
     schema: apiEnvelopeSchema(getSchemaPath(DeleteNotificationResponseDTO)),
   })
-  @ApiResponse({ status: 403, description: 'Forbidden.' })
-  @ApiResponse({ status: 404, description: 'Notification not found.' })
   async deleteNotification(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: JwtPayload,

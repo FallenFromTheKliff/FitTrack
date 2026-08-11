@@ -12,7 +12,7 @@ export const membershipPaymentStatusSchema = z.enum([
 ]);
 
 export const purchaseMembershipCardSchema = z.object({
-  provider: membershipPaymentProviderSchema
+  provider: z.literal("paymongo")
 });
 
 export const subscribeToMembershipSchema = z.object({

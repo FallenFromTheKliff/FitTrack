@@ -3,6 +3,7 @@ import { BadRequestException, Logger, NotFoundException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { MasteryRank, Prisma } from '@prisma/client';
 
+import { FilesService } from '../../files/files.service';
 import type { PaginationDTO } from '../../user/dto/user-dto';
 import { UserService } from '../../user/user.service';
 import { type PoseSessionFinalizedEvent } from '../pose/events/pose-session-finalized.event';
@@ -17,6 +18,7 @@ describe('GamificationService', () => {
   const repo = {
     applyRankingOverride: jest.fn(),
     applyWorkoutCompletionProgression: jest.fn(),
+    createManualExpGrant: jest.fn(),
     createIntegrityCase: jest.fn(),
     getAdminOverview: jest.fn(),
     getActiveSeasonStanding: jest.fn(),
@@ -56,6 +58,10 @@ describe('GamificationService', () => {
 
   const eventEmitter = {
     emit: jest.fn(),
+  };
+
+  const filesService = {
+    assertUserOwnedRasterImage: jest.fn(),
   };
 
   const makeWorkoutCompletedEvent = (
@@ -321,6 +327,7 @@ describe('GamificationService', () => {
         { provide: GamificationRepository, useValue: repo },
         { provide: UserService, useValue: userService },
         { provide: EventEmitter2, useValue: eventEmitter },
+        { provide: FilesService, useValue: filesService },
       ],
     }).compile();
 
@@ -407,8 +414,94 @@ describe('GamificationService', () => {
         limit: 2,
         total: 3,
         total_pages: 2,
+        next_cursor: expect.any(String),
+        snapshot: expect.any(String),
       },
     });
+  });
+
+  it('uses deterministic competition ranks for total-xp ties', async () => {
+    userService.listGamificationParticipants.mockResolvedValue([
+      { user_id: 'user-z', display_name: 'Zulu Member', avatar_url: null },
+      { user_id: 'user-a', display_name: 'Alpha Member', avatar_url: null },
+      { user_id: 'user-b', display_name: 'Bravo Member', avatar_url: null },
+    ]);
+    repo.listLeaderboardTotals.mockResolvedValue([
+      { user_id: 'user-z', total_xp: 500 },
+      { user_id: 'user-a', total_xp: 500 },
+      { user_id: 'user-b', total_xp: 100 },
+    ]);
+    repo.listRankingProfiles.mockResolvedValue([]);
+
+    const result = await service.getLeaderboard({ page: 1, limit: 20 });
+
+    expect(result.data.map((entry) => entry.user_id)).toEqual([
+      'user-a',
+      'user-z',
+      'user-b',
+    ]);
+    expect(result.data.map((entry) => entry.rank_position)).toEqual([1, 1, 3]);
+    expect(result.data.every((entry) => entry.rank_position !== null)).toBe(
+      true,
+    );
+  });
+
+  it('creates one idempotent manual EXP request with multiple allocations', async () => {
+    repo.createManualExpGrant.mockResolvedValue({
+      currentSeasonPoints: 225,
+      grantId: 'grant-1',
+      grantIds: ['grant-1', 'grant-2'],
+      grantStatus: 'applied',
+      moderationActionId: 'action-1',
+      totalXp: 725,
+      userId: 'member-1',
+    });
+
+    await expect(
+      service.adminCreateManualExpGrant(
+        'admin-1',
+        {
+          user_id: 'member-1',
+          rationale: 'Verified multi-muscle session.',
+          allocations: [
+            { muscle_group: 'chest', amount: 125 },
+            { muscle_group: 'triceps', amount: 100 },
+          ],
+        },
+        '11111111-1111-4111-8111-111111111111',
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        grant_id: 'grant-1',
+        grant_ids: ['grant-1', 'grant-2'],
+        total_xp: 725,
+      }),
+    );
+    expect(repo.createManualExpGrant).toHaveBeenCalledWith({
+      actorUserId: 'admin-1',
+      allocations: [
+        { muscle_group: 'chest', amount: 125 },
+        { muscle_group: 'triceps', amount: 100 },
+      ],
+      rationale: 'Verified multi-muscle session.',
+      sourceId: 'manual_exp:11111111-1111-4111-8111-111111111111',
+      userId: 'member-1',
+    });
+  });
+
+  it('rejects a manual EXP request without a valid idempotency key', async () => {
+    await expect(
+      service.adminCreateManualExpGrant(
+        'admin-1',
+        {
+          user_id: 'member-1',
+          rationale: 'Verified session.',
+          allocations: [{ muscle_group: 'chest', amount: 50 }],
+        },
+        undefined,
+      ),
+    ).rejects.toThrow(BadRequestException);
+    expect(repo.createManualExpGrant).not.toHaveBeenCalled();
   });
 
   it('uses zero xp for participants without mastery rows', async () => {
@@ -437,6 +530,8 @@ describe('GamificationService', () => {
         limit: 20,
         total: 1,
         total_pages: 1,
+        next_cursor: null,
+        snapshot: expect.any(String),
       },
     });
   });
@@ -503,6 +598,8 @@ describe('GamificationService', () => {
         limit: 20,
         total: 2,
         total_pages: 1,
+        next_cursor: null,
+        snapshot: expect.any(String),
       },
     });
   });
@@ -557,18 +654,18 @@ describe('GamificationService', () => {
     });
   });
 
-  it('promotes to the highest mastery tier crossed by xp or volume', () => {
+  it('promotes only when the canonical EXP threshold is crossed', () => {
     expect(service.evaluateRank(500, new Prisma.Decimal('4000'))).toBe(
       MasteryRank.silver,
     );
     expect(service.evaluateRank(400, new Prisma.Decimal('5500'))).toBe(
-      MasteryRank.silver,
+      MasteryRank.bronze,
     );
     expect(service.evaluateRank(2100, new Prisma.Decimal('51000'))).toBe(
-      MasteryRank.platinum,
+      MasteryRank.gold,
     );
     expect(service.evaluateRank(2500, new Prisma.Decimal('100500'))).toBe(
-      MasteryRank.adamantite,
+      MasteryRank.gold,
     );
   });
 
@@ -1154,6 +1251,9 @@ describe('GamificationService', () => {
         reward_payload: { badge_tone: 'ember' },
         evidence_requirement: 'none',
         verification_policy: 'auto',
+        icon_kind: 'library',
+        icon_key: 'trophy',
+        icon_asset_key: null,
         unlocked_at: '2026-03-27T03:00:00.000Z',
         claimed_at: null,
         updated_at: '2026-03-27T03:00:00.000Z',
@@ -1174,6 +1274,9 @@ describe('GamificationService', () => {
         reward_payload: null,
         evidence_requirement: 'none',
         verification_policy: 'auto',
+        icon_kind: 'library',
+        icon_key: 'trophy',
+        icon_asset_key: null,
         unlocked_at: '2026-03-28T03:00:00.000Z',
         claimed_at: null,
         updated_at: '2026-03-28T03:00:00.000Z',

@@ -4,10 +4,12 @@ import {
   ActivityLevel,
   FitnessGoal,
   Gender,
+  NutritionIconKind,
   NutritionUnit,
 } from '@prisma/client';
 import {
   IsEnum,
+  IsIn,
   IsISO8601,
   IsNotEmpty,
   IsOptional,
@@ -16,9 +18,101 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
 
 import { TrimString } from '../../common/validators';
+import { DateRangeDTO } from '../../user/dto/user-dto';
+
+export const NUTRITION_MEAL_TYPES = [
+  'Breakfast',
+  'Lunch',
+  'Dinner',
+  'Snack',
+  'Pre-workout',
+  'Post-workout',
+] as const;
+
+export type NutritionMealType = (typeof NUTRITION_MEAL_TYPES)[number];
+
+export const NUTRITION_LOG_SORTS = ['newest', 'oldest'] as const;
+
+export type NutritionLogSort = (typeof NUTRITION_LOG_SORTS)[number];
+
+export const NUTRITION_MEAL_ICON_LIBRARY_KEYS = [
+  'apple',
+  'beef',
+  'coffee',
+  'cookie',
+  'dumbbell',
+  'milk',
+  'salad',
+  'sandwich',
+  'utensils',
+] as const;
+
+export type NutritionMealIconLibraryKey =
+  (typeof NUTRITION_MEAL_ICON_LIBRARY_KEYS)[number];
+
+export const NUTRITION_MEAL_ICON_FALLBACKS: Record<
+  string,
+  NutritionMealIconLibraryKey
+> = {
+  breakfast: 'coffee',
+  dinner: 'beef',
+  lunch: 'sandwich',
+  'post-workout': 'apple',
+  'pre-workout': 'dumbbell',
+  snack: 'cookie',
+};
+
+export class NutritionLogIconInputDTO {
+  @ApiProperty({ enum: NutritionIconKind, example: NutritionIconKind.library })
+  @IsEnum(NutritionIconKind, {
+    message: `kind must be one of: ${Object.values(NutritionIconKind).join(', ')}`,
+  })
+  kind: NutritionIconKind;
+
+  @ApiPropertyOptional({
+    enum: NUTRITION_MEAL_ICON_LIBRARY_KEYS,
+    nullable: true,
+    example: 'salad',
+  })
+  @IsOptional()
+  @TrimString()
+  @IsIn(NUTRITION_MEAL_ICON_LIBRARY_KEYS, {
+    message: `key must be one of: ${NUTRITION_MEAL_ICON_LIBRARY_KEYS.join(', ')}`,
+  })
+  key?: NutritionMealIconLibraryKey | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    example: 'uploads/11111111-1111-4111-8111-111111111111/2026/08/icon.png',
+  })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'asset_key must be a string' })
+  @MaxLength(500, { message: 'asset_key must not exceed 500 characters' })
+  asset_key?: string | null;
+}
+
+export class NutritionLogIconResponseDTO {
+  @ApiProperty({ enum: NutritionIconKind, example: NutritionIconKind.library })
+  kind: NutritionIconKind;
+
+  @ApiProperty({
+    enum: NUTRITION_MEAL_ICON_LIBRARY_KEYS,
+    nullable: true,
+    example: 'salad',
+  })
+  key: NutritionMealIconLibraryKey | null;
+
+  @ApiProperty({
+    nullable: true,
+    example: null,
+  })
+  asset_key: string | null;
+}
 
 export class TdeeProfileResponseDTO {
   @ApiProperty({ example: '11111111-1111-4111-8111-111111111111' })
@@ -193,9 +287,57 @@ export class LogNutritionDTO {
     message: `unit must be one of: ${Object.values(NutritionUnit).join(', ')}`,
   })
   unit: NutritionUnit;
+
+  @ApiPropertyOptional({
+    type: () => NutritionLogIconInputDTO,
+    nullable: true,
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => NutritionLogIconInputDTO)
+  icon?: NutritionLogIconInputDTO | null;
+}
+
+export class NutritionLogFilterDTO extends DateRangeDTO {
+  @ApiPropertyOptional({
+    example: 'chicken',
+    description: 'Case-insensitive search across meal type and food item.',
+  })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'search must be a string' })
+  @MaxLength(100, { message: 'search must not exceed 100 characters' })
+  search?: string;
+
+  @ApiPropertyOptional({
+    enum: NUTRITION_MEAL_TYPES,
+    example: 'Lunch',
+    description: 'Canonical meal type stored in meal_name.',
+  })
+  @IsOptional()
+  @TrimString()
+  @IsIn(NUTRITION_MEAL_TYPES, {
+    message: `meal_type must be one of: ${NUTRITION_MEAL_TYPES.join(', ')}`,
+  })
+  meal_type?: NutritionMealType;
+
+  @ApiPropertyOptional({
+    enum: NUTRITION_LOG_SORTS,
+    default: 'newest',
+  })
+  @IsOptional()
+  @IsIn(NUTRITION_LOG_SORTS, {
+    message: `sort must be one of: ${NUTRITION_LOG_SORTS.join(', ')}`,
+  })
+  sort?: NutritionLogSort = 'newest';
 }
 
 export class UpdateNutritionLogDTO {
+  @ApiPropertyOptional({ example: '2026-03-27' })
+  @IsOptional()
+  @IsISO8601({}, { message: 'log_date must be a valid ISO 8601 date string' })
+  log_date?: string;
+
   @ApiPropertyOptional({ example: 'Lunch' })
   @IsOptional()
   @TrimString()
@@ -248,6 +390,15 @@ export class UpdateNutritionLogDTO {
     message: `unit must be one of: ${Object.values(NutritionUnit).join(', ')}`,
   })
   unit?: NutritionUnit;
+
+  @ApiPropertyOptional({
+    type: () => NutritionLogIconInputDTO,
+    nullable: true,
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => NutritionLogIconInputDTO)
+  icon?: NutritionLogIconInputDTO | null;
 }
 
 export class NutritionLogResponseDTO {
@@ -272,6 +423,9 @@ export class NutritionLogResponseDTO {
 
   @ApiProperty({ example: 'Greek yogurt' })
   food_item: string;
+
+  @ApiProperty({ type: () => NutritionLogIconResponseDTO })
+  icon: NutritionLogIconResponseDTO;
 
   @ApiProperty({ example: '320.00' })
   calories: string;

@@ -6,7 +6,9 @@ type ApiEnvelope<T> = {
   data: T;
   meta?: {
     limit: number;
+    next_cursor?: string | null;
     page: number;
+    snapshot?: string | null;
     total: number;
     total_pages: number;
   };

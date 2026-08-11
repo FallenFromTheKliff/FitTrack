@@ -1,4 +1,4 @@
-import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
+import { infiniteQueryOptions, mutationOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
 import type {
   ApiClient,
   CreateNutritionLogPayload,
@@ -7,8 +7,22 @@ import type {
   RecalculateNutritionPayload,
   UpdateNutritionLogPayload
 } from "@fittrack/api-client";
-import { invalidateNutritionQueries } from "./cache";
 import { queryKeys } from "./query-keys";
+
+function invalidateNutritionLogQueries(queryClient: QueryClient, userId?: string) {
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: queryKeys.nutritionLogs(userId) }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.nutritionDailySummary(userId) })
+  ]);
+}
+
+function invalidateNutritionTargetQueries(queryClient: QueryClient, userId?: string) {
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: queryKeys.nutritionActive(userId) }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.nutritionHistory(userId) }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.nutritionDailySummary(userId) })
+  ]);
+}
 
 export function nutritionActiveTdeeQueryOptions<T>(client: Pick<ApiClient, "nutrition">, userId?: string) {
   return queryOptions({
@@ -58,6 +72,28 @@ export function nutritionLogsQueryOptions<T>(
   });
 }
 
+export function nutritionLogsInfiniteQueryOptions<T>(
+  client: Pick<ApiClient, "nutrition">,
+  userId?: string,
+  params?: Omit<NutritionLogListParams, "page">
+) {
+  return infiniteQueryOptions({
+    queryKey: queryKeys.nutritionLogs(userId, { ...params, infinite: true }),
+    initialPageParam: 1,
+    queryFn: async ({ pageParam }) => {
+      if (!userId) {
+        return {
+          data: [],
+          meta: { page: 1, limit: params?.limit ?? 0, total: 0, total_pages: 0 }
+        };
+      }
+      return client.nutrition.listLogs<T>({ ...params, page: pageParam });
+    },
+    getNextPageParam: (lastPage) =>
+      lastPage.meta.page < lastPage.meta.total_pages ? lastPage.meta.page + 1 : undefined
+  });
+}
+
 export function nutritionDailySummaryQueryOptions<T>(
   client: Pick<ApiClient, "nutrition">,
   userId?: string,
@@ -77,7 +113,7 @@ export function recalculateNutritionMutationOptions(client: Pick<ApiClient, "nut
     mutationFn: ({ payload }: { payload: RecalculateNutritionPayload; userId?: string }) =>
       client.nutrition.recalculate(payload),
     onSuccess: async (_data, variables) => {
-      await invalidateNutritionQueries(queryClient, variables.userId);
+      await invalidateNutritionTargetQueries(queryClient, variables.userId);
     }
   });
 }
@@ -87,7 +123,7 @@ export function createNutritionLogMutationOptions(client: Pick<ApiClient, "nutri
     mutationFn: ({ payload }: { payload: CreateNutritionLogPayload; userId?: string }) =>
       client.nutrition.createLog(payload),
     onSuccess: async (_data, variables) => {
-      await invalidateNutritionQueries(queryClient, variables.userId);
+      await invalidateNutritionLogQueries(queryClient, variables.userId);
     }
   });
 }
@@ -97,7 +133,7 @@ export function updateNutritionLogMutationOptions(client: Pick<ApiClient, "nutri
     mutationFn: ({ id, payload }: { id: string; payload: UpdateNutritionLogPayload; userId?: string }) =>
       client.nutrition.updateLog(id, payload),
     onSuccess: async (_data, variables) => {
-      await invalidateNutritionQueries(queryClient, variables.userId);
+      await invalidateNutritionLogQueries(queryClient, variables.userId);
     }
   });
 }
@@ -106,7 +142,7 @@ export function deleteNutritionLogMutationOptions(client: Pick<ApiClient, "nutri
   return mutationOptions({
     mutationFn: ({ id }: { id: string; userId?: string }) => client.nutrition.deleteLog(id),
     onSuccess: async (_data, variables) => {
-      await invalidateNutritionQueries(queryClient, variables.userId);
+      await invalidateNutritionLogQueries(queryClient, variables.userId);
     }
   });
 }

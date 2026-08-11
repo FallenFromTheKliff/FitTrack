@@ -608,6 +608,7 @@ export class AdminUsersService {
             where: {
               payable_id: updatedCard.id,
               payable_type: PayableType.membership_card,
+              provider: PaymentProvider.cash,
               status: {
                 in: [
                   PaymentStatus.pending,

@@ -6,6 +6,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useLoadingText } from "@fittrack/hooks";
 import FitButton from "@/components/fit/FitButton";
 import { FitText } from "@/components/fit/FitText";
+import { acquireModalInteractionLock } from "@/components/modals/FitModal";
 
 type Props = {
   isOpen: boolean;
@@ -93,27 +94,8 @@ export default function ConfirmModal({
   useEffect(() => {
     if (!isOpen || !portalRoot) return;
 
-    const previousOverflow = document.body.style.overflow;
-    const previouslyFocused =
-      document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : null;
     const overlay = overlayRef.current;
-    const backgroundSiblings = Array.from(document.body.children).filter(
-      (element): element is HTMLElement =>
-        element instanceof HTMLElement && element !== overlay,
-    );
-    const previousBackgroundState = backgroundSiblings.map((element) => ({
-      element,
-      inert: element.inert,
-      ariaHidden: element.getAttribute("aria-hidden"),
-    }));
-
-    document.body.style.overflow = "hidden";
-    previousBackgroundState.forEach(({ element }) => {
-      element.inert = true;
-      element.setAttribute("aria-hidden", "true");
-    });
+    const releaseModalInteractionLock = acquireModalInteractionLock(overlay);
     const focusFrame = requestAnimationFrame(() => {
       dialogRef.current?.focus({ preventScroll: true });
     });
@@ -155,20 +137,7 @@ export default function ConfirmModal({
     return () => {
       cancelAnimationFrame(focusFrame);
       document.removeEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = previousOverflow;
-      previousBackgroundState.forEach(({ element, inert, ariaHidden }) => {
-        element.inert = inert;
-        if (ariaHidden === null) {
-          element.removeAttribute("aria-hidden");
-        } else {
-          element.setAttribute("aria-hidden", ariaHidden);
-        }
-      });
-      requestAnimationFrame(() => {
-        if (previouslyFocused?.isConnected) {
-          previouslyFocused.focus({ preventScroll: true });
-        }
-      });
+      releaseModalInteractionLock();
     };
   }, [isLoading, isOpen, portalRoot]);
 

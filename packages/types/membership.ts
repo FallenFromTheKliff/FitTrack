@@ -2,7 +2,9 @@ import type { MembershipCardRecord } from "./member";
 
 export type PaginationMeta = {
   limit: number;
+  next_cursor?: string | null;
   page: number;
+  snapshot?: string | null;
   total: number;
   total_pages: number;
 };
@@ -185,7 +187,7 @@ export type SubscribeToMembershipInput = {
 };
 
 export type PurchaseMembershipCardInput = {
-  provider: MembershipPaymentProvider;
+  provider: "paymongo";
 };
 
 export type MembershipCardPurchaseRecord = {

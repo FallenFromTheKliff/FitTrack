@@ -64,6 +64,7 @@ export function makeGoalsModalStyles(colors: ThemeColors) {
       alignItems: "center",
       justifyContent: "center",
       gap: 6,
+      paddingHorizontal: 14,
       paddingVertical: 10,
       borderRadius: R.md,
       borderWidth: 1

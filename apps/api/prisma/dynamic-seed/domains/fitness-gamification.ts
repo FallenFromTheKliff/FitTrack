@@ -5,7 +5,6 @@ import {
   FitnessGoal,
   IntegrityCaseStatus,
   IntegrityRiskLevel,
-  MasteryRank,
   MilestoneCategory,
   MilestoneDefinitionStatus,
   MilestoneEvidenceRequirement,
@@ -16,6 +15,7 @@ import {
   PlanSource,
   PoseProfileKind,
   Prisma,
+  ProgressionIconKind,
   ProgressionGrantStatus,
   ProgressionGrantType,
   ProgressionSourceStatus,
@@ -27,7 +27,12 @@ import {
 } from '@prisma/client';
 import { seedExternalId, seedId } from '../ids';
 import { dateInsideRange, daysFrom } from '../time';
-import type { DynamicSeedContext } from '../types';
+import type { DynamicSeedContext, SeedAccount } from '../types';
+import {
+  DEFAULT_MILESTONE_ICON_KEY,
+  DEFAULT_MUSCLE_ICON_KEY,
+  evaluateExpRank,
+} from '../../../src/fitness/gamification/gamification.constants';
 
 const EXERCISE_SEEDS = [
   {
@@ -245,6 +250,9 @@ const DYNAMIC_MILESTONES = [
     key: 'dynamic-premium-first-block',
     category: MilestoneCategory.training,
     description: 'Complete a seeded premium training block.',
+    iconKey: 'flame',
+    metric: 'completed_workout_sessions',
+    target: 1,
     title: 'Premium First Block',
     trigger: MilestoneTriggerType.summary_threshold,
   },
@@ -252,6 +260,9 @@ const DYNAMIC_MILESTONES = [
     key: 'dynamic-booking-regular',
     category: MilestoneCategory.booking,
     description: 'Complete seeded amenity bookings without no-shows.',
+    iconKey: 'target',
+    metric: 'completed_venue_bookings',
+    target: 3,
     title: 'Booking Regular',
     trigger: MilestoneTriggerType.summary_threshold,
   },
@@ -259,8 +270,21 @@ const DYNAMIC_MILESTONES = [
     key: 'dynamic-coach-accountability',
     category: MilestoneCategory.coaching,
     description: 'Complete coaching sessions and keep feedback visible.',
+    iconKey: 'medal',
+    metric: 'completed_coach_appointments',
+    target: 2,
     title: 'Coach Accountability',
     trigger: MilestoneTriggerType.source_event,
+  },
+  {
+    key: 'dynamic-exp-achiever',
+    category: MilestoneCategory.training,
+    description: 'Reach the seeded lifetime EXP achievement threshold.',
+    iconKey: DEFAULT_MILESTONE_ICON_KEY,
+    metric: 'total_xp',
+    target: 1_000,
+    title: 'EXP Achiever',
+    trigger: MilestoneTriggerType.summary_threshold,
   },
 ] as const;
 
@@ -271,6 +295,9 @@ async function seedExerciseBackbone(ctx: DynamicSeedContext) {
       update: {
         aliases: [name.toLowerCase(), key],
         body_region: bodyRegion,
+        icon_asset_key: null,
+        icon_key: DEFAULT_MUSCLE_ICON_KEY,
+        icon_kind: ProgressionIconKind.library,
         is_active: true,
         is_system: true,
         name,
@@ -280,6 +307,9 @@ async function seedExerciseBackbone(ctx: DynamicSeedContext) {
         id: seedId(`muscle-definition:${key}`),
         aliases: [name.toLowerCase(), key],
         body_region: bodyRegion,
+        icon_asset_key: null,
+        icon_key: DEFAULT_MUSCLE_ICON_KEY,
+        icon_kind: ProgressionIconKind.library,
         is_active: true,
         is_system: true,
         key,
@@ -400,6 +430,43 @@ type SeedPlanExerciseDescriptor = {
   sets: number;
   weightKg: number | null;
 };
+
+export function getRepresentativeLifetimeXp(
+  account: Pick<SeedAccount, 'role'>,
+  memberIndex: number,
+) {
+  if (account.role !== 'member') {
+    return 0;
+  }
+
+  const tier = Math.max(0, memberIndex) % 7;
+  return 600 + tier * 1_600;
+}
+
+export function getRepresentativeMuscleXp(
+  memberIndex: number,
+  muscleIndex: number,
+) {
+  const tier = Math.max(0, memberIndex + muscleIndex) % 7;
+  return 600 + tier * 1_500 + muscleIndex * 100;
+}
+
+export function getSeedRankingVisibility(
+  account: Pick<SeedAccount, 'memberPersona'>,
+) {
+  if (account.memberPersona === 'archived') {
+    return RankingVisibility.private;
+  }
+
+  if (
+    account.memberPersona === 'frozen' ||
+    account.memberPersona === 'pending'
+  ) {
+    return RankingVisibility.anonymous;
+  }
+
+  return RankingVisibility.public;
+}
 
 async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
   const memberKeys = ctx.state.premiumMemberKeys.slice(0, 36);
@@ -831,50 +898,67 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
 }
 
 async function seedGamification(ctx: DynamicSeedContext) {
-  const activeSeasonId = seedId('season:dynamic-main');
+  const dynamicSeasonId = seedId('season:dynamic-main');
   const previousSeasonId = seedId('season:dynamic-previous');
   const upcomingSeasonId = seedId('season:dynamic-upcoming');
-  ctx.state.seasonId = activeSeasonId;
   const memberKeys = ctx.state.memberKeys;
   const activeMemberKeys = ctx.state.activeMemberKeys;
   const adminId = ctx.state.userIds[ctx.state.adminKeys[0]];
-
-  await ctx.prisma.seasonDefinition.updateMany({
-    where: {
-      id: { not: activeSeasonId },
-      status: SeasonStatus.active,
-    },
-    data: {
-      closed_at: daysFrom(ctx.config.anchorDate, -1, 23),
-      status: SeasonStatus.closed,
-    },
+  const existingActiveSeason = await ctx.prisma.seasonDefinition.findFirst({
+    where: { status: SeasonStatus.active },
+    select: { id: true },
   });
+  const useDynamicActiveSeason =
+    ctx.config.mode === 'reset' ||
+    !existingActiveSeason ||
+    existingActiveSeason.id === dynamicSeasonId;
+  const activeSeasonId = useDynamicActiveSeason
+    ? dynamicSeasonId
+    : existingActiveSeason.id;
+  ctx.state.seasonId = activeSeasonId;
+
+  if (useDynamicActiveSeason) {
+    await ctx.prisma.seasonDefinition.updateMany({
+      where: {
+        id: { not: dynamicSeasonId },
+        status: SeasonStatus.active,
+      },
+      data: {
+        closed_at: daysFrom(ctx.config.anchorDate, -1, 23),
+        status: SeasonStatus.closed,
+      },
+    });
+  }
 
   await ctx.prisma.seasonDefinition.upsert({
-    where: { id: activeSeasonId },
+    where: { id: dynamicSeasonId },
     update: {
-      activated_at: daysFrom(ctx.config.anchorDate, -25, 0),
+      activated_at: useDynamicActiveSeason
+        ? daysFrom(ctx.config.anchorDate, -25, 0)
+        : null,
       archived_at: null,
-      auto_start_next: false,
+      auto_start_next: useDynamicActiveSeason ? false : true,
       closed_at: null,
       description:
         'Dynamic demo season with enough standings to test leaderboards.',
       ends_at: daysFrom(ctx.config.anchorDate, 65, 23, 59),
       rules_version: 'dynamic-v1',
       starts_at: daysFrom(ctx.config.anchorDate, -25, 0),
-      status: SeasonStatus.active,
+      status: useDynamicActiveSeason ? SeasonStatus.active : SeasonStatus.draft,
       title: 'FitTrack Performance Season',
     },
     create: {
-      id: activeSeasonId,
-      activated_at: daysFrom(ctx.config.anchorDate, -25, 0),
-      auto_start_next: false,
+      id: dynamicSeasonId,
+      activated_at: useDynamicActiveSeason
+        ? daysFrom(ctx.config.anchorDate, -25, 0)
+        : null,
+      auto_start_next: useDynamicActiveSeason ? false : true,
       description:
         'Dynamic demo season with enough standings to test leaderboards.',
       ends_at: daysFrom(ctx.config.anchorDate, 65, 23, 59),
       rules_version: 'dynamic-v1',
       starts_at: daysFrom(ctx.config.anchorDate, -25, 0),
-      status: SeasonStatus.active,
+      status: useDynamicActiveSeason ? SeasonStatus.active : SeasonStatus.draft,
       title: 'FitTrack Performance Season',
     },
   });
@@ -940,14 +1024,21 @@ async function seedGamification(ctx: DynamicSeedContext) {
       where: { key: milestone.key },
       update: {
         category: milestone.category,
-        condition_payload: { metric: milestone.key, target: 1 },
+        condition_payload: {
+          metric: milestone.metric,
+          target: milestone.target,
+        },
         created_by_user_id: adminId,
         description: milestone.description,
         evidence_requirement: MilestoneEvidenceRequirement.none,
+        icon_asset_key: null,
+        icon_key: milestone.iconKey,
+        icon_kind: ProgressionIconKind.library,
         is_active: true,
         is_hidden: false,
         reward_payload: {
           badgeTone: index === 0 ? 'gold' : 'green',
+          icon: milestone.iconKey,
           xp: 150 + index * 50,
         },
         sort_order: 200 + index,
@@ -960,15 +1051,22 @@ async function seedGamification(ctx: DynamicSeedContext) {
       create: {
         id: seedId(`milestone-definition:${milestone.key}`),
         category: milestone.category,
-        condition_payload: { metric: milestone.key, target: 1 },
+        condition_payload: {
+          metric: milestone.metric,
+          target: milestone.target,
+        },
         created_by_user_id: adminId,
         description: milestone.description,
         evidence_requirement: MilestoneEvidenceRequirement.none,
+        icon_asset_key: null,
+        icon_key: milestone.iconKey,
+        icon_kind: ProgressionIconKind.library,
         is_active: true,
         is_hidden: false,
         key: milestone.key,
         reward_payload: {
           badgeTone: index === 0 ? 'gold' : 'green',
+          icon: milestone.iconKey,
           xp: 150 + index * 50,
         },
         sort_order: 200 + index,
@@ -985,10 +1083,12 @@ async function seedGamification(ctx: DynamicSeedContext) {
     (candidate) => candidate.role === 'member' || candidate.role === 'admin',
   )) {
     const userId = ctx.state.userIds[account.key];
+    const memberIndex = memberKeys.indexOf(account.key);
     const points =
       account.role === 'admin'
         ? 0
-        : 120 + (memberKeys.indexOf(account.key) % 60) * 12;
+        : 150 + (memberIndex % 12) * 65;
+    const totalXp = getRepresentativeLifetimeXp(account, memberIndex);
     await ctx.prisma.userProgressionProfile.upsert({
       where: { user_id: userId },
       update: {
@@ -1003,7 +1103,7 @@ async function seedGamification(ctx: DynamicSeedContext) {
         ),
         longest_streak:
           account.memberPersona === 'premium' ? 12 : 3 + (points % 8),
-        total_xp: points * 8,
+        total_xp: totalXp,
       },
       create: {
         id: seedId(`progression-profile:${account.key}`),
@@ -1018,7 +1118,7 @@ async function seedGamification(ctx: DynamicSeedContext) {
         ),
         longest_streak:
           account.memberPersona === 'premium' ? 12 : 3 + (points % 8),
-        total_xp: points * 8,
+        total_xp: totalXp,
         user_id: userId,
       },
     });
@@ -1034,9 +1134,7 @@ async function seedGamification(ctx: DynamicSeedContext) {
             ? RankingGovernanceStatus.hidden_by_admin
             : RankingGovernanceStatus.normal,
         visibility:
-          account.memberPersona === 'archived'
-            ? RankingVisibility.private
-            : RankingVisibility.public,
+          getSeedRankingVisibility(account),
       },
       create: {
         id: seedId(`ranking-profile:${account.key}`),
@@ -1049,10 +1147,7 @@ async function seedGamification(ctx: DynamicSeedContext) {
             ? RankingGovernanceStatus.hidden_by_admin
             : RankingGovernanceStatus.normal,
         user_id: userId,
-        visibility:
-          account.memberPersona === 'archived'
-            ? RankingVisibility.private
-            : RankingVisibility.public,
+        visibility: getSeedRankingVisibility(account),
       },
     });
     await ctx.prisma.integrityProfile.upsert({
@@ -1121,17 +1216,17 @@ async function seedGamification(ctx: DynamicSeedContext) {
     });
   }
 
-  await ctx.prisma.seasonalStanding.createMany({
-    data: activeMemberKeys.flatMap((memberKey, index) => [
+  for (const [index, memberKey] of activeMemberKeys.entries()) {
+    const userId = ctx.state.userIds[memberKey];
+    const standings = [
       {
-        id: seedId(`season-standing:${memberKey}`),
+        id: seedId(`season-standing:${activeSeasonId}:${memberKey}`),
         is_disqualified: memberKey === 'member-suspended',
         is_hidden: index % 17 === 0,
         last_earned_at: daysFrom(ctx.config.anchorDate, -1 - (index % 12), 19),
         rank_position: index + 1,
         season_id: activeSeasonId,
         season_points: 900 - index * 8,
-        user_id: ctx.state.userIds[memberKey],
       },
       {
         id: seedId(`season-standing:previous:${memberKey}`),
@@ -1141,47 +1236,88 @@ async function seedGamification(ctx: DynamicSeedContext) {
         rank_position: index + 1,
         season_id: previousSeasonId,
         season_points: 840 - index * 7,
-        user_id: ctx.state.userIds[memberKey],
       },
-    ]),
-    skipDuplicates: true,
-  });
+    ];
 
-  await ctx.prisma.muscleMasteryProgress.createMany({
-    data: activeMemberKeys.slice(0, 40).flatMap((memberKey, memberIndex) =>
-      ['chest', 'quads', 'core'].map((muscle, muscleIndex) => ({
-        id: seedId(`mastery:${memberKey}:${muscle}`),
-        last_ranked_at: daysFrom(ctx.config.anchorDate, -2 - muscleIndex, 20),
-        muscle_group: muscle,
-        rank:
-          memberIndex % 5 === 0
-            ? MasteryRank.gold
-            : memberIndex % 3 === 0
-              ? MasteryRank.silver
-              : MasteryRank.bronze,
-        total_volume_kg: new Prisma.Decimal(
-          4500 + memberIndex * 125 + muscleIndex * 300,
-        ),
-        user_id: ctx.state.userIds[memberKey],
-        xp_points: 500 + memberIndex * 45 + muscleIndex * 80,
-      })),
-    ),
-    skipDuplicates: true,
-  });
+    for (const standing of standings) {
+      await ctx.prisma.seasonalStanding.upsert({
+        where: {
+          season_id_user_id: {
+            season_id: standing.season_id,
+            user_id: userId,
+          },
+        },
+        update: {
+          is_disqualified: standing.is_disqualified,
+          is_hidden: standing.is_hidden,
+          last_earned_at: standing.last_earned_at,
+          rank_position: standing.rank_position,
+          season_points: standing.season_points,
+        },
+        create: {
+          ...standing,
+          user_id: userId,
+        },
+      });
+    }
+  }
 
-  await ctx.prisma.seasonalMuscleStanding.createMany({
-    data: activeMemberKeys.slice(0, 40).flatMap((memberKey, memberIndex) =>
-      ['chest', 'quads', 'core'].flatMap((muscle, muscleIndex) => [
+  for (const [memberIndex, memberKey] of activeMemberKeys
+    .slice(0, 40)
+    .entries()) {
+    for (const [muscleIndex, muscle] of ['chest', 'quads', 'core'].entries()) {
+      const xpPoints = getRepresentativeMuscleXp(memberIndex, muscleIndex);
+      const totalVolumeKg = new Prisma.Decimal(
+        4_500 + memberIndex * 125 + muscleIndex * 300,
+      );
+      await ctx.prisma.muscleMasteryProgress.upsert({
+        where: {
+          user_id_muscle_group: {
+            muscle_group: muscle,
+            user_id: ctx.state.userIds[memberKey],
+          },
+        },
+        update: {
+          last_ranked_at: daysFrom(
+            ctx.config.anchorDate,
+            -2 - muscleIndex,
+            20,
+          ),
+          rank: evaluateExpRank(xpPoints),
+          total_volume_kg: totalVolumeKg,
+          xp_points: xpPoints,
+        },
+        create: {
+          id: seedId(`mastery:${memberKey}:${muscle}`),
+          last_ranked_at: daysFrom(ctx.config.anchorDate, -2 - muscleIndex, 20),
+          muscle_group: muscle,
+          rank: evaluateExpRank(xpPoints),
+          total_volume_kg: totalVolumeKg,
+          user_id: ctx.state.userIds[memberKey],
+          xp_points: xpPoints,
+        },
+      });
+    }
+  }
+
+  for (const [memberIndex, memberKey] of activeMemberKeys
+    .slice(0, 40)
+    .entries()) {
+    for (const [muscleIndex, muscle] of ['chest', 'quads', 'core'].entries()) {
+      const rows = [
         {
           id: seedId(`season-muscle:${activeSeasonId}:${memberKey}:${muscle}`),
           is_disqualified: memberKey === 'member-suspended',
           is_hidden: false,
-          last_earned_at: daysFrom(ctx.config.anchorDate, -2 - muscleIndex, 20),
+          last_earned_at: daysFrom(
+            ctx.config.anchorDate,
+            -2 - muscleIndex,
+            20,
+          ),
           muscle_group: muscle,
           muscle_points: 900 - memberIndex * 9 + muscleIndex * 35,
           rank_position: memberIndex + 1,
           season_id: activeSeasonId,
-          user_id: ctx.state.userIds[memberKey],
         },
         {
           id: seedId(
@@ -1198,12 +1334,33 @@ async function seedGamification(ctx: DynamicSeedContext) {
           muscle_points: 820 - memberIndex * 8 + muscleIndex * 30,
           rank_position: memberIndex + 1,
           season_id: previousSeasonId,
-          user_id: ctx.state.userIds[memberKey],
         },
-      ]),
-    ),
-    skipDuplicates: true,
-  });
+      ];
+
+      for (const row of rows) {
+        await ctx.prisma.seasonalMuscleStanding.upsert({
+          where: {
+            season_id_user_id_muscle_group: {
+              muscle_group: row.muscle_group,
+              season_id: row.season_id,
+              user_id: ctx.state.userIds[memberKey],
+            },
+          },
+          update: {
+            is_disqualified: row.is_disqualified,
+            is_hidden: row.is_hidden,
+            last_earned_at: row.last_earned_at,
+            muscle_points: row.muscle_points,
+            rank_position: row.rank_position,
+          },
+          create: {
+            ...row,
+            user_id: ctx.state.userIds[memberKey],
+          },
+        });
+      }
+    }
+  }
 
   const sourceRows = activeMemberKeys.slice(0, 48).map((memberKey, index) => ({
     id: seedId(`progression-source:${memberKey}:workout`),
@@ -1222,12 +1379,22 @@ async function seedGamification(ctx: DynamicSeedContext) {
     user_id: ctx.state.userIds[memberKey],
   }));
 
-  await ctx.prisma.progressionSourceEvent.createMany({
-    data: sourceRows,
-    skipDuplicates: true,
-  });
-  await ctx.prisma.progressionGrantLedger.createMany({
-    data: sourceRows.flatMap((source, index) => [
+  for (const [index, source] of sourceRows.entries()) {
+    await ctx.prisma.progressionSourceEvent.upsert({
+      where: { id: source.id },
+      update: {
+        created_at: source.created_at,
+        processed_at: source.processed_at,
+        source_context: source.source_context,
+        source_id: source.source_id,
+        source_status: source.source_status,
+        source_type: source.source_type,
+        user_id: source.user_id,
+      },
+      create: source,
+    });
+
+    const grants = [
       {
         id: seedId(`progression-grant:${source.user_id}:xp`),
         amount: 120 + (index % 8) * 10,
@@ -1254,39 +1421,96 @@ async function seedGamification(ctx: DynamicSeedContext) {
         source_event_id: source.id,
         user_id: source.user_id,
       },
-    ]),
-    skipDuplicates: true,
-  });
+    ];
+
+    for (const grant of grants) {
+      await ctx.prisma.progressionGrantLedger.upsert({
+        where: { id: grant.id },
+        update: {
+          amount: grant.amount,
+          created_at: grant.created_at,
+          grant_status: grant.grant_status,
+          grant_type: grant.grant_type,
+          metadata: grant.metadata,
+          muscle_group: grant.muscle_group,
+          reason: grant.reason,
+          season_id: grant.season_id,
+          source_event_id: grant.source_event_id,
+          user_id: grant.user_id,
+        },
+        create: grant,
+      });
+    }
+  }
 
   const milestoneKeys = DYNAMIC_MILESTONES.map((milestone) => milestone.key);
   const milestoneProgressRows = activeMemberKeys
     .slice(0, 36)
     .flatMap((memberKey, index) =>
-      milestoneKeys.slice(0, 2).map((milestoneKey, milestoneIndex) => ({
-        id: seedId(`milestone-progress:${memberKey}:${milestoneKey}`),
-        claimed_at:
-          milestoneIndex === 0 ? daysFrom(ctx.config.anchorDate, -1, 10) : null,
-        milestone_definition_id: seedId(`milestone-definition:${milestoneKey}`),
-        progress_payload: { source: 'dynamic-seed', memberKey },
-        progress_value: milestoneIndex === 0 ? 1 : index % 2,
-        status:
-          milestoneIndex === 0
+      milestoneKeys.map((milestoneKey, milestoneIndex) => {
+        const milestone = DYNAMIC_MILESTONES[milestoneIndex];
+        const isLifetimeXpMilestone = milestone.metric === 'total_xp';
+        const lifetimeXp = getRepresentativeLifetimeXp(
+          { role: 'member' },
+          index,
+        );
+        const automaticallyUnlocked =
+          isLifetimeXpMilestone && lifetimeXp >= milestone.target;
+        const isClaimed =
+          milestoneIndex === 0 ||
+          (automaticallyUnlocked && index % 3 === 0);
+
+        return {
+          id: seedId(`milestone-progress:${memberKey}:${milestoneKey}`),
+          claimed_at: isClaimed
+            ? daysFrom(ctx.config.anchorDate, -1, 10)
+            : null,
+          milestone_definition_id: seedId(`milestone-definition:${milestoneKey}`),
+          progress_payload: {
+            memberKey,
+            source: 'dynamic-seed',
+          },
+          progress_value: isLifetimeXpMilestone
+            ? lifetimeXp
+            : milestoneIndex === 0
+              ? 1
+              : index % 2,
+          reward_granted_at: isClaimed
+            ? daysFrom(ctx.config.anchorDate, -1, 10)
+            : null,
+          status: isClaimed
             ? MilestoneProgressStatus.claimed
-            : index % 2 === 0
+            : automaticallyUnlocked || index % 2 === 0
               ? MilestoneProgressStatus.unlocked
               : MilestoneProgressStatus.in_progress,
-        unlocked_at:
-          milestoneIndex === 0 || index % 2 === 0
-            ? daysFrom(ctx.config.anchorDate, -2, 9)
-            : null,
-        user_id: ctx.state.userIds[memberKey],
-      })),
+          unlocked_at:
+            isClaimed || automaticallyUnlocked || index % 2 === 0
+              ? daysFrom(ctx.config.anchorDate, -2, 9)
+              : null,
+          user_id: ctx.state.userIds[memberKey],
+        };
+      }),
     );
 
-  await ctx.prisma.userMilestoneProgress.createMany({
-    data: milestoneProgressRows,
-    skipDuplicates: true,
-  });
+  for (const progress of milestoneProgressRows) {
+    await ctx.prisma.userMilestoneProgress.upsert({
+      where: {
+        user_id_milestone_definition_id: {
+          milestone_definition_id: progress.milestone_definition_id,
+          user_id: progress.user_id,
+        },
+      },
+      update: {
+        claimed_at: progress.claimed_at,
+        progress_payload: progress.progress_payload,
+        progress_value: progress.progress_value,
+        reward_granted_at: progress.reward_granted_at,
+        status: progress.status,
+        unlocked_at: progress.unlocked_at,
+      },
+      create: progress,
+    });
+  }
 
   const riskyMembers = [
     'member-suspended',

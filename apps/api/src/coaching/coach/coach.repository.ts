@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import {
   AppointmentStatus,
   BookingStatus,
@@ -12,7 +12,10 @@ import {
   PaginatedResult,
 } from '../../common/base-repository/base-repository';
 import { PrismaService } from '../../prisma/prisma.service';
-import { CoachFilterDTO } from './dto/coach.dto';
+import {
+  CoachFilterDTO,
+  CoachSpecialtyFilterDTO,
+} from './dto/coach.dto';
 
 const coachListInclude = {
   user: {
@@ -34,6 +37,16 @@ const coachListInclude = {
   availability_slots: {
     where: { is_active: true },
     orderBy: [{ day_of_week: 'asc' }, { start_time: 'asc' }],
+  },
+  specialties: {
+    include: {
+      specialty: {
+        select: {
+          id: true,
+          display_label: true,
+        },
+      },
+    },
   },
 } satisfies Prisma.CoachProfileInclude;
 
@@ -58,6 +71,16 @@ const coachDetailInclude = {
     where: { is_active: true },
     orderBy: [{ day_of_week: 'asc' }, { start_time: 'asc' }],
   },
+  specialties: {
+    include: {
+      specialty: {
+        select: {
+          id: true,
+          display_label: true,
+        },
+      },
+    },
+  },
 } satisfies Prisma.CoachProfileInclude;
 
 export type CoachListRecord = Prisma.CoachProfileGetPayload<{
@@ -67,6 +90,18 @@ export type CoachListRecord = Prisma.CoachProfileGetPayload<{
 export type CoachDetailRecord = Prisma.CoachProfileGetPayload<{
   include: typeof coachDetailInclude;
 }>;
+
+export type CoachSpecialtyRecord = Prisma.CoachSpecialtyGetPayload<{
+  select: {
+    id: true;
+    display_label: true;
+  };
+}>;
+
+export type CoachSpecialtySelection = {
+  specialty_ids: string[];
+  specialty_labels: string[];
+};
 
 const ACTIVE_APPOINTMENT_STATUSES = [
   AppointmentStatus.pending_coach,
@@ -130,6 +165,35 @@ export class CoachRepository extends BaseRepository {
     );
   }
 
+  listSpecialties(
+    dto: CoachSpecialtyFilterDTO,
+  ): Promise<PaginatedResult<CoachSpecialtyRecord>> {
+    const where: Prisma.CoachSpecialtyWhereInput = {};
+    const search = dto.search?.trim();
+
+    if (search) {
+      where.OR = [
+        { display_label: { contains: search, mode: 'insensitive' } },
+        {
+          normalized_label: {
+            contains: search.toLocaleLowerCase('en-US'),
+            mode: 'insensitive',
+          },
+        },
+      ];
+    }
+
+    return this.paginate<CoachSpecialtyRecord>(
+      this.prisma.coachSpecialty,
+      {
+        where,
+        select: { id: true, display_label: true },
+        orderBy: [{ normalized_label: 'asc' }],
+      },
+      { page: dto.page, limit: dto.limit },
+    );
+  }
+
   findCoachByIdOrThrow(id: string): Promise<CoachDetailRecord> {
     return this.findOneOrThrow<CoachDetailRecord>(
       this.prisma.coachProfile,
@@ -172,6 +236,31 @@ export class CoachRepository extends BaseRepository {
     );
   }
 
+  async updateCoachByIdWithSpecialties(
+    id: string,
+    data: Prisma.CoachProfileUpdateInput,
+    selection: CoachSpecialtySelection,
+  ): Promise<CoachDetailRecord> {
+    return this.transaction(async (tx) => {
+      const specialties = await this.resolveCoachSpecialties(tx, selection);
+
+      return (await tx.coachProfile.update({
+        where: { id },
+        data: {
+          ...data,
+          specialization: this.toLegacySpecialization(specialties),
+          specialties: {
+            deleteMany: {},
+            create: specialties.map((specialty) => ({
+              specialty: { connect: { id: specialty.id } },
+            })),
+          },
+        },
+        include: coachDetailInclude,
+      })) as CoachDetailRecord;
+    });
+  }
+
   createStandaloneCoach(
     data: Prisma.CoachProfileCreateInput,
   ): Promise<CoachDetailRecord> {
@@ -193,6 +282,31 @@ export class CoachRepository extends BaseRepository {
       'CoachProfile',
       coachDetailInclude,
     );
+  }
+
+  async updateCoachByUserIdWithSpecialties(
+    userId: string,
+    data: Prisma.CoachProfileUpdateInput,
+    selection: CoachSpecialtySelection,
+  ): Promise<CoachDetailRecord> {
+    return this.transaction(async (tx) => {
+      const specialties = await this.resolveCoachSpecialties(tx, selection);
+
+      return (await tx.coachProfile.update({
+        where: { user_id: userId },
+        data: {
+          ...data,
+          specialization: this.toLegacySpecialization(specialties),
+          specialties: {
+            deleteMany: {},
+            create: specialties.map((specialty) => ({
+              specialty: { connect: { id: specialty.id } },
+            })),
+          },
+        },
+        include: coachDetailInclude,
+      })) as CoachDetailRecord;
+    });
   }
 
   async hasActiveAppointmentConflict(
@@ -277,6 +391,113 @@ export class CoachRepository extends BaseRepository {
         ...linkedBookings.map((booking) => toGymDateKey(booking.starts_at)),
       ]),
     ).sort();
+  }
+
+  private async resolveCoachSpecialties(
+    tx: Prisma.TransactionClient,
+    selection: CoachSpecialtySelection,
+  ): Promise<CoachSpecialtyRecord[]> {
+    const specialtyIds = Array.from(new Set(selection.specialty_ids));
+    const existingById = specialtyIds.length
+      ? await tx.coachSpecialty.findMany({
+          where: { id: { in: specialtyIds } },
+          select: { id: true, display_label: true },
+        })
+      : [];
+
+    if (existingById.length !== specialtyIds.length) {
+      throw new BadRequestException({
+        type: 'INVALID_SPECIALTY_SELECTION',
+        title: 'Invalid Specialty Selection',
+        status: 400,
+        detail: 'One or more specialty_ids do not exist.',
+      });
+    }
+
+    const labelsByNormalized = new Map<
+      string,
+      { normalized_label: string; display_label: string }
+    >();
+    for (const label of selection.specialty_labels) {
+      const displayLabel = label.normalize('NFKC').trim().replace(/\s+/gu, ' ');
+      const normalizedLabel = displayLabel.toLocaleLowerCase('en-US');
+
+      if (!displayLabel || normalizedLabel === 'n/a' || normalizedLabel === 'na') {
+        throw new BadRequestException({
+          type: 'INVALID_SPECIALTY_SELECTION',
+          title: 'Invalid Specialty Selection',
+          status: 400,
+          detail: 'specialty_labels must contain a real specialty label.',
+        });
+      }
+
+      if (!labelsByNormalized.has(normalizedLabel)) {
+        labelsByNormalized.set(normalizedLabel, {
+          normalized_label: normalizedLabel,
+          display_label: displayLabel,
+        });
+      }
+    }
+    const labels = Array.from(labelsByNormalized.values());
+
+    if (labels.length) {
+      await tx.coachSpecialty.createMany({
+        data: labels,
+        skipDuplicates: true,
+      });
+    }
+
+    const resolvedByLabel = labels.length
+      ? await tx.coachSpecialty.findMany({
+          where: { normalized_label: { in: labels.map((label) => label.normalized_label) } },
+          select: { id: true, display_label: true },
+        })
+      : [];
+    const byId = new Map(existingById.map((specialty) => [specialty.id, specialty]));
+    const byLabel = new Map(
+      resolvedByLabel.map((specialty) => [
+        specialty.display_label.normalize('NFKC').trim().replace(/\s+/gu, ' ').toLocaleLowerCase('en-US'),
+        specialty,
+      ]),
+    );
+    const seenIds = new Set<string>();
+    const selected: CoachSpecialtyRecord[] = [];
+
+    for (const id of specialtyIds) {
+      const specialty = byId.get(id);
+      if (specialty && !seenIds.has(specialty.id)) {
+        selected.push(specialty);
+        seenIds.add(specialty.id);
+      }
+    }
+    for (const label of labels) {
+      const specialty = byLabel.get(label.normalized_label);
+      if (specialty && !seenIds.has(specialty.id)) {
+        selected.push(specialty);
+        seenIds.add(specialty.id);
+      }
+    }
+
+    return selected;
+  }
+
+  private toLegacySpecialization(
+    specialties: CoachSpecialtyRecord[],
+  ): string | null {
+    const specialization = specialties
+      .map((specialty) => specialty.display_label)
+      .join(', ');
+    if (specialization.length > 255) {
+      throw new BadRequestException({
+        type: 'INVALID_SPECIALTY_SELECTION',
+        title: 'Invalid Specialty Selection',
+        status: 400,
+        detail:
+          'The selected specialty labels exceed the legacy specialization limit.',
+      });
+    }
+
+    return specialization || null;
   }
 }
 

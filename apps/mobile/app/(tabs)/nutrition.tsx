@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
 import Animated, { useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
-import { Bot, Flame, Info, Plus, Target, UtensilsCrossed } from "lucide-react-native";
+import { Bot, ChevronRight, Flame, History, Info, Plus, RefreshCw, Target, UtensilsCrossed } from "lucide-react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { useIsFocused } from "@react-navigation/native";
@@ -20,6 +20,7 @@ import {
   nutritionLogsQueryOptions
 } from "@fittrack/query";
 import { getTodayString } from "@/data/bookings";
+import { formatNutritionLogSubtitle } from "@/data/nutrition";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { type FABMenuItem, useFABState } from "@/contexts/FABStateContext";
@@ -31,14 +32,122 @@ import FeatureHeader from "@/components/layout/FeatureHeader";
 
 import FitSection from "@/components/fit/FitSection";
 import FitCard from "@/components/fit/FitCard";
+import FitButton from "@/components/fit/FitButton";
 import { FitText } from "@/components/fit/FitText";
-import { GoalsModal, NutritionLogModal } from "@/components/modals";
+import { GoalsModal, NutritionHistoryModal, NutritionLogModal } from "@/components/modals";
+import NutritionMealIcon from "@/components/nutrition/NutritionMealIcon";
+import { R } from "@fittrack/ui/tokens";
 
 type ThemeColors = ReturnType<typeof useTheme>["colors"];
-type MealMacroFocus = "protein" | "carbs" | "fat" | "balance";
-type RecommendedMealLog = NutritionLogRecord & {
-  focus: MealMacroFocus;
-};
+type RatioTone = "success" | "warning" | "danger";
+
+const TODAY_LOG_PREVIEW_COUNT = 6;
+const TODAY_MEAL_GROUPS = ["Breakfast", "Lunch", "Dinner", "Snacks"] as const;
+type TodayMealGroup = (typeof TODAY_MEAL_GROUPS)[number];
+
+const localStyles = StyleSheet.create({
+  historyAction: {
+    alignItems: "center",
+    borderRadius: R.md,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 6,
+    justifyContent: "center",
+    minHeight: 44,
+    minWidth: 76,
+    paddingHorizontal: 8
+  },
+  historyActionText: {
+    fontSize: 12,
+    lineHeight: 16
+  },
+  todayGroups: {
+    gap: 16
+  },
+  todayGroup: {
+    gap: 8
+  },
+  todayGroupHeader: {
+    alignItems: "baseline",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 2
+  },
+  todayGroupTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+    textTransform: "uppercase"
+  },
+  todayGroupSubtotal: {
+    fontSize: 11,
+    fontWeight: "700"
+  },
+  todayGroupRows: {
+    gap: 8
+  },
+  todayExpandButton: {
+    alignItems: "center",
+    alignSelf: "center",
+    borderRadius: R.md,
+    minHeight: 36,
+    justifyContent: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 8
+  },
+  todayExpandButtonText: {
+    fontSize: 12,
+    fontWeight: "700"
+  },
+  todayRow: {
+    alignItems: "center",
+    borderRadius: R.md,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    minHeight: 68,
+    paddingHorizontal: 12,
+    paddingVertical: 10
+  },
+  todayRowCopy: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0
+  },
+  todayRowIcon: {
+    alignItems: "center",
+    borderRadius: R.md,
+    borderWidth: 1,
+    height: 38,
+    justifyContent: "center",
+    width: 38
+  },
+  todayRowSubtitle: {
+    fontSize: 11,
+    lineHeight: 16
+  },
+  todayRowTitle: {
+    fontSize: 14,
+    fontWeight: "700"
+  },
+  todayState: {
+    alignItems: "center",
+    gap: 8,
+    justifyContent: "center",
+    paddingHorizontal: 18,
+    paddingVertical: 28
+  },
+  todayStateHint: {
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: "center"
+  },
+  todayStateTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    textAlign: "center"
+  }
+});
 
 function formatGoalLabel(value?: string | null) {
   if (!value) return "No active target";
@@ -63,14 +172,14 @@ function formatMacroRows(
     {
       key: "carbs",
       label: "Carbs",
-      color: "textSecondary",
+      color: "success",
       value: logged.carbsG,
       target: target?.carbsG ?? 0
     },
     {
       key: "fat",
       label: "Fats",
-      color: "success",
+      color: "warning",
       value: logged.fatG,
       target: target?.fatG ?? 0
     }
@@ -79,10 +188,6 @@ function formatMacroRows(
 
 function formatMacroDelta(delta: number) {
   return delta >= 0 ? `${delta.toFixed(0)}g remaining` : `${Math.abs(delta).toFixed(0)}g over target`;
-}
-
-function formatNutritionLogSubtitle(entry: NutritionLogRecord) {
-  return `${entry.calories.toFixed(0)} kcal | P ${entry.proteinG.toFixed(0)} C ${entry.carbsG.toFixed(0)} F ${entry.fatG.toFixed(0)}`;
 }
 
 function formatShortDateTime(value?: string | null) {
@@ -103,146 +208,59 @@ function formatCalorieDelta(current?: number, previous?: number) {
   return `${delta > 0 ? "+" : ""}${delta.toFixed(0)} kcal`;
 }
 
-function getMacroGaps(
-  logged: NutritionMacroTotalsRecord,
-  target: NutritionMacroTotalsRecord
-) {
-  return [
-    {
-      key: "protein" as const,
-      delta: target.proteinG - logged.proteinG,
-      threshold: 12
-    },
-    {
-      key: "carbs" as const,
-      delta: target.carbsG - logged.carbsG,
-      threshold: 18
-    },
-    {
-      key: "fat" as const,
-      delta: target.fatG - logged.fatG,
-      threshold: 8
-    }
-  ].sort((left, right) => right.delta - left.delta);
-}
-
-function getMealMacroValue(entry: NutritionLogRecord, focus: MealMacroFocus) {
-  switch (focus) {
-    case "protein":
-      return entry.proteinG;
-    case "carbs":
-      return entry.carbsG;
-    case "fat":
-      return entry.fatG;
-    default:
-      return 0;
+function getRatioState(percent: number) {
+  if (percent >= 90 && percent <= 105) {
+    return { label: "On target", tone: "success" as RatioTone };
   }
-}
-
-function getDominantMealFocus(entry: NutritionLogRecord): MealMacroFocus {
-  const macroCalories = [
-    { focus: "protein" as const, value: entry.proteinG * 4 },
-    { focus: "carbs" as const, value: entry.carbsG * 4 },
-    { focus: "fat" as const, value: entry.fatG * 9 }
-  ].sort((left, right) => right.value - left.value);
-  const total = macroCalories.reduce((sum, macro) => sum + macro.value, 0);
-
-  if (!total || macroCalories[0].value / total < 0.4) {
-    return "balance";
+  if ((percent >= 75 && percent < 90) || (percent > 105 && percent <= 115)) {
+    return {
+      label: percent < 90 ? "Near target, low" : "Near target, high",
+      tone: "warning" as RatioTone
+    };
   }
-
-  return macroCalories[0].focus;
+  return {
+    label: percent < 75 ? "Below target" : "Above target",
+    tone: "danger" as RatioTone
+  };
 }
 
-function getRecommendedMealFocus(
-  entry: NutritionLogRecord,
-  positiveGaps: ReturnType<typeof getMacroGaps>
-): MealMacroFocus {
-  const topMatch = positiveGaps
-    .map((gap, index) => ({
-      focus: gap.key,
-      value: getMealMacroValue(entry, gap.key) * (positiveGaps.length - index)
-    }))
-    .sort((left, right) => right.value - left.value)[0];
-
-  return topMatch && topMatch.value > 0 ? topMatch.focus : getDominantMealFocus(entry);
+function getRatioColor(tone: RatioTone, colors: ThemeColors) {
+  if (tone === "success") return colors.success;
+  if (tone === "warning") return colors.warning;
+  return colors.danger;
 }
 
-function getRecommendedMealLogs(
-  logs: NutritionLogRecord[],
-  logged: NutritionMacroTotalsRecord,
-  target: NutritionMacroTotalsRecord | null,
-  limit = 3
-): RecommendedMealLog[] {
-  const seen = new Set<string>();
-  const uniqueLogs = logs.filter((entry) => {
-    const key = [
-      entry.mealName,
-      entry.foodItem.trim().toLowerCase(),
-      entry.calories,
-      entry.proteinG,
-      entry.carbsG,
-      entry.fatG,
-      entry.quantity,
-      entry.unit
-    ].join("|");
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
+function getMacroCategoryColor(color: string, colors: ThemeColors) {
+  if (color === "success") return colors.success;
+  if (color === "warning") return colors.warning;
+  return colors.textSecondary;
+}
+
+function getTodayMealGroup(mealName: string): TodayMealGroup {
+  const normalizedMealName = mealName.trim().toLowerCase().replace(/\s+/g, "-");
+  if (normalizedMealName === "breakfast") return "Breakfast";
+  if (normalizedMealName === "lunch") return "Lunch";
+  if (normalizedMealName === "dinner") return "Dinner";
+  return "Snacks";
+}
+
+function groupTodayLogs(entries: NutritionLogRecord[]) {
+  const grouped: Record<TodayMealGroup, NutritionLogRecord[]> = {
+    Breakfast: [],
+    Lunch: [],
+    Dinner: [],
+    Snacks: []
+  };
+
+  entries.forEach((entry) => {
+    grouped[getTodayMealGroup(entry.mealName)].push(entry);
   });
-  const positiveGaps = target
-    ? getMacroGaps(logged, target).filter((gap) => gap.delta > gap.threshold / 2)
-    : [];
 
-  return uniqueLogs
-    .map((entry, index) => {
-      const focus = getRecommendedMealFocus(entry, positiveGaps);
-      const score = positiveGaps.length
-        ? positiveGaps.reduce(
-            (total, gap, gapIndex) =>
-              total + getMealMacroValue(entry, gap.key) * (positiveGaps.length - gapIndex + 1),
-            0
-          )
-        : uniqueLogs.length - index;
-
-      return {
-        ...entry,
-        focus,
-        score
-      };
-    })
-    .sort((left, right) => right.score - left.score)
-    .slice(0, limit);
-}
-
-function getMealTrailingLabel(focus: MealMacroFocus) {
-  switch (focus) {
-    case "protein":
-      return "PROTEIN";
-    case "carbs":
-      return "CARB REFILL";
-    case "fat":
-      return "FAT SUPPORT";
-    default:
-      return "BALANCED";
-  }
-}
-
-function getMealTrailingColor(focus: MealMacroFocus, colors: ThemeColors) {
-  switch (focus) {
-    case "protein":
-      return colors.brand;
-    case "carbs":
-      return colors.textSecondary;
-    case "fat":
-      return colors.warning;
-    default:
-      return colors.success;
-  }
-}
-
-function formatRecommendedMealSubtitle(entry: NutritionLogRecord) {
-  return `${formatShortDateTime(entry.logDate)} | ${formatNutritionLogSubtitle(entry)} | ${entry.quantity.toFixed(0)} ${entry.unit}`;
+  return TODAY_MEAL_GROUPS.map((label) => ({
+    calories: grouped[label].reduce((total, entry) => total + entry.calories, 0),
+    entries: grouped[label],
+    label
+  })).filter((group) => group.entries.length > 0);
 }
 
 export default function NutritionScreen() {
@@ -290,6 +308,9 @@ export default function NutritionScreen() {
 
   const [isGoalsVisible, setGoalsVisible] = useState(false);
   const [isLogVisible, setLogVisible] = useState(false);
+  const [isHistoryVisible, setHistoryVisible] = useState(false);
+  const [editingLog, setEditingLog] = useState<NutritionLogRecord | null>(null);
+  const [isTodayLogExpanded, setTodayLogExpanded] = useState(false);
 
   const { data: activeNutrition = null, isLoading: isNutritionLoading } = useQuery({
     ...nutritionActiveTdeeQueryOptions<ActiveNutritionProfileRecord | null>(mobileApiClient, user?.id),
@@ -299,22 +320,41 @@ export default function NutritionScreen() {
     ...nutritionDailySummaryQueryOptions<DailyNutritionSummaryRecord>(mobileApiClient, user?.id, todayString),
     enabled: isFocused && !!user?.id
   });
-  const { data: nutritionLogs = { data: [], meta: { page: 1, limit: 20, total: 0, total_pages: 0 } } } = useQuery({
+  const {
+    data: todayLogsResponse,
+    error: todayLogsError,
+    isError: isTodayLogsError,
+    isPending: isTodayLogsLoading,
+    refetch: refetchTodayLogs
+  } = useQuery({
     ...nutritionLogsQueryOptions<NutritionLogRecord>(mobileApiClient, user?.id, {
       startDate: todayString,
       endDate: todayString,
-      page: 1,
-      limit: 20
+      sort: "newest",
+      limit: 100
     }),
     enabled: isFocused && !!user?.id && canUseNutritionLogging
   });
-  const { data: recentNutritionLogs = { data: [], meta: { page: 1, limit: 24, total: 0, total_pages: 0 } } } = useQuery({
-    ...nutritionLogsQueryOptions<NutritionLogRecord>(mobileApiClient, user?.id, {
-      page: 1,
-      limit: 24
-    }),
-    enabled: isFocused && !!user?.id && canUseNutritionLogging
-  });
+  const nutritionLogs = useMemo(() => todayLogsResponse?.data ?? [], [todayLogsResponse?.data]);
+  const visibleTodayLogs = useMemo(
+    () => isTodayLogExpanded ? nutritionLogs : nutritionLogs.slice(0, TODAY_LOG_PREVIEW_COUNT),
+    [isTodayLogExpanded, nutritionLogs]
+  );
+  const allTodayLogGroups = useMemo(() => groupTodayLogs(nutritionLogs), [nutritionLogs]);
+  const visibleTodayLogIds = useMemo(
+    () => new Set(visibleTodayLogs.map((entry) => entry.id)),
+    [visibleTodayLogs]
+  );
+  const todayLogGroups = useMemo(
+    () => allTodayLogGroups
+      .map((group) => ({
+        ...group,
+        entries: group.entries.filter((entry) => visibleTodayLogIds.has(entry.id))
+      }))
+      .filter((group) => group.entries.length > 0),
+    [allTodayLogGroups, visibleTodayLogIds]
+  );
+  const hasMoreTodayLogsToShow = nutritionLogs.length > TODAY_LOG_PREVIEW_COUNT;
   const { data: nutritionHistory = { data: [], meta: { page: 1, limit: 4, total: 0, total_pages: 0 } } } = useQuery({
     ...nutritionHistoryQueryOptions<NutritionTdeeRecord>(mobileApiClient, user?.id, {
       page: 1,
@@ -350,6 +390,7 @@ export default function NutritionScreen() {
   const recentTdee = nutritionHistory.data[0] ?? activeNutrition?.tdee ?? null;
   const previousTdee = nutritionHistory.data.find((entry) => entry.id !== activeNutrition?.tdee.id) ?? null;
   const targetAdherence = target > 0 ? Math.min((today / target) * 100, 999) : 0;
+  const adherenceState = target > 0 ? getRatioState(targetAdherence) : null;
   const targetStatusLabel = hasGoal
     ? calorieDelta >= 0
       ? "In range"
@@ -362,10 +403,9 @@ export default function NutritionScreen() {
     ? `Last calculated ${formatShortDateTime(recentTdee.calculatedAt)}.`
     : "No backend TDEE calculation is active yet.";
   const macroRows = formatMacroRows(loggedTotals, targetTotals);
-  const recommendedMeals = useMemo(
-    () => getRecommendedMealLogs(recentNutritionLogs.data, loggedTotals, targetTotals, 3),
-    [loggedTotals, recentNutritionLogs.data, targetTotals]
-  );
+  const todayLogsErrorMessage = todayLogsError instanceof Error
+    ? todayLogsError.message
+    : "Unable to load today's meals.";
 
   const scrollY = useSharedValue(0);
   const scrollHandler = useAnimatedScrollHandler({
@@ -392,6 +432,7 @@ export default function NutritionScreen() {
       iconBg: colors.success + "18",
       onPress: () => {
         setFabOpen(false);
+        setEditingLog(null);
         setLogVisible(true);
       }
     };
@@ -550,8 +591,12 @@ export default function NutritionScreen() {
                     ? `${today.toFixed(0)} kcal logged against ${target.toFixed(0)} kcal today.`
                     : "No calorie target is available for today's comparison."
                 }
-                trailingLabel={target > 0 ? `${Math.min(targetAdherence, 100).toFixed(0)}%` : "--"}
-                trailingLabelColor={targetAdherence > 105 ? colors.warning : colors.success}
+                trailingLabel={
+                  target > 0 && adherenceState
+                    ? `${Math.min(targetAdherence, 999).toFixed(0)}% ${adherenceState.label}`
+                    : "--"
+                }
+                trailingLabelColor={adherenceState ? getRatioColor(adherenceState.tone, colors) : colors.textMuted}
                 hasBorder
                 noChevron
               />
@@ -571,27 +616,34 @@ export default function NutritionScreen() {
               {macroRows.map((row) => {
                 const targetValue = row.target;
                 const progress = targetValue > 0 ? (row.value / targetValue) * 100 : 0;
-                const color = row.color === "brand"
-                  ? colors.brand
-                  : row.color === "success"
-                    ? colors.success
-                    : colors.textSecondary;
+                const categoryColor = getMacroCategoryColor(row.color, colors);
+                const ratioState = targetValue > 0 ? getRatioState(progress) : null;
+                const ratioPercent = Math.min(Math.max(progress, 0), 999);
 
                 return (
-                  <View key={row.key} style={{ marginBottom: 12 }}>
+                  <View
+                    key={row.key}
+                    style={{ marginBottom: 12 }}
+                    accessible
+                    accessibilityLabel={
+                      targetValue > 0 && ratioState
+                        ? `${row.label}: ${row.value.toFixed(0)} grams of ${targetValue.toFixed(0)} grams. ${ratioState.label}, ${ratioPercent.toFixed(0)} percent of target.`
+                        : `${row.label}: ${row.value.toFixed(0)} grams. No target is set.`
+                    }
+                  >
                     <View style={s.macroRow}>
-                      <View style={[s.macroDot, { backgroundColor: color }]} />
+                      <View style={[s.macroDot, { backgroundColor: categoryColor }]} />
                       <FitText style={s.macroName}>{row.label}</FitText>
                       <FitText style={s.macroValue}>
                         {`${row.value.toFixed(0)}g${targetValue > 0 ? ` / ${targetValue.toFixed(0)}g` : ""}`}
                       </FitText>
                     </View>
                     <View style={s.macroTrack}>
-                      <View style={[s.macroFill, { width: `${Math.min(progress, 100)}%`, backgroundColor: color }]} />
+                      <View style={[s.macroFill, { width: `${Math.min(progress, 100)}%`, backgroundColor: categoryColor }]} />
                     </View>
-                    <FitText style={s.macroRemaining}>
+                    <FitText style={[s.macroRemaining, { color: categoryColor }]}>
                       {targetValue > 0
-                        ? formatMacroDelta(targetValue - row.value)
+                        ? `${formatMacroDelta(targetValue - row.value)} | ${ratioState?.label} (${ratioPercent.toFixed(0)}%)`
                         : "Create a target to compare your macros"}
                     </FitText>
                   </View>
@@ -600,7 +652,30 @@ export default function NutritionScreen() {
             </View>
           </FitSection>
 
-          <FitSection heading="Today's Nutrition Log" bare>
+          <FitSection
+            heading="Today's Nutrition Log"
+            bare
+            headerAccessory={
+              canUseNutritionLogging ? (
+                <Pressable
+                  accessibilityLabel="History"
+                  accessibilityRole="button"
+                  hitSlop={4}
+                  onPress={() => {
+                    setLogVisible(false);
+                    setHistoryVisible(true);
+                  }}
+                  style={[
+                    localStyles.historyAction,
+                    { backgroundColor: colors.surfaceRaised, borderColor: colors.border }
+                  ]}
+                >
+                  <History color={colors.textSecondary} size={15} strokeWidth={2} />
+                  <FitText style={[localStyles.historyActionText, { color: colors.textSecondary }]}>History</FitText>
+                </Pressable>
+              ) : undefined
+            }
+          >
             {!canUseNutritionLogging ? (
               <PremiumFeatureGate
                 eyebrow="ACTIVE MEMBER REQUIRED"
@@ -610,28 +685,101 @@ export default function NutritionScreen() {
                 title="Meal logging unlocks for active members"
                 message={memberAccessSummary}
               />
-            ) : nutritionLogs.data.length > 0 ? (
-              <View style={s.cardList}>
-                {nutritionLogs.data.map((entry, index) => (
-                  <FitCard
-                    key={entry.id}
-                    label={`${entry.mealName} - ${entry.foodItem}`}
-                    subtitle={formatNutritionLogSubtitle(entry)}
-                    trailingLabel={`${entry.quantity.toFixed(0)} ${entry.unit}`}
-                    trailingLabelColor={colors.brand}
-                    hasBorder={index < nutritionLogs.data.length - 1}
-                    noChevron
-                  />
-                ))}
-              </View>
             ) : (
-              <View style={s.contentCard}>
-                <FitText style={s.matchBadge}>NO LOGS YET</FitText>
-                <FitText style={s.matchTitle}>Start tracking today</FitText>
-                <FitText style={s.matchSubtitle}>
-                  Save your meals to compare today's intake against your live macro target.
-                </FitText>
-              </View>
+              <>
+                {isTodayLogsLoading ? (
+                  <View style={localStyles.todayState}>
+                    <ActivityIndicator color={colors.brand} />
+                    <FitText style={[localStyles.todayStateTitle, { color: colors.textPrimary }]}>Loading today's meals</FitText>
+                  </View>
+                ) : isTodayLogsError ? (
+                  <View style={localStyles.todayState}>
+                    <UtensilsCrossed size={28} color={colors.danger} strokeWidth={2} />
+                    <FitText style={[localStyles.todayStateTitle, { color: colors.textPrimary }]}>Today's meals are unavailable</FitText>
+                    <FitText style={[localStyles.todayStateHint, { color: colors.textMuted }]}>{todayLogsErrorMessage}</FitText>
+                    <FitButton
+                      label="Retry"
+                      icon={RefreshCw}
+                      iconSize={16}
+                      variant="ghost"
+                      onPress={() => void refetchTodayLogs()}
+                    />
+                  </View>
+                ) : nutritionLogs.length > 0 ? (
+                  <>
+                    <View style={localStyles.todayGroups}>
+                      {todayLogGroups.map((group) => (
+                        <View key={group.label} style={localStyles.todayGroup}>
+                          <View style={localStyles.todayGroupHeader}>
+                            <FitText style={[localStyles.todayGroupTitle, { color: colors.textSecondary }]}>
+                              {group.label}
+                            </FitText>
+                            <FitText style={[localStyles.todayGroupSubtotal, { color: colors.textMuted }]}>
+                              {`${group.calories.toFixed(0)} kcal`}
+                            </FitText>
+                          </View>
+                          <View style={localStyles.todayGroupRows}>
+                            {group.entries.map((entry) => (
+                              <Pressable
+                                key={entry.id}
+                                accessibilityRole="button"
+                                accessibilityLabel={`Edit ${entry.mealName}, ${entry.foodItem}`}
+                                onPress={() => {
+                                  setEditingLog(entry);
+                                  setLogVisible(true);
+                                }}
+                                style={[localStyles.todayRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                              >
+                                <View style={[localStyles.todayRowIcon, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
+                                  <NutritionMealIcon color={colors.brand} icon={entry.icon} size={18} />
+                                </View>
+                                <View style={localStyles.todayRowCopy}>
+                                  <FitText
+                                    numberOfLines={1}
+                                    ellipsizeMode="tail"
+                                    style={[localStyles.todayRowTitle, { color: colors.textPrimary }]}
+                                  >
+                                    {`${entry.mealName} - ${entry.foodItem}`}
+                                  </FitText>
+                                  <FitText numberOfLines={1} style={[localStyles.todayRowSubtitle, { color: colors.textMuted }]}>
+                                    {`${formatNutritionLogSubtitle(entry)} | ${entry.quantity.toFixed(0)} ${entry.unit}`}
+                                  </FitText>
+                                </View>
+                                <ChevronRight color={colors.textMuted} size={18} strokeWidth={2} />
+                              </Pressable>
+                            ))}
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                    {hasMoreTodayLogsToShow ? (
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={isTodayLogExpanded ? "Show less" : `View all ${nutritionLogs.length} entries`}
+                        onPress={() => setTodayLogExpanded((expanded) => !expanded)}
+                        style={[
+                          localStyles.todayExpandButton,
+                          { backgroundColor: colors.surfaceRaised, borderColor: colors.border, borderWidth: 1 }
+                        ]}
+                      >
+                        <FitText style={[localStyles.todayExpandButtonText, { color: colors.brand }]}>
+                          {isTodayLogExpanded ? "Show less" : `View all ${nutritionLogs.length} entries`}
+                        </FitText>
+                      </Pressable>
+                    ) : null}
+                  </>
+                ) : (
+                  <View style={localStyles.todayState}>
+                    <UtensilsCrossed size={28} color={colors.textMuted} strokeWidth={1.8} />
+                    <FitText style={[localStyles.todayStateTitle, { color: colors.textPrimary }]}>
+                      Start tracking today
+                    </FitText>
+                    <FitText style={[localStyles.todayStateHint, { color: colors.textMuted }]}>
+                      Save your meals to compare today's intake against your live macro target.
+                    </FitText>
+                  </View>
+                )}
+              </>
             )}
             {!isFrozen && canUseNutritionLogging ? (
               <View style={s.logFabHintRow}>
@@ -642,46 +790,6 @@ export default function NutritionScreen() {
               </View>
             ) : null}
           </FitSection>
-
-          <FitSection heading="Recommended Next Bites">
-            <View style={s.sectionBlock}>
-              <FitText style={s.matchBadge}>{hasGoal ? "LIVE MEAL PICKS" : "SAVED MEAL PICKS"}</FitText>
-              <FitText style={s.matchTitle}>Recent meals to close the next gap</FitText>
-              <FitText style={s.matchSubtitle}>
-                {hasGoal
-                  ? "These picks come from your saved meal logs and sort against the macros you're still missing."
-                  : "No target is active yet, so FitTrack shows recent saved meals while you set your first nutrition goal."}
-              </FitText>
-              {recommendedMeals.length > 0 ? (
-                <View style={s.cardList}>
-                  {recommendedMeals.map((entry, index) => (
-                    <FitCard
-                      key={entry.id}
-                      icon={UtensilsCrossed}
-                      label={entry.foodItem}
-                      subtitle={formatRecommendedMealSubtitle(entry)}
-                      trailingLabel={getMealTrailingLabel(entry.focus)}
-                      trailingLabelColor={getMealTrailingColor(entry.focus, colors)}
-                      hasBorder={index < recommendedMeals.length - 1}
-                      noChevron
-                    />
-                  ))}
-                </View>
-              ) : (
-                <View style={s.contentCard}>
-                  <FitText style={s.matchBadge}>NO SAVED MEALS</FitText>
-                  <FitText style={s.matchTitle}>Log meals to build this shelf</FitText>
-                  <FitText style={s.matchSubtitle}>
-                    Recommended bites now come from live meal logs instead of a built-in catalog.
-                  </FitText>
-                </View>
-              )}
-              <FitText style={s.sectionNote}>
-                Pick a previous meal from Log Meal or save a fresh entry to keep this list aligned with what you actually eat.
-              </FitText>
-            </View>
-          </FitSection>
-
         </Animated.View>
       </Animated.ScrollView>
       <GoalsModal
@@ -689,10 +797,24 @@ export default function NutritionScreen() {
         onClose={() => setGoalsVisible(false)}
         onSuccess={() => setGoalsVisible(false)}
       />
+      <NutritionHistoryModal
+        isVisible={canUseNutritionLogging && isHistoryVisible}
+        onClose={() => setHistoryVisible(false)}
+        onEdit={(entry) => {
+          setHistoryVisible(false);
+          setEditingLog(entry);
+          setLogVisible(true);
+        }}
+      />
       <NutritionLogModal
+        key={editingLog?.id ?? "new-nutrition-log"}
+        editingEntry={editingLog}
         isVisible={canUseNutritionLogging && isLogVisible}
         onClose={() => setLogVisible(false)}
-        onSuccess={() => setLogVisible(false)}
+        onSuccess={() => {
+          setLogVisible(false);
+          setEditingLog(null);
+        }}
       />
     </Animated.View>
   );

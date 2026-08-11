@@ -82,6 +82,7 @@ describe('NotificationsService', () => {
     markOwnedInAppNotificationRead: jest.fn(),
     markAllOwnedInAppNotificationsRead: jest.fn(),
     deleteOwnedInAppNotification: jest.fn(),
+    deleteAllOwnedInAppNotifications: jest.fn(),
     markNotificationSent: jest.fn(),
     markNotificationFailed: jest.fn(),
   };
@@ -144,6 +145,24 @@ describe('NotificationsService', () => {
       unread_only: true,
       page: 1,
       limit: 20,
+    });
+  });
+
+  it('preserves an empty inbox and zero pagination total after refresh', async () => {
+    repo.listOwnedInAppNotifications.mockResolvedValue({
+      data: [],
+      meta: { page: 1, limit: 20, total: 0, total_pages: 0 },
+    });
+
+    await expect(
+      service.getMyNotifications('user-1', {
+        unread_only: false,
+        page: 1,
+        limit: 20,
+      } satisfies NotificationFilterDTO),
+    ).resolves.toEqual({
+      data: [],
+      meta: { page: 1, limit: 20, total: 0, total_pages: 0 },
     });
   });
 
@@ -226,13 +245,44 @@ describe('NotificationsService', () => {
   });
 
   it('delegates notification deletion to the repository', async () => {
-    repo.deleteOwnedInAppNotification.mockResolvedValue(undefined);
+    repo.deleteOwnedInAppNotification.mockResolvedValue(0);
 
-    await service.deleteNotification('user-1', 'notif-1');
+    await Promise.all([
+      service.deleteNotification('user-1', 'notif-1'),
+      service.deleteNotification('user-1', 'notif-1'),
+    ]);
 
-    expect(repo.deleteOwnedInAppNotification).toHaveBeenCalledWith(
+    expect(repo.deleteOwnedInAppNotification).toHaveBeenNthCalledWith(
+      1,
       'user-1',
       'notif-1',
+    );
+    expect(repo.deleteOwnedInAppNotification).toHaveBeenNthCalledWith(
+      2,
+      'user-1',
+      'notif-1',
+    );
+  });
+
+  it('returns the repository affected count for idempotent clear-all operations', async () => {
+    repo.deleteAllOwnedInAppNotifications
+      .mockResolvedValueOnce(3)
+      .mockResolvedValueOnce(0);
+
+    await expect(service.deleteAllNotifications('user-1')).resolves.toEqual({
+      deleted_count: 3,
+    });
+    await expect(service.deleteAllNotifications('user-1')).resolves.toEqual({
+      deleted_count: 0,
+    });
+
+    expect(repo.deleteAllOwnedInAppNotifications).toHaveBeenNthCalledWith(
+      1,
+      'user-1',
+    );
+    expect(repo.deleteAllOwnedInAppNotifications).toHaveBeenNthCalledWith(
+      2,
+      'user-1',
     );
   });
 

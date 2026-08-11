@@ -43,6 +43,21 @@ type BookingListFilters = {
   startDate?: string;
 };
 
+function invalidateAdminGamificationRankingViews(queryClient: QueryClient) {
+  return Promise.all([
+    invalidateAdminGamificationOverviewQuery(queryClient),
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.adminGamificationSeasons(),
+    }),
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.adminGamificationSeasonStandings(),
+    }),
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.adminGamificationMuscleStandings(),
+    }),
+  ]);
+}
+
 export function adminMembersQueryOptions(
   client: Pick<ApiClient, "admin">,
   filters?: MemberDirectoryFilters,
@@ -127,14 +142,7 @@ export function createAdminGamificationSeasonMutationOptions(
   return mutationOptions({
     mutationFn: (payload: AdminGamificationSeasonCreateInput) =>
       client.admin.createGamificationSeason(payload),
-    onSuccess: async () => {
-      await Promise.all([
-        invalidateAdminGamificationOverviewQuery(queryClient),
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.adminGamificationSeasons(),
-        }),
-      ]);
-    },
+    onSuccess: () => invalidateAdminGamificationRankingViews(queryClient),
   });
 }
 
@@ -149,15 +157,8 @@ export function updateAdminGamificationSeasonMutationOptions(
     }: {
       payload: AdminGamificationSeasonUpdateInput;
       seasonId: string;
-    }) => client.admin.updateGamificationSeason(seasonId, payload),
-    onSuccess: async () => {
-      await Promise.all([
-        invalidateAdminGamificationOverviewQuery(queryClient),
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.adminGamificationSeasons(),
-        }),
-      ]);
-    },
+      }) => client.admin.updateGamificationSeason(seasonId, payload),
+    onSuccess: () => invalidateAdminGamificationRankingViews(queryClient),
   });
 }
 
@@ -173,20 +174,7 @@ export function updateAdminGamificationSeasonStatusMutationOptions(
       payload: AdminGamificationSeasonStatusInput;
       seasonId: string;
     }) => client.admin.updateGamificationSeasonStatus(seasonId, payload),
-    onSuccess: async () => {
-      await Promise.all([
-        invalidateAdminGamificationOverviewQuery(queryClient),
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.adminGamificationSeasons(),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.adminGamificationSeasonStandings(),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.adminGamificationMuscleStandings(),
-        }),
-      ]);
-    },
+    onSuccess: () => invalidateAdminGamificationRankingViews(queryClient),
   });
 }
 
@@ -225,12 +213,7 @@ export function updateAdminGamificationRankingOverrideMutationOptions(
       payload: AdminGamificationRankingOverrideInput;
       userId: string;
     }) => client.admin.updateGamificationRankingOverride(userId, payload),
-    onSuccess: async () => {
-      await invalidateAdminGamificationOverviewQuery(queryClient);
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.adminGamificationSeasonStandings(),
-      });
-    },
+    onSuccess: () => invalidateAdminGamificationRankingViews(queryClient),
   });
 }
 
@@ -257,11 +240,14 @@ export function createAdminManualExpGrantMutationOptions(
   queryClient: QueryClient,
 ) {
   return mutationOptions({
-    mutationFn: ({ payload }: { payload: AdminManualExpGrantInput }) =>
-      client.admin.createManualExpGrant(payload),
-    onSuccess: async () => {
-      await invalidateAdminGamificationOverviewQuery(queryClient);
-    },
+    mutationFn: ({
+      idempotencyKey,
+      payload,
+    }: {
+      idempotencyKey: string;
+      payload: AdminManualExpGrantInput;
+    }) => client.admin.createManualExpGrant(payload, idempotencyKey),
+    onSuccess: () => invalidateAdminGamificationRankingViews(queryClient),
   });
 }
 

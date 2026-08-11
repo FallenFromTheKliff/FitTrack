@@ -20,6 +20,8 @@ import {
   CoachListItemResponseDTO,
   CoachPublicReviewResponseDTO,
   CoachSelfDetailResponseDTO,
+  CoachSpecialtyFilterDTO,
+  CoachSpecialtyResponseDTO,
   CoachUserProfileResponseDTO,
   UpdateCoachProfileDTO,
 } from './dto/coach.dto';
@@ -27,6 +29,8 @@ import {
   CoachDetailRecord,
   CoachListRecord,
   CoachRepository,
+  CoachSpecialtyRecord,
+  CoachSpecialtySelection,
 } from './coach.repository';
 
 type CoachUserProfileRecord = NonNullable<CoachDetailRecord['user']>['profile'];
@@ -138,6 +142,17 @@ export class CoachService {
     };
   }
 
+  async listSpecialties(
+    dto: CoachSpecialtyFilterDTO,
+  ): Promise<PaginatedResult<CoachSpecialtyResponseDTO>> {
+    const result = await this.repo.listSpecialties(dto);
+
+    return {
+      data: result.data.map((specialty) => this.toCoachSpecialty(specialty)),
+      meta: result.meta,
+    };
+  }
+
   async getCoachById(id: string): Promise<CoachDetailResponseDTO> {
     const coach = await this.repo.findCoachByIdOrThrow(id);
     const bookedDates = await this.repo.listActiveBookingDateKeys(
@@ -161,9 +176,17 @@ export class CoachService {
   ): Promise<CoachDetailResponseDTO> {
     this.assertCoachOwnedFields(dto);
 
-    return this.toCoachDetail(
-      await this.repo.updateCoachByUserId(userId, this.toSelfUpdateInput(dto)),
-    );
+    const selection = this.toSpecialtySelection(dto);
+    const data = this.toSelfUpdateInput(dto);
+    const updated = selection
+      ? await this.repo.updateCoachByUserIdWithSpecialties(
+          userId,
+          data,
+          selection,
+        )
+      : await this.repo.updateCoachByUserId(userId, data);
+
+    return this.toCoachDetail(updated);
   }
 
   async adminUpdateCoach(
@@ -176,10 +199,15 @@ export class CoachService {
         ? await this.repo.findCoachByIdOrThrow(coachId)
         : null;
 
-    const updated = await this.repo.updateCoachById(
-      coachId,
-      this.toAdminUpdateInput(dto),
-    );
+    const selection = this.toSpecialtySelection(dto);
+    const data = this.toAdminUpdateInput(dto);
+    const updated = selection
+      ? await this.repo.updateCoachByIdWithSpecialties(
+          coachId,
+          data,
+          selection,
+        )
+      : await this.repo.updateCoachById(coachId, data);
 
     if (
       before &&
@@ -207,9 +235,17 @@ export class CoachService {
   ): Promise<CoachDetailResponseDTO> {
     this.assertStaffManagedFields(dto);
 
-    return this.toCoachDetail(
-      await this.repo.updateCoachById(coachId, this.toStaffUpdateInput(dto)),
-    );
+    const selection = this.toSpecialtySelection(dto);
+    const data = this.toStaffUpdateInput(dto);
+    const updated = selection
+      ? await this.repo.updateCoachByIdWithSpecialties(
+          coachId,
+          data,
+          selection,
+        )
+      : await this.repo.updateCoachById(coachId, data);
+
+    return this.toCoachDetail(updated);
   }
 
   createStandaloneCoach(
@@ -375,6 +411,19 @@ export class CoachService {
     };
   }
 
+  private toSpecialtySelection(
+    dto: UpdateCoachProfileDTO,
+  ): CoachSpecialtySelection | undefined {
+    if (dto.specialty_ids !== undefined || dto.specialty_labels !== undefined) {
+      return {
+        specialty_ids: dto.specialty_ids ?? [],
+        specialty_labels: dto.specialty_labels ?? [],
+      };
+    }
+
+    return undefined;
+  }
+
   private toCoachListItem(
     coach: CoachListRecord,
     bookedDates: string[] = [],
@@ -385,6 +434,9 @@ export class CoachService {
       contact_email: coach.contact_email,
       contact_phone: coach.contact_phone,
       specialization: coach.specialization,
+      specialties: coach.specialties
+        .map((entry) => this.toCoachSpecialty(entry.specialty))
+        .sort((left, right) => left.label.localeCompare(right.label)),
       bio: coach.bio,
       certification: coach.certification,
       hourly_rate: coach.hourly_rate.toString(),
@@ -432,6 +484,15 @@ export class CoachService {
   ): CoachDetailResponseDTO {
     return {
       ...this.toCoachListItem(coach, bookedDates),
+    };
+  }
+
+  private toCoachSpecialty(
+    specialty: CoachSpecialtyRecord | CoachListRecord['specialties'][number]['specialty'],
+  ): CoachSpecialtyResponseDTO {
+    return {
+      id: specialty.id,
+      label: specialty.display_label,
     };
   }
 

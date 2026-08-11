@@ -1,4 +1,4 @@
-import type { NutritionUnit } from "@fittrack/types";
+import type { NutritionLogRecord, NutritionUnit } from "@fittrack/types";
 
 export type NutritionMealName = "Breakfast" | "Lunch" | "Dinner" | "Snack" | "Pre-workout" | "Post-workout";
 export type NutritionPickerOption<T extends string = string> = {
@@ -29,3 +29,26 @@ export const NUTRITION_UNIT_OPTIONS: NutritionPickerOption<NutritionUnit>[] = [
   { label: "Ounce (oz)", value: "oz", description: "Common for meats, snacks, and US nutrition labels." },
   { label: "Pound (lb)", value: "lb", description: "Best for larger bulk weights or full cuts." }
 ];
+
+export function formatNutritionLogSubtitle(entry: NutritionLogRecord) {
+  return `${entry.calories.toFixed(0)} kcal | P ${entry.proteinG.toFixed(0)} C ${entry.carbsG.toFixed(0)} F ${entry.fatG.toFixed(0)}`;
+}
+
+export function getNutritionLogSearchText(entry: NutritionLogRecord) {
+  const unitOption = NUTRITION_UNIT_OPTIONS.find((option) => option.value === entry.unit);
+  return [
+    entry.foodItem,
+    entry.mealName,
+    entry.unit,
+    unitOption?.label,
+    formatNutritionLogSubtitle(entry),
+    `${entry.quantity} ${entry.unit}`,
+    `calories ${entry.calories.toFixed(0)} kcal`,
+    `protein ${entry.proteinG.toFixed(0)} p`,
+    `carbs ${entry.carbsG.toFixed(0)} c`,
+    `fat ${entry.fatG.toFixed(0)} f`
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}

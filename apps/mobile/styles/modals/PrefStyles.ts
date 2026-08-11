@@ -143,12 +143,211 @@ export function makePrefModalStyles(colors: ThemeColors) {
       paddingBottom: 16
     },
     notificationFooter: {
-      flexDirection: "row",
       gap: 10,
       marginTop: "auto",
       padding: 16,
       borderTopWidth: 1,
       borderTopColor: colors.border
+    },
+    notificationFooterActions: {
+      flexDirection: "row",
+      gap: 10
+    },
+    notificationFooterAction: {
+      flex: 1,
+      minHeight: 42,
+      paddingVertical: 8
+    },
+    notificationFooterActionText: {
+      fontSize: 12,
+      fontWeight: "700"
+    },
+    notificationFooterClose: {
+      minHeight: 48,
+      paddingVertical: 10
+    },
+    notificationHeaderRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginBottom: 10
+    },
+    notificationHeaderCopy: {
+      flex: 1,
+      gap: 2,
+      paddingRight: 12
+    },
+    notificationSummaryText: {
+      color: colors.textMuted,
+      fontSize: 12
+    },
+    notificationStatusBanner: {
+      alignItems: "flex-start",
+      backgroundColor: colors.warning + "14",
+      borderColor: colors.warning + "44",
+      borderRadius: R.md,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 8,
+      marginBottom: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 9
+    },
+    notificationStatusBannerText: {
+      color: colors.warning,
+      flex: 1,
+      fontSize: 12,
+      lineHeight: 17
+    },
+    notificationItemContainer: {
+      overflow: "hidden"
+    },
+    notificationItem: {
+      backgroundColor: colors.surfaceRaised,
+      borderRadius: R.lg,
+      borderWidth: 1,
+      overflow: "hidden",
+      padding: 13
+    },
+    notificationItemUnread: {
+      backgroundColor: colors.brand + "08"
+    },
+    notificationItemHeader: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      gap: 9
+    },
+    notificationUnreadColumn: {
+      alignItems: "center",
+      paddingTop: 5,
+      width: 9
+    },
+    notificationUnreadDot: {
+      borderRadius: 4,
+      height: 8,
+      width: 8
+    },
+    notificationReadDotPlaceholder: {
+      height: 8,
+      width: 8
+    },
+    notificationItemCopy: {
+      flex: 1,
+      gap: 3,
+      minWidth: 0
+    },
+    notificationItemTitle: {
+      color: colors.textPrimary,
+      fontSize: 14,
+      fontWeight: "700"
+    },
+    notificationItemPreview: {
+      color: colors.textMuted,
+      fontSize: 12,
+      lineHeight: 17
+    },
+    notificationItemTimestamp: {
+      color: colors.textMuted,
+      fontSize: 11
+    },
+    notificationExpanded: {
+      overflow: "hidden"
+    },
+    notificationExpandedInner: {
+      gap: 8,
+      paddingTop: 11
+    },
+    notificationDetailText: {
+      color: colors.textSecondary,
+      fontSize: 13,
+      lineHeight: 19
+    },
+    notificationMetaRow: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      gap: 10
+    },
+    notificationMetaLabel: {
+      color: colors.textMuted,
+      fontSize: 11,
+      fontWeight: "700",
+      textTransform: "uppercase",
+      width: 54
+    },
+    notificationMetaValue: {
+      color: colors.textSecondary,
+      flex: 1,
+      fontSize: 12,
+      lineHeight: 17
+    },
+    notificationDetailData: {
+      gap: 4
+    },
+    notificationItemActions: {
+      flexDirection: "row",
+      gap: 8,
+      paddingTop: 3
+    },
+    notificationItemAction: {
+      flex: 1,
+      minHeight: 40,
+      paddingVertical: 7
+    },
+    notificationItemActionText: {
+      fontSize: 12,
+      fontWeight: "700"
+    },
+    notificationItemDismissText: {
+      color: colors.danger,
+      fontSize: 12,
+      fontWeight: "700"
+    },
+    notificationError: {
+      backgroundColor: colors.danger + "12",
+      borderColor: colors.danger + "44",
+      borderRadius: R.md,
+      borderWidth: 1,
+      marginTop: 8,
+      paddingHorizontal: 10,
+      paddingVertical: 7
+    },
+    notificationErrorText: {
+      color: colors.danger,
+      fontSize: 12,
+      lineHeight: 17
+    },
+    notificationEmpty: {
+      alignItems: "center",
+      gap: 4,
+      justifyContent: "center",
+      minHeight: 132,
+      paddingHorizontal: 12,
+      paddingVertical: 18
+    },
+    notificationEmptyTitle: {
+      color: colors.textPrimary,
+      fontSize: 15,
+      fontWeight: "700"
+    },
+    notificationEmptyText: {
+      color: colors.textMuted,
+      fontSize: 12,
+      lineHeight: 17,
+      textAlign: "center"
+    },
+    notificationLoading: {
+      alignItems: "center",
+      justifyContent: "center",
+      minHeight: 132
+    },
+    notificationLoadMore: {
+      marginTop: 2,
+      minHeight: 42,
+      paddingVertical: 8
+    },
+    notificationLoadMoreText: {
+      fontSize: 12,
+      fontWeight: "700"
     },
     footer: {
       flexDirection: "row",

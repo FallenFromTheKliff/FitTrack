@@ -8,6 +8,7 @@ import FitButton from "@/components/fit/FitButton";
 import { FitSelect } from "@/components/fit/FitCard";
 import { FitText, FitTextInput, FitTextArea } from "@/components/fit/FitText";
 import FitModal from "@/components/modals/FitModal";
+import CoachSpecialtyPicker from "@/components/coaching/CoachSpecialtyPicker";
 
 export type FieldConfig = {
   name: string;
@@ -47,6 +48,7 @@ type Props = {
   onCancel: () => void;
   submitLabel?: string;
   isLoading?: boolean;
+  submitDisabled?: boolean;
   dangerLabel?: string;
   dangerIcon?: LucideIcon;
   dangerDisabled?: boolean;
@@ -71,6 +73,7 @@ export default function DetailsModal({
   onCancel,
   submitLabel = "SAVE",
   isLoading = false,
+  submitDisabled = false,
   dangerLabel,
   dangerIcon,
   dangerDisabled = false,
@@ -180,7 +183,7 @@ export default function DetailsModal({
             label={submitLabel}
             loading={isLoading}
             onClick={handleSubmit}
-            disabled={disableSubmit}
+            disabled={disableSubmit || submitDisabled}
             style={{ flex: 1 }}
           />
         </>
@@ -202,7 +205,15 @@ export default function DetailsModal({
               <FitText as="span" style={s.requiredAsterisk}>*</FitText>
             )}
           </FitText>
-          {field.type === "select" ? (
+          {field.name === "specialties" ? (
+            <CoachSpecialtyPicker
+              id={fieldId}
+              ariaLabel={field.label}
+              disabled={fieldReadOnly}
+              onChange={(values) => handleChange(field.name, values.join(", "))}
+              value={getMultiSelectValues(field.name)}
+            />
+          ) : field.type === "select" ? (
             <FitSelect
               id={fieldId}
               fullWidth

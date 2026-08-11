@@ -225,12 +225,14 @@ export {
   nutritionActiveTdeeQueryOptions,
   nutritionDailySummaryQueryOptions,
   nutritionHistoryQueryOptions,
+  nutritionLogsInfiniteQueryOptions,
   nutritionLogsQueryOptions,
   recalculateNutritionMutationOptions,
   updateNutritionLogMutationOptions,
 } from "./nutrition";
 export {
   activeCoachesQueryOptions,
+  coachSpecialtiesQueryOptions,
   coachAvailabilityQueryOptions,
   coachScheduleQueryOptions,
   coachSelfProfileQueryOptions,

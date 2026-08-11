@@ -25,13 +25,14 @@ import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { ActiveMemberAccountGuard } from '../common/guards/active-member-account.guard';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { DateRangeDTO, PaginationDTO } from '../user/dto/user-dto';
+import { PaginationDTO } from '../user/dto/user-dto';
 import {
   ActiveTdeeResponseDTO,
   DailyMacroTotalsResponseDTO,
   DailyNutritionSummaryResponseDTO,
   DailySummaryDateQueryDTO,
   LogNutritionDTO,
+  NutritionLogFilterDTO,
   MacroTargetResponseDTO,
   NutritionLogResponseDTO,
   RecalculateTdeeDTO,
@@ -182,7 +183,7 @@ export class NutritionController {
   })
   listNutritionLogs(
     @CurrentUser() user: JwtPayload,
-    @Query() dto: DateRangeDTO,
+    @Query() dto: NutritionLogFilterDTO,
   ) {
     return this.nutritionService.getNutritionLogs(user.sub, dto);
   }

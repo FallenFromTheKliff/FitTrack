@@ -11,6 +11,11 @@ describe('CoachRepository', () => {
     findUnique: jest.fn(),
     update: jest.fn(),
   };
+  const coachSpecialty = {
+    createMany: jest.fn(),
+    findMany: jest.fn(),
+    count: jest.fn(),
+  };
   const coachAppointment = {
     findMany: jest.fn(),
   };
@@ -22,6 +27,7 @@ describe('CoachRepository', () => {
     amenityBooking,
     coachAppointment,
     coachProfile,
+    coachSpecialty,
     $transaction: jest.fn(),
   };
 
@@ -30,6 +36,9 @@ describe('CoachRepository', () => {
   beforeEach(() => {
     repo = new CoachRepository(prisma as never);
     jest.clearAllMocks();
+    prisma.$transaction.mockImplementation(
+      async (work: (tx: typeof prisma) => Promise<unknown>) => work(prisma),
+    );
   });
 
   it('lists available coaches with the requested filters', async () => {
@@ -147,6 +156,107 @@ describe('CoachRepository', () => {
         },
       }),
     });
+  });
+
+  it('lists catalog entries through the searchable paginated repository seam', async () => {
+    coachSpecialty.findMany.mockResolvedValue([
+      { id: 'specialty-1', display_label: 'Strength and Conditioning' },
+    ]);
+    coachSpecialty.count.mockResolvedValue(1);
+
+    await repo.listSpecialties({ page: 1, limit: 20, search: 'strength' });
+
+    expect(coachSpecialty.findMany).toHaveBeenCalledWith({
+      where: {
+        OR: [
+          {
+            display_label: {
+              contains: 'strength',
+              mode: 'insensitive',
+            },
+          },
+          {
+            normalized_label: {
+              contains: 'strength',
+              mode: 'insensitive',
+            },
+          },
+        ],
+      },
+      select: { id: true, display_label: true },
+      orderBy: [{ normalized_label: 'asc' }],
+      skip: 0,
+      take: 20,
+    });
+  });
+
+  it('upserts case-duplicate custom labels idempotently and mirrors the legacy field', async () => {
+    coachSpecialty.findMany.mockResolvedValueOnce([
+      {
+        id: 'specialty-strength',
+        display_label: 'Strength and Conditioning',
+      },
+    ]);
+    coachProfile.update.mockResolvedValue({ id: 'coach-1' });
+
+    await repo.updateCoachByUserIdWithSpecialties(
+      'user-1',
+      { bio: 'Updated' },
+      {
+        specialty_ids: [],
+        specialty_labels: [
+          'Strength and Conditioning',
+          ' strength and conditioning ',
+        ],
+      },
+    );
+
+    expect(coachSpecialty.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          normalized_label: 'strength and conditioning',
+          display_label: 'Strength and Conditioning',
+        },
+      ],
+      skipDuplicates: true,
+    });
+    expect(coachProfile.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { user_id: 'user-1' },
+        data: {
+          bio: 'Updated',
+          specialization: 'Strength and Conditioning',
+          specialties: {
+            deleteMany: {},
+            create: [
+              {
+                specialty: { connect: { id: 'specialty-strength' } },
+              },
+            ],
+          },
+        },
+      }),
+    );
+  });
+
+  it('allows zero specialties without creating a placeholder catalog value', async () => {
+    coachProfile.update.mockResolvedValue({ id: 'coach-1' });
+
+    await repo.updateCoachByUserIdWithSpecialties(
+      'user-1',
+      {},
+      { specialty_ids: [], specialty_labels: [] },
+    );
+
+    expect(coachSpecialty.createMany).not.toHaveBeenCalled();
+    expect(coachProfile.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: {
+          specialization: null,
+          specialties: { deleteMany: {}, create: [] },
+        },
+      }),
+    );
   });
 
   it('detects overlapping active coach appointments for reservation add-ons', async () => {

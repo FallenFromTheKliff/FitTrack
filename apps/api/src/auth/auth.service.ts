@@ -42,7 +42,10 @@ import {
   AdminCreateUserDTO,
   ResendOtpDTO,
 } from './dto/auth.dto';
-import { AuthOtpService } from './otp/auth-otp.service';
+import {
+  AuthOtpService,
+  RegistrationChallengePayload,
+} from './otp/auth-otp.service';
 import {
   USER_REGISTERED_EVENT,
   type UserRegisteredEvent,
@@ -87,14 +90,16 @@ export class AuthService {
 
   async register(dto: RegisterDTO): Promise<{ user_id: string }> {
     const email = this.normalizeLoginEmail(dto.email);
-    const existing = await this.repo.findIdentity(AuthProvider.email, email);
-    if (existing) {
-      throw new ConflictException({
-        type: 'CONFLICT',
-        title: 'Email Already Registered',
-        status: 409,
-        detail: 'An account with this email already exists.',
-      });
+    const phone = dto.phone?.trim() || undefined;
+    const [existingEmail, existingPhone] = await Promise.all([
+      this.repo.findIdentity(AuthProvider.email, email),
+      phone ? this.repo.findIdentity(AuthProvider.phone, phone) : null,
+    ]);
+
+    // Keep registration enumeration-safe. Existing identities receive the
+    // same public shape, but no challenge is created or delivered for them.
+    if (existingEmail || existingPhone) {
+      return { user_id: crypto.randomUUID() };
     }
 
     const credentialHash = await bcrypt.hash(
@@ -102,35 +107,88 @@ export class AuthService {
       PASSWORD_HASH_ROUNDS,
     );
 
-    const user = await this.repo.createUserWithProfile({
-      acceptedPrivacyAt: new Date(),
-      role: UserRole.member,
-      status: UserStatus.pending,
-      email,
+    const challengeId = crypto.randomUUID();
+    const challenge: RegistrationChallengePayload = {
+      acceptedPrivacyAt: new Date().toISOString(),
       credentialHash,
-      firstName: dto.first_name,
-      lastName: dto.last_name,
-      phone: dto.phone,
-    });
-
-    await this.otpService.issueOtp(
-      user.id,
-      OtpPurpose.registration,
-      OtpChannel.email,
       email,
-    );
+      firstName: dto.first_name.trim(),
+      lastName: dto.last_name.trim(),
+      ...(phone ? { phone } : {}),
+    };
 
-    return { user_id: user.id };
+    await this.otpService.startRegistrationChallenge(challengeId, challenge);
+
+    return { user_id: challengeId };
   }
 
   async verifyEmail(dto: VerifyEmailDTO): Promise<InternalTokenPairResponse> {
+    if (await this.otpService.hasRegistrationChallenge(dto.user_id)) {
+      let user: Awaited<ReturnType<AuthRepository['createUserWithProfile']>>;
+      try {
+        user = await this.otpService.completeRegistrationChallenge(
+          dto.user_id,
+          dto.code,
+          (challenge) =>
+            this.repo.createUserWithProfile({
+              acceptedPrivacyAt: new Date(challenge.acceptedPrivacyAt),
+              email: challenge.email,
+              credentialHash: challenge.credentialHash,
+              firstName: challenge.firstName,
+              lastName: challenge.lastName,
+              phone: challenge.phone,
+              role: UserRole.member,
+              status: UserStatus.active,
+              emailVerifiedAt: new Date(),
+              qrCodeToken: this.generateQrToken(),
+              enforceIdentityUniquenessAtCommit: true,
+            }),
+        );
+      } catch (error) {
+        if (error instanceof ConflictException) {
+          await this.otpService.discardRegistrationChallenge(dto.user_id);
+          throw new ConflictException({
+            type: 'REGISTRATION_UNAVAILABLE',
+            title: 'Registration Unavailable',
+            status: HttpStatus.CONFLICT,
+            detail: 'This registration cannot be completed.',
+          });
+        }
+        throw error;
+      }
+
+      this.emitUserRegistered({
+        userId: user.id,
+        role: user.role,
+        source: 'email_verification',
+        registeredAt: new Date().toISOString(),
+      });
+
+      return this.issueTokenPair(
+        await this.repo.findUserWithProfileOrThrow(user.id),
+      );
+    }
+
+    const pendingUser = await this.repo.findUserById(dto.user_id);
+    if (!pendingUser) {
+      throw new HttpException(
+        {
+          type: 'REGISTRATION_CHALLENGE_EXPIRED',
+          title: 'Registration Challenge Unavailable',
+          status: HttpStatus.UNPROCESSABLE_ENTITY,
+          detail:
+            'This registration challenge has expired or is no longer available.',
+        },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+
     await this.otpService.consumeOtp(
       dto.user_id,
       dto.code,
       OtpPurpose.registration,
     );
 
-    const pendingUser = await this.repo.findUserByIdOrThrow(dto.user_id);
     const user = await this.repo.updateUser(dto.user_id, {
       status: UserStatus.active,
       email_verified_at: new Date(),
@@ -517,6 +575,10 @@ export class AuthService {
   }
 
   async resendOtp(dto: ResendOtpDTO): Promise<void> {
+    if (await this.otpService.resendRegistrationChallenge(dto.user_id)) {
+      return;
+    }
+
     const user = await this.repo.findUserById(dto.user_id);
     if (!user) return;
     if (user.status !== UserStatus.pending) return;

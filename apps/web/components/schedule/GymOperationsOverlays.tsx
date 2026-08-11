@@ -17,13 +17,13 @@ import { expandCoachAvailabilitySlots } from "@fittrack/utils";
 import {
   authStrongPasswordPattern,
   composeAuthPhilippineMobileNumber,
-  formatAuthPhilippineMobileDigits,
   isAllowedAuthEmailDomain,
   isSupportedAuthPhilippineMobileNumber,
 } from "@fittrack/validators";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { webApiClient } from "@/lib/api-client";
+import CoachSpecialtyPicker from "@/components/coaching/CoachSpecialtyPicker";
 import {
   FitButton,
   FitSelect,
@@ -35,7 +35,6 @@ import { CalendarModal, ConfirmModal } from "@/components/modals";
 import { OverlayAmountGrid } from "./GymOperationsOverlayCards";
 import { OverlayFrame } from "./GymOperationsOverlayFrame";
 import {
-  COACH_SPECIALTY_OPTIONS,
   EMAIL_PATTERN,
   actionPillStyle,
   formatCompactDate,
@@ -103,6 +102,174 @@ function splitCoachAccountName(value: string) {
   const lastName = parts.slice(1).join(" ") || firstName;
 
   return { firstName, lastName };
+}
+
+const MAX_CREATE_COACH_HOURLY_RATE = 999_999.99;
+const CREATE_COACH_SCHEDULE_TYPES = ["full_time", "part_time"] as const;
+const CREATE_COACH_VISIBILITY_VALUES = ["active", "inactive"] as const;
+
+type CreateCoachModalForm = {
+  bio: string;
+  certifications: string;
+  contactEmail: string;
+  contactPhone: string;
+  displayName: string;
+  hourlyRate: string;
+  isAvailableForBooking: string;
+  password: string;
+  scheduleType: string;
+  specialties: string;
+};
+
+type CreateCoachModalPayload = {
+  email: string;
+  firstName: string;
+  lastName: string;
+  password: string;
+  coachProfile: CreateUserCoachProfileInput;
+  phone_no?: string;
+};
+
+type CreateCoachModalValidation = {
+  errors: Partial<Record<keyof CreateCoachModalForm, string>>;
+  payload: CreateCoachModalPayload | null;
+};
+
+export function validateCreateCoachForm(
+  form: CreateCoachModalForm,
+): CreateCoachModalValidation {
+  const errors: CreateCoachModalValidation["errors"] = {};
+  const name = form.displayName.trim();
+  const nameParts = name.split(/\s+/).filter(Boolean);
+  const email = form.contactEmail.trim();
+  const normalizedEmail = email.toLowerCase();
+  const password = form.password;
+  const phoneRemainder = form.contactPhone;
+  const specialtiesList = splitListInput(form.specialties);
+  const certificationsList = splitListInput(form.certifications);
+  const joinedSpecialties = specialtiesList.join(", ");
+  const joinedCertifications = certificationsList.join(", ");
+  const bio = form.bio.trim();
+  const hourlyRateText = form.hourlyRate.trim();
+  const { firstName, lastName } = splitCoachAccountName(name);
+
+  if (!name) errors.displayName = "Coach name is required.";
+  else if (nameParts.length < 2)
+    errors.displayName = "Enter a coach first and last name.";
+  else if (name.length > 160)
+    errors.displayName = "Coach name must not exceed 160 characters.";
+  else if (firstName.length < 2 || lastName.length < 2)
+    errors.displayName = "Enter a coach first and last name.";
+  else if (firstName.length > 100 || lastName.length > 100)
+    errors.displayName =
+      "Coach names must not exceed 100 characters per name.";
+
+  if (!email) errors.contactEmail = "Account email is required.";
+  else if (email.length > 255)
+    errors.contactEmail = "Account email must not exceed 255 characters.";
+  else if (!EMAIL_PATTERN.test(normalizedEmail))
+    errors.contactEmail = "Enter a valid coach account email.";
+  else if (!isAllowedAuthEmailDomain(normalizedEmail))
+    errors.contactEmail = "Use a supported account email domain.";
+
+  if (!password.trim()) errors.password = "Temporary password is required.";
+  else if (password.length < 10)
+    errors.password = "Temporary password must be at least 10 characters.";
+  else if (password.length > 64)
+    errors.password = "Temporary password must not exceed 64 characters.";
+  else if (/\s/.test(password))
+    errors.password = "Temporary password must not contain spaces.";
+  else if (!authStrongPasswordPattern.test(password))
+    errors.password =
+      "Temporary password needs upper, lower, number, and symbol.";
+
+  let phone = "";
+  if (phoneRemainder.trim()) {
+    if (!/^9\d{9}$/.test(phoneRemainder)) {
+      errors.contactPhone =
+        "Enter a valid Philippine mobile remainder after +63 (9XXXXXXXXX).";
+    } else {
+      phone = composeAuthPhilippineMobileNumber("+63", phoneRemainder);
+      if (!isSupportedAuthPhilippineMobileNumber(phone)) {
+        errors.contactPhone = "Enter a valid Philippine mobile number.";
+      }
+    }
+  }
+
+  if (specialtiesList.length === 0)
+    errors.specialties = "Enter at least one specialty.";
+  else if (joinedSpecialties.length > 255)
+    errors.specialties = "Specialties must not exceed 255 characters.";
+
+  if (joinedCertifications.length > 255)
+    errors.certifications =
+      "Certifications must not exceed 255 characters.";
+
+  let hourlyRateValue: number | undefined;
+  if (!hourlyRateText) {
+    errors.hourlyRate = "Hourly rate is required.";
+  } else if (!/^\d+(?:\.\d{1,2})?$/.test(hourlyRateText)) {
+    errors.hourlyRate = "Enter a valid hourly rate.";
+  } else {
+    hourlyRateValue = Number(hourlyRateText);
+    if (!Number.isFinite(hourlyRateValue) || hourlyRateValue <= 0) {
+      errors.hourlyRate = "Hourly rate must be greater than zero.";
+    } else if (hourlyRateValue > MAX_CREATE_COACH_HOURLY_RATE) {
+      errors.hourlyRate =
+        "Hourly rate must not exceed 999999.99 Philippine pesos.";
+    }
+  }
+
+  const scheduleType = CREATE_COACH_SCHEDULE_TYPES.includes(
+    form.scheduleType as (typeof CREATE_COACH_SCHEDULE_TYPES)[number],
+  )
+    ? (form.scheduleType as (typeof CREATE_COACH_SCHEDULE_TYPES)[number])
+    : undefined;
+  if (!scheduleType) errors.scheduleType = "Select a valid working schedule.";
+
+  const visibility = CREATE_COACH_VISIBILITY_VALUES.includes(
+    form.isAvailableForBooking as (typeof CREATE_COACH_VISIBILITY_VALUES)[number],
+  )
+    ? (form.isAvailableForBooking as (typeof CREATE_COACH_VISIBILITY_VALUES)[number])
+    : undefined;
+  if (!visibility)
+    errors.isAvailableForBooking = "Select a valid booking visibility.";
+
+  if (bio.length > 2000)
+    errors.bio = "Bio must not exceed 2000 characters.";
+
+  if (
+    Object.keys(errors).length > 0 ||
+    hourlyRateValue === undefined ||
+    !scheduleType ||
+    !visibility
+  ) {
+    return { errors, payload: null };
+  }
+
+  return {
+    errors,
+    payload: {
+      email: normalizedEmail,
+      firstName,
+      lastName,
+      password,
+      coachProfile: {
+        ...(bio ? { bio } : {}),
+        ...(certificationsList.length > 0
+          ? { certifications: certificationsList }
+          : {}),
+        contactEmail: normalizedEmail,
+        ...(phone ? { contactPhone: phone } : {}),
+        displayName: name,
+        hourlyRate: hourlyRateValue,
+        isAvailableForBooking: visibility === "active",
+        scheduleType,
+        specialties: specialtiesList,
+      },
+      ...(phone ? { phone_no: phone } : {}),
+    },
+  };
 }
 
 function ScheduleOptionPicker({
@@ -1492,14 +1659,7 @@ export function GymOperationsCreateCoachModal({
   isOpen: boolean;
   isSubmitting?: boolean;
   onClose: () => void;
-  onCreate: (payload: {
-    email: string;
-    firstName: string;
-    lastName: string;
-    password: string;
-    coachProfile?: CreateUserCoachProfileInput;
-    phone_no?: string;
-  }) => void;
+  onCreate: (payload: CreateCoachModalPayload) => void;
 }) {
   const { colors, settings } = useTheme();
   const [displayName, setDisplayName] = useState("");
@@ -1514,7 +1674,6 @@ export function GymOperationsCreateCoachModal({
   );
   const [isAvailableForBooking, setIsAvailableForBooking] = useState("active");
   const [bio, setBio] = useState("");
-  const [errors, setErrors] = useState<Record<string, string>>({});
   const [createConfirm, setCreateConfirm] =
     useState<OverlayConfirmation | null>(null);
   const shouldAnimate = settings.animationLevel !== "none";
@@ -1533,7 +1692,6 @@ export function GymOperationsCreateCoachModal({
     setScheduleType("part_time");
     setIsAvailableForBooking("active");
     setBio("");
-    setErrors({});
     setCreateConfirm(null);
   }, [isOpen]);
 
@@ -1541,138 +1699,65 @@ export function GymOperationsCreateCoachModal({
     () => splitListInput(specialties),
     [specialties],
   );
-  const selectedSpecialties = useMemo(
-    () => new Set(specialtiesList),
-    [specialtiesList],
-  );
-  const certificationsList = useMemo(
-    () => splitListInput(certifications),
-    [certifications],
-  );
-  const hourlyRateValue = Number(hourlyRate);
-  const canSubmit =
-    displayName.trim().length > 0 &&
-    contactEmail.trim().length > 0 &&
-    password.trim().length > 0 &&
-    specialtiesList.length > 0 &&
-    hourlyRate.trim().length > 0 &&
-    Number.isFinite(hourlyRateValue) &&
-    hourlyRateValue > 0 &&
-    !isSubmitting;
-
-  const validateCoach = () => {
-    const nextErrors: Record<string, string> = {};
-    const name = displayName.trim();
-    const email = contactEmail.trim();
-    const phone = contactPhone.trim()
-      ? composeAuthPhilippineMobileNumber("+63", contactPhone)
-      : "";
-    const { firstName, lastName } = splitCoachAccountName(name);
-    const joinedSpecialties = specialtiesList.join(", ");
-    const joinedCertifications = certificationsList.join(", ");
-
-    if (!name) nextErrors.displayName = "Coach name is required.";
-    else if (name.length > 160)
-      nextErrors.displayName = "Coach name must not exceed 160 characters.";
-    else if (firstName.length < 2 || lastName.length < 2)
-      nextErrors.displayName = "Enter a coach first and last name.";
-    else if (firstName.length > 100 || lastName.length > 100)
-      nextErrors.displayName =
-        "Coach names must not exceed 100 characters per name.";
-    if (!email) nextErrors.contactEmail = "Account email is required.";
-    else if (!EMAIL_PATTERN.test(email))
-      nextErrors.contactEmail = "Enter a valid coach account email.";
-    else if (!isAllowedAuthEmailDomain(email))
-      nextErrors.contactEmail = "Use a supported account email domain.";
-    if (email.length > 255)
-      nextErrors.contactEmail = "Account email must not exceed 255 characters.";
-    if (!password) nextErrors.password = "Temporary password is required.";
-    else if (password.length < 10)
-      nextErrors.password = "Temporary password must be at least 10 characters.";
-    else if (password.length > 64)
-      nextErrors.password = "Temporary password must not exceed 64 characters.";
-    else if (/\s/.test(password))
-      nextErrors.password = "Temporary password must not contain spaces.";
-    else if (!authStrongPasswordPattern.test(password))
-      nextErrors.password = "Temporary password needs upper, lower, number, and symbol.";
-    if (contactPhone.length > 10)
-      nextErrors.contactPhone = "Enter no more than 10 mobile digits after +63.";
-    else if (phone && !isSupportedAuthPhilippineMobileNumber(phone))
-      nextErrors.contactPhone = "Enter a valid Philippine mobile number.";
-    if (specialtiesList.length === 0)
-      nextErrors.specialties = "Enter at least one specialty.";
-    if (joinedSpecialties.length > 255)
-      nextErrors.specialties = "Specialties must not exceed 255 characters.";
-    if (joinedCertifications.length > 255)
-      nextErrors.certifications =
-        "Certifications must not exceed 255 characters.";
-    if (!hourlyRate.trim()) {
-      nextErrors.hourlyRate = "Hourly rate is required.";
-    } else if (!Number.isFinite(hourlyRateValue) || hourlyRateValue <= 0) {
-      nextErrors.hourlyRate = "Hourly rate must be greater than zero.";
-    }
-    if (bio.length > 2000)
-      nextErrors.bio = "Bio must not exceed 2000 characters.";
-
-    setErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
-  };
-
-  const submitCoach = () => {
-    const { firstName, lastName } = splitCoachAccountName(displayName);
-    const phone = contactPhone.trim()
-      ? composeAuthPhilippineMobileNumber("+63", contactPhone)
-      : "";
-
-    onCreate({
-      email: contactEmail.trim().toLowerCase(),
-      firstName,
-      lastName,
+  const form = useMemo<CreateCoachModalForm>(
+    () => ({
+      bio,
+      certifications,
+      contactEmail,
+      contactPhone,
+      displayName,
+      hourlyRate,
+      isAvailableForBooking,
       password,
-      coachProfile: {
-        ...(bio.trim() ? { bio: bio.trim() } : {}),
-        ...(certificationsList.length > 0
-          ? { certifications: certificationsList }
-          : {}),
-        contactEmail: contactEmail.trim().toLowerCase(),
-        ...(phone ? { contactPhone: phone } : {}),
-        displayName: displayName.trim(),
-        hourlyRate: hourlyRateValue,
-        isAvailableForBooking: isAvailableForBooking === "active",
-        scheduleType,
-        specialties: specialtiesList,
-      },
-      ...(phone ? { phone_no: phone } : {}),
-    });
-  };
+      scheduleType,
+      specialties,
+    }),
+    [
+      bio,
+      certifications,
+      contactEmail,
+      contactPhone,
+      displayName,
+      hourlyRate,
+      isAvailableForBooking,
+      password,
+      scheduleType,
+      specialties,
+    ],
+  );
+  const validation = useMemo(() => validateCreateCoachForm(form), [form]);
+  const { errors } = validation;
+  const canSubmit = Boolean(validation.payload) && !isSubmitting;
 
-  const toggleSpecialty = (value: string) => {
-    const nextValues = selectedSpecialties.has(value)
-      ? specialtiesList.filter((item) => item !== value)
-      : [...specialtiesList, value];
-    setSpecialties(nextValues.join(", "));
-    if (errors.specialties) {
-      setErrors((current) => ({ ...current, specialties: "" }));
-    }
+  const submitCoach = (payload: CreateCoachModalPayload) => {
+    if (isSubmitting) return;
+    onCreate(payload);
   };
 
   const handleCreate = () => {
-    if (!validateCoach()) return;
+    const payload = validation.payload;
+    if (isSubmitting || !payload) return;
 
     setCreateConfirm({
       confirmLabel: "CREATE COACH",
       message:
         "Create this coach account and profile now? It will start as Not Verified.",
-      onConfirm: submitCoach,
+      onConfirm: () => submitCoach(payload),
       title: "Confirm coach account",
     });
+  };
+
+  const handleClose = () => {
+    if (isSubmitting) return;
+    setCreateConfirm(null);
+    onClose();
   };
 
   return (
     <>
       <OverlayFrame
         isOpen={isOpen}
-        onClose={onClose}
+        onClose={handleClose}
         closeDisabled={isSubmitting}
         title="Create coach"
         subtitle="Create a coach-role account and profile for Gym Operations."
@@ -1744,7 +1829,8 @@ export function GymOperationsCreateCoachModal({
                   Hourly rate
                 </FitText>
                 <FitTextInput
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   value={hourlyRate}
                   onChange={(event) => setHourlyRate(event.target.value)}
                   placeholder="0"
@@ -1825,13 +1911,8 @@ export function GymOperationsCreateCoachModal({
                     id="coach-create-phone"
                     type="tel"
                     inputMode="numeric"
-                    maxLength={13}
                     value={contactPhone}
-                    onChange={(event) =>
-                      setContactPhone(
-                        formatAuthPhilippineMobileDigits(event.target.value, "+63"),
-                      )
-                    }
+                    onChange={(event) => setContactPhone(event.target.value)}
                     placeholder="9171234567"
                     aria-label="Coach account phone digits"
                     style={{
@@ -1900,41 +1981,13 @@ export function GymOperationsCreateCoachModal({
                 >
                   Specialties
                 </FitText>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  {COACH_SPECIALTY_OPTIONS.map((option) => {
-                    const selected = selectedSpecialties.has(option.value);
-
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        aria-pressed={selected}
-                        disabled={isSubmitting}
-                        onClick={() => toggleSpecialty(option.value)}
-                        style={{
-                          backgroundColor: selected
-                            ? colors.brand
-                            : colors.surfaceRaised,
-                          border: `1px solid ${
-                            selected ? `${colors.brand}66` : colors.border
-                          }`,
-                          borderRadius: 999,
-                          boxShadow: selected
-                            ? `0 0 0 1px ${colors.brand}22 inset`
-                            : "none",
-                          color: selected ? colors.onBrand : colors.textPrimary,
-                          cursor: isSubmitting ? "not-allowed" : "pointer",
-                          fontSize: 12,
-                          fontWeight: 800,
-                          minHeight: 34,
-                          padding: "7px 12px",
-                        }}
-                      >
-                        {option.label}
-                      </button>
-                    );
-                  })}
-                </div>
+                <CoachSpecialtyPicker
+                  ariaLabel="Coach specialties"
+                  disabled={isSubmitting}
+                  id="create-coach-specialties"
+                  onChange={(values) => setSpecialties(values.join(", "))}
+                  value={specialtiesList}
+                />
                 <FitText
                   excludeGlobalScale
                   style={{ color: colors.textMuted, fontSize: 11 }}
@@ -2015,6 +2068,14 @@ export function GymOperationsCreateCoachModal({
                   compact
                   fullWidth
                 />
+                {errors.scheduleType ? (
+                  <FitText
+                    excludeGlobalScale
+                    style={{ fontSize: 11, color: colors.danger }}
+                  >
+                    {errors.scheduleType}
+                  </FitText>
+                ) : null}
               </div>
               <div style={{ display: "grid", gap: 6 }}>
                 <FitText
@@ -2039,6 +2100,14 @@ export function GymOperationsCreateCoachModal({
                   compact
                   fullWidth
                 />
+                {errors.isAvailableForBooking ? (
+                  <FitText
+                    excludeGlobalScale
+                    style={{ fontSize: 11, color: colors.danger }}
+                  >
+                    {errors.isAvailableForBooking}
+                  </FitText>
+                ) : null}
               </div>
             </div>
 
@@ -2081,6 +2150,7 @@ export function GymOperationsCreateCoachModal({
         isDanger={createConfirm?.isDanger}
         isLoading={isSubmitting}
         onConfirm={() => {
+          if (isSubmitting) return;
           const nextAction = createConfirm?.onConfirm;
           setCreateConfirm(null);
           nextAction?.();

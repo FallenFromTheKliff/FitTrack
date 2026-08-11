@@ -11,6 +11,7 @@ function getMethodGuardMetadata(
     | 'getUnreadCount'
     | 'markAllRead'
     | 'markRead'
+    | 'deleteAllNotifications'
     | 'deleteNotification',
 ): unknown[] | undefined {
   const descriptor = Object.getOwnPropertyDescriptor(
@@ -37,6 +38,7 @@ describe('NotificationsController', () => {
     getUnreadCount: jest.fn(),
     markAllRead: jest.fn(),
     markRead: jest.fn(),
+    deleteAllNotifications: jest.fn(),
     deleteNotification: jest.fn(),
   };
 
@@ -58,6 +60,7 @@ describe('NotificationsController', () => {
     'getUnreadCount',
     'markAllRead',
     'markRead',
+    'deleteAllNotifications',
     'deleteNotification',
   ] as const)('does not duplicate method-level guards for %s', (methodName) => {
     expect(getMethodGuardMetadata(methodName)).toBeUndefined();
@@ -136,6 +139,20 @@ describe('NotificationsController', () => {
     expect(notificationsService.markRead).toHaveBeenCalledWith(
       'user-1',
       '11111111-1111-4111-8111-111111111111',
+    );
+  });
+
+  it('clears notifications for the authenticated user through the service', async () => {
+    notificationsService.deleteAllNotifications.mockResolvedValue({
+      deleted_count: 2,
+    });
+
+    await expect(
+      controller.deleteAllNotifications({ sub: 'user-1' } as never),
+    ).resolves.toEqual({ deleted_count: 2 });
+
+    expect(notificationsService.deleteAllNotifications).toHaveBeenCalledWith(
+      'user-1',
     );
   });
 

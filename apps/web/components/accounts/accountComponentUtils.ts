@@ -98,25 +98,6 @@ export function getMembershipFieldValue(member: MemberRecord | null) {
   return member.membershipCard?.status ?? "none";
 }
 
-export function formatMembershipStatus(value: string) {
-  return value
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-export function formatReviewPayableLabel(value?: string) {
-  if (value === "membership_card") return "Membership Card";
-  if (value === "subscription") return "Loaded Plan";
-  return formatMembershipStatus(value ?? "payment");
-}
-
-export function getMembershipPaymentReviewLabel(value?: string) {
-  return value === "membership_card"
-    ? "membership card payment"
-    : "membership payment";
-}
-
 export function formatMembershipAccess(
   value: ReturnType<typeof getMembershipFieldValue>,
 ) {

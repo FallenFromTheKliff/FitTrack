@@ -1,6 +1,7 @@
 import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
 import type {
   ApiClient,
+  CoachSpecialtyListParams,
   CoachListFilters,
   SubmitCoachReviewPayload,
   UpdateCoachProfilePayload,
@@ -16,6 +17,16 @@ export function activeCoachesQueryOptions<T>(
   return queryOptions({
     queryKey: queryKeys.coaches(filters),
     queryFn: () => client.coaches.listActive<T>(filters)
+  });
+}
+
+export function coachSpecialtiesQueryOptions(
+  client: Pick<ApiClient, "coachSpecialties">,
+  params?: CoachSpecialtyListParams,
+) {
+  return queryOptions({
+    queryKey: queryKeys.coachSpecialties(params),
+    queryFn: () => client.coachSpecialties.list(params),
   });
 }
 

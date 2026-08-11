@@ -67,6 +67,13 @@
     "Context7 Docs": {
       "type": "http",
       "url": "https://mcp.context7.com/mcp"
+    },
+    "shadcn": {
+      "command": "npx",
+      "args": [
+        "shadcn@3.0.0",
+        "mcp"
+      ]
     }
   }
 }

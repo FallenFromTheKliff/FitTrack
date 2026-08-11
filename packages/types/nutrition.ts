@@ -3,6 +3,42 @@ export type NutritionActivityLevel = "sedentary" | "light" | "moderate" | "activ
 export type NutritionFitnessGoal = "bulking" | "cutting" | "maintenance" | "sport_specific";
 export type NutritionUnit = "g" | "kg" | "ml" | "L" | "oz" | "lb" | "cup" | "tbsp" | "tsp" | "serving" | "piece";
 
+export const NUTRITION_MEAL_ICON_LIBRARY_KEYS = [
+  "apple",
+  "beef",
+  "coffee",
+  "cookie",
+  "dumbbell",
+  "milk",
+  "salad",
+  "sandwich",
+  "utensils"
+] as const;
+
+export type NutritionMealIconLibraryKey = (typeof NUTRITION_MEAL_ICON_LIBRARY_KEYS)[number];
+export type NutritionIconKind = "library" | "custom";
+
+export type NutritionLogIconInput = {
+  assetKey?: string | null;
+  key?: NutritionMealIconLibraryKey | null;
+  kind: NutritionIconKind;
+};
+
+export type NutritionLogIconRecord = {
+  assetKey: string | null;
+  key: NutritionMealIconLibraryKey | null;
+  kind: NutritionIconKind;
+};
+
+export const NUTRITION_MEAL_ICON_FALLBACKS: Record<string, NutritionMealIconLibraryKey> = {
+  breakfast: "coffee",
+  dinner: "beef",
+  lunch: "sandwich",
+  "post-workout": "apple",
+  "pre-workout": "dumbbell",
+  snack: "cookie"
+};
+
 export interface NutritionMacroTotalsRecord {
   calories: number;
   proteinG: number;
@@ -71,6 +107,7 @@ export interface NutritionLogRecord {
   logDate: string;
   mealName: string;
   foodItem: string;
+  icon: NutritionLogIconRecord;
   calories: number;
   proteinG: number;
   carbsG: number;

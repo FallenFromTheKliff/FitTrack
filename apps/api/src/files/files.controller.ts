@@ -23,6 +23,8 @@ import {
 
 import { Public } from '../auth/public.decorator/public.decorator';
 import { JwtAuthGuard } from '../common/guards';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { FilesService } from './files.service';
 import { UploadedImageFile, UploadedStorageFile } from './files.types';
 
@@ -51,8 +53,11 @@ export class FilesController {
     status: 413,
     description: 'File exceeds the configured upload limit.',
   })
-  uploadFile(@UploadedFile() file: UploadedImageFile | undefined) {
-    return this.filesService.uploadImage(file);
+  uploadFile(
+    @CurrentUser() user: JwtPayload,
+    @UploadedFile() file: UploadedImageFile | undefined,
+  ) {
+    return this.filesService.uploadImage(file, `uploads/${user.sub}`);
   }
 
   @Post('milestone-evidence')

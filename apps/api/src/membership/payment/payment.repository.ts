@@ -1,11 +1,16 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import {
+  MembershipCardSource,
+  MembershipCardStatus,
   PayableType,
   Payment,
+  PaymentProvider,
   PaymentStage,
   PaymentStatus,
   Prisma,
+  UserStatus,
 } from '@prisma/client';
+import { randomBytes } from 'node:crypto';
 
 import {
   BaseRepository,
@@ -39,6 +44,24 @@ type CoachingPaymentContext = {
 type RecurringCoachingPaymentContext = {
   id: string;
   user_id: string;
+};
+
+export type PaymongoMembershipCardWebhookInput = {
+  gatewayEventId: string;
+  gatewayMetadata: Prisma.InputJsonValue;
+  verifiedAt: Date;
+};
+
+export type PaymongoMembershipCardFailureInput = {
+  gatewayEventId: string;
+  gatewayMetadata: Prisma.InputJsonValue;
+  rejectionReason: string;
+};
+
+export type PaymongoMembershipCardTransition = {
+  payment: Payment;
+  transitioned: boolean;
+  membershipCardStateChanged: boolean;
 };
 
 @Injectable()
@@ -90,9 +113,231 @@ export class PaymentRepository extends BaseRepository {
         payment.payable_type = 'membership_card'
         AND payment.payable_id = membership_card.id
         AND payment.user_id = ${userId}
+        AND payment.provider = 'cash'
         AND payment.status IN ('pending', 'processing', 'awaiting_verification')
         AND membership_card.status = 'active'
     `;
+  }
+
+  async completePaymongoMembershipCardPayment(
+    paymentId: string,
+    input: PaymongoMembershipCardWebhookInput,
+  ): Promise<PaymongoMembershipCardTransition> {
+    return this.transaction(async (tx) => {
+      const payment = await tx.payment.findUnique({
+        where: { id: paymentId },
+      });
+
+      if (!payment) {
+        throw new NotFoundException({
+          type: 'NOT_FOUND',
+          title: 'Payment Not Found',
+          status: 404,
+          detail: `Payment with id "${paymentId}" does not exist.`,
+        });
+      }
+
+      if (
+        payment.payable_type !== PayableType.membership_card ||
+        payment.provider !== PaymentProvider.paymongo
+      ) {
+        return {
+          payment,
+          transitioned: false,
+          membershipCardStateChanged: false,
+        };
+      }
+
+      const paymentTransition = await tx.payment.updateMany({
+        where: {
+          id: paymentId,
+          payable_type: PayableType.membership_card,
+          provider: PaymentProvider.paymongo,
+          status: {
+            in: [PaymentStatus.pending, PaymentStatus.processing],
+          },
+        },
+        data: {
+          status: PaymentStatus.completed,
+          verified_at: input.verifiedAt,
+          gateway_event_id: input.gatewayEventId,
+          gateway_metadata: input.gatewayMetadata,
+          rejection_reason: null,
+        },
+      });
+
+      const currentPayment = await tx.payment.findUnique({
+        where: { id: paymentId },
+      });
+
+      if (!currentPayment) {
+        throw new NotFoundException({
+          type: 'NOT_FOUND',
+          title: 'Payment Not Found',
+          status: 404,
+          detail: `Payment with id "${paymentId}" does not exist.`,
+        });
+      }
+
+      if (paymentTransition.count === 0) {
+        return {
+          payment: currentPayment,
+          transitioned: false,
+          membershipCardStateChanged: false,
+        };
+      }
+
+      const card = await tx.membershipCard.findUnique({
+        where: { id: payment.payable_id },
+      });
+
+      if (!card) {
+        throw new NotFoundException({
+          type: 'NOT_FOUND',
+          title: 'Membership Card Not Found',
+          status: 404,
+          detail: `MembershipCard with id "${payment.payable_id}" does not exist.`,
+        });
+      }
+
+      const cardTransition = await tx.membershipCard.updateMany({
+        where: {
+          id: card.id,
+          user_id: payment.user_id,
+          source: MembershipCardSource.paymongo,
+          status: MembershipCardStatus.pending_verification,
+        },
+        data: {
+          activated_at: input.verifiedAt,
+          revoke_reason: null,
+          revoked_at: null,
+          revoked_by: null,
+          status: MembershipCardStatus.active,
+          verified_at: input.verifiedAt,
+          verified_by: null,
+        },
+      });
+
+      if (cardTransition.count > 0) {
+        const owner = await tx.user.findUnique({
+          where: { id: payment.user_id },
+          select: { id: true, qr_code_token: true, status: true },
+        });
+
+        if (
+          owner &&
+          (owner.status === UserStatus.pending || !owner.qr_code_token)
+        ) {
+          await tx.user.update({
+            where: { id: owner.id },
+            data: {
+              ...(owner.status === UserStatus.pending
+                ? { status: UserStatus.active }
+                : {}),
+              ...(!owner.qr_code_token
+                ? { qr_code_token: randomBytes(32).toString('hex') }
+                : {}),
+            },
+          });
+        }
+      }
+
+      return {
+        payment: currentPayment,
+        transitioned: true,
+        membershipCardStateChanged: cardTransition.count > 0,
+      };
+    });
+  }
+
+  async failPaymongoMembershipCardPayment(
+    paymentId: string,
+    input: PaymongoMembershipCardFailureInput,
+  ): Promise<PaymongoMembershipCardTransition> {
+    return this.transaction(async (tx) => {
+      const payment = await tx.payment.findUnique({
+        where: { id: paymentId },
+      });
+
+      if (!payment) {
+        throw new NotFoundException({
+          type: 'NOT_FOUND',
+          title: 'Payment Not Found',
+          status: 404,
+          detail: `Payment with id "${paymentId}" does not exist.`,
+        });
+      }
+
+      if (
+        payment.payable_type !== PayableType.membership_card ||
+        payment.provider !== PaymentProvider.paymongo
+      ) {
+        return {
+          payment,
+          transitioned: false,
+          membershipCardStateChanged: false,
+        };
+      }
+
+      const paymentTransition = await tx.payment.updateMany({
+        where: {
+          id: paymentId,
+          payable_type: PayableType.membership_card,
+          provider: PaymentProvider.paymongo,
+          status: {
+            in: [PaymentStatus.pending, PaymentStatus.processing],
+          },
+        },
+        data: {
+          status: PaymentStatus.failed,
+          gateway_event_id: input.gatewayEventId,
+          gateway_metadata: input.gatewayMetadata,
+          rejection_reason: input.rejectionReason,
+        },
+      });
+
+      const currentPayment = await tx.payment.findUnique({
+        where: { id: paymentId },
+      });
+
+      if (!currentPayment) {
+        throw new NotFoundException({
+          type: 'NOT_FOUND',
+          title: 'Payment Not Found',
+          status: 404,
+          detail: `Payment with id "${paymentId}" does not exist.`,
+        });
+      }
+
+      if (paymentTransition.count === 0) {
+        return {
+          payment: currentPayment,
+          transitioned: false,
+          membershipCardStateChanged: false,
+        };
+      }
+
+      const cardTransition = await tx.membershipCard.updateMany({
+        where: {
+          id: payment.payable_id,
+          user_id: payment.user_id,
+          source: MembershipCardSource.paymongo,
+          status: MembershipCardStatus.pending_verification,
+        },
+        data: {
+          activated_at: null,
+          revoke_reason: input.rejectionReason,
+          revoked_at: new Date(),
+          status: MembershipCardStatus.revoked,
+        },
+      });
+
+      return {
+        payment: currentPayment,
+        transitioned: true,
+        membershipCardStateChanged: cardTransition.count > 0,
+      };
+    });
   }
 
   findPaymentByIdForOwnerOrThrow(

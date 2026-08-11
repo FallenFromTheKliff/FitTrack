@@ -23,3 +23,13 @@ required = false
 startup_timeout_sec = 10
 tool_timeout_sec = 30
 default_tools_approval_mode = "approve"
+
+[mcp_servers.shadcn]
+command = "npx"
+args = ["shadcn@latest", "mcp"]
+cwd = "C:/FitTrack_rebuilt_20260330_212527/apps/web"
+enabled = true
+required = false
+startup_timeout_sec = 30
+tool_timeout_sec = 30
+default_tools_approval_mode = "approve"

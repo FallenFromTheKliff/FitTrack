@@ -1,12 +1,16 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   IsBoolean,
   IsEnum,
+  IsArray,
   IsInt,
+  IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
   Max,
   MaxLength,
   Min,
@@ -52,6 +56,40 @@ export class UpdateCoachProfileDTO {
     message: 'specialization must not exceed 255 characters',
   })
   specialization?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Catalog specialty IDs. Providing this or specialty_labels replaces all current specialties; an empty array clears them.',
+    type: String,
+    isArray: true,
+  })
+  @IsOptional()
+  @IsArray({ message: 'specialty_ids must be an array' })
+  @ArrayMaxSize(20, { message: 'specialty_ids must not contain more than 20 values' })
+  @IsUUID('4', { each: true, message: 'each specialty_id must be a valid UUID' })
+  specialty_ids?: string[];
+
+  @ApiPropertyOptional({
+    description:
+      'Catalog labels to resolve or create. Providing this or specialty_ids replaces all current specialties; an empty array clears them.',
+    type: String,
+    isArray: true,
+  })
+  @IsOptional()
+  @Transform(({ value }) =>
+    Array.isArray(value)
+      ? value.map((item) => (typeof item === 'string' ? item.trim() : item))
+      : value,
+  )
+  @IsArray({ message: 'specialty_labels must be an array' })
+  @ArrayMaxSize(20, { message: 'specialty_labels must not contain more than 20 values' })
+  @IsString({ each: true, message: 'each specialty_label must be a string' })
+  @IsNotEmpty({ each: true, message: 'specialty_labels must not contain blank values' })
+  @MaxLength(255, {
+    each: true,
+    message: 'each specialty_label must not exceed 255 characters',
+  })
+  specialty_labels?: string[];
 
   @ApiPropertyOptional({
     example: 'NASM-certified coach focused on athletic performance.',
@@ -189,6 +227,30 @@ export class CreateStandaloneCoachDTO {
   })
   specialization?: string;
 
+  @ApiPropertyOptional({ type: String, isArray: true })
+  @IsOptional()
+  @IsArray({ message: 'specialty_ids must be an array' })
+  @ArrayMaxSize(20, { message: 'specialty_ids must not contain more than 20 values' })
+  @IsUUID('4', { each: true, message: 'each specialty_id must be a valid UUID' })
+  specialty_ids?: string[];
+
+  @ApiPropertyOptional({ type: String, isArray: true })
+  @IsOptional()
+  @Transform(({ value }) =>
+    Array.isArray(value)
+      ? value.map((item) => (typeof item === 'string' ? item.trim() : item))
+      : value,
+  )
+  @IsArray({ message: 'specialty_labels must be an array' })
+  @ArrayMaxSize(20, { message: 'specialty_labels must not contain more than 20 values' })
+  @IsString({ each: true, message: 'each specialty_label must be a string' })
+  @IsNotEmpty({ each: true, message: 'specialty_labels must not contain blank values' })
+  @MaxLength(255, {
+    each: true,
+    message: 'each specialty_label must not exceed 255 characters',
+  })
+  specialty_labels?: string[];
+
   @ApiPropertyOptional({
     example: 'NASM-certified coach focused on athletic performance.',
   })
@@ -241,8 +303,23 @@ export class CreateStandaloneCoachDTO {
 }
 
 export class CoachSelfUpdateProfileDTO {
+  @ApiPropertyOptional({ example: 'Coach Mara Santos' })
+  display_name?: string;
+
+  @ApiPropertyOptional({ example: 'coach.mara@fittrack.com', nullable: true })
+  contact_email?: string | null;
+
+  @ApiPropertyOptional({ example: '+639171234567', nullable: true })
+  contact_phone?: string | null;
+
   @ApiPropertyOptional({ example: 'Strength and conditioning' })
   specialization?: string;
+
+  @ApiPropertyOptional({ type: String, isArray: true })
+  specialty_ids?: string[];
+
+  @ApiPropertyOptional({ type: String, isArray: true })
+  specialty_labels?: string[];
 
   @ApiPropertyOptional({
     example: 'NASM-certified coach focused on athletic performance.',
@@ -280,6 +357,23 @@ export class CoachFilterDTO extends PaginationDTO {
   @IsNumber({}, { message: 'max_rate must be a number' })
   @Min(0, { message: 'max_rate must be at least 0' })
   max_rate?: number;
+}
+
+export class CoachSpecialtyFilterDTO extends PaginationDTO {
+  @ApiPropertyOptional({ example: 'strength' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'search must be a string' })
+  @MaxLength(255, { message: 'search must not exceed 255 characters' })
+  search?: string;
+}
+
+export class CoachSpecialtyResponseDTO {
+  @ApiProperty({ example: '11111111-1111-4111-8111-111111111111' })
+  id: string;
+
+  @ApiProperty({ example: 'Strength and Conditioning' })
+  label: string;
 }
 
 export class CoachUserProfileResponseDTO {
@@ -353,6 +447,9 @@ export class CoachListItemResponseDTO {
 
   @ApiPropertyOptional({ example: 'Strength and conditioning', nullable: true })
   specialization: string | null;
+
+  @ApiProperty({ type: CoachSpecialtyResponseDTO, isArray: true })
+  specialties: CoachSpecialtyResponseDTO[];
 
   @ApiPropertyOptional({
     example: 'NASM-certified coach focused on athletic performance.',

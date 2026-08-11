@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import {
+  ActivityIndicator,
+  FlatList,
+  Modal,
+  Pressable,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -7,27 +15,35 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import {
+  Badge,
   Dumbbell,
+  Flame,
+  History,
   Lock,
+  Medal,
   RefreshCw,
   SlidersHorizontal,
   Sparkles,
   Trophy,
+  X,
   type LucideIcon,
 } from "lucide-react-native";
 import { R } from "@fittrack/ui/tokens";
 import type {
+  FitnessExpProgressionRecord,
   FitnessMasteryRank,
+  FitnessMuscleLeaderboardEntryRecord,
   FitnessMilestoneProgressRecord,
+  FitnessSeasonHistoryRecord,
 } from "@fittrack/types";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import PremiumFeatureGate from "@/components/membership/PremiumFeatureGate";
 import {
   FitButton,
+  FitAvatarImage,
   FitCard,
   FitFilter,
-  FitPager,
   FitSearch,
   FitSection,
   FitText,
@@ -54,6 +70,36 @@ const TABS: Array<{ label: string; value: MasteryTab }> = [
   { label: "Muscle EXP", value: "muscles" },
   { label: "Leaderboard", value: "leaderboard" },
 ];
+
+const RANK_COLORS: Record<FitnessMasteryRank, string> = {
+  bronze: "#CD7F32",
+  silver: "#A8B0BC",
+  gold: "#D4AF37",
+  platinum: "#6D657E",
+  adamantite: "#8E2F38",
+};
+
+const LIBRARY_ICONS: Record<string, LucideIcon> = {
+  badge: Badge,
+  dumbbell: Dumbbell,
+  flame: Flame,
+  medal: Medal,
+  star: Sparkles,
+  target: SlidersHorizontal,
+  trophy: Trophy,
+};
+
+function getRankColor(rank: FitnessMasteryRank) {
+  return RANK_COLORS[rank];
+}
+
+function getLibraryIcon(iconKey: string | null | undefined, fallback = Dumbbell) {
+  return LIBRARY_ICONS[iconKey ?? ""] ?? fallback;
+}
+
+function getRankLabel(rank: FitnessMasteryRank) {
+  return formatTitle(rank);
+}
 
 function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
   return StyleSheet.create({
@@ -87,14 +133,14 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
       position: "absolute",
       width: 10,
     },
-    burstLayer: {
+    claimBurstLayer: {
       alignItems: "center",
       height: 1,
       justifyContent: "center",
       left: 0,
       position: "absolute",
       right: 0,
-      top: 92,
+      top: 32,
       zIndex: 12,
     },
     emptyMessage: {
@@ -178,6 +224,12 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
       fontSize: 13,
       fontWeight: "700",
     },
+    leaderboardAvatarShell: {
+      borderRadius: 20,
+      height: 40,
+      overflow: "hidden",
+      width: 40,
+    },
     leaderboardMeta: {
       alignItems: "flex-end",
       gap: 2,
@@ -205,6 +257,8 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
     leaderboardControls: {
       gap: 8,
       marginBottom: 10,
+      position: "relative",
+      zIndex: 20,
     },
     leaderboardControlRow: {
       flexDirection: "row",
@@ -222,6 +276,32 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
     leaderboardChipText: {
       fontSize: 12,
       fontWeight: "700",
+    },
+    leaderboardFilterButton: {
+      alignItems: "center",
+      borderRadius: R.md,
+      borderWidth: 1,
+      height: 42,
+      justifyContent: "center",
+      width: 44,
+    },
+    leaderboardFilterDropdown: {
+      left: 0,
+      right: 0,
+      top: 92,
+      zIndex: 220,
+      elevation: 14,
+    },
+    leaderboardSearchRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 8,
+    },
+    leaderboardSearchField: {
+      flex: 1,
+    },
+    loadMoreButton: {
+      marginTop: 12,
     },
     seasonHistoryBlock: {
       gap: 10,
@@ -244,6 +324,10 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
     list: {
       gap: 10,
     },
+    milestoneGrid: {
+      flexGrow: 0,
+      height: 432,
+    },
     milestoneActions: {
       flexDirection: "row",
       justifyContent: "flex-end",
@@ -255,8 +339,32 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
     milestoneCard: {
       borderRadius: R.lg,
       borderWidth: 1,
+      flexBasis: "48%",
+      height: 204,
+      marginBottom: 10,
+      maxWidth: "48%",
+      overflow: "visible",
+      padding: 11,
+      position: "relative",
+    },
+    milestoneIcon: {
+      alignItems: "center",
+      borderRadius: R.md,
+      height: 34,
+      justifyContent: "center",
+      overflow: "hidden",
+      width: 34,
+    },
+    milestoneIconImage: {
+      borderRadius: R.md,
+      height: 34,
+      overflow: "hidden",
+      width: 34,
+    },
+    milestoneCardHeader: {
+      alignItems: "flex-start",
+      flexDirection: "row",
       gap: 8,
-      padding: 14,
     },
     milestoneDescription: {
       color: colors.textSecondary,
@@ -284,6 +392,36 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
       color: colors.textPrimary,
       fontSize: 15,
       fontWeight: "700",
+      lineHeight: 18,
+    },
+    milestoneSearchRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 8,
+      marginBottom: 10,
+    },
+    milestoneSearchField: {
+      flex: 1,
+    },
+    milestoneFilterButton: {
+      alignItems: "center",
+      borderRadius: R.md,
+      borderWidth: 1,
+      height: 42,
+      justifyContent: "center",
+      width: 44,
+    },
+    milestoneFilterDropdown: {
+      left: 0,
+      right: 0,
+      top: 48,
+      zIndex: 220,
+      elevation: 14,
+    },
+    lazyFooter: {
+      alignItems: "center",
+      gap: 8,
+      paddingVertical: 8,
     },
     noticeCard: {
       borderRadius: R.lg,
@@ -304,6 +442,76 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
       color: colors.textMuted,
       fontSize: 12,
       fontWeight: "700",
+    },
+    progressionCard: {
+      borderRadius: R.lg,
+      borderWidth: 1,
+      gap: 8,
+      padding: 12,
+    },
+    progressionGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 10,
+    },
+    progressionLabel: {
+      color: colors.textMuted,
+      fontSize: 11,
+      fontWeight: "800",
+      letterSpacing: 0.4,
+      textTransform: "uppercase",
+    },
+    progressionLevel: {
+      fontSize: 18,
+      fontWeight: "800",
+    },
+    progressionXp: {
+      color: colors.textSecondary,
+      fontSize: 12,
+      fontWeight: "700",
+    },
+    progressionTrack: {
+      backgroundColor: colors.border,
+      borderRadius: 999,
+      height: 6,
+      overflow: "hidden",
+    },
+    progressionFill: {
+      borderRadius: 999,
+      height: 6,
+    },
+    progressionMeta: {
+      color: colors.textMuted,
+      fontSize: 11,
+      fontWeight: "700",
+    },
+    privatePanel: {
+      alignItems: "center",
+      borderRadius: R.lg,
+      borderWidth: 1,
+      gap: 8,
+      padding: 18,
+      textAlign: "center",
+    },
+    privatePanelTitle: {
+      color: colors.textPrimary,
+      fontSize: 15,
+      fontWeight: "800",
+      textAlign: "center",
+    },
+    privatePanelText: {
+      color: colors.textSecondary,
+      fontSize: 13,
+      lineHeight: 19,
+      textAlign: "center",
+    },
+    summaryTopMuscleLabel: {
+      color: colors.textMuted,
+      fontSize: 11,
+      fontWeight: "800",
+      letterSpacing: 0.8,
+      marginBottom: 6,
+      textTransform: "uppercase",
     },
     root: {
       gap: 12,
@@ -379,6 +587,133 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
       paddingHorizontal: 14,
       paddingVertical: 10,
     },
+    modalBackdrop: {
+      alignItems: "center",
+      backgroundColor: "rgba(0,0,0,0.62)",
+      flex: 1,
+      justifyContent: "center",
+      padding: 12,
+    },
+    modalCard: {
+      borderRadius: R.xl,
+      borderWidth: 1,
+      gap: 12,
+      maxHeight: "92%",
+      padding: 16,
+      width: "100%",
+    },
+    modalHeader: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      gap: 10,
+      justifyContent: "space-between",
+    },
+    modalTitle: {
+      color: colors.textPrimary,
+      flex: 1,
+      fontSize: 20,
+      fontWeight: "800",
+      lineHeight: 24,
+    },
+    modalClose: {
+      alignItems: "center",
+      borderRadius: R.md,
+      borderWidth: 1,
+      height: 36,
+      justifyContent: "center",
+      width: 36,
+    },
+    modalControlRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    modalChip: {
+      alignItems: "center",
+      borderRadius: R.md,
+      borderWidth: 1,
+      minHeight: 36,
+      paddingHorizontal: 11,
+      justifyContent: "center",
+    },
+    modalChipText: {
+      fontSize: 12,
+      fontWeight: "800",
+    },
+    modalList: {
+      flexGrow: 0,
+    },
+    modalRow: {
+      alignItems: "center",
+      borderRadius: R.md,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 10,
+      marginBottom: 8,
+      minHeight: 56,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+    },
+    modalRank: {
+      alignItems: "center",
+      borderRadius: R.md,
+      height: 32,
+      justifyContent: "center",
+      minWidth: 34,
+      paddingHorizontal: 5,
+    },
+    modalRankText: {
+      fontSize: 12,
+      fontWeight: "900",
+    },
+    modalAvatar: {
+      borderRadius: 17,
+      height: 34,
+      overflow: "hidden",
+      width: 34,
+    },
+    modalCopy: {
+      flex: 1,
+      gap: 2,
+    },
+    modalName: {
+      color: colors.textPrimary,
+      fontSize: 14,
+      fontWeight: "800",
+    },
+    modalValue: {
+      fontSize: 13,
+      fontWeight: "800",
+    },
+    modalHint: {
+      color: colors.textMuted,
+      fontSize: 11,
+    },
+    modalEmpty: {
+      alignItems: "center",
+      gap: 8,
+      justifyContent: "center",
+      minHeight: 180,
+      padding: 12,
+    },
+    pickerCard: {
+      borderRadius: R.xl,
+      borderWidth: 1,
+      gap: 12,
+      maxHeight: "86%",
+      padding: 16,
+      width: "100%",
+    },
+    pickerList: {
+      flexGrow: 0,
+    },
+    pickerRow: {
+      borderRadius: R.md,
+      borderWidth: 1,
+      gap: 3,
+      marginBottom: 8,
+      padding: 12,
+    },
   });
 }
 
@@ -406,14 +741,6 @@ function getMilestoneStatusLabel(milestone: FitnessMilestoneProgressRecord) {
     return "Recalculating";
   }
   return "Locked";
-}
-
-function getMilestoneIcon(milestone: FitnessMilestoneProgressRecord): LucideIcon {
-  if (milestone.status === "claimed") return Trophy;
-  if (milestone.status === "unlocked") return Sparkles;
-  if (milestone.status === "rejected") return Sparkles;
-  if (milestone.status === "pending_review") return Sparkles;
-  return Lock;
 }
 
 function getMilestoneTone(
@@ -497,6 +824,141 @@ function MilestoneClaimBurst({
   );
 }
 
+function ProgressionSummary({
+  label,
+  points,
+  pointsLabel,
+  progression,
+}: {
+  label: string;
+  points: number;
+  pointsLabel: string;
+  progression: FitnessExpProgressionRecord;
+}) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const rankColor = getRankColor(progression.level);
+  const progress = Math.min(Math.max(progression.progressPercent, 0), 100);
+  const nextLabel = progression.nextLevelExp
+    ? `${progression.remainingExp?.toLocaleString("en-US") ?? 0} EXP to ${getRankLabel(
+        progression.level === "bronze"
+          ? "silver"
+          : progression.level === "silver"
+            ? "gold"
+            : progression.level === "gold"
+              ? "platinum"
+              : "adamantite",
+      )}`
+    : "Max rank reached";
+
+  return (
+    <View
+      style={[
+        styles.progressionCard,
+        { borderColor: rankColor + "66", backgroundColor: colors.surfaceRaised },
+      ]}
+    >
+      <FitText style={styles.progressionLabel}>{label}</FitText>
+      <FitText style={[styles.progressionLevel, { color: rankColor }]}>
+        {getRankLabel(progression.level)}
+      </FitText>
+      <FitText style={styles.progressionXp}>
+        {points.toLocaleString("en-US")} {pointsLabel}
+      </FitText>
+      <View style={styles.progressionTrack}>
+        <View
+          style={[
+            styles.progressionFill,
+            { backgroundColor: rankColor, width: `${progress}%` },
+          ]}
+        />
+      </View>
+      <FitText style={styles.progressionMeta}>
+        {progress}% to next level · {nextLabel}
+      </FitText>
+    </View>
+  );
+}
+
+function MasteryIcon({
+  alt,
+  iconAssetKey,
+  iconKey,
+  iconKind,
+  size = 34,
+  tone,
+}: {
+  alt: string;
+  iconAssetKey?: string | null;
+  iconKey?: string | null;
+  iconKind?: "library" | "custom";
+  size?: number;
+  tone: string;
+}) {
+  const { colors } = useTheme();
+  const Icon = getLibraryIcon(iconKey);
+  const fallback = (
+    <View
+      style={{
+        alignItems: "center",
+        backgroundColor: tone + "18",
+        borderColor: tone + "55",
+        borderRadius: R.md,
+        borderWidth: 1,
+        height: size,
+        justifyContent: "center",
+        width: size,
+      }}
+    >
+      <Icon size={Math.max(16, size * 0.52)} color={tone || colors.brand} strokeWidth={2} />
+    </View>
+  );
+
+  if (iconKind === "custom" && iconAssetKey?.trim()) {
+    return (
+      <View style={{ height: size, width: size }}>
+        <FitAvatarImage
+          alt={alt}
+          borderRadius={R.md}
+          fallback={fallback}
+          uri={iconAssetKey}
+        />
+      </View>
+    );
+  }
+
+  return fallback;
+}
+
+function LeaderboardAvatar({
+  displayName,
+  styles,
+  uri,
+}: {
+  displayName: string;
+  styles: ReturnType<typeof makeStyles>;
+  uri?: string | null;
+}) {
+  const { colors } = useTheme();
+  const initials = getInitials(displayName);
+  return (
+    <View style={[styles.leaderboardAvatarShell, { backgroundColor: colors.brand + "18" }]}>
+      <FitAvatarImage
+        alt={`${displayName} avatar`}
+        borderRadius={20}
+        fallback={
+          <View style={styles.leaderboardAvatar}>
+            <FitText style={[styles.leaderboardAvatarText, { color: colors.brand }]}>
+              {initials}
+            </FitText>
+          </View>
+        }
+        uri={uri}
+      />
+    </View>
+  );
+}
+
 export function MuscleMasteryHeaderPanel({
   controller,
 }: {
@@ -518,7 +980,9 @@ export function MuscleMasteryHeaderPanel({
         <FitText style={styles.heroTitle}>{streakLabel}</FitText>
         <View>
           <FitText style={styles.heroValueLabel}>TOTAL EXP</FitText>
-          <FitText style={styles.heroValue}>{totalXpLabel}</FitText>
+          <FitText style={[styles.heroValue, { color: colors.success }]}>
+            {totalXpLabel}
+          </FitText>
         </View>
       </View>
       <View style={{ gap: 8 }}>
@@ -549,49 +1013,74 @@ export default function MuscleMasteryScreenContent({
 }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const [isMilestoneFilterOpen, setIsMilestoneFilterOpen] = useState(false);
   const [isMuscleFilterOpen, setIsMuscleFilterOpen] = useState(false);
+  const [isLeaderboardMuscleFilterOpen, setIsLeaderboardMuscleFilterOpen] =
+    useState(false);
   const maxXp = controller.mastery[0]?.xpPoints ?? 0;
 
   const renderSummary = () => (
     <>
-      {controller.integrityNotice ? (
-        <FitSection heading="Progress Status">
-          <View
-            style={[
-              styles.noticeCard,
-              {
-                backgroundColor: colors.warning + "12",
-                borderColor: colors.warning + "55",
-              },
-            ]}
-          >
-            <FitText style={styles.noticeTitle}>
-              {controller.integrityNotice.title}
-            </FitText>
-            <FitText style={styles.sectionMessage}>
-              {controller.integrityNotice.body}
-            </FitText>
-          </View>
-        </FitSection>
-      ) : null}
-
       <FitSection heading="Summary" cardStyle={{ padding: 14 }}>
         <View style={styles.statGrid}>
-          {controller.summaryCards.map((item) => (
-            <View key={item.id} style={styles.statTile}>
-              <FitCard label={item.label} statValue={item.value} />
+          {controller.summaryCards.map((item) =>
+            item.id === "xp" ? (
+              <View
+                key={item.id}
+                style={[
+                  styles.statTile,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                    borderRadius: R.lg,
+                    borderWidth: 1,
+                    padding: 12,
+                  },
+                ]}
+              >
+                <FitText style={[styles.heroValue, { color: colors.success }]}>
+                  {item.value}
+                </FitText>
+                <FitText style={styles.heroValueLabel}>TOTAL EXP</FitText>
+              </View>
+            ) : (
+              <View key={item.id} style={styles.statTile}>
+                <FitCard label={item.label} statValue={item.value} />
+              </View>
+            ),
+          )}
+        </View>
+        <View style={{ gap: 10, marginTop: 12 }}>
+          <FitText style={styles.progressionLabel}>Overall progression</FitText>
+          <View style={styles.progressionGrid}>
+            <View style={{ flexBasis: "48%", flexGrow: 1 }}>
+              <ProgressionSummary
+                label="Lifetime"
+                points={controller.totalXp}
+                pointsLabel="EXP"
+                progression={controller.lifetimeProgression}
+              />
             </View>
-          ))}
+            <View style={{ flexBasis: "48%", flexGrow: 1 }}>
+              <ProgressionSummary
+                label="Season"
+                points={controller.seasonStanding?.seasonPoints ?? 0}
+                pointsLabel="points"
+                progression={controller.seasonProgression}
+              />
+            </View>
+          </View>
         </View>
         {controller.topMuscle ? (
           <View style={{ marginTop: 12 }}>
+            <FitText style={styles.summaryTopMuscleLabel}>Top muscle</FitText>
             <FitCard
               label={controller.topMuscle.muscleGroup}
               subtitle={`${controller.topMuscle.xpPoints.toLocaleString("en-US")} EXP | ${controller.topMuscle.totalVolumeKg.toLocaleString("en-US")} kg total volume`}
-              trailingLabel={controller.topMuscle.rankDisplay}
-              trailingLabelColor={colors.brand}
+              trailingLabel={getRankLabel(controller.topMuscle.rank)}
+              trailingLabelColor={getRankColor(controller.topMuscle.rank)}
               progress={maxXp > 0 ? controller.topMuscle.xpPoints / maxXp : 0}
-              icon={Sparkles}
+              icon={getLibraryIcon(controller.topMuscle.iconKey, Sparkles)}
               noChevron
             />
           </View>
@@ -603,7 +1092,7 @@ export default function MuscleMasteryScreenContent({
           label={controller.seasonCaption}
           subtitle="Season standing and points are tracked from confirmed progression."
           trailingLabel={controller.seasonRankLabel}
-          trailingLabelColor={colors.brand}
+          trailingLabelColor={getRankColor(controller.seasonProgression.level)}
           icon={Trophy}
           noChevron
         />
@@ -613,22 +1102,91 @@ export default function MuscleMasteryScreenContent({
 
   const renderMilestones = () => (
     <>
+      <View style={styles.muscleControls}>
+        <View style={styles.milestoneSearchRow}>
+          <View style={styles.milestoneSearchField}>
+            <FitSearch
+              value={controller.milestoneSearch}
+              placeholder="Search milestones"
+              onChangeText={controller.setMilestoneSearch}
+            />
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Filter milestones: ${controller.milestoneFilter}`}
+            accessibilityState={{ expanded: isMilestoneFilterOpen }}
+            onPress={() => setIsMilestoneFilterOpen((open) => !open)}
+            style={[
+              styles.milestoneFilterButton,
+              {
+                backgroundColor: isMilestoneFilterOpen
+                  ? colors.brand + "16"
+                  : colors.surfaceRaised,
+                borderColor: isMilestoneFilterOpen ? colors.brand : colors.border,
+              },
+            ]}
+          >
+            <SlidersHorizontal
+              size={19}
+              color={isMilestoneFilterOpen ? colors.brand : colors.textMuted}
+              strokeWidth={2}
+            />
+          </Pressable>
+        </View>
+        <FitFilter
+          isOpen={isMilestoneFilterOpen}
+          topChipLabel="Milestone state"
+          topChipOptions={[
+            { label: "All", value: "all" },
+            { label: "Achieved", value: "achieved" },
+            { label: "Unachieved", value: "unachieved" },
+          ]}
+          dropdownStyle={styles.milestoneFilterDropdown}
+          activeTopChip={controller.milestoneFilter}
+          onTopChipChange={(value) => {
+            controller.setMilestoneFilter(value as "all" | "achieved" | "unachieved");
+            setIsMilestoneFilterOpen(false);
+          }}
+        />
+      </View>
+
       <FitSection heading="Milestones" cardStyle={{ padding: 14 }}>
-        {controller.sortedMilestones.length > 0 ? (
-          <View style={styles.list}>
-            {controller.milestonePageItems.map((milestone) => {
-              const Icon = getMilestoneIcon(milestone);
+        {controller.sortedMilestones.length === 0 ? (
+          <FitText style={styles.sectionMessage}>
+            Visible milestones will appear after the progression backbone publishes
+            active goals for this member account.
+          </FitText>
+        ) : controller.milestonePageItems.length === 0 ? (
+          <FitText style={styles.sectionMessage}>
+            No milestones match the current search and state filter.
+          </FitText>
+        ) : (
+          <FlatList
+            data={controller.milestonePageItems}
+            keyExtractor={(milestone) => milestone.milestoneDefinitionId}
+            numColumns={2}
+            nestedScrollEnabled
+            initialNumToRender={6}
+            maxToRenderPerBatch={6}
+            windowSize={5}
+            onEndReached={() => {
+              if (controller.milestoneHasMore) controller.onLoadMoreMilestones();
+            }}
+            onEndReachedThreshold={0.45}
+            style={styles.milestoneGrid}
+            columnWrapperStyle={{ justifyContent: "space-between" }}
+            showsVerticalScrollIndicator={false}
+            renderItem={({ item: milestone }) => {
               const tone = getMilestoneTone(milestone, colors);
               const canClaim = milestone.status === "unlocked";
               const isRecalculating =
                 milestone.status === "pending_review" || milestone.status === "rejected";
               const reviewHint = isRecalculating
-                ? "Progress is being recalculated automatically. Refresh shortly."
+                ? "Recalculating shortly"
                 : null;
 
               return (
                 <View
-                  key={milestone.milestoneDefinitionId}
                   style={[
                     styles.milestoneCard,
                     {
@@ -639,53 +1197,50 @@ export default function MuscleMasteryScreenContent({
                     },
                   ]}
                 >
-                  <View style={{ flexDirection: "row", gap: 10 }}>
-                    <Icon size={22} color={tone} strokeWidth={2} />
-                    <View style={{ flex: 1 }}>
-                      <FitText style={styles.milestoneTitle}>
+                  {controller.celebratedMilestoneId === milestone.milestoneDefinitionId ? (
+                    <View pointerEvents="none" style={styles.claimBurstLayer}>
+                      <MilestoneClaimBurst
+                        activeKey={controller.celebrationKey}
+                        color={colors.brand}
+                      />
+                    </View>
+                  ) : null}
+                  <View style={styles.milestoneCardHeader}>
+                    <MasteryIcon
+                      alt={`${milestone.title} icon`}
+                      iconAssetKey={milestone.iconAssetKey}
+                      iconKey={milestone.iconKey}
+                      iconKind={milestone.iconKind}
+                      tone={tone}
+                    />
+                    <View style={{ flex: 1, gap: 3 }}>
+                      <FitText numberOfLines={2} style={styles.milestoneTitle}>
                         {milestone.title}
                       </FitText>
-                      <FitText style={styles.milestoneDescription}>
+                      <FitText numberOfLines={2} style={styles.milestoneDescription}>
                         {milestone.description ??
                           `${formatTitle(milestone.triggerType)} milestone progress.`}
                       </FitText>
                     </View>
                   </View>
                   <View style={styles.milestoneMeta}>
-                    <FitText style={styles.progressMeta}>
+                    <FitText numberOfLines={1} style={styles.progressMeta}>
                       {formatTitle(milestone.category)}
                     </FitText>
-                    <FitText style={styles.progressMeta}>
+                    <FitText numberOfLines={1} style={styles.progressMeta}>
                       {milestone.progressValue.toLocaleString("en-US")} /{" "}
                       {milestone.targetValue.toLocaleString("en-US")}
                     </FitText>
-                    <FitText style={[styles.progressMeta, { color: tone }]}>
+                    <FitText numberOfLines={1} style={[styles.progressMeta, { color: tone }]}>
                       {getMilestoneStatusLabel(milestone)}
                     </FitText>
                   </View>
                   {reviewHint ? (
-                    <View
-                      style={[
-                        styles.milestoneReviewHint,
-                        {
-                          backgroundColor: tone + "12",
-                          borderColor: tone + "55",
-                        },
-                      ]}
-                    >
-                      <FitText style={[styles.milestoneReviewHintText, { color: tone }]}>
-                        {reviewHint}
-                      </FitText>
-                    </View>
+                    <FitText numberOfLines={1} style={[styles.milestoneReviewHintText, { color: tone }]}>
+                      {reviewHint}
+                    </FitText>
                   ) : null}
-                  <View
-                    style={{
-                      backgroundColor: colors.border,
-                      borderRadius: 999,
-                      height: 5,
-                      overflow: "hidden",
-                    }}
-                  >
+                  <View style={{ backgroundColor: colors.border, borderRadius: 999, height: 5, overflow: "hidden" }}>
                     <View
                       style={{
                         backgroundColor: tone,
@@ -704,29 +1259,28 @@ export default function MuscleMasteryScreenContent({
                         disabled={controller.isClaimingMilestone}
                         loading={controller.isClaimingMilestone}
                         style={styles.claimButton}
-                        textStyle={{ textAlign: "center" }}
+                        textStyle={{ fontSize: 11, textAlign: "center" }}
                       />
                     </View>
                   ) : null}
                 </View>
               );
-            })}
-          </View>
-        ) : (
-          <FitText style={styles.sectionMessage}>
-            Visible milestones will appear after the progression backbone publishes
-            active goals for this member account.
-          </FitText>
+            }}
+          />
         )}
+        {controller.milestoneHasMore ? (
+          <View style={styles.lazyFooter}>
+            <FitButton
+              label="Load more milestones"
+              onPress={controller.onLoadMoreMilestones}
+              variant="ghost"
+            />
+            <FitText style={styles.progressMeta}>
+              Showing {controller.milestonePageItems.length} of {controller.sortedMilestones.length}
+            </FitText>
+          </View>
+        ) : null}
       </FitSection>
-      {controller.milestoneTotalPages > 1 ? (
-        <FitPager
-          currentPage={controller.milestonePage}
-          onPageChange={controller.setMilestonePage}
-          style={styles.sectionPager}
-          totalPages={controller.milestoneTotalPages}
-        />
-      ) : null}
     </>
   );
 
@@ -770,19 +1324,75 @@ export default function MuscleMasteryScreenContent({
       </View>
       <FitSection heading="Muscle EXP" cardStyle={{ padding: 14 }}>
         <View style={styles.list}>
-          {controller.musclePageItems.length > 0 ? (
-            controller.musclePageItems.map((entry) => (
-              <FitCard
-                key={entry.id}
-                label={entry.muscleGroup}
-                subtitle={`${entry.xpPoints.toLocaleString("en-US")} EXP | ${entry.totalVolumeKg.toLocaleString("en-US")} kg total volume`}
-                trailingLabel={entry.rankDisplay}
-                trailingLabelColor={colors.brand}
-                progress={maxXp > 0 ? entry.xpPoints / maxXp : 0}
-                icon={Sparkles}
-                noChevron
-              />
-            ))
+          {controller.filteredMuscleCount > 0 ? (
+            controller.mastery
+              .filter((entry) =>
+                controller.muscleSearch.trim()
+                  ? entry.muscleGroup
+                      .toLowerCase()
+                      .includes(controller.muscleSearch.trim().toLowerCase())
+                  : true,
+              )
+              .filter(
+                (entry) =>
+                  controller.muscleRankFilter === "all" ||
+                  entry.rank === controller.muscleRankFilter,
+              )
+              .map((entry) => {
+                const lifetimeColor = getRankColor(entry.lifetimeProgression.level);
+                const seasonColor = getRankColor(entry.seasonProgression.level);
+                return (
+                  <View
+                    key={entry.id}
+                    style={[
+                      styles.progressionCard,
+                      {
+                        backgroundColor: colors.surfaceRaised,
+                        borderColor: lifetimeColor + "55",
+                      },
+                    ]}
+                  >
+                    <View style={{ alignItems: "center", flexDirection: "row", gap: 10 }}>
+                      <MasteryIcon
+                        alt={`${entry.muscleGroup} icon`}
+                        iconAssetKey={entry.iconAssetKey}
+                        iconKey={entry.iconKey}
+                        iconKind={entry.iconKind}
+                        tone={lifetimeColor}
+                      />
+                      <View style={{ flex: 1, gap: 3 }}>
+                        <FitText style={styles.milestoneTitle}>{entry.muscleGroup}</FitText>
+                        <FitText style={styles.progressMeta}>
+                          {entry.totalVolumeKg.toLocaleString("en-US")} kg total volume
+                        </FitText>
+                      </View>
+                      <FitText style={[styles.progressionLevel, { color: lifetimeColor, fontSize: 14 }]}>
+                        {getRankLabel(entry.lifetimeProgression.level)}
+                      </FitText>
+                    </View>
+                    <View style={{ gap: 6 }}>
+                      <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                        <FitText style={styles.progressionLabel}>Lifetime</FitText>
+                        <FitText style={styles.progressionXp}>
+                          {entry.lifetimeProgression.currentExp.toLocaleString("en-US")} EXP · {entry.lifetimeProgression.progressPercent}%
+                        </FitText>
+                      </View>
+                      <View style={styles.progressionTrack}>
+                        <View style={[styles.progressionFill, { backgroundColor: lifetimeColor, width: `${entry.lifetimeProgression.progressPercent}%` }]} />
+                      </View>
+                      <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                        <FitText style={styles.progressionLabel}>Season</FitText>
+                        <FitText style={[styles.progressionXp, { color: seasonColor }]}>
+                          {entry.seasonProgression.currentExp.toLocaleString("en-US")} EXP · {entry.seasonProgression.progressPercent}%
+                        </FitText>
+                      </View>
+                      <View style={styles.progressionTrack}>
+                        <View style={[styles.progressionFill, { backgroundColor: seasonColor, width: `${entry.seasonProgression.progressPercent}%` }]} />
+                      </View>
+                    </View>
+                  </View>
+                );
+              })
           ) : (
             <FitText style={styles.sectionMessage}>
               No muscle EXP entries match the current filters.
@@ -790,14 +1400,6 @@ export default function MuscleMasteryScreenContent({
           )}
         </View>
       </FitSection>
-      {controller.muscleTotalPages > 1 ? (
-        <FitPager
-          currentPage={controller.musclePage}
-          onPageChange={controller.setMusclePage}
-          style={styles.sectionPager}
-          totalPages={controller.muscleTotalPages}
-        />
-      ) : null}
     </>
   );
 
@@ -806,208 +1408,28 @@ export default function MuscleMasteryScreenContent({
       controller.leaderboardMode === "muscle"
         ? controller.muscleLeaderboard
         : controller.leaderboard;
-    const leaderboardMeta =
+    const hasMore =
       controller.leaderboardMode === "muscle"
-        ? controller.muscleLeaderboardMeta
-        : controller.leaderboardMeta;
+        ? controller.muscleLeaderboardHasMore
+        : controller.leaderboardHasMore;
 
     return (
       <>
-      <FitSection heading="Leaderboard" cardStyle={{ paddingHorizontal: 14, paddingVertical: 10 }}>
-        <View style={styles.leaderboardControls}>
-          <View style={styles.leaderboardControlRow}>
-            {[
-              { label: "Overall", value: "overall" as const },
-              { label: "By muscle", value: "muscle" as const },
-            ].map((option) => {
-              const active = controller.leaderboardMode === option.value;
-              return (
-                <Pressable
-                  key={option.value}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: active }}
-                  onPress={() => controller.setLeaderboardMode(option.value)}
-                  style={[
-                    styles.leaderboardChip,
-                    {
-                      backgroundColor: active
-                        ? colors.brand + "16"
-                        : colors.surfaceRaised,
-                      borderColor: active ? colors.brand : colors.border,
-                    },
-                  ]}
-                >
-                  <FitText
-                    style={[
-                      styles.leaderboardChipText,
-                      { color: active ? colors.brand : colors.textSecondary },
-                    ]}
-                  >
-                    {option.label}
-                  </FitText>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          {controller.leaderboardMode === "muscle" ? (
-            <>
-              <View style={styles.leaderboardControlRow}>
-                {(["season", "lifetime"] as const).map((scope) => {
-                  const active = controller.muscleLeaderboardScope === scope;
-                  return (
-                    <Pressable
-                      key={scope}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: active }}
-                      onPress={() => controller.setMuscleLeaderboardScope(scope)}
-                      style={[
-                        styles.leaderboardChip,
-                        {
-                          backgroundColor: active
-                            ? colors.brand + "16"
-                            : colors.surfaceRaised,
-                          borderColor: active ? colors.brand : colors.border,
-                        },
-                      ]}
-                    >
-                      <FitText
-                        style={[
-                          styles.leaderboardChipText,
-                          { color: active ? colors.brand : colors.textSecondary },
-                        ]}
-                      >
-                        {scope === "season" ? "This season" : "Lifetime"}
-                      </FitText>
-                    </Pressable>
-                  );
-                })}
-              </View>
-              <View style={styles.leaderboardControlRow}>
-                {controller.leaderboardMuscleOptions.map((muscle) => {
-                  const active = controller.selectedLeaderboardMuscle === muscle;
-                  return (
-                    <Pressable
-                      key={muscle}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: active }}
-                      onPress={() => controller.setSelectedLeaderboardMuscle(muscle)}
-                      style={[
-                        styles.leaderboardChip,
-                        {
-                          backgroundColor: active
-                            ? colors.brand + "16"
-                            : colors.surfaceRaised,
-                          borderColor: active ? colors.brand : colors.border,
-                        },
-                      ]}
-                    >
-                      <FitText
-                        style={[
-                          styles.leaderboardChipText,
-                          { color: active ? colors.brand : colors.textSecondary },
-                        ]}
-                      >
-                        {formatTitle(muscle)}
-                      </FitText>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </>
-          ) : null}
-        </View>
-        {controller.rankingVisibility === "private" ? (
-          <FitText style={styles.sectionMessage}>
-            Your visible ranking is private. Progression still counts in history,
-            but member-facing leaderboards hide your standing.
-          </FitText>
-        ) : leaderboardEntries.length > 0 ? (
-          <View>
-            {leaderboardEntries.map((entry, index) => (
-              <View key={`${entry.userId}-${entry.rankPosition}`}>
-                <View style={styles.leaderboardRow}>
-                  <View
-                    style={[
-                      styles.leaderboardAvatar,
-                      { backgroundColor: colors.brand + "18" },
-                    ]}
-                  >
-                    <FitText
-                      style={[
-                        styles.leaderboardAvatarText,
-                        { color: colors.brand },
-                      ]}
-                    >
-                      {getInitials(entry.displayName)}
-                    </FitText>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <FitText style={styles.leaderboardName}>
-                      {entry.displayName}
-                    </FitText>
-                    <FitText style={styles.leaderboardSubtitle}>
-                      Rank #{entry.rankPosition}
-                    </FitText>
-                  </View>
-                  <View style={styles.leaderboardMeta}>
-                    <FitText style={styles.leaderboardXp}>
-                      {(
-                        "xpPoints" in entry ? entry.xpPoints : entry.totalXp
-                      ).toLocaleString("en-US")} EXP
-                    </FitText>
-                    <FitText style={styles.leaderboardSubtitle}>
-                      {("isCurrentUser" in entry && entry.isCurrentUser) ||
-                      controller.leaderboardEntry?.userId === entry.userId
-                        ? "You"
-                        : controller.leaderboardMode === "muscle"
-                          ? formatTitle(controller.selectedLeaderboardMuscle)
-                          : "Gym member"}
-                    </FitText>
-                  </View>
-                </View>
-                {index < leaderboardEntries.length - 1 ? (
-                  <View
-                    style={[
-                      styles.separator,
-                      { backgroundColor: colors.border },
-                    ]}
-                  />
-                ) : null}
-              </View>
-            ))}
-          </View>
-        ) : (
-          <FitText style={styles.sectionMessage}>
-            No visible rankings match this leaderboard yet.
-          </FitText>
-        )}
-      </FitSection>
-      {controller.rankingVisibility !== "private" &&
-      leaderboardMeta.total_pages > 1 ? (
-        <FitPager
-          currentPage={leaderboardMeta.page}
-          onPageChange={controller.setLeaderboardPage}
-          style={styles.sectionPager}
-          totalPages={leaderboardMeta.total_pages}
-        />
-      ) : null}
-
-      <FitSection heading="Season history" cardStyle={{ padding: 14 }}>
-        <View style={styles.seasonHistoryBlock}>
-          <View style={styles.seasonHistoryHeader}>
-            <FitText style={styles.sectionMessage}>
-              Best performers from completed seasons
-            </FitText>
+        <FitSection heading="Leaderboard" cardStyle={{ paddingHorizontal: 14, paddingVertical: 10 }}>
+          <View style={styles.leaderboardControls}>
             <View style={styles.leaderboardControlRow}>
-              {([3, 10] as const).map((limit) => {
-                const active = controller.seasonHistoryLimit === limit;
+              {[
+                { label: "Overall", value: "overall" as const },
+                { label: "By Muscle", value: "muscle" as const },
+              ].map((option) => {
+                const active = controller.leaderboardMode === option.value;
                 return (
                   <Pressable
-                    key={limit}
+                    key={option.value}
                     accessibilityRole="button"
+                    accessibilityLabel={`Leaderboard: ${option.label}`}
                     accessibilityState={{ selected: active }}
-                    onPress={() => controller.setSeasonHistoryLimit(limit)}
+                    onPress={() => controller.setLeaderboardMode(option.value)}
                     style={[
                       styles.leaderboardChip,
                       {
@@ -1024,55 +1446,194 @@ export default function MuscleMasteryScreenContent({
                         { color: active ? colors.brand : colors.textSecondary },
                       ]}
                     >
-                      Top {limit}
+                      {option.label}
                     </FitText>
                   </Pressable>
                 );
               })}
             </View>
-          </View>
-          {controller.seasonHistory.length > 0 ? (
-            controller.seasonHistory.map((season) => (
-              <View key={season.seasonId} style={styles.seasonHistoryList}>
-                <FitText style={styles.leaderboardName}>{season.title}</FitText>
-                {season.topPerformers.map((performer) => (
-                  <View
-                    key={`${season.seasonId}-${performer.userId}`}
-                    style={styles.seasonHistoryRow}
-                  >
-                    <FitText style={[styles.leaderboardXp, { minWidth: 28 }]}>
-                      #{performer.rankPosition}
-                    </FitText>
-                    <FitText style={[styles.leaderboardName, { flex: 1 }]}>
-                      {performer.displayName}
-                    </FitText>
-                    <FitText style={styles.leaderboardSubtitle}>
-                      {performer.seasonPoints.toLocaleString("en-US")} pts
-                    </FitText>
-                  </View>
-                ))}
+            <View style={styles.leaderboardSearchRow}>
+              <View style={styles.leaderboardSearchField}>
+                <FitSearch
+                  value={controller.leaderboardSearch}
+                  placeholder={
+                    controller.leaderboardMode === "muscle"
+                      ? "Search By Muscle"
+                      : "Search Overall"
+                  }
+                  onChangeText={controller.setLeaderboardSearch}
+                />
               </View>
-            ))
+              {controller.leaderboardMode === "muscle" ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Filter By Muscle: ${formatTitle(controller.selectedLeaderboardMuscle)}`}
+                  accessibilityState={{ expanded: isLeaderboardMuscleFilterOpen }}
+                  onPress={() => setIsLeaderboardMuscleFilterOpen((open) => !open)}
+                  style={[
+                    styles.leaderboardFilterButton,
+                    {
+                      backgroundColor: isLeaderboardMuscleFilterOpen
+                        ? colors.brand + "16"
+                        : colors.surfaceRaised,
+                      borderColor: isLeaderboardMuscleFilterOpen
+                        ? colors.brand
+                        : colors.border,
+                    },
+                  ]}
+                >
+                  <SlidersHorizontal
+                    size={19}
+                    color={isLeaderboardMuscleFilterOpen ? colors.brand : colors.textMuted}
+                    strokeWidth={2}
+                  />
+                </Pressable>
+              ) : null}
+            </View>
+            {controller.leaderboardMode === "muscle" ? (
+              <>
+                <FitFilter
+                  isOpen={isLeaderboardMuscleFilterOpen}
+                  topChipLabel="Muscle"
+                  topChipOptions={controller.leaderboardMuscleOptions.map((muscle) => ({
+                    label: formatTitle(muscle),
+                    value: muscle,
+                  }))}
+                  dropdownStyle={styles.leaderboardFilterDropdown}
+                  activeTopChip={controller.selectedLeaderboardMuscle}
+                  onTopChipChange={(value) => {
+                    controller.setSelectedLeaderboardMuscle(value);
+                    setIsLeaderboardMuscleFilterOpen(false);
+                  }}
+                />
+                <View style={styles.leaderboardControlRow}>
+                  {(["season", "lifetime"] as const).map((scope) => {
+                    const active = controller.muscleLeaderboardScope === scope;
+                    return (
+                      <Pressable
+                        key={scope}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: active }}
+                        onPress={() => controller.setMuscleLeaderboardScope(scope)}
+                        style={[
+                          styles.leaderboardChip,
+                          {
+                            backgroundColor: active
+                              ? colors.brand + "16"
+                              : colors.surfaceRaised,
+                            borderColor: active ? colors.brand : colors.border,
+                          },
+                        ]}
+                      >
+                        <FitText
+                          style={[
+                            styles.leaderboardChipText,
+                            { color: active ? colors.brand : colors.textSecondary },
+                          ]}
+                        >
+                          {scope === "season" ? "This season" : "Lifetime"}
+                        </FitText>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </>
+            ) : null}
+          </View>
+
+          {controller.rankingVisibility === "private" ? (
+            <View
+              style={[
+                styles.privatePanel,
+                { backgroundColor: colors.surfaceRaised, borderColor: colors.border },
+              ]}
+            >
+              <Lock size={24} color={colors.textMuted} strokeWidth={2} />
+              <FitText style={styles.privatePanelTitle}>Leaderboard is private</FitText>
+              <FitText style={styles.privatePanelText}>
+                Your progression still counts in history, but no member rows are shown while ranking visibility is private.
+              </FitText>
+            </View>
+          ) : leaderboardEntries.length > 0 ? (
+            <View>
+              {leaderboardEntries.map((entry, index) => {
+                const xp = "xpPoints" in entry ? entry.xpPoints : entry.totalXp;
+                const isCurrent =
+                  ("isCurrentUser" in entry && entry.isCurrentUser) ||
+                  controller.leaderboardEntry?.userId === entry.userId;
+                return (
+                  <View key={`${entry.userId}-${entry.rankPosition}`}>
+                    <View style={styles.leaderboardRow}>
+                      <LeaderboardAvatar
+                        displayName={entry.displayName}
+                        styles={styles}
+                        uri={entry.avatarUrl}
+                      />
+                      <View style={{ flex: 1 }}>
+                        <FitText style={styles.leaderboardName} numberOfLines={1}>
+                          {entry.displayName}
+                        </FitText>
+                        <FitText style={styles.leaderboardSubtitle}>
+                          Rank #{entry.rankPosition}
+                        </FitText>
+                      </View>
+                      <View style={styles.leaderboardMeta}>
+                        <FitText style={styles.leaderboardXp}>
+                          {xp.toLocaleString("en-US")} EXP
+                        </FitText>
+                        <FitText style={styles.leaderboardSubtitle}>
+                          {isCurrent
+                            ? "You"
+                            : controller.leaderboardMode === "muscle"
+                              ? formatTitle(controller.selectedLeaderboardMuscle)
+                              : "Gym member"}
+                        </FitText>
+                      </View>
+                    </View>
+                    {index < leaderboardEntries.length - 1 ? (
+                      <View style={[styles.separator, { backgroundColor: colors.border }]} />
+                    ) : null}
+                  </View>
+                );
+              })}
+            </View>
           ) : (
             <FitText style={styles.sectionMessage}>
-              Completed season results will appear here after the first season closes.
+              No visible rankings match this search or filter yet.
             </FitText>
           )}
-        </View>
-      </FitSection>
-    </>
-  );
+          {controller.rankingVisibility !== "private" && hasMore ? (
+            <FitButton
+              label={controller.isLoadingMoreLeaderboard ? "Loading more..." : "Load more"}
+              icon={controller.isLoadingMoreLeaderboard ? undefined : RefreshCw}
+              loading={controller.isLoadingMoreLeaderboard}
+              disabled={controller.isLoadingMoreLeaderboard}
+              onPress={() => void controller.onLoadMoreLeaderboard()}
+              variant="ghost"
+              style={styles.loadMoreButton}
+            />
+          ) : null}
+        </FitSection>
+
+        <FitSection heading="Season history" cardStyle={{ padding: 14 }}>
+          <View style={styles.seasonHistoryBlock}>
+            <FitText style={styles.sectionMessage}>
+              Review a fixed top-10 from completed seasons, with overall and muscle views.
+            </FitText>
+            <FitButton
+              label="Open season history"
+              icon={History}
+              onPress={controller.onOpenSeasonHistory}
+              variant="primary"
+            />
+          </View>
+        </FitSection>
+      </>
+    );
   };
 
   return (
     <View style={styles.root}>
-      <View style={[styles.burstLayer, { pointerEvents: "none" }]}>
-        <MilestoneClaimBurst
-          activeKey={controller.celebrationKey}
-          color={colors.brand}
-        />
-      </View>
-
       {controller.statusMessage ? (
         <View
           style={[
@@ -1107,8 +1668,7 @@ export default function MuscleMasteryScreenContent({
       ) : controller.isLoading ? (
         <FitSection heading="Overview">
           <FitText style={styles.sectionMessage}>
-            Loading mastery progress, milestones, season standing, and
-            governance status...
+            Loading mastery progress, milestones, season standing, and leaderboard...
           </FitText>
         </FitSection>
       ) : controller.isError ? (
@@ -1179,6 +1739,354 @@ export default function MuscleMasteryScreenContent({
           {controller.activeTab === "leaderboard" ? renderLeaderboard() : null}
         </>
       )}
+      <SeasonHistoryModal controller={controller} />
     </View>
+  );
+}
+
+function SeasonHistoryModal({
+  controller,
+}: {
+  controller: MuscleMasteryScreenController;
+}) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { height, width } = useWindowDimensions();
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const [seasonSearch, setSeasonSearch] = useState("");
+  const modalWidth = Math.min(Math.max(width - 24, 300), 680);
+  const listHeight = Math.min(Math.max(height * 0.48, 260), 430);
+  const pickerListHeight = Math.min(Math.max(height * 0.52, 280), 480);
+  const selectedSeason = controller.seasonHistory.find(
+    (season) => season.seasonId === controller.selectedSeasonHistoryId,
+  );
+  const filteredSeasons = controller.seasonHistory.filter((season) => {
+    const search = seasonSearch.trim().toLowerCase();
+    return !search || season.title.toLowerCase().includes(search);
+  });
+  const muscleRows = controller.seasonHistoryMuscleLeaderboard;
+
+  const renderOverallRow = ({
+    item,
+  }: {
+    item: FitnessSeasonHistoryRecord["topPerformers"][number];
+  }) => {
+    const isTopThree = item.rankPosition <= 3;
+    return (
+      <View
+        style={[
+          styles.modalRow,
+          {
+            backgroundColor: isTopThree
+              ? colors.brand + (item.rankPosition === 1 ? "22" : "12")
+              : colors.surfaceRaised,
+            borderColor: isTopThree ? colors.brand + "66" : colors.border,
+          },
+        ]}
+      >
+        <View
+          style={[
+            styles.modalRank,
+            {
+              backgroundColor: isTopThree ? colors.brand + "2a" : colors.surface,
+              minWidth: item.rankPosition <= 3 ? 38 : 34,
+            },
+          ]}
+        >
+          <FitText style={[styles.modalRankText, { color: isTopThree ? colors.brand : colors.textSecondary }]}>
+            #{item.rankPosition}
+          </FitText>
+        </View>
+        <View style={styles.modalAvatar}>
+          <FitAvatarImage
+            alt={`${item.displayName} avatar`}
+            borderRadius={17}
+            fallback={
+              <View style={[styles.leaderboardAvatar, { backgroundColor: colors.brand + "18" }]}>
+                <FitText style={[styles.leaderboardAvatarText, { color: colors.brand }]}>
+                  {getInitials(item.displayName)}
+                </FitText>
+              </View>
+            }
+          />
+        </View>
+        <View style={styles.modalCopy}>
+          <FitText numberOfLines={1} style={styles.modalName}>
+            {item.displayName}
+          </FitText>
+          <FitText style={styles.modalHint}>Overall season standing</FitText>
+        </View>
+        <FitText style={[styles.modalValue, { color: isTopThree ? colors.brand : colors.textSecondary }]}>
+          {item.seasonPoints.toLocaleString("en-US")} pts
+        </FitText>
+      </View>
+    );
+  };
+
+  const renderMuscleRow = ({
+    item,
+  }: {
+    item: FitnessMuscleLeaderboardEntryRecord;
+  }) => {
+    const isTopThree = item.rankPosition <= 3;
+    const rankColor = getRankColor(item.progression?.level ?? "bronze");
+    return (
+      <View
+        style={[
+          styles.modalRow,
+          {
+            backgroundColor: isTopThree ? rankColor + "18" : colors.surfaceRaised,
+            borderColor: isTopThree ? rankColor + "66" : colors.border,
+          },
+        ]}
+      >
+        <View style={[styles.modalRank, { backgroundColor: rankColor + "24" }]}>
+          <FitText style={[styles.modalRankText, { color: rankColor }]}>
+            #{item.rankPosition}
+          </FitText>
+        </View>
+        <LeaderboardAvatar displayName={item.displayName} styles={styles} uri={item.avatarUrl} />
+        <View style={styles.modalCopy}>
+          <FitText numberOfLines={1} style={styles.modalName}>
+            {item.displayName}
+          </FitText>
+          <FitText style={styles.modalHint}>
+            {getRankLabel(item.progression?.level ?? "bronze")} · {formatTitle(controller.seasonHistoryMuscleKey)}
+          </FitText>
+        </View>
+        <FitText style={[styles.modalValue, { color: rankColor }]}>
+          {item.xpPoints.toLocaleString("en-US")} EXP
+        </FitText>
+      </View>
+    );
+  };
+
+  return (
+    <>
+      <Modal
+        visible={controller.seasonHistoryOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={controller.onCloseSeasonHistory}
+      >
+        <View style={styles.modalBackdrop}>
+          <View
+            style={[
+              styles.modalCard,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+                maxWidth: modalWidth,
+              },
+            ]}
+          >
+            <View style={styles.modalHeader}>
+              <View style={{ flex: 1, gap: 4 }}>
+                <FitText style={styles.modalTitle}>Season history</FitText>
+                <FitText style={styles.sectionMessage}>
+                  Fixed top-10 · {selectedSeason?.title ?? "Select a season"}
+                </FitText>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Close season history"
+                onPress={controller.onCloseSeasonHistory}
+                style={[styles.modalClose, { borderColor: colors.border }]}
+              >
+                <X size={19} color={colors.textMuted} strokeWidth={2} />
+              </Pressable>
+            </View>
+
+            <View style={styles.modalControlRow}>
+              {([
+                { label: "Overall", value: "overall" as const },
+                { label: "By muscle", value: "muscle" as const },
+              ]).map((option) => {
+                const active = controller.seasonHistoryScope === option.value;
+                return (
+                  <Pressable
+                    key={option.value}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                    onPress={() => controller.setSeasonHistoryScope(option.value)}
+                    style={[
+                      styles.modalChip,
+                      {
+                        backgroundColor: active ? colors.brand + "16" : colors.surfaceRaised,
+                        borderColor: active ? colors.brand : colors.border,
+                      },
+                    ]}
+                  >
+                    <FitText style={[styles.modalChipText, { color: active ? colors.brand : colors.textSecondary }]}>
+                      {option.label}
+                    </FitText>
+                  </Pressable>
+                );
+              })}
+              <FitButton
+                label={selectedSeason?.title ?? "Choose season"}
+                icon={History}
+                onPress={() => setIsPickerOpen(true)}
+                variant="ghost"
+                style={{ flexGrow: 1, minHeight: 36 }}
+                textStyle={{ fontSize: 11 }}
+              />
+            </View>
+
+            {controller.seasonHistoryScope === "muscle" ? (
+              <View style={styles.modalControlRow}>
+                {controller.leaderboardMuscleOptions.map((muscle) => {
+                  const active = controller.seasonHistoryMuscleKey === muscle;
+                  return (
+                    <Pressable
+                      key={muscle}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                      onPress={() => controller.setSeasonHistoryMuscleKey(muscle)}
+                      style={[
+                        styles.modalChip,
+                        {
+                          backgroundColor: active ? colors.brand + "16" : colors.surfaceRaised,
+                          borderColor: active ? colors.brand : colors.border,
+                        },
+                      ]}
+                    >
+                      <FitText style={[styles.modalChipText, { color: active ? colors.brand : colors.textSecondary }]}>
+                        {formatTitle(muscle)}
+                      </FitText>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : null}
+
+            {controller.seasonHistoryLoading ? (
+              <View style={styles.modalEmpty}>
+                <ActivityIndicator color={colors.brand} />
+                <FitText style={styles.sectionMessage}>Loading completed seasons...</FitText>
+              </View>
+            ) : controller.seasonHistoryError ? (
+              <View style={styles.modalEmpty}>
+                <FitText style={styles.sectionMessage}>{controller.seasonHistoryError}</FitText>
+                <FitButton label="Retry" icon={RefreshCw} onPress={() => void controller.onRefreshSeasonHistory()} variant="ghost" />
+              </View>
+            ) : controller.seasonHistoryScope === "muscle" && controller.seasonHistoryMuscleLoading ? (
+              <View style={styles.modalEmpty}>
+                <ActivityIndicator color={colors.brand} />
+                <FitText style={styles.sectionMessage}>Loading muscle season rankings...</FitText>
+              </View>
+            ) : controller.seasonHistoryScope === "muscle" && controller.seasonHistoryMuscleError ? (
+              <View style={styles.modalEmpty}>
+                <FitText style={styles.sectionMessage}>{controller.seasonHistoryMuscleError}</FitText>
+                <FitButton label="Retry" icon={RefreshCw} onPress={() => void controller.onRefreshSeasonHistory()} variant="ghost" />
+              </View>
+            ) : controller.seasonHistoryScope === "muscle" ? (
+              muscleRows.length > 0 ? (
+                <FlatList
+                  data={muscleRows}
+                  keyExtractor={(entry) => `${entry.userId}-${entry.rankPosition}`}
+                  renderItem={renderMuscleRow}
+                  style={[styles.modalList, { height: listHeight }]}
+                  showsVerticalScrollIndicator
+                />
+              ) : (
+                <View style={styles.modalEmpty}>
+                  <FitText style={styles.sectionMessage}>No muscle season rankings are available for this season yet.</FitText>
+                </View>
+              )
+            ) : selectedSeason && selectedSeason.topPerformers.length > 0 ? (
+              <FlatList
+                data={selectedSeason.topPerformers.slice(0, 10)}
+                keyExtractor={(entry) => `${selectedSeason.seasonId}-${entry.userId}`}
+                renderItem={renderOverallRow}
+                style={[styles.modalList, { height: listHeight }]}
+                showsVerticalScrollIndicator
+              />
+            ) : (
+              <View style={styles.modalEmpty}>
+                <FitText style={styles.sectionMessage}>
+                  Completed season results will appear here after the first season closes.
+                </FitText>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={isPickerOpen && controller.seasonHistoryOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsPickerOpen(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View
+            style={[
+              styles.pickerCard,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+                maxWidth: modalWidth,
+              },
+            ]}
+          >
+            <View style={styles.modalHeader}>
+              <FitText style={styles.modalTitle}>Choose a season</FitText>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Close season picker"
+                onPress={() => setIsPickerOpen(false)}
+                style={[styles.modalClose, { borderColor: colors.border }]}
+              >
+                <X size={19} color={colors.textMuted} strokeWidth={2} />
+              </Pressable>
+            </View>
+            <FitSearch
+              value={seasonSearch}
+              placeholder="Search seasons"
+              onChangeText={setSeasonSearch}
+            />
+            <FlatList
+              data={filteredSeasons}
+              keyExtractor={(season) => season.seasonId}
+              style={[styles.pickerList, { height: pickerListHeight }]}
+              keyboardShouldPersistTaps="handled"
+              renderItem={({ item: season }) => {
+                const active = season.seasonId === controller.selectedSeasonHistoryId;
+                return (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                    onPress={() => {
+                      controller.setSelectedSeasonHistoryId(season.seasonId);
+                      setIsPickerOpen(false);
+                    }}
+                    style={[
+                      styles.pickerRow,
+                      {
+                        backgroundColor: active ? colors.brand + "12" : colors.surfaceRaised,
+                        borderColor: active ? colors.brand : colors.border,
+                      },
+                    ]}
+                  >
+                    <FitText style={[styles.modalName, { color: active ? colors.brand : colors.textPrimary }]}>
+                      {season.title}
+                    </FitText>
+                    <FitText style={styles.modalHint}>
+                      {new Date(season.startsAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })} – {new Date(season.endsAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </FitText>
+                  </Pressable>
+                );
+              }}
+              ListEmptyComponent={
+                <View style={styles.modalEmpty}>
+                  <FitText style={styles.sectionMessage}>No seasons match this search.</FitText>
+                </View>
+              }
+            />
+          </View>
+        </View>
+      </Modal>
+    </>
   );
 }

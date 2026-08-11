@@ -764,7 +764,6 @@ export function AccountInspectorFooter() {
     canEditTargetDetails,
     canManageMemberCard,
     canManualCheckInTarget,
-  canManageAccounts,
   canRestoreEditTarget,
   canArchiveEditTarget,
   canTerminateEditTarget,
@@ -774,13 +773,10 @@ export function AccountInspectorFooter() {
     isCoach,
     isMembershipCardPending,
     isManualAttendancePending,
-    isMembershipPaymentReviewPending,
     membershipCardLoadingLabel,
     manualCheckInLoadingLabel,
     openEditModal,
-    pendingMembershipPayment,
     setArchiveTarget,
-    setPaymentReviewAction,
   setGrantCardTarget,
   setRejectTerminationTarget,
   setRemoveMembershipTarget,
@@ -822,10 +818,6 @@ export function AccountInspectorFooter() {
           };
   const accountActionLabel = canRestoreEditTarget ? "Restore Account" : "Archive Account";
   const canRunAccountArchiveAction = canArchiveEditTarget || canRestoreEditTarget;
-  const canReviewMembershipPayment =
-    canManageAccounts &&
-    Boolean(editTarget) &&
-    Boolean(pendingMembershipPayment);
   const compactActionStyle: CSSProperties = {
     minHeight: 36,
     paddingInline: 8,
@@ -1043,50 +1035,9 @@ export function AccountInspectorFooter() {
                 textStyle={{ ...compactTextStyle, color: colors.danger }}
               />
             ) : null}
-            {canReviewMembershipPayment ? (
-              <>
-                <FitButton
-                  variant="ghost"
-                  label="Approve Payment"
-                  icon={CreditCard}
-                  iconSize={13}
-                  fullWidth
-                  disabled={isMembershipPaymentReviewPending}
-                  onClick={() => setPaymentReviewAction("approve")}
-                  style={{
-                    ...secondaryActionStyle,
-                    ...compactActionStyle,
-                    border: `1px solid ${colors.success}45`,
-                    backgroundColor: `${colors.success}10`,
-                  }}
-                  textStyle={{ ...compactTextStyle, color: colors.success }}
-                />
-                <FitButton
-                  variant="ghost"
-                  label="Reject Payment"
-                  icon={CreditCard}
-                  iconSize={13}
-                  fullWidth
-                  disabled={isMembershipPaymentReviewPending}
-                  onClick={() => setPaymentReviewAction("reject")}
-                  style={{
-                    ...secondaryActionStyle,
-                    ...compactActionStyle,
-                    border: `1px solid ${colors.danger}45`,
-                    backgroundColor: `${colors.danger}10`,
-                  }}
-                  textStyle={{ ...compactTextStyle, color: colors.danger }}
-                />
-              </>
-            ) : null}
           </div>
           {isMembershipCardPending ? (
             <FitText style={{ fontSize: 11, color: colors.textMuted }}>{membershipCardLoadingLabel}</FitText>
-          ) : null}
-          {canReviewMembershipPayment ? (
-            <FitText style={{ fontSize: 11, color: colors.textMuted }}>
-              Cash membership payment is awaiting staff verification.
-            </FitText>
           ) : null}
           {isManualAttendancePending ? (
             <FitText style={{ fontSize: 11, color: colors.textMuted }}>{manualCheckInLoadingLabel}</FitText>
