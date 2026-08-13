@@ -2,7 +2,12 @@ import { BookingRepository } from './booking.repository';
 
 describe('BookingRepository', () => {
   const payment = {
+    count: jest.fn(),
     create: jest.fn(),
+    findFirst: jest.fn(),
+    findMany: jest.fn(),
+    findUnique: jest.fn(),
+    updateMany: jest.fn(),
   };
   const amenity = {
     findUnique: jest.fn(),
@@ -11,16 +16,28 @@ describe('BookingRepository', () => {
   const amenityBooking = {
     count: jest.fn(),
     create: jest.fn(),
+    findFirst: jest.fn(),
     findMany: jest.fn(),
     findUnique: jest.fn(),
     update: jest.fn(),
+    updateMany: jest.fn(),
+  };
+  const coachProfile = { findUnique: jest.fn() };
+  const coachAppointment = { findMany: jest.fn() };
+  const commerceCheckoutHold = {
+    count: jest.fn(),
+    findMany: jest.fn(),
     updateMany: jest.fn(),
   };
 
   const prisma = {
     amenity,
     amenityBooking,
+    coachAppointment,
+    coachProfile,
+    commerceCheckoutHold,
     payment,
+    $executeRaw: jest.fn(),
     $transaction: jest.fn(),
   };
 
@@ -34,19 +51,45 @@ describe('BookingRepository', () => {
         callback: (client: {
           amenity: typeof amenity;
           amenityBooking: typeof amenityBooking;
+          coachAppointment: typeof coachAppointment;
+          coachProfile: typeof coachProfile;
+          commerceCheckoutHold: typeof commerceCheckoutHold;
           payment: typeof payment;
+          $executeRaw: typeof prisma.$executeRaw;
         }) => unknown,
       ) =>
         callback({
           amenity,
           amenityBooking,
+          coachAppointment,
+          coachProfile,
+          commerceCheckoutHold,
           payment,
+          $executeRaw: prisma.$executeRaw,
         }),
     );
     amenity.findUnique.mockResolvedValue({
       capacity: 1,
       is_active: true,
     });
+    amenityBooking.findMany.mockResolvedValue([]);
+    coachAppointment.findMany.mockResolvedValue([]);
+    coachProfile.findUnique.mockResolvedValue({
+      availability_slots: [
+        {
+          day_of_week: 2,
+          end_time: new Date(Date.UTC(1970, 0, 1, 23, 59)),
+          start_time: new Date(Date.UTC(1970, 0, 1, 0, 0)),
+        },
+      ],
+      is_available_for_booking: true,
+    });
+    commerceCheckoutHold.count.mockResolvedValue(0);
+    commerceCheckoutHold.findMany.mockResolvedValue([]);
+    commerceCheckoutHold.updateMany.mockResolvedValue({ count: 0 });
+    payment.findMany.mockResolvedValue([]);
+    payment.count.mockResolvedValue(0);
+    payment.updateMany.mockResolvedValue({ count: 0 });
   });
 
   it('lists overlapping bookings using active capacity statuses only', async () => {
@@ -176,6 +219,67 @@ describe('BookingRepository', () => {
       },
     });
     expect(include.user.select).not.toHaveProperty('qr_code_token');
+  });
+
+  it('returns only fully paid venue add-ons owned by the authenticated coach', async () => {
+    const paidBooking = {
+      id: 'booking-paid',
+      coach_id: 'coach-1',
+      starts_at: new Date('2099-03-24T10:00:00.000Z'),
+      created_at: new Date('2099-03-20T10:00:00.000Z'),
+    };
+    const unpaidBooking = {
+      id: 'booking-unpaid',
+      coach_id: 'coach-1',
+      starts_at: new Date('2099-03-25T10:00:00.000Z'),
+      created_at: new Date('2099-03-20T10:00:00.000Z'),
+    };
+    amenityBooking.findMany.mockResolvedValue([paidBooking, unpaidBooking]);
+    payment.findMany.mockResolvedValue([{ payable_id: 'booking-paid' }]);
+
+    const result = await repository.getCoachVenueWork('coach-user-1', {
+      page: 1,
+      limit: 20,
+    });
+
+    expect(result.data).toEqual([paidBooking]);
+    expect(amenityBooking.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          coach: { is: { user_id: 'coach-user-1' } },
+          status: {
+            in: ['confirmed', 'completed', 'cancelled', 'no_show'],
+          },
+        }),
+      }),
+    );
+    expect(payment.findMany).toHaveBeenCalledWith({
+      where: {
+        payable_id: { in: ['booking-paid', 'booking-unpaid'] },
+        payable_type: 'booking',
+        payment_stage: 'full',
+        status: 'completed',
+      },
+      select: { payable_id: true },
+    });
+  });
+
+  it('authorizes venue delivery only for the assigned coach with full payment provenance', async () => {
+    amenityBooking.findFirst.mockResolvedValue({ id: 'booking-1' });
+    payment.count.mockResolvedValue(1);
+    commerceCheckoutHold.count.mockResolvedValue(0);
+
+    await expect(
+      repository.isFullyPaidCoachVenueWork('booking-1', 'coach-user-1'),
+    ).resolves.toBe(true);
+    expect(amenityBooking.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'booking-1',
+        coach: { is: { user_id: 'coach-user-1' } },
+        total_amount: { gt: 0 },
+      },
+      select: { id: true },
+    });
   });
 
   it('persists optional coach linkage on confirmed free bookings', async () => {

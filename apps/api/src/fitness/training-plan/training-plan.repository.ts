@@ -53,6 +53,7 @@ export type TrainingPlanScheduleDayWriteInput = {
   dayOfWeek: number;
   focusLabel?: string | null;
   notes?: string | null;
+  isRestDay?: boolean | null;
   exercises: TrainingPlanExerciseWriteInput[];
 };
 
@@ -270,6 +271,9 @@ export class TrainingPlanRepository extends BaseRepository {
       day_of_week: day.dayOfWeek,
       focus_label: day.focusLabel ?? null,
       notes: day.notes ?? null,
+      ...(day.isRestDay === undefined
+        ? {}
+        : { is_rest_day: day.isRestDay }),
       exercises: {
         create: day.exercises.map((exercise) => ({
           exercise: { connect: { id: exercise.exerciseId } },

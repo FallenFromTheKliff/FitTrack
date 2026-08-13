@@ -1,16 +1,14 @@
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   BadRequestException,
-  ConflictException,
   ForbiddenException,
-  HttpException,
-  HttpStatus,
   Injectable,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
 import { AuditAction, AuditEvent } from '../../audit/audit.service';
 import { PaginatedResult } from '../../common/base-repository/base-repository';
+import { CoachAvailabilityService } from '../availability/coach-availability.service';
 import {
   AdminCoachDetailResponseDTO,
   CreateStandaloneCoachDTO,
@@ -65,7 +63,6 @@ const COACH_STAFF_UPDATE_FIELDS = [
   'monthly_offer_active',
 ] as const;
 const EMAIL_LIKE_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const GYM_TIMEZONE_OFFSET_MINUTES = 8 * 60;
 
 function pickDefined<T extends object, K extends keyof T>(
   source: T,
@@ -115,6 +112,7 @@ export class CoachService {
   constructor(
     private readonly repo: CoachRepository,
     private readonly eventEmitter: EventEmitter2,
+    private readonly coachAvailabilityService: CoachAvailabilityService,
   ) {}
 
   async listCoaches(
@@ -265,52 +263,14 @@ export class CoachService {
     endsAt: Date,
   ): Promise<CoachDetailRecord> {
     const coach = await this.repo.findCoachByIdOrThrow(coachId);
-
-    if (!coach.is_available_for_booking) {
-      throw this.buildCoachUnavailableError();
-    }
-
-    if (this.toGymDateKey(startsAt) !== this.toGymDateKey(endsAt)) {
-      throw new HttpException(
-        {
-          type: 'BUSINESS_RULE_VIOLATION',
-          title: 'Invalid Coach Reservation Window',
-          status: 422,
-          detail:
-            'Coach-linked venue reservations must begin and end on the same gym calendar day.',
-        },
-        HttpStatus.UNPROCESSABLE_ENTITY,
-      );
-    }
-
-    const dayOfWeek = this.toGymDayOfWeek(startsAt);
-    const slotStart = this.toTimeValue(this.toGymTimeString(startsAt));
-    const slotEnd = this.toTimeValue(this.toGymTimeString(endsAt));
-    const hasAvailability = coach.availability_slots.some(
-      (slot) =>
-        slot.day_of_week === dayOfWeek &&
-        slot.start_time.getTime() <= slotStart.getTime() &&
-        slot.end_time.getTime() >= slotEnd.getTime(),
+    const durationMinutes = Math.round(
+      (endsAt.getTime() - startsAt.getTime()) / 60_000,
     );
-
-    if (!hasAvailability) {
-      throw this.buildCoachUnavailableError();
-    }
-
-    const hasAppointmentConflict = await this.repo.hasActiveAppointmentConflict(
+    await this.coachAvailabilityService.assertAvailable({
       coachId,
+      durationMinutes,
       startsAt,
-      endsAt,
-    );
-    if (hasAppointmentConflict) {
-      throw this.buildCoachConflictError();
-    }
-
-    const hasLinkedBookingConflict =
-      await this.repo.hasActiveLinkedBookingConflict(coachId, startsAt, endsAt);
-    if (hasLinkedBookingConflict) {
-      throw this.buildCoachConflictError();
-    }
+    });
 
     return coach;
   }
@@ -551,50 +511,6 @@ export class CoachService {
     const hours = value.getUTCHours().toString().padStart(2, '0');
     const minutes = value.getUTCMinutes().toString().padStart(2, '0');
     return `${hours}:${minutes}`;
-  }
-
-  private toTimeValue(value: string): Date {
-    const [hours = 0, minutes = 0] = value.split(':').map(Number);
-    return new Date(Date.UTC(1970, 0, 1, hours, minutes, 0, 0));
-  }
-
-  private toGymWallClockDate(value: Date): Date {
-    return new Date(value.getTime() + GYM_TIMEZONE_OFFSET_MINUTES * 60 * 1000);
-  }
-
-  private toGymDateKey(value: Date): string {
-    return this.toGymWallClockDate(value).toISOString().slice(0, 10);
-  }
-
-  private toGymDayOfWeek(value: Date): number {
-    return this.toGymWallClockDate(value).getUTCDay();
-  }
-
-  private toGymTimeString(value: Date): string {
-    return this.toTimeString(this.toGymWallClockDate(value));
-  }
-
-  private buildCoachUnavailableError(): HttpException {
-    return new HttpException(
-      {
-        type: 'BUSINESS_RULE_VIOLATION',
-        title: 'Coach Unavailable',
-        status: 422,
-        detail:
-          'The selected coach is not currently available for this reservation window.',
-      },
-      HttpStatus.UNPROCESSABLE_ENTITY,
-    );
-  }
-
-  private buildCoachConflictError(): ConflictException {
-    return new ConflictException({
-      type: 'SCHEDULE_CONFLICT',
-      title: 'Coach Schedule Conflict',
-      status: 409,
-      detail:
-        'The selected coach already has another appointment or reservation during that time.',
-    });
   }
 
   private didCommissionChange(

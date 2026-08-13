@@ -20,6 +20,7 @@ import {
 import { seedId } from '../ids';
 import { daysFrom, yearsAgo } from '../time';
 import type { DynamicSeedContext, SeedAccount } from '../types';
+import { activityDateFor, memberVolumeCount } from '../volumes';
 
 const PASSWORD_HASH_ROUNDS = 12;
 const credentialHashCache = new Map<string, Promise<string>>();
@@ -110,11 +111,15 @@ async function seedAccount(
   const status =
     account.status ??
     (account.emailVerified === false ? UserStatus.pending : UserStatus.active);
+  const deletedAt =
+    account.memberPersona === 'archived'
+      ? daysFrom(ctx.config.anchorDate, -45, 9)
+      : (account.deletedAt ?? null);
 
   await ctx.prisma.user.upsert({
     where: { id: userId },
     update: {
-      deletedAt: account.deletedAt ?? null,
+      deletedAt,
       email_verified_at: verifiedAt,
       has_accepted_privacy: Boolean(acceptedAt),
       phone_verified_at: verifiedAt,
@@ -136,7 +141,7 @@ async function seedAccount(
     },
     create: {
       id: userId,
-      deletedAt: account.deletedAt ?? null,
+      deletedAt,
       email_verified_at: verifiedAt,
       has_accepted_privacy: Boolean(acceptedAt),
       phone_verified_at: verifiedAt,
@@ -253,9 +258,17 @@ async function seedAccount(
 
 async function seedSecondaryUserData(ctx: DynamicSeedContext) {
   const staffId = ctx.state.userIds[ctx.state.staffKeys[0]];
-  const activeMemberKeys = ctx.state.activeMemberKeys.slice(0, 36);
+  const activityMemberKeys = [
+    ...ctx.state.activeMemberKeys,
+    ...ctx.state.historicalMemberKeys,
+  ];
   const feedbackRows = ctx.state.accounts
-    .slice(0, 24)
+    .filter(
+      (account) =>
+        account.role !== UserRole.member ||
+        !ctx.state.restrictedMemberKeys.includes(account.key),
+    )
+    .slice(0, 48)
     .map((account, index) => ({
       id: seedId(`app-feedback:${account.key}:${index}`),
       category:
@@ -268,43 +281,75 @@ async function seedSecondaryUserData(ctx: DynamicSeedContext) {
       user_id: ctx.state.userIds[account.key],
     }));
 
-  const metricRows = activeMemberKeys.flatMap((memberKey, memberIndex) =>
-    [0, 1, 2].map((metricIndex) => ({
-      id: seedId(`progress-metric:${memberKey}:${metricIndex}`),
-      body_fat_pct: new Prisma.Decimal(18 + ((memberIndex + metricIndex) % 10)),
-      chest_cm: new Prisma.Decimal(82 + ((memberIndex + metricIndex) % 18)),
-      height_cm: new Prisma.Decimal(156 + (memberIndex % 24)),
-      muscle_mass_kg: new Prisma.Decimal(
-        28 + ((memberIndex + metricIndex) % 14),
-      ),
-      notes:
-        metricIndex === 2
-          ? 'Trend check after seeded training block.'
-          : 'Baseline measurement for demo analytics.',
-      recorded_at: daysFrom(ctx.config.anchorDate, -45 + metricIndex * 15, 7),
-      user_id: ctx.state.userIds[memberKey],
-      waist_cm: new Prisma.Decimal(70 + ((memberIndex + metricIndex) % 16)),
-      weight_kg: new Prisma.Decimal(55 + ((memberIndex + metricIndex) % 32)),
-    })),
+  const metricRows = activityMemberKeys.flatMap((memberKey, memberIndex) =>
+    [0, 1, 2].flatMap((metricIndex) => {
+      const recordedAt = activityDateFor(
+        ctx,
+        memberKey,
+        metricIndex,
+        3,
+        7,
+      );
+      return recordedAt
+        ? [
+            {
+              id: seedId(`progress-metric:${memberKey}:${metricIndex}`),
+              body_fat_pct: new Prisma.Decimal(
+                18 + ((memberIndex + metricIndex) % 10),
+              ),
+              chest_cm: new Prisma.Decimal(
+                82 + ((memberIndex + metricIndex) % 18),
+              ),
+              height_cm: new Prisma.Decimal(156 + (memberIndex % 24)),
+              muscle_mass_kg: new Prisma.Decimal(
+                28 + ((memberIndex + metricIndex) % 14),
+              ),
+              notes:
+                metricIndex === 2
+                  ? 'Trend check after seeded training block.'
+                  : 'Baseline measurement for demo analytics.',
+              recorded_at: recordedAt,
+              user_id: ctx.state.userIds[memberKey],
+              waist_cm: new Prisma.Decimal(
+                70 + ((memberIndex + metricIndex) % 16),
+              ),
+              weight_kg: new Prisma.Decimal(
+                55 + ((memberIndex + metricIndex) % 32),
+              ),
+            },
+          ]
+        : [];
+    }),
   );
 
-  const attendanceRows = activeMemberKeys.flatMap((memberKey, memberIndex) =>
-    [0, 1, 2, 3].map((scanIndex) => {
-      const checkIn = daysFrom(
-        ctx.config.anchorDate,
-        -28 + scanIndex * 5 + (memberIndex % 3),
+  const attendanceRows = activityMemberKeys.flatMap((memberKey, memberIndex) => {
+    const attendanceCount = memberVolumeCount(
+      ctx,
+      memberKey,
+      'attendance',
+      'normal',
+    );
+    return Array.from({ length: attendanceCount }, (_, scanIndex) => {
+      const checkIn = activityDateFor(
+        ctx,
+        memberKey,
+        scanIndex,
+        attendanceCount,
         6 + ((memberIndex + scanIndex) % 13),
         scanIndex % 2 === 0 ? 15 : 45,
       );
+      if (!checkIn) {
+        return null;
+      }
       return {
         id: seedId(`attendance:${memberKey}:${scanIndex}`),
         check_in_at: checkIn,
-        check_out_at: daysFrom(checkIn, 0, checkIn.getHours() + 1, 35),
+        check_out_at: daysFrom(checkIn, 0, checkIn.getUTCHours() + 1, 35),
         scanned_by: staffId,
         user_id: ctx.state.userIds[memberKey],
       };
-    }),
-  );
+    }).filter((row): row is NonNullable<typeof row> => row !== null);
+  });
 
   const deletionRequests = ctx.state.accounts
     .filter((account) =>

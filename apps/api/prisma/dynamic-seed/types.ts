@@ -11,6 +11,14 @@ import type { SeedRandom } from './random';
 export type DynamicSeedMode = 'additive' | 'reset';
 export type DynamicSeedTarget = 'local' | 'railway';
 
+export type MemberCohort =
+  | 'power'
+  | 'frequent'
+  | 'regular'
+  | 'light_trial'
+  | 'historical_only'
+  | 'pending_unverified_suspended';
+
 export type DynamicSeedConfig = {
   allowRemoteReset: boolean;
   anchorDate: Date;
@@ -81,11 +89,14 @@ export type SeedState = {
   coachProfileIds: Record<string, string>;
   demoCredentials: SeedCredential[];
   exerciseIds: Record<string, string>;
+  historicalMemberKeys: string[];
   macroTargetIds: Record<string, string>;
   memberKeys: string[];
+  memberCohorts: Record<string, MemberCohort>;
   membershipPlanIds: Record<string, string>;
   premiumMemberKeys: string[];
   productIds: Record<string, string>;
+  restrictedMemberKeys: string[];
   seasonId?: string;
   staffKeys: string[];
   tdeeProfileIds: Record<string, string>;
@@ -114,11 +125,14 @@ export function createInitialSeedState(): SeedState {
     coachProfileIds: {},
     demoCredentials: [],
     exerciseIds: {},
+    historicalMemberKeys: [],
     macroTargetIds: {},
     memberKeys: [],
+    memberCohorts: {},
     membershipPlanIds: {},
     premiumMemberKeys: [],
     productIds: {},
+    restrictedMemberKeys: [],
     staffKeys: [],
     tdeeProfileIds: {},
     userIds: {},

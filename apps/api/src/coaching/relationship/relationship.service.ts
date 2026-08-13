@@ -16,19 +16,17 @@ import {
   RelationshipCoachSummaryResponseDTO,
   RelationshipMemberSummaryResponseDTO,
   RelationshipResponseDTO,
+  RelationshipUpcomingSessionResponseDTO,
   RelationshipUserProfileResponseDTO,
   RequestRelationshipDTO,
   UpdateRelationshipDTO,
 } from './dto/relationship.dto';
 import {
+  CoachClientRecord,
   RelationshipRecord,
   RelationshipRepository,
   ReviewAppointmentContext,
 } from './relationship.repository';
-import {
-  RELATIONSHIP_REQUESTED_EVENT,
-  type RelationshipRequestedEvent,
-} from './events/relationship-requested.event';
 import {
   RELATIONSHIP_STATUS_CHANGED_EVENT,
   type RelationshipStatusChangedEvent,
@@ -69,42 +67,18 @@ export class RelationshipService {
     userId: string,
     dto: RequestRelationshipDTO,
   ): Promise<RelationshipResponseDTO> {
-    const coach = await this.repo.findCoachByIdOrThrow(dto.coach_id);
-
-    if (coach.user_id === userId) {
-      throw new ForbiddenException({
-        type: 'FORBIDDEN',
-        title: 'Relationship Request Forbidden',
-        status: 403,
+    void userId;
+    void dto;
+    throw new HttpException(
+      {
+        type: 'GONE',
+        title: 'Relationship Requests Retired',
+        status: HttpStatus.GONE,
         detail:
-          'Coaches cannot request a coaching relationship with themselves.',
-      });
-    }
-
-    const existing = await this.repo.findOpenRelationshipPair(coach.id, userId);
-
-    if (existing) {
-      throw new ConflictException({
-        type: 'CONFLICT',
-        title: 'Relationship Already Exists',
-        status: 409,
-        detail:
-          'An active or pending coaching relationship already exists for this coach-member pair.',
-      });
-    }
-
-    const created = await this.repo.createRelationship({
-      coachId: coach.id,
-      memberId: userId,
-      notes: dto.notes,
-    });
-    this.emitRelationshipRequested({
-      relationshipId: created.id,
-      coachId: created.coach_id,
-      memberId: created.member_id,
-    });
-
-    return this.toRelationshipResponse(created);
+          'Coaching clients are created only after full online payment or an atomic staff cash enrollment.',
+      },
+      HttpStatus.GONE,
+    );
   }
 
   async getMyRelationships(userId: string): Promise<RelationshipResponseDTO[]> {
@@ -141,10 +115,30 @@ export class RelationshipService {
     if (!relationship) {
       throw new ForbiddenException({
         type: 'FORBIDDEN',
-        title: 'Training Plan Assignment Forbidden',
+      title: 'Coach Client Relationship Required',
+      status: 403,
+      detail:
+        'You can only create coach-managed appointments or assign training plans to members with an active coaching relationship.',
+      });
+    }
+  }
+
+  async assertCoachClientAccess(
+    coachUserId: string,
+    memberId: string,
+  ): Promise<void> {
+    const coach = await this.repo.findCoachByUserIdOrThrow(coachUserId);
+    if (await this.repo.findValidPaidOneTimeAppointment(coach.id, memberId)) {
+      return;
+    }
+
+    if (!(await this.repo.findActivePaidMonthlyPlan(coach.id, memberId))) {
+      throw new ForbiddenException({
+        type: 'FORBIDDEN',
+        title: 'Coach Client Access Required',
         status: 403,
         detail:
-          'You can only assign training plans to members with an active coaching relationship.',
+          'You can only manage a member with an active monthly relationship or a valid paid one-time coaching appointment.',
       });
     }
   }
@@ -363,7 +357,7 @@ export class RelationshipService {
   }
 
   private toRelationshipResponse(
-    relationship: RelationshipRecord,
+    relationship: CoachClientRecord,
   ): RelationshipResponseDTO {
     return {
       id: relationship.id,
@@ -381,7 +375,7 @@ export class RelationshipService {
   }
 
   private toCoachSummary(
-    relationship: RelationshipRecord,
+    relationship: CoachClientRecord,
   ): RelationshipCoachSummaryResponseDTO {
     return {
       id: relationship.coach.id,
@@ -392,28 +386,68 @@ export class RelationshipService {
   }
 
   private toMemberSummary(
-    relationship: RelationshipRecord,
+    relationship: CoachClientRecord,
   ): RelationshipMemberSummaryResponseDTO {
     return {
+      email:
+        relationship.member.auth_identities.find(
+          (identity) => identity.provider === 'email',
+        )?.identifier ??
+        relationship.member.auth_identities[0]?.identifier ??
+        null,
+      email_verified: relationship.member.email_verified_at !== null,
       id: relationship.member.id,
+      last_check_in_at:
+        relationship.member.attendance_logs[0]?.check_in_at?.toISOString() ??
+        null,
+      membership_card: relationship.member.membership_card
+        ? { status: relationship.member.membership_card.status }
+        : null,
+      phone_no: relationship.member.profile?.phone ?? null,
+      phone_verified: relationship.member.phone_verified_at !== null,
       profile: this.toUserProfile(relationship.member.profile),
+      status: relationship.member.status,
+      upcoming_sessions: (relationship.member.member_appointments ?? [])
+        .filter((appointment) => appointment.coach_id === relationship.coach_id)
+        .map(
+          (appointment): RelationshipUpcomingSessionResponseDTO => ({
+            duration_minutes: appointment.duration_minutes,
+            id: appointment.id,
+            scheduled_at: appointment.scheduled_at.toISOString(),
+            status: appointment.status,
+          }),
+        ),
     };
   }
 
   private toUserProfile(
     profile:
       | {
+          activity_level: string | null;
+          date_of_birth: Date | null;
           first_name: string;
-          last_name: string;
-          avatar_url: string | null;
+          fitness_goal: string | null;
+          gender: string | null;
+          height_cm: Prisma.Decimal | null;
+           last_name: string;
+           avatar_url: string | null;
+           membership_type?: string | null;
+          weight_kg: Prisma.Decimal | null;
         }
       | null
       | undefined,
   ): RelationshipUserProfileResponseDTO {
     return {
+      activity_level: profile?.activity_level ?? null,
+      date_of_birth: profile?.date_of_birth?.toISOString() ?? null,
       first_name: profile?.first_name ?? null,
+      fitness_goal: profile?.fitness_goal ?? null,
+      gender: profile?.gender ?? null,
+      height_cm: profile?.height_cm?.toNumber() ?? null,
       last_name: profile?.last_name ?? null,
       avatar_url: profile?.avatar_url ?? null,
+      membership_type: profile?.membership_type ?? null,
+      weight_kg: profile?.weight_kg?.toNumber() ?? null,
     };
   }
 
@@ -434,10 +468,6 @@ export class RelationshipService {
       created_at: review.created_at.toISOString(),
       updated_at: review.updated_at.toISOString(),
     };
-  }
-
-  private emitRelationshipRequested(event: RelationshipRequestedEvent): void {
-    this.eventEmitter.emit(RELATIONSHIP_REQUESTED_EVENT, event);
   }
 
   private emitRelationshipStatusChanged(

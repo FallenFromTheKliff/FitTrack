@@ -1,19 +1,13 @@
 "use client";
 
-import { useMemo } from "react";
 import { Check, Filter, LayoutGrid, List, X } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-import type { CoachAppointmentScheduleRecord } from "@fittrack/api-client";
-import { coachScheduleQueryOptions } from "@fittrack/query";
 import type { MemberRecord } from "@fittrack/types";
 import { fullName } from "@fittrack/utils";
 
 import MembersDirectoryPanel from "@/components/accounts/MembersDirectoryPanel";
 import { FitButton, FitPill, FitSearch, FitSelect, FitText } from "@/components/fit";
 import type { FitTableColumn } from "@/components/fit/FitTable";
-import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
-import { webApiClient } from "@/lib/api-client";
 import type { MemberStatusTab } from "@/data/members/members";
 import {
   formatLastCheckIn,
@@ -25,12 +19,12 @@ import {
   getScanReadinessLabel,
 } from "@/components/accounts/accountComponentUtils";
 
+import CoachClientInspectorSurface from "./coach-client/CoachClientInspectorSurface";
 import AccountsInspectorSurface from "./AccountsInspectorSurface";
-import { useAccountsPage, type CoachClientPanelMode } from "./AccountsPageContext";
+import { useAccountsPage } from "./AccountsPageContext";
 
 export default function AccountsDirectorySurface() {
   const { colors } = useTheme();
-  const { user } = useAuth();
   const {
     activeChip,
     activeCoachActivityLevel,
@@ -38,7 +32,7 @@ export default function AccountsDirectorySurface() {
     activeCoachSessionStatus,
     activeStatus,
     activeTier,
-    coachClientPanelMode,
+    coachClientSummary,
     directoryEmptyMessage,
     directoryPageSize,
     editTarget,
@@ -59,7 +53,6 @@ export default function AccountsDirectorySurface() {
     setActiveCoachSessionStatus,
     setActiveStatus,
     setActiveTier,
-    setCoachClientPanelMode,
     setPage,
     setQ,
     setViewMode,
@@ -68,66 +61,6 @@ export default function AccountsDirectorySurface() {
     totalPages,
     viewMode,
   } = useAccountsPage();
-
-  const { data: coachAppointments = [] } = useQuery({
-    ...coachScheduleQueryOptions<CoachAppointmentScheduleRecord>(webApiClient, user?.id),
-    enabled: isCoach && Boolean(user?.id),
-  });
-  const coachClientSummary = useMemo(() => {
-    const now = Date.now();
-    const byClient = new Map<
-      string,
-      {
-        completed: number;
-        nextSessionLabel: string;
-        nextSessionTime: number | null;
-        notReviewed: number;
-        total: number;
-        upcoming: number;
-      }
-    >();
-
-    for (const appointment of coachAppointments) {
-      const userId = appointment.userId;
-      const current =
-        byClient.get(userId) ??
-        {
-          completed: 0,
-          nextSessionLabel: "None scheduled",
-          nextSessionTime: null,
-          notReviewed: 0,
-          total: 0,
-          upcoming: 0,
-        };
-      const status = appointment.status ?? "";
-      const isCompleted = status === "completed";
-      const isCancelled = status === "cancelled";
-      const scheduledTime = new Date(appointment.scheduledAt).getTime();
-
-      current.total += 1;
-      if (isCompleted) {
-        current.completed += 1;
-        if (!appointment.review) current.notReviewed += 1;
-      } else if (!isCancelled) {
-        current.upcoming += 1;
-        if (
-          Number.isFinite(scheduledTime) &&
-          scheduledTime >= now &&
-          (current.nextSessionTime == null || scheduledTime < current.nextSessionTime)
-        ) {
-          current.nextSessionTime = scheduledTime;
-          current.nextSessionLabel = new Intl.DateTimeFormat("en-PH", {
-            dateStyle: "medium",
-            timeStyle: "short",
-          }).format(new Date(scheduledTime));
-        }
-      }
-
-      byClient.set(userId, current);
-    }
-
-    return byClient;
-  }, [coachAppointments]);
 
   const coachMembershipStatusOptions = [
     { label: "All Clients", value: "all" },
@@ -812,59 +745,8 @@ export default function AccountsDirectorySurface() {
     );
   };
 
-  const coachClientModeTabs = isCoach ? (
-    <div
-      role="tablist"
-      aria-label="Coach client workspace"
-      style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-        gap: 8,
-        minWidth: 0,
-      }}
-    >
-      {[
-        ["overview", "Client"],
-        ["schedule", "Schedule"],
-        ["feedback", "Feedback"],
-      ].map(([mode, label]) => {
-        const typedMode = mode as CoachClientPanelMode;
-        const isActive = coachClientPanelMode === typedMode;
-
-        return (
-          <button
-            key={mode}
-            type="button"
-            role="tab"
-            aria-selected={isActive}
-            onClick={() => setCoachClientPanelMode(typedMode)}
-            style={{
-              minHeight: 36,
-              borderRadius: 8,
-              border: `1px solid ${isActive ? `${colors.brand}66` : colors.border}`,
-              backgroundColor: isActive ? `${colors.brand}14` : colors.surface,
-              color: isActive ? colors.brand : colors.textSecondary,
-              cursor: "pointer",
-              padding: "7px 10px",
-              boxShadow: isActive ? `0 0 0 1px ${colors.brand}18 inset` : "none",
-            }}
-          >
-            <FitText
-              as="span"
-              excludeGlobalScale
-              style={{ fontSize: 11, fontWeight: 850, lineHeight: 1 }}
-            >
-              {label}
-            </FitText>
-          </button>
-        );
-      })}
-    </div>
-  ) : null;
-
   const directoryToolbar = (
     <div style={{ display: "grid", gap: 10, minWidth: 0 }}>
-      {coachClientModeTabs}
       <div
         className={isCoach ? "members-directory-toolbar members-directory-toolbar-coach" : "members-directory-toolbar"}
         style={{
@@ -1189,7 +1071,7 @@ export default function AccountsDirectorySurface() {
         totalPages={totalPages}
         viewMode={viewMode}
       />
-      <AccountsInspectorSurface />
+      {isCoach ? <CoachClientInspectorSurface /> : <AccountsInspectorSurface />}
     </div>
   );
 }

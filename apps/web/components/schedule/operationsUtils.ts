@@ -8,19 +8,17 @@ import type { VenueBookingRecord } from "@/contexts/ScheduleContext";
 const EMAIL_LIKE_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function getReadableStatus(status?: string) {
-  return (status ?? "unknown")
+  const normalized = (status ?? "unknown").toLowerCase();
+  if (["pending", "pending_coach"].includes(normalized)) {
+    return "Processing";
+  }
+  return normalized
     .replace(/_/g, " ")
     .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
 export function getAppointmentStatusColor(status: string | undefined, colors: ThemeColors) {
   switch (status) {
-    case "pending_coach":
-      return colors.warning;
-    case "pending_downpayment":
-    case "pending_payment":
-    case "pending_full_payment":
-      return colors.brand;
     case "confirmed":
       return colors.success;
     case "completed":
@@ -118,30 +116,7 @@ export function formatAppointmentWindow(appointment: StaffAppointmentRecord) {
   };
 }
 
-export function isPendingFullCoachPayment(appointment: StaffAppointmentRecord) {
-  return (
-    appointment.status === "confirmed" &&
-    (appointment.remainingBalance ?? 0) > 0 &&
-    !appointment.balancePaidAt
-  );
-}
-
 export function getCoachAppointmentPaymentStatus(appointment: StaffAppointmentRecord) {
-  if (isPendingFullCoachPayment(appointment)) {
-    return "pending_full_payment";
-  }
-  if (
-    appointment.status === "pending_payment" &&
-    appointment.activePaymentStage === "full"
-  ) {
-    return "pending_full_payment";
-  }
-  if (
-    appointment.status === "pending_payment" &&
-    appointment.activePaymentStage === "downpayment"
-  ) {
-    return "pending_downpayment";
-  }
   return appointment.status;
 }
 
@@ -180,11 +155,6 @@ export function mapAppointmentToTimelineBooking(
 
 export function getAppointmentActionLabel(status?: string) {
   switch (status) {
-    case "pending_coach":
-    case "pending_downpayment":
-    case "pending_payment":
-    case "pending_full_payment":
-      return "Review";
     case "confirmed":
       return "Open";
     case "completed":
@@ -199,12 +169,6 @@ export function getAppointmentActionLabel(status?: string) {
 
 export function getVenueBookingActionLabel(status?: string) {
   switch (status) {
-    case "pending":
-    case "pending_downpayment":
-    case "pending_payment":
-    case "pending_full_payment":
-    case "balance_pending":
-      return "Review";
     case "confirmed":
       return "Open";
     case "completed":
@@ -217,44 +181,15 @@ export function getVenueBookingActionLabel(status?: string) {
 }
 
 export function getVenueBookingPaymentStatus(booking: VenueBookingRecord) {
-  const normalized = (booking.status ?? "pending").toLowerCase();
-  const remainingBalance = Number(booking.remainingBalance ?? 0);
-  const hasOutstandingBalance = remainingBalance > 0 && !booking.balancePaidAt;
-
-  if (normalized === "cancelled" || normalized === "completed") {
-    return normalized;
-  }
-  if (normalized === "balance_pending") {
-    return "pending_full_payment";
-  }
-  if (normalized === "confirmed" && hasOutstandingBalance) {
-    return "pending_full_payment";
-  }
-  if (normalized === "pending") {
-    if (booking.paymentPlan === "downpayment" || hasOutstandingBalance) {
-      return "pending_downpayment";
-    }
-    if (booking.paymentPlan === "full" || Number(booking.totalAmount ?? 0) > 0) {
-      return "pending_full_payment";
-    }
-  }
-
-  return normalized;
+  return (booking.status ?? "unknown").toLowerCase();
 }
 
 export function getVenueBookingStatusColor(booking: VenueBookingRecord, colors: ThemeColors) {
   const paymentStatus = getVenueBookingPaymentStatus(booking);
-  if (
-    paymentStatus === "pending" ||
-    paymentStatus === "pending_downpayment" ||
-    paymentStatus === "pending_payment" ||
-    paymentStatus === "pending_full_payment"
-  ) {
-    return colors.warning;
-  }
   if (paymentStatus === "confirmed") return colors.success;
   if (paymentStatus === "completed") return colors.textMuted;
-  return colors.danger;
+  if (paymentStatus === "cancelled" || paymentStatus === "no_show") return colors.danger;
+  return colors.textMuted;
 }
 
 export function getDisplayInitials(label: string) {

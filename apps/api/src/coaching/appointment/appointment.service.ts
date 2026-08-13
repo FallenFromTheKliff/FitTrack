@@ -1,6 +1,7 @@
 import {
   ConflictException,
   ForbiddenException,
+  GoneException,
   HttpException,
   HttpStatus,
   Injectable,
@@ -19,7 +20,6 @@ import {
   RecurringCoachingSessionState,
   UserRole,
 } from '@prisma/client';
-import { randomUUID } from 'crypto';
 import { isUUID } from 'class-validator';
 
 import { AuditAction, AuditEvent } from '../../audit/audit.service';
@@ -49,6 +49,7 @@ import {
   CreateAppointmentDTO,
   InitiateAppointmentPaymentDTO,
   RespondAppointmentDTO,
+  RescheduleAppointmentDTO,
   SetAvailabilityDTO,
   StaffAppointmentFilterDTO,
   StaffAppointmentResponseDTO,
@@ -74,6 +75,15 @@ import {
   type AppointmentConfirmedEvent,
 } from './events/appointment-confirmed.event';
 import { RecurringCoachingPlanService } from '../recurring-plan/recurring-coaching-plan.service';
+import { RelationshipService } from '../relationship/relationship.service';
+import {
+  CoachAvailabilityQueryDTO,
+} from './dto/appointment.dto';
+import { CoachAvailabilityService } from '../availability/coach-availability.service';
+import {
+  CoachingCheckoutResponse,
+  CoachingCommerceService,
+} from '../commerce/coaching-commerce.service';
 
 const DOWNPAYMENT_RATE = new Prisma.Decimal('0.30');
 const ZERO_DECIMAL = new Prisma.Decimal('0');
@@ -144,7 +154,18 @@ export class AppointmentService {
     private readonly paymongoCheckoutService: PaymongoCheckoutService,
     private readonly eventEmitter: EventEmitter2,
     private readonly recurringPlanService: RecurringCoachingPlanService,
+    private readonly relationshipService: RelationshipService,
+    private readonly coachingCommerceService: CoachingCommerceService,
+    private readonly coachAvailabilityService: CoachAvailabilityService,
   ) {}
+
+  getAvailability(coachId: string, dto: CoachAvailabilityQueryDTO) {
+    return this.coachAvailabilityService.getSlots({
+      coachId,
+      date: dto.date,
+      durationMinutes: dto.duration_minutes,
+    });
+  }
 
   async setAvailability(
     userId: string,
@@ -183,7 +204,8 @@ export class AppointmentService {
   async createAppointment(
     userId: string,
     dto: CreateAppointmentDTO,
-  ): Promise<AppointmentResponseDTO> {
+    idempotencyKey?: string,
+  ): Promise<CoachingCheckoutResponse> {
     const scheduledAt = this.parseScheduledAt(dto.scheduled_at);
     const coach = await this.repo.findCoachScheduleContextOrThrow(dto.coach_id);
     const appointmentEndsAt = new Date(
@@ -205,9 +227,6 @@ export class AppointmentService {
       );
     }
 
-    const slotStart = this.toTimeValue(this.toGymTimeString(scheduledAt));
-    const slotEnd = this.toTimeValue(this.toGymTimeString(appointmentEndsAt));
-
     if (!coach.is_available_for_booking) {
       throw this.buildUnavailableCoachError();
     }
@@ -221,21 +240,17 @@ export class AppointmentService {
       isFreeSession,
     );
 
-    const appointment = await this.repo.createPendingAppointment({
-      userId,
+    // A member checkout reserves an internal hold only. No product-visible
+    // appointment exists until the PayMongo webhook consumes that hold.
+    return this.coachingCommerceService.createOneTimeCheckout({
+      amount: amounts.totalAmount,
       coachId: coach.id,
-      scheduledAt,
-      appointmentEndsAt,
-      dayOfWeek: this.toGymDayOfWeek(scheduledAt),
-      slotStart,
-      slotEnd,
       durationMinutes: dto.duration_minutes,
+      idempotencyKey: idempotencyKey ?? '',
       memberNotes: this.formatMemberAppointmentNotes(dto),
-      isFreeSession,
-      ...amounts,
+      scheduledAt,
+      userId,
     });
-
-    return this.toAppointmentResponse(appointment);
   }
 
   private formatMemberAppointmentNotes(dto: CreateAppointmentDTO) {
@@ -258,43 +273,83 @@ export class AppointmentService {
     return [intentLabel, memberNotes].filter(Boolean).join(' - ');
   }
 
-  async createCoachManagedAppointment(
+  createCoachManagedAppointment(
     coachUserId: string,
     dto: CreateCoachManagedAppointmentDTO,
   ): Promise<AppointmentResponseDTO> {
-    const coach = await this.repo.findCoachByUserIdOrThrow(coachUserId);
+    void coachUserId;
+    void dto;
+    return Promise.reject(new GoneException({
+      type: 'GONE',
+      title: 'Coach Commercial Booking Retired',
+      status: 410,
+      detail:
+        'Coaches cannot create new commercial paid appointments. Members must complete full PayMongo checkout or staff/admin must use atomic full-cash registration.',
+    }));
+  }
 
-    return this.createStaffManualAppointment(
-      dto.member_id,
-      {
-        coach_id: coach.id,
-        duration_minutes: dto.duration_minutes,
-        member_id: dto.member_id,
-        member_notes: dto.member_notes,
-        payment_stage: CreateStaffInitialPaymentStage.full,
-        scheduled_at: dto.scheduled_at,
-      },
-      coachUserId,
-    );
+  async rescheduleAppointment(
+    requesterId: string,
+    role: UserRole,
+    appointmentId: string,
+    dto: RescheduleAppointmentDTO,
+    idempotencyKey?: string,
+  ): Promise<AppointmentResponseDTO> {
+    const appointment =
+      await this.repo.findAppointmentLifecycleContextByIdOrThrow(appointmentId);
+
+    this.assertRescheduleOwnership(appointment, requesterId, role);
+    this.assertPaidOneTimeAppointment(appointment);
+    this.normalizeAndValidateIdempotencyKey(idempotencyKey);
+
+    const scheduledAt = this.parseScheduledAt(dto.scheduled_at);
+    const durationMinutes = dto.duration_minutes;
+    const isReplay =
+      appointment.scheduled_at.getTime() === scheduledAt.getTime() &&
+      appointment.duration_minutes === durationMinutes;
+
+    if (!isReplay) {
+      await this.coachAvailabilityService.assertAvailable({
+        coachId: appointment.coach_id,
+        durationMinutes,
+        excludeAppointmentIds: [appointment.id],
+        startsAt: scheduledAt,
+      });
+    }
+
+    const updated = isReplay
+      ? appointment
+      : await this.repo.updateAppointment(appointment.id, {
+          scheduled_at: scheduledAt,
+          duration_minutes: durationMinutes,
+        });
+
+    return this.toAppointmentResponseWithLatestPayment(updated);
   }
 
   async createStaffManualAppointment(
     userId: string,
     dto: CreateStaffCoachBookingDTO,
     actorUserId: string,
+    idempotencyKey?: string,
   ): Promise<AppointmentResponseDTO> {
-    if (dto.payment_stage === CreateStaffInitialPaymentStage.downpayment) {
+    if (
+      dto.payment_stage !== undefined &&
+      dto.payment_stage !== CreateStaffInitialPaymentStage.full
+    ) {
       throw new HttpException(
         {
           type: 'BUSINESS_RULE_VIOLATION',
           title: 'Full Cash Payment Required',
           status: 422,
           detail:
-            'Staff-created coaching appointments must record full cash payment. Downpayment appointments are not available in the staff flow.',
+            'Staff-created coaching appointments must record full cash payment. Partial-payment appointments are not available in the staff flow.',
         },
         HttpStatus.UNPROCESSABLE_ENTITY,
       );
     }
+    const normalizedIdempotencyKey =
+      this.normalizeAndValidateIdempotencyKey(idempotencyKey);
 
     const scheduledAt = this.parseScheduledAt(dto.scheduled_at);
     const coach = await this.repo.findCoachScheduleContextOrThrow(dto.coach_id);
@@ -329,7 +384,7 @@ export class AppointmentService {
       dto.duration_minutes,
       false,
     );
-    const paymentStage = resolveStaffAppointmentPaymentStage();
+    const paymentStage = PaymentStage.full;
     const paymentAmount =
       paymentStage === PaymentStage.full
         ? amounts.totalAmount
@@ -345,7 +400,7 @@ export class AppointmentService {
       durationMinutes: dto.duration_minutes,
       memberNotes: dto.member_notes,
       ...amounts,
-      idempotencyKey: randomUUID(),
+      idempotencyKey: normalizedIdempotencyKey,
       paymentAmount,
       paymentStage,
       verifiedBy: actorUserId,
@@ -459,34 +514,34 @@ export class AppointmentService {
     };
   }
 
-  async respondToAppointment(
+  respondToAppointment(
     coachUserId: string,
     appointmentId: string,
     dto: RespondAppointmentDTO,
   ): Promise<AppointmentResponseDTO> {
-    const coach = await this.repo.findCoachByUserIdOrThrow(coachUserId);
-    const appointment =
-      await this.repo.findAppointmentLifecycleContextByIdOrThrow(appointmentId);
-
-    this.assertCoachOwnership(appointment, coach.id);
-    this.assertPendingCoachStatus(appointment.status);
-    this.assertRejectionReason(dto);
-
-    return this.applyAppointmentResponse(coachUserId, appointment, dto);
+    void coachUserId;
+    void appointmentId;
+    void dto;
+    return Promise.reject(
+      this.legacyCommercialRouteRetired(
+        'Coach acceptance of pending appointment requests is retired. Coaches may mutate only paid entitlement sessions and approved reschedules.',
+      ),
+    );
   }
 
-  async respondToAppointmentAsStaff(
+  respondToAppointmentAsStaff(
     actorId: string,
     appointmentId: string,
     dto: RespondAppointmentDTO,
   ): Promise<AppointmentResponseDTO> {
-    const appointment =
-      await this.repo.findAppointmentLifecycleContextByIdOrThrow(appointmentId);
-
-    this.assertPendingCoachStatus(appointment.status);
-    this.assertRejectionReason(dto);
-
-    return this.applyAppointmentResponse(actorId, appointment, dto);
+    void actorId;
+    void appointmentId;
+    void dto;
+    return Promise.reject(
+      this.legacyCommercialRouteRetired(
+        'Staff confirmation of pending appointment requests is retired. New appointments are confirmed only after full payment or atomic staff cash registration.',
+      ),
+    );
   }
 
   async cancelAppointment(
@@ -529,13 +584,26 @@ export class AppointmentService {
     });
   }
 
-  async initiateDownpayment(
+  initiateDownpayment(
     userId: string,
     userRole: UserRole,
     appointmentId: string,
     dto: InitiateAppointmentPaymentDTO,
     idempotencyKey: string | undefined,
   ): Promise<AppointmentCheckoutResponseDTO> {
+    void userId;
+    void userRole;
+    void appointmentId;
+    void dto;
+    void idempotencyKey;
+    return Promise.reject(new GoneException({
+      type: 'GONE',
+      title: 'Appointment Payment Route Retired',
+      status: 410,
+      detail:
+        'Product-visible appointment payment initiation, downpayments, and cash verification are retired. New appointments use the checkout hold returned by POST /coaching/appointments.',
+    }));
+    /*
     const normalizedIdempotencyKey =
       this.normalizeAndValidateIdempotencyKey(idempotencyKey);
     this.assertMemberAppointmentPaymentPolicy(
@@ -625,69 +693,21 @@ export class AppointmentService {
       appointment.id,
       appointment.status,
     );
+    */
   }
 
-  async processBalance(
+  processBalance(
     _staffId: string,
     appointmentId: string,
     dto: AppointmentBalanceDTO,
   ): Promise<AppointmentCheckoutResponseDTO> {
-    const appointment =
-      await this.repo.findAppointmentLifecycleContextByIdOrThrow(appointmentId);
-
-    this.assertBalanceCollectionAllowed(appointment);
-
-    const existingBalancePayment =
-      await this.paymentRepository.findLatestPaymentForPayableStage(
-        PayableType.coaching,
-        appointment.id,
-        PaymentStage.balance,
-      );
-
-    if (
-      existingBalancePayment &&
-      existingBalancePayment.status !== PaymentStatus.failed
-    ) {
-      return this.resumeExistingBalancePayment(
-        existingBalancePayment,
-        appointment,
-        dto.provider,
-      );
-    }
-
-    const payment = await this.paymentRepository.createPayment({
-      user: { connect: { id: appointment.user_id } },
-      payable_type: PayableType.coaching,
-      payable_id: appointment.id,
-      payment_stage: PaymentStage.balance,
-      amount: appointment.balance_amount,
-      provider: dto.provider,
-      provider_ref:
-        dto.provider === PaymentProvider.cash ? dto.reference_no : undefined,
-      screenshot_url:
-        dto.provider === PaymentProvider.cash
-          ? dto.screenshot_url?.trim() || undefined
-          : undefined,
-      idempotency_key: randomUUID(),
-      status:
-        dto.provider === PaymentProvider.cash
-          ? PaymentStatus.awaiting_verification
-          : PaymentStatus.pending,
-    });
-
-    if (dto.provider === PaymentProvider.cash) {
-      return {
-        appointment_id: appointment.id,
-        status: appointment.status,
-        checkout_url: null,
-        payment_id: payment.id,
-      };
-    }
-
-    return this.startCheckoutForPayment(
-      payment,
-      appointment.id,
-      appointment.status,
+    void _staffId;
+    void appointmentId;
+    void dto;
+    return Promise.reject(
+      this.legacyCommercialRouteRetired(
+        'Coaching appointments are full-payment-only. Product-visible balance collection and cash verification are retired.',
+      ),
     );
   }
 
@@ -1115,6 +1135,18 @@ export class AppointmentService {
     };
   }
 
+  private async toAppointmentResponseWithLatestPayment(
+    appointment: CoachAppointment | AppointmentLifecycleRecord,
+  ): Promise<AppointmentResponseDTO> {
+    const latestPayments =
+      await this.paymentRepository.findLatestPaymentsForPayableIds(
+        PayableType.coaching,
+        [appointment.id],
+      );
+
+    return this.toAppointmentResponse(appointment, latestPayments[0] ?? null);
+  }
+
   private toCoachScheduleResponse(
     appointment: CoachScheduleRecord,
     activePayment: ActiveAppointmentPayment | null = null,
@@ -1258,6 +1290,47 @@ export class AppointmentService {
         title: 'Forbidden',
         status: 403,
         detail: 'You can only respond to your own appointment requests.',
+      });
+    }
+  }
+
+  private assertRescheduleOwnership(
+    appointment: AppointmentLifecycleRecord,
+    requesterId: string,
+    role: UserRole,
+  ): void {
+    if (this.isStaffPaymentProcessor(role)) {
+      return;
+    }
+
+    if (role === UserRole.coach && appointment.coach.user_id === requesterId) {
+      return;
+    }
+
+    throw new ForbiddenException({
+      type: 'FORBIDDEN',
+      title: 'Forbidden',
+      status: 403,
+      detail:
+        'Only the assigned coach or an admin/staff user can reschedule this appointment.',
+    });
+  }
+
+  private assertPaidOneTimeAppointment(
+    appointment: AppointmentLifecycleRecord,
+  ): void {
+    if (
+      appointment.status !== AppointmentStatus.confirmed ||
+      appointment.is_free_session ||
+      Boolean(appointment.recurring_plan_id) ||
+      Boolean(appointment.recurring_schedule_item_id)
+    ) {
+      throw new ConflictException({
+        type: 'CONFLICT',
+        title: 'Appointment Not Eligible For Reschedule',
+        status: 409,
+        detail:
+          'Only paid, confirmed one-time coaching appointments can be rescheduled. This changes this session only.',
       });
     }
   }
@@ -1437,6 +1510,15 @@ export class AppointmentService {
       },
       HttpStatus.UNPROCESSABLE_ENTITY,
     );
+  }
+
+  private legacyCommercialRouteRetired(detail: string): GoneException {
+    return new GoneException({
+      type: 'GONE',
+      title: 'Legacy Commercial Appointment Route Retired',
+      status: 410,
+      detail,
+    });
   }
 
   private assertDownpaymentAllowed(
@@ -2006,11 +2088,4 @@ function calculateAppointmentAmounts(
     gymRevenue,
     coachEarnings,
   };
-}
-
-function resolveStaffAppointmentPaymentStage(): Extract<
-  PaymentStage,
-  typeof PaymentStage.downpayment | typeof PaymentStage.full
-> {
-  return PaymentStage.full;
 }

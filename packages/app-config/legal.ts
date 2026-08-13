@@ -1,5 +1,5 @@
-export const FITTRACK_LEGAL_VERSION = "2026-07-28";
-export const FITTRACK_PAYMENT_POLICY_VERSION = "2026-07-28";
+export const FITTRACK_LEGAL_VERSION = "2026-08-13";
+export const FITTRACK_PAYMENT_POLICY_VERSION = "2026-08-13";
 
 export type FitTrackLegalSection = {
   title: string;
@@ -30,7 +30,7 @@ export const FITTRACK_TERMS_SECTIONS: readonly FitTrackLegalSection[] = [
   {
     title: "Payments, cancellations, and refunds",
     body:
-      "Prices, payment stage, amount due, and cancellation terms are shown before confirmation. A member-initiated cancellation, no-show, or change of mind after a slot is confirmed does not refund a downpayment or full payment. Refund, correction, replacement, or credit remains available when SertFit Gym cancels or cannot deliver the service, a charge is duplicate or unauthorized, the service is materially defective, a payment provider reverses it, or Philippine law requires a remedy.",
+      "Prices and cancellation terms are shown before purchase confirmation. A member-initiated cancellation, no-show, or change of mind after a purchase is confirmed generally does not qualify for a refund. Refund, correction, replacement, or credit remains available when SertFit Gym cancels or cannot deliver the service, a charge is duplicate or unauthorized, the service is materially defective, a payment provider reverses it, or Philippine law requires a remedy.",
   },
   {
     title: "Acceptable use and intellectual property",
@@ -98,7 +98,7 @@ export const FITTRACK_PRIVACY_SECTIONS: readonly FitTrackLegalSection[] = [
 ] as const;
 
 export const FITTRACK_PAYMENT_POLICY_SUMMARY =
-  "Member cancellations, no-shows, and change-of-mind after confirmation do not refund downpayments or full payments. Remedies remain available for gym cancellation or non-delivery, duplicate or unauthorized charges, materially defective service, provider reversal, or when required by Philippine law.";
+  "Member cancellations, no-shows, and change-of-mind after purchase confirmation generally do not qualify for refunds. Remedies remain available for gym cancellation or non-delivery, duplicate or unauthorized charges, materially defective service, provider reversal, or when required by Philippine law.";
 
 export const FITTRACK_PAYMENT_ACCEPTANCE_LABEL =
   "ACCEPT POLICY & CONTINUE";

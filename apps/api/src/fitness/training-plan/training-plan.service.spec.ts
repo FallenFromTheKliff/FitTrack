@@ -27,7 +27,7 @@ describe('TrainingPlanService', () => {
   };
 
   const relationshipService = {
-    assertActiveClientRelationship: jest.fn(),
+    assertCoachClientAccess: jest.fn(),
     hasActiveCoach: jest.fn().mockResolvedValue(false),
     getActiveCoachUserId: jest.fn().mockResolvedValue(null),
   };
@@ -78,6 +78,22 @@ describe('TrainingPlanService', () => {
             },
           },
         ],
+      },
+    ],
+    ...overrides,
+  });
+
+  const makeUpdateDto = (overrides: Record<string, unknown> = {}) => ({
+    title: 'Updated training plan',
+    goal: FitnessGoal.maintenance,
+    duration_weeks: 1,
+    days_per_week: 1,
+    schedule: [
+      {
+        week_number: 1,
+        day_of_week: 1,
+        is_rest_day: false,
+        exercises: [{ exercise_id: 'exercise-1', sets: 3 }],
       },
     ],
     ...overrides,
@@ -285,14 +301,401 @@ describe('TrainingPlanService', () => {
     expect(repo.createPlan).not.toHaveBeenCalled();
   });
 
-  it('rejects plan access for non-owners', async () => {
+  it('accepts explicit rest days and persists their day kind', async () => {
+    repo.findActiveExercisesByIds.mockResolvedValue([{ id: 'exercise-1' }]);
+    repo.createPlan.mockResolvedValue(makePlan());
+
+    await service.createPlan('user-1', UserRole.member, {
+      title: 'PPL with recovery',
+      goal: FitnessGoal.maintenance,
+      duration_weeks: 1,
+      days_per_week: 2,
+      schedule: [
+        {
+          week_number: 1,
+          day_of_week: 1,
+          is_rest_day: false,
+          exercises: [{ exercise_id: 'exercise-1', sets: 3 }],
+        },
+        {
+          week_number: 1,
+          day_of_week: 3,
+          focus_label: 'Rest',
+          is_rest_day: true,
+          exercises: [],
+        },
+      ],
+    });
+
+    expect(repo.createPlan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        schedule: [
+          expect.objectContaining({ isRestDay: false }),
+          expect.objectContaining({ isRestDay: true, exercises: [] }),
+        ],
+      }),
+    );
+  });
+
+  it('rejects empty workout days and rest days that carry exercises', async () => {
+    await expect(
+      service.createPlan('user-1', UserRole.member, {
+        title: 'Empty workout',
+        goal: FitnessGoal.maintenance,
+        duration_weeks: 1,
+        days_per_week: 1,
+        schedule: [
+          { week_number: 1, day_of_week: 1, is_rest_day: false, exercises: [] },
+        ],
+      }),
+    ).rejects.toMatchObject({ response: expect.objectContaining({ title: 'Empty Workout Day' }) });
+
+    await expect(
+      service.createPlan('user-1', UserRole.member, {
+        title: 'Invalid recovery',
+        goal: FitnessGoal.maintenance,
+        duration_weeks: 1,
+        days_per_week: 1,
+        schedule: [
+          {
+            week_number: 1,
+            day_of_week: 3,
+            is_rest_day: true,
+            exercises: [{ exercise_id: 'exercise-1', sets: 3 }],
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({ response: expect.objectContaining({ title: 'Rest Day Contains Exercises' }) });
+    expect(repo.createPlan).not.toHaveBeenCalled();
+  });
+
+  it('updates an existing plan with a legacy rest row and retains explicit rest state', async () => {
+    const existingPlan = makePlan({
+      schedule_days: [
+        makePlan().schedule_days[0],
+        {
+          id: 'day-rest',
+          plan_id: 'plan-1',
+          week_number: 1,
+          day_of_week: 3,
+          focus_label: 'Rest',
+          is_rest_day: null,
+          notes: 'Legacy recovery day',
+          created_at: new Date('2026-03-26T02:00:00.000Z'),
+          updated_at: new Date('2026-03-26T03:00:00.000Z'),
+          exercises: [],
+        },
+      ],
+    });
+    repo.findPlanByIdOrThrow.mockResolvedValue(existingPlan);
+    repo.findActiveExercisesByIds.mockResolvedValue([{ id: 'exercise-1' }]);
+    repo.updatePlan.mockResolvedValue(existingPlan);
+
+    await service.updatePlan('user-1', UserRole.member, 'plan-1', {
+      title: 'PPL with recovery',
+      goal: FitnessGoal.maintenance,
+      duration_weeks: 1,
+      days_per_week: 2,
+      schedule: [
+        {
+          week_number: 1,
+          day_of_week: 1,
+          is_rest_day: false,
+          exercises: [{ exercise_id: 'exercise-1', sets: 3 }],
+        },
+        {
+          week_number: 1,
+          day_of_week: 3,
+          focus_label: 'Rest',
+          is_rest_day: true,
+          exercises: [],
+        },
+      ],
+    });
+
+    expect(repo.updatePlan).toHaveBeenCalledWith(
+      'plan-1',
+      expect.objectContaining({
+        schedule: expect.arrayContaining([
+          expect.objectContaining({ isRestDay: true, exercises: [] }),
+        ]),
+      }),
+    );
+  });
+
+  it('allows the plan owner to update a mutable training plan', async () => {
+    const updatedPlan = makePlan({ title: 'Updated training plan' });
+    repo.findPlanByIdOrThrow.mockResolvedValue(makePlan());
+    repo.findActiveExercisesByIds.mockResolvedValue([{ id: 'exercise-1' }]);
+    repo.updatePlan.mockResolvedValue(updatedPlan);
+
+    await expect(
+      service.updatePlan(
+        'user-1',
+        UserRole.member,
+        'plan-1',
+        makeUpdateDto(),
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        title: 'Updated training plan',
+        user_id: 'user-1',
+      }),
+    );
+    expect(
+      relationshipService.assertCoachClientAccess,
+    ).not.toHaveBeenCalled();
+    expect(repo.updatePlan).toHaveBeenCalledWith(
+      'plan-1',
+      expect.objectContaining({
+        userId: 'user-1',
+        coachUserId: null,
+        source: PlanSource.self_created,
+      }),
+    );
+  });
+
+  it.each(['active monthly', 'valid paid one-session'])(
+    'allows an authorized coach to update an assigned plan through an %s relationship',
+    async () => {
+      const assignedPlan = makePlan({
+        user_id: 'member-1',
+        coach_id: 'coach-user-1',
+        source: PlanSource.coach_assigned,
+      });
+      repo.findPlanByIdOrThrow.mockResolvedValue(assignedPlan);
+      relationshipService.assertCoachClientAccess.mockResolvedValue(undefined);
+      repo.findActiveExercisesByIds.mockResolvedValue([{ id: 'exercise-1' }]);
+      repo.updatePlan.mockResolvedValue(
+        makePlan({
+          ...assignedPlan,
+          title: 'Updated training plan',
+        }),
+      );
+
+      await expect(
+        service.updatePlan(
+          'coach-user-1',
+          UserRole.coach,
+          'plan-1',
+          makeUpdateDto(),
+        ),
+      ).resolves.toEqual(
+        expect.objectContaining({
+          coach_id: 'coach-user-1',
+          title: 'Updated training plan',
+          user_id: 'member-1',
+        }),
+      );
+      expect(
+        relationshipService.assertCoachClientAccess,
+      ).toHaveBeenCalledWith('coach-user-1', 'member-1');
+      expect(repo.updatePlan).toHaveBeenCalledWith(
+        'plan-1',
+        expect.objectContaining({
+          userId: 'member-1',
+          coachUserId: 'coach-user-1',
+          source: PlanSource.coach_assigned,
+        }),
+      );
+    },
+  );
+
+  it('rejects update access for an unrelated coach', async () => {
     repo.findPlanByIdOrThrow.mockResolvedValue(
-      makePlan({ user_id: 'other-user-1' }),
+      makePlan({
+        user_id: 'member-1',
+        coach_id: 'coach-user-1',
+        source: PlanSource.coach_assigned,
+      }),
     );
 
     await expect(
-      service.getPlanById('user-1', 'plan-1'),
+      service.updatePlan(
+        'unrelated-coach-1',
+        UserRole.coach,
+        'plan-1',
+        makeUpdateDto(),
+      ),
     ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(
+      relationshipService.assertCoachClientAccess,
+    ).not.toHaveBeenCalled();
+    expect(repo.updatePlan).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'inactive monthly relationship',
+    'expired one-session appointment',
+    'cancelled one-session appointment',
+    'unpaid one-session appointment',
+  ])('rejects coach update access for an %s', async () => {
+    repo.findPlanByIdOrThrow.mockResolvedValue(
+      makePlan({
+        user_id: 'member-1',
+        coach_id: 'coach-user-1',
+        source: PlanSource.coach_assigned,
+      }),
+    );
+    relationshipService.assertCoachClientAccess.mockRejectedValue(
+      new ForbiddenException(),
+    );
+
+    await expect(
+      service.updatePlan(
+        'coach-user-1',
+        UserRole.coach,
+        'plan-1',
+        makeUpdateDto(),
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(
+      relationshipService.assertCoachClientAccess,
+    ).toHaveBeenCalledWith('coach-user-1', 'member-1');
+    expect(repo.updatePlan).not.toHaveBeenCalled();
+  });
+
+  it('keeps the assigned owner and coach identity immutable during coach updates', async () => {
+    const assignedPlan = makePlan({
+      user_id: 'member-1',
+      coach_id: 'coach-user-1',
+      source: PlanSource.coach_assigned,
+      is_template: false,
+    });
+    repo.findPlanByIdOrThrow.mockResolvedValue(assignedPlan);
+    relationshipService.assertCoachClientAccess.mockResolvedValue(undefined);
+    repo.findActiveExercisesByIds.mockResolvedValue([{ id: 'exercise-1' }]);
+    repo.updatePlan.mockResolvedValue(assignedPlan);
+    const payloadWithIdentityFields = makeUpdateDto({
+      user_id: 'different-member-1',
+      member_id: 'different-member-1',
+      coach_id: 'different-coach-1',
+      source: PlanSource.self_created,
+      is_template: true,
+    });
+
+    await service.updatePlan(
+      'coach-user-1',
+      UserRole.coach,
+      'plan-1',
+      payloadWithIdentityFields,
+    );
+
+    expect(repo.updatePlan).toHaveBeenCalledWith(
+      'plan-1',
+      expect.objectContaining({
+        userId: 'member-1',
+        coachUserId: 'coach-user-1',
+        source: PlanSource.coach_assigned,
+        isTemplate: false,
+      }),
+    );
+    expect(repo.updatePlan).not.toHaveBeenCalledWith(
+      'plan-1',
+      expect.objectContaining({
+        userId: 'different-member-1',
+        coachUserId: 'different-coach-1',
+      }),
+    );
+  });
+
+  it('allows the plan owner to read a training plan', async () => {
+    repo.findPlanByIdOrThrow.mockResolvedValue(makePlan());
+
+    await expect(service.getPlanById('user-1', 'plan-1')).resolves.toEqual(
+      expect.objectContaining({
+        id: 'plan-1',
+        user_id: 'user-1',
+      }),
+    );
+    expect(
+      relationshipService.assertCoachClientAccess,
+    ).not.toHaveBeenCalled();
+  });
+
+  it('lists plans for a one-time client through the shared coach access guard', async () => {
+    relationshipService.assertCoachClientAccess.mockResolvedValue(undefined);
+    repo.listOwnedPlans.mockResolvedValue({
+      data: [],
+      meta: { page: 1, limit: 20, total: 0, total_pages: 0 },
+    });
+
+    await expect(
+      service.listClientPlans('coach-user-1', 'member-1', {
+        page: 1,
+        limit: 20,
+      }),
+    ).resolves.toEqual({
+      data: [],
+      meta: { page: 1, limit: 20, total: 0, total_pages: 0 },
+    });
+    expect(relationshipService.assertCoachClientAccess).toHaveBeenCalledWith(
+      'coach-user-1',
+      'member-1',
+    );
+  });
+
+  it('allows the managing coach to read an assigned client plan', async () => {
+    repo.findPlanByIdOrThrow.mockResolvedValue(
+      makePlan({
+        user_id: 'member-1',
+        coach_id: 'coach-user-1',
+        source: PlanSource.coach_assigned,
+      }),
+    );
+    relationshipService.assertCoachClientAccess.mockResolvedValue(
+      undefined,
+    );
+
+    await expect(
+      service.getPlanById('coach-user-1', 'plan-1'),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        coach_id: 'coach-user-1',
+        id: 'plan-1',
+        user_id: 'member-1',
+      }),
+    );
+    expect(
+      relationshipService.assertCoachClientAccess,
+    ).toHaveBeenCalledWith('coach-user-1', 'member-1');
+  });
+
+  it('rejects plan access for an unrelated coach', async () => {
+    repo.findPlanByIdOrThrow.mockResolvedValue(
+      makePlan({
+        user_id: 'member-1',
+        coach_id: 'coach-user-1',
+        source: PlanSource.coach_assigned,
+      }),
+    );
+
+    await expect(
+      service.getPlanById('unrelated-coach-1', 'plan-1'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(
+      relationshipService.assertCoachClientAccess,
+    ).not.toHaveBeenCalled();
+  });
+
+  it('rejects the managing coach when the client relationship is inactive', async () => {
+    repo.findPlanByIdOrThrow.mockResolvedValue(
+      makePlan({
+        user_id: 'member-1',
+        coach_id: 'coach-user-1',
+        source: PlanSource.coach_assigned,
+      }),
+    );
+    relationshipService.assertCoachClientAccess.mockRejectedValue(
+      new ForbiddenException(),
+    );
+
+    await expect(
+      service.getPlanById('coach-user-1', 'plan-1'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(
+      relationshipService.assertCoachClientAccess,
+    ).toHaveBeenCalledWith('coach-user-1', 'member-1');
   });
 
   it('assigns a coach-owned source plan to an active client copy', async () => {
@@ -302,7 +705,7 @@ describe('TrainingPlanService', () => {
         coach_id: 'coach-user-1',
       }),
     );
-    relationshipService.assertActiveClientRelationship.mockResolvedValue(
+    relationshipService.assertCoachClientAccess.mockResolvedValue(
       undefined,
     );
     repo.replaceActivePlan.mockResolvedValue(
@@ -321,7 +724,7 @@ describe('TrainingPlanService', () => {
     );
 
     expect(
-      relationshipService.assertActiveClientRelationship,
+      relationshipService.assertCoachClientAccess,
     ).toHaveBeenCalledWith('coach-user-1', 'member-1');
     expect(repo.replaceActivePlan).toHaveBeenCalledWith(
       expect.objectContaining({

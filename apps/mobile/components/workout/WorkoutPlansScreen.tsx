@@ -2,12 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, TextInput, View } from "react-native";
 import { ArrowLeft, Check, Minus, Plus, Trash2 } from "lucide-react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type {
-  CreateTrainingPlanInput,
-  FitnessGoal,
-  TrainingPlanDetailRecord,
-  TrainingPlanSummaryRecord,
-} from "@fittrack/types";
+import type { FitnessGoal, TrainingPlanSummaryRecord } from "@fittrack/types";
 import {
   activateFitnessPlanMutationOptions,
   createFitnessPlanMutationOptions,
@@ -22,27 +17,16 @@ import { FitButton, FitText } from "@/components/fit";
 import ConfirmModal from "@/components/modals/shared/ConfirmModal";
 import CoachPlanWeeklyViewerModal from "@/components/workout/CoachPlanWeeklyViewerModal";
 import ExerciseRestTimerModal from "@/components/workout/ExerciseRestTimerModal";
+import {
+  DAY_NAMES,
+  detailToDraft,
+  toPlanInput,
+  type DraftDays,
+  type DraftExercise,
+} from "@/components/workout/workoutPlanDraft";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { mobileApiClient } from "@/lib/api-client";
-
-const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
-
-type DraftExercise = {
-  exerciseId: string;
-  exerciseName: string;
-  reps: number;
-  restSeconds: number;
-  restSecondsBySet: number[] | null;
-  sets: number;
-};
-
-type DraftDay = {
-  exercises: DraftExercise[];
-  focusLabel: string;
-};
-
-type DraftDays = Record<number, DraftDay>;
 
 type PlanConfirmation = {
   confirmLabel: string;
@@ -56,58 +40,6 @@ function sourceLabel(plan: TrainingPlanSummaryRecord) {
   if (isCoachManagedTrainingPlan(plan)) return "Coach assigned";
   if (plan.source === "ai_generated") return "Smart draft";
   return "Personal";
-}
-
-function detailToDraft(plan: TrainingPlanDetailRecord): DraftDays {
-  return Object.fromEntries(
-    plan.scheduleDays
-      .filter((day) => day.weekNumber === 1 && day.exercises.length > 0)
-      .map((day) => [
-        day.dayOfWeek,
-        {
-          exercises: day.exercises.map((exercise) => ({
-            exerciseId: exercise.exerciseId,
-            exerciseName: exercise.exerciseName,
-            reps: exercise.reps ?? 10,
-            restSeconds: exercise.restSeconds,
-            restSecondsBySet: exercise.restSecondsBySet,
-            sets: exercise.sets,
-          })),
-          focusLabel: day.focusLabel ?? `${DAY_NAMES[day.dayOfWeek]} training`,
-        },
-      ]),
-  );
-}
-
-function toPlanInput(
-  title: string,
-  goal: FitnessGoal,
-  draftDays: DraftDays,
-): CreateTrainingPlanInput {
-  const schedule = Object.entries(draftDays)
-    .map(([dayOfWeek, day]) => ({
-      dayOfWeek: Number(dayOfWeek),
-      exercises: day.exercises.map((exercise, orderIndex) => ({
-        exerciseId: exercise.exerciseId,
-        orderIndex,
-        reps: exercise.reps,
-        restSeconds: exercise.restSeconds,
-        restSecondsBySet: exercise.restSecondsBySet ?? undefined,
-        sets: exercise.sets,
-      })),
-      focusLabel:
-        day.focusLabel.trim() || `${DAY_NAMES[Number(dayOfWeek)]} training`,
-      weekNumber: 1,
-    }))
-    .sort((a, b) => a.dayOfWeek - b.dayOfWeek);
-
-  return {
-    daysPerWeek: schedule.length,
-    durationWeeks: 12,
-    goal,
-    schedule,
-    title: title.trim(),
-  };
 }
 
 export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {

@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type {
-  RecurringCoachingBillingCycleRecord,
   StaffAppointmentRecord,
   SubmitCoachAppointmentFeedbackPayload,
 } from "@fittrack/api-client";
@@ -12,52 +11,32 @@ import { FitButton, FitSelect, FitText, FitTextArea } from "@/components/fit";
 import { OverlayAmountGrid } from "./GymOperationsOverlayCards";
 import { OverlayFrame } from "./GymOperationsOverlayFrame";
 import {
-  COACH_DECISION_LABELS,
   actionPillStyle,
   buildStatusTone,
   canCancelUntilDayBefore,
   formatAppointmentWindow,
-  formatCompactDate,
   formatPeso,
   getPersonDisplayName,
-  metricChipStyle,
   overlaySurfaceStyle,
-  type CoachDecision,
   type CoachReadinessSummary,
-  type PaymentCollectionProvider,
-  type StaffInitialPaymentStage,
 } from "./GymOperationsOverlayShared";
 
 export function GymOperationsCoachAppointmentModal({
   appointment,
-  billingCycles = [],
-  canManageRecurringPlan = false,
   coachReadiness,
   isOpen,
   isCoachView = false,
   isSubmitting = false,
-  onCancelRecurringPlan,
   onCancelAppointment,
   onClose,
   onComplete,
-  onApprovePayment,
   onSaveFeedback,
-  onEditRecurringFuture,
-  onEditRecurringSession,
-  onConfirm,
-  onCollectBalance,
-  onCollectInitialPayment,
-  onPayRecurringCycle,
-  onReject,
 }: {
   appointment: StaffAppointmentRecord | null;
-  billingCycles?: RecurringCoachingBillingCycleRecord[];
-  canManageRecurringPlan?: boolean;
   coachReadiness: CoachReadinessSummary;
   isOpen: boolean;
   isCoachView?: boolean;
   isSubmitting?: boolean;
-  onCancelRecurringPlan?: () => void;
   onCancelAppointment: (note: string) => void;
   onClose: () => void;
   onComplete: (payload: {
@@ -65,287 +44,74 @@ export function GymOperationsCoachAppointmentModal({
     coachFeedback?: string;
     sessionNotes?: string;
   }) => void;
-  onApprovePayment?: (paymentId: string) => void;
   onSaveFeedback?: (payload: SubmitCoachAppointmentFeedbackPayload) => void;
-  onEditRecurringFuture?: () => void;
-  onEditRecurringSession?: () => void;
-  onConfirm: () => void;
-  onCollectBalance?: (provider: PaymentCollectionProvider) => void;
-  onCollectInitialPayment?: (
-    provider: PaymentCollectionProvider,
-    paymentStage: StaffInitialPaymentStage,
-  ) => void;
-  onPayRecurringCycle?: (
-    cycle: RecurringCoachingBillingCycleRecord,
-    provider: PaymentCollectionProvider,
-  ) => void;
-  onReject: (note: string) => void;
 }) {
   const { colors, settings } = useTheme();
   const [note, setNote] = useState("");
   const [assessmentReport, setAssessmentReport] = useState("");
   const [coachFeedback, setCoachFeedback] = useState("");
   const [sessionNotes, setSessionNotes] = useState("");
-  const [coachDecision, setCoachDecision] = useState<CoachDecision>("confirm");
-  const shouldAnimate = settings.animationLevel !== "none";
-  const status = appointment?.status ?? "pending_coach";
-  const canConfirm = status === "pending_coach";
-  const canComplete = status === "confirmed";
-  const canCollectInitialPayment = status === "pending_payment";
-  const canCancelAppointment = canCancelUntilDayBefore(
-    appointment?.scheduledAt,
-  );
-  const hasAwaitingPayment =
-    status === "pending_payment" &&
-    appointment?.activePaymentStatus === "awaiting_verification" &&
-    Boolean(appointment?.activePaymentId);
-  const hasUnresolvedPaymentRequest =
-    status === "pending_payment" &&
-    Boolean(appointment?.activePaymentId) &&
-    appointment?.activePaymentStatus !== "failed";
-  const isRecurring = Boolean(appointment?.recurringPlanId);
-  const bookingTypeLabel = isRecurring ? "Recurring booking" : "Single booking";
-  const coachRate = appointment?.coach?.hourlyRate ?? null;
-  const totalAmount = appointment?.totalAmount ?? null;
-  const nextBillingCycle =
-    billingCycles.find((cycle) =>
-      ["due", "overdue", "awaiting_verification", "processing"].includes(
-        cycle.status,
-      ),
-    ) ??
-    billingCycles.find(
-      (cycle) =>
-        cycle.status !== "paid" &&
-        cycle.status !== "cancelled" &&
-        cycle.status !== "overdue",
-    ) ?? billingCycles.at(-1);
-  const recurringCycleAmount = nextBillingCycle
-    ? Number(nextBillingCycle.amount)
-    : null;
-  const sessionPrice = totalAmount != null ? totalAmount : coachRate;
-  const recurringDueNow =
-    recurringCycleAmount != null
-      ? Math.min(
-          recurringCycleAmount,
-          Math.max(0, Number(sessionPrice ?? recurringCycleAmount)),
-        )
-      : null;
-  const amountDueNow = isRecurring
-    ? recurringDueNow
-    : (appointment?.amountDueNow ?? null);
-  const remainingBalance = isRecurring
-    ? recurringCycleAmount != null && recurringDueNow != null
-      ? Math.max(recurringCycleAmount - recurringDueNow, 0)
-      : null
-    : (appointment?.remainingBalance ?? null);
-  const displayTotalLabel = isRecurring ? "Current cycle total" : "Total price";
-  const displayTotalAmount = isRecurring
-    ? recurringCycleAmount
-    : totalAmount;
-  const canCollectBalance =
-    !isRecurring &&
-    status === "confirmed" &&
-    Number(appointment?.remainingBalance ?? 0) > 0 &&
-    !appointment?.balancePaidAt;
-  const tone = canCollectBalance
-    ? {
-        bg: colors.warning,
-        color: colors.onBrand,
-        label: "Pending full payment",
-      }
-    : status === "pending_payment" &&
-        appointment?.activePaymentStage === "full"
-      ? {
-          bg: colors.warning,
-          color: colors.onBrand,
-          label: "Pending full payment",
-        }
-      : status === "pending_payment" &&
-          appointment?.activePaymentStage === "downpayment"
-        ? {
-            bg: colors.brand,
-            color: colors.onBrand,
-            label: "Pending downpayment",
-          }
-        : buildStatusTone(status, colors);
+  const [action, setAction] = useState<"mark_complete" | "cancel">("mark_complete");
+  const status = appointment?.status ?? "confirmed";
+  const isTerminal = ["cancelled", "completed", "no_show"].includes(status);
+  const isConfirmed = status === "confirmed";
+  const canCancel = Boolean(appointment) && !isTerminal && canCancelUntilDayBefore(appointment?.scheduledAt);
+  const actionOptions = useMemo<Array<"mark_complete" | "cancel">>(() => {
+    if (!appointment || isTerminal) return [];
+    const options: Array<"mark_complete" | "cancel"> = isConfirmed ? ["mark_complete"] : [];
+    if (canCancel) options.push("cancel");
+    return options;
+  }, [appointment, canCancel, isConfirmed, isTerminal]);
+  const scheduleWindow = appointment
+    ? formatAppointmentWindow(appointment)
+    : { dateLabel: "-", timeLabel: "-" };
   const memberName = appointment
-    ? getPersonDisplayName(
-        appointment.user.profile,
-        appointment.user.email,
-        "Member",
-      )
+    ? getPersonDisplayName(appointment.user.profile, appointment.user.email, "Member")
     : "Member";
   const coachName = appointment
     ? appointment.coach.displayName?.trim() ||
       getPersonDisplayName(appointment.coach.profile, null, "Coach")
     : "Coach";
-  const coachSubtitleName =
-    isCoachView && coachName === "Coach" ? "you" : coachName;
-  const scheduleWindow = appointment
-    ? formatAppointmentWindow(appointment)
-    : { dateLabel: "-", timeLabel: "-" };
-  const memberReview = appointment?.review ?? null;
-  const memberReviewLabel =
-    status === "completed"
-      ? memberReview
-        ? `Reviewed ${memberReview.rating}/5`
-        : "Not reviewed"
-      : "Review opens after completion";
-  const memberReviewTone =
-    status === "completed"
-      ? memberReview
-        ? colors.success
-        : colors.warning
-      : colors.textMuted;
-  const isTerminalStatus =
-    status === "cancelled" || status === "completed" || status === "no_show";
-  const cancellationClosed =
-    Boolean(appointment) && !isTerminalStatus && !canCancelAppointment;
+  const tone = buildStatusTone(status, colors);
+  const isFeedbackReady = Boolean(onSaveFeedback && appointment && status === "completed");
+  const isFeedbackDisabled = isSubmitting || !coachFeedback.trim();
 
   useEffect(() => {
     if (!isOpen) return;
     setNote("");
     setAssessmentReport(appointment?.assessmentReport ?? "");
     setCoachFeedback(appointment?.coachFeedback ?? "");
-    setSessionNotes(appointment?.sessionNotes ?? "");
+    setSessionNotes("");
+    setAction(actionOptions[0] ?? "mark_complete");
   }, [
-    isOpen,
+    actionOptions,
     appointment?.assessmentReport,
     appointment?.coachFeedback,
     appointment?.id,
-    appointment?.sessionNotes,
+    isOpen,
   ]);
 
-  const title = isCoachView
-    ? canConfirm
-      ? "Review coach appointment"
-      : "Coach appointment actions"
-    : "Review payment and appointment status";
-  const description = isCoachView
-    ? canConfirm
-      ? "Confirm, reject, or keep the request pending from your coach schedule."
-      : "Review the current session state and resolve your coach-side action."
-    : "Verify payment, booking status, and remaining balances without switching away from Gym Operations.";
-  const coachDecisionOptions = useMemo<CoachDecision[]>(() => {
-    const withCancel = (options: CoachDecision[]): CoachDecision[] =>
-      canCancelAppointment ? [...options, "cancel"] : options;
-
-    if (isCoachView) {
-      if (canConfirm) return withCancel(["confirm", "reject"]);
-      if (canComplete) return withCancel(["mark_complete"]);
-      if (isTerminalStatus) return [];
-      return canCancelAppointment ? ["cancel"] : [];
+  const submitAction = () => {
+    if (!appointment || isSubmitting) return;
+    if (action === "cancel") {
+      if (canCancel) onCancelAppointment(note.trim());
+      return;
     }
-    if (canConfirm) {
-      return withCancel(["confirm", "reject"]);
-    }
-    if (canComplete) {
-      const options: CoachDecision[] = [];
-      if (canCollectBalance) {
-        options.push("accept_cash_balance", "paymongo_balance");
-      } else {
-        options.push("mark_complete");
-      }
-      return withCancel(options);
-    }
-    if (canCollectInitialPayment) {
-      if (hasAwaitingPayment) {
-        return withCancel(["approve_payment"]);
-      }
-      if (hasUnresolvedPaymentRequest) {
-        return canCancelAppointment ? ["cancel"] : [];
-      }
-      if (appointment?.activePaymentStage === "full") {
-        return withCancel(["accept_cash_full"]);
-      }
-      if (appointment?.activePaymentStage === "downpayment") {
-        return withCancel(["paymongo_downpayment", "accept_cash_downpayment"]);
-      }
-      return withCancel([
-        "paymongo_downpayment",
-        "accept_cash_downpayment",
-        "accept_cash_full",
-      ]);
-    }
-    if (isTerminalStatus) return [];
-    return canCancelAppointment ? ["cancel"] : [];
-  }, [
-    appointment?.activePaymentStage,
-    canCancelAppointment,
-    canCollectBalance,
-    canCollectInitialPayment,
-    canComplete,
-    canConfirm,
-    hasAwaitingPayment,
-    hasUnresolvedPaymentRequest,
-    isTerminalStatus,
-    isCoachView,
-  ]);
-
-  useEffect(() => {
-    if (coachDecisionOptions.length === 0) return;
-    if (!coachDecisionOptions.includes(coachDecision)) {
-      setCoachDecision(coachDecisionOptions[0]);
-    }
-  }, [coachDecision, coachDecisionOptions]);
-
-  const handleCoachDecisionSubmit = () => {
-    switch (coachDecision) {
-      case "accept_cash_balance":
-        onCollectBalance?.("cash");
-        return;
-      case "paymongo_balance":
-        onCollectBalance?.("paymongo");
-        return;
-      case "paymongo_downpayment":
-        onCollectInitialPayment?.("paymongo", "downpayment");
-        return;
-      case "accept_cash_downpayment":
-        onCollectInitialPayment?.("cash", "downpayment");
-        return;
-      case "accept_cash_full":
-        onCollectInitialPayment?.("cash", "full");
-        return;
-      case "approve_payment":
-        if (appointment?.activePaymentId) {
-          onApprovePayment?.(appointment.activePaymentId);
-        }
-        return;
-      case "confirm":
-        onConfirm();
-        return;
-      case "mark_complete":
-        onComplete({
-          assessmentReport: assessmentReport.trim() || undefined,
-          coachFeedback: coachFeedback.trim() || undefined,
-          sessionNotes: sessionNotes.trim() || undefined,
-        });
-        return;
-      case "reject":
-        onReject(note.trim());
-        return;
-      case "cancel":
-        if (!canCancelAppointment) return;
-        onCancelAppointment(note.trim());
-        return;
-    }
+    if (!isConfirmed || !coachFeedback.trim()) return;
+    onComplete({
+      assessmentReport: assessmentReport.trim() || undefined,
+      coachFeedback: coachFeedback.trim() || undefined,
+      sessionNotes: sessionNotes.trim() || undefined,
+    });
   };
 
-  const isCoachDecisionDisabled =
-    isSubmitting ||
-    coachDecisionOptions.length === 0 ||
-    (coachDecision === "reject" && !note.trim()) ||
-    (coachDecision === "mark_complete" && !coachFeedback.trim()) ||
-    ((coachDecision === "accept_cash_balance" ||
-      coachDecision === "paymongo_balance") &&
-      !onCollectBalance) ||
-    ((coachDecision === "paymongo_downpayment" ||
-      coachDecision === "accept_cash_downpayment" ||
-      coachDecision === "accept_cash_full") &&
-      !onCollectInitialPayment) ||
-    (coachDecision === "approve_payment" &&
-      (!onApprovePayment || !appointment?.activePaymentId)) ||
-    !coachDecisionOptions.includes(coachDecision);
+  const saveFeedback = () => {
+    if (!isFeedbackReady || !coachFeedback.trim()) return;
+    onSaveFeedback?.({
+      assessmentReport: assessmentReport.trim() || undefined,
+      coachFeedback: coachFeedback.trim(),
+    });
+  };
 
   return (
     <OverlayFrame
@@ -353,36 +119,37 @@ export function GymOperationsCoachAppointmentModal({
       maxWidth={760}
       onClose={onClose}
       closeDisabled={isSubmitting}
-      subtitle={description}
-      title={title}
-      footer={coachDecisionOptions.length > 0 ? (
-        <FitButton
-          variant="primary"
-          label={isSubmitting ? "SUBMITTING..." : "SUBMIT DECISION"}
-          onClick={handleCoachDecisionSubmit}
-          disabled={isCoachDecisionDisabled}
-          style={actionPillStyle(colors, true)}
-          textStyle={{ fontSize: 13, fontWeight: 700 }}
-        />
-      ) : undefined}
+      subtitle={
+        isCoachView
+          ? "Review the paid session, capture client notes, and update the session outcome."
+          : "Review the confirmed coaching session and document the staff outcome."
+      }
+      title={isCoachView ? "Coach session" : "Review coaching session"}
+      footer={
+        actionOptions.length > 0 ? (
+          <FitButton
+            variant="primary"
+            label={isSubmitting ? "SAVING..." : "SAVE SESSION"}
+            aria-label={isSubmitting ? "Saving coaching session" : "Save coaching session"}
+            onClick={submitAction}
+            disabled={
+              isSubmitting ||
+              !actionOptions.includes(action) ||
+              (action === "mark_complete" && (!isConfirmed || !coachFeedback.trim()))
+            }
+            style={actionPillStyle(colors, true)}
+            textStyle={{ fontSize: 13, fontWeight: 700 }}
+          />
+        ) : undefined
+      }
     >
       <div
         onClick={(event) => event.stopPropagation()}
         style={{
-          width: "100%",
-          maxWidth: "none",
-          maxHeight: "none",
-          overflow: "visible",
-          margin: 0,
-          padding: 0,
-          borderRadius: 0,
-          border: "none",
-          backgroundColor: "transparent",
           display: "grid",
           gap: 14,
-          boxShadow: "none",
-          transform: "none",
-          transition: shouldAnimate ? "opacity 160ms ease" : "none",
+          transform: settings.animationLevel !== "none" && isOpen ? "scale(1)" : "scale(0.985)",
+          transition: settings.animationLevel !== "none" ? "transform 180ms ease" : "none",
         }}
       >
         <div
@@ -397,833 +164,135 @@ export function GymOperationsCoachAppointmentModal({
             alignItems: "center",
           }}
         >
-          <FitText
-            excludeGlobalScale
-            style={{ fontSize: 13, fontWeight: 700, color: tone.color }}
-          >
+          <FitText excludeGlobalScale style={{ fontSize: 13, fontWeight: 700, color: tone.color }}>
             {tone.label}
           </FitText>
         </div>
+
         <div style={{ ...overlaySurfaceStyle(colors), gap: 8 }}>
-          <div
-            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}
-          >
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
             <div style={{ display: "grid", gap: 4 }}>
-              <FitText
-                excludeGlobalScale
-                style={{
-                  fontSize: 18,
-                  fontWeight: 800,
-                  color: colors.textPrimary,
-                }}
-              >
+              <FitText excludeGlobalScale style={{ fontSize: 18, fontWeight: 800, color: colors.textPrimary }}>
                 {memberName}
               </FitText>
-              <FitText
-                excludeGlobalScale
-                style={{ fontSize: 13, color: colors.textMuted }}
-              >
-                with {coachSubtitleName}
+              <FitText excludeGlobalScale style={{ fontSize: 12, color: colors.textMuted }}>
+                Coach: {coachName}
               </FitText>
             </div>
             <div style={{ display: "grid", gap: 4 }}>
-              <FitText
-                excludeGlobalScale
-                style={{
-                  fontSize: 13,
-                  fontWeight: 700,
-                  color: colors.textPrimary,
-                }}
-              >
+              <FitText excludeGlobalScale style={{ fontSize: 13, fontWeight: 700, color: colors.textPrimary }}>
                 {scheduleWindow.dateLabel} / {scheduleWindow.timeLabel}
               </FitText>
-              <FitText
-                excludeGlobalScale
-                style={{ fontSize: 12, color: colors.textMuted }}
-              >
-                {appointment?.notes?.trim() ||
-                  "No member note was provided for this appointment."}
+              <FitText excludeGlobalScale style={{ fontSize: 12, color: colors.textMuted }}>
+                {appointment?.duration ?? 60} minutes · {appointment?.recurringPlanId ? "Monthly plan session" : "One-time session"}
               </FitText>
             </div>
           </div>
+          <FitText excludeGlobalScale style={{ fontSize: 12, color: colors.textMuted, lineHeight: 1.35 }}>
+            {coachReadiness.trustLabel}. Session controls appear only for a confirmed paid booking.
+          </FitText>
         </div>
 
         <OverlayAmountGrid
           colors={colors}
-          items={
-            isCoachView
-              ? [
-                  {
-                    label: "Booking type",
-                    value: bookingTypeLabel,
-                  },
-                  {
-                    label: "Duration",
-                    value: `${appointment?.duration ?? 0} min`,
-                  },
-                  {
-                    label: "Status",
-                    value: tone.label,
-                  },
-                  {
-                    label: "Member review",
-                    value: memberReviewLabel,
-                  },
-                  {
-                    label: "Coach reply",
-                    value: appointment?.coachFeedback ? "Submitted" : "Not submitted",
-                  },
-                ]
-              : [
-                  {
-                    label: "Booking type",
-                    value: bookingTypeLabel,
-                  },
-                  {
-                    label: "Coach rate",
-                    value:
-                      coachRate != null ? `${formatPeso(coachRate)}/hr` : "Not set",
-                  },
-                  {
-                    label: displayTotalLabel,
-                    value:
-                      displayTotalAmount != null
-                        ? formatPeso(displayTotalAmount)
-                        : "Not set",
-                  },
-                  {
-                    label: isRecurring ? "Cycle due now" : "Paid / due now",
-                    value:
-                      amountDueNow != null ? formatPeso(amountDueNow) : "Not set",
-                  },
-                  {
-                    label: isRecurring ? "Cycle remaining" : "Remaining",
-                    value:
-                      remainingBalance != null
-                        ? formatPeso(remainingBalance)
-                        : "Not set",
-                  },
-                  {
-                    label: "Member review",
-                    value: memberReviewLabel,
-                  },
-                ]
-          }
+          columns="repeat(4, minmax(0, 1fr))"
+          items={[
+            {
+              label: "Total price",
+              value: appointment?.totalAmount != null ? formatPeso(appointment.totalAmount) : "Recorded",
+            },
+            { label: "Session status", value: tone.label },
+            { label: "Coach availability", value: coachReadiness.isVisible ? "Visible" : "Not visible" },
+            { label: "Member review", value: appointment?.review ? `Reviewed ${appointment.review.rating}/5` : "Not submitted" },
+          ]}
         />
 
-        {isCoachView ? (
-        <div style={{ ...overlaySurfaceStyle(colors), gap: 10 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-            <FitText
-              excludeGlobalScale
-              style={{
-                fontSize: 15,
-                fontWeight: 800,
-                color: colors.textPrimary,
-              }}
-            >
-              Client details and review status
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
+          <div style={{ ...overlaySurfaceStyle(colors), gap: 10 }}>
+            <FitText excludeGlobalScale style={{ fontSize: 15, fontWeight: 800, color: colors.textPrimary }}>
+              Session notes
             </FitText>
-            <span
-              style={{
-                borderRadius: 999,
-                border: `1px solid ${memberReviewTone}55`,
-                backgroundColor: `${memberReviewTone}18`,
-                color: memberReviewTone,
-                fontSize: 12,
-                fontWeight: 800,
-                padding: "7px 10px",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {memberReviewLabel}
-            </span>
-          </div>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-              gap: 10,
-            }}
-          >
-            <div style={overlaySurfaceStyle(colors)}>
-              <FitText excludeGlobalScale style={{ fontSize: 11, fontWeight: 800, color: colors.textMuted }}>
-                Client
-              </FitText>
-              <FitText excludeGlobalScale style={{ fontSize: 13, fontWeight: 800, color: colors.textPrimary }}>
-                {memberName}
-              </FitText>
-            </div>
-            <div style={overlaySurfaceStyle(colors)}>
-              <FitText excludeGlobalScale style={{ fontSize: 11, fontWeight: 800, color: colors.textMuted }}>
-                Status
-              </FitText>
-              <FitText excludeGlobalScale style={{ fontSize: 13, fontWeight: 800, color: colors.textPrimary }}>
-                {tone.label}
-              </FitText>
-            </div>
-            <div style={overlaySurfaceStyle(colors)}>
-              <FitText excludeGlobalScale style={{ fontSize: 11, fontWeight: 800, color: colors.textMuted }}>
-                Member note
-              </FitText>
-              <FitText excludeGlobalScale style={{ fontSize: 12, color: colors.textSecondary }}>
-                {appointment?.notes?.trim() || "No member note provided."}
-              </FitText>
-            </div>
-          </div>
-          {memberReview ? (
-            <FitText excludeGlobalScale style={{ fontSize: 12, color: colors.textSecondary }}>
-              Member review: {memberReview.comment?.trim() || "Rating submitted without written feedback."}
-            </FitText>
-          ) : null}
-        </div>
-        ) : null}
-
-        <div
-          style={{ display: "grid", gridTemplateColumns: isCoachView ? "1fr 1fr" : "1fr", gap: 18 }}
-        >
-          {isCoachView ? (
-          <>
-            <div style={overlaySurfaceStyle(colors)}>
-              <FitText
-                excludeGlobalScale
-                style={{
-                  fontSize: 15,
-                  fontWeight: 800,
-                  color: colors.textPrimary,
-                }}
-              >
-                Coach readiness
-              </FitText>
-              <FitText
-                excludeGlobalScale
-                style={{ fontSize: 12, color: colors.textMuted }}
-              >
-                Visibility: {coachReadiness.isVisible ? "visible" : "hidden"}
-              </FitText>
-              <FitText
-                excludeGlobalScale
-                style={{ fontSize: 12, color: colors.textMuted }}
-              >
-                Peak slots open: {coachReadiness.openPeakSlots}
-              </FitText>
-              <FitText
-                excludeGlobalScale
-                style={{ fontSize: 12, fontWeight: 700, color: colors.success }}
-              >
-                Profile trust: {coachReadiness.trustLabel}
-              </FitText>
-            </div>
-          </>
-          ) : null}
-          <div style={overlaySurfaceStyle(colors)}>
-            <FitText
-              excludeGlobalScale
-              style={{
-                fontSize: 15,
-                fontWeight: 800,
-                color: colors.textPrimary,
-              }}
-            >
-              Decision note
-            </FitText>
-            <div
-              style={{
-                borderTop: `1px solid ${colors.border}`,
-                backgroundColor: "transparent",
-                minHeight: 76,
-                paddingTop: 10,
-              }}
-            >
-              <FitTextArea
-                id="coach-appointment-decision-note"
-                name="coachAppointmentDecisionNote"
-                aria-label={
-                  isCoachView
-                    ? "Coach appointment decision note"
-                    : "Operations appointment decision note"
-                }
-                value={note}
-                onChange={(event) => setNote(event.target.value)}
-                rows={3}
-                placeholder={
-                  isCoachView
-                    ? "Optional note for front desk, coach, or audit trail..."
-                    : "Optional payment or status note for the operations audit trail..."
-                }
-                style={{
-                  boxSizing: "border-box",
-                  display: "block",
-                  fontSize: 12,
-                  lineHeight: 1.4,
-                  width: "100%",
-                }}
-              />
-            </div>
-          </div>
-        </div>
-
-        {coachDecision === "mark_complete" ? (
-          <div style={{ ...overlaySurfaceStyle(colors), gap: 12 }}>
-            <FitText
-              excludeGlobalScale
-              style={{
-                fontSize: 15,
-                fontWeight: 800,
-                color: colors.textPrimary,
-              }}
-            >
-              Session report
-            </FitText>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                gap: 12,
-              }}
-            >
-              <div style={{ display: "grid", gap: 6 }}>
-                <FitText
-                  excludeGlobalScale
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 800,
-                    color: colors.textMuted,
-                  }}
-                >
-                  Client feedback
-                </FitText>
-                <FitTextArea
-                  id="coach-appointment-client-feedback"
-                  name="coachAppointmentClientFeedback"
-                  aria-label="Coach appointment client feedback"
-                  value={coachFeedback}
-                  onChange={(event) => setCoachFeedback(event.target.value)}
-                  rows={3}
-                  placeholder="Feedback the member should see after this session..."
-                  style={{ fontSize: 12, lineHeight: 1.4 }}
-                />
-              </div>
-              <div style={{ display: "grid", gap: 6 }}>
-                <FitText
-                  excludeGlobalScale
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 800,
-                    color: colors.textMuted,
-                  }}
-                >
-                  Assessment report
-                </FitText>
-                <FitTextArea
-                  id="coach-appointment-assessment-report"
-                  name="coachAppointmentAssessmentReport"
-                  aria-label="Coach appointment assessment report"
-                  value={assessmentReport}
-                  onChange={(event) => setAssessmentReport(event.target.value)}
-                  rows={3}
-                  placeholder="Progress, movement quality, next focus..."
-                  style={{ fontSize: 12, lineHeight: 1.4 }}
-                />
-              </div>
-            </div>
-            <div style={{ display: "grid", gap: 6 }}>
-              <FitText
-                excludeGlobalScale
-                style={{
-                  fontSize: 12,
-                  fontWeight: 800,
-                  color: colors.textMuted,
-                }}
-              >
-                Private session notes
-              </FitText>
-              <FitTextArea
-                id="coach-appointment-private-session-notes"
-                name="coachAppointmentPrivateSessionNotes"
-                aria-label="Coach appointment private session notes"
-                value={sessionNotes}
-                onChange={(event) => setSessionNotes(event.target.value)}
-                rows={3}
-                placeholder="Internal coaching notes for this appointment..."
-                style={{ fontSize: 12, lineHeight: 1.4 }}
-              />
-            </div>
-          </div>
-        ) : null}
-
-        {isCoachView && status === "completed" ? (
-          <div style={{ ...overlaySurfaceStyle(colors), gap: 12 }}>
-            <FitText
-              excludeGlobalScale
-              style={{
-                fontSize: 15,
-                fontWeight: 800,
-                color: colors.textPrimary,
-              }}
-            >
-              Coach reply and session report
-            </FitText>
-            <FitText
-              excludeGlobalScale
-              style={{ fontSize: 12, color: colors.textMuted }}
-            >
-              Update the feedback and report the member sees in Bookings and Assessments.
-            </FitText>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                gap: 12,
-              }}
-            >
-              <div style={{ display: "grid", gap: 6 }}>
-                <FitText
-                  excludeGlobalScale
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 800,
-                    color: colors.textMuted,
-                  }}
-                >
-                  Coach feedback
-                </FitText>
-                <FitTextArea
-                  id="coach-appointment-reply-feedback"
-                  name="coachAppointmentReplyFeedback"
-                  aria-label="Coach appointment reply feedback"
-                  value={coachFeedback}
-                  onChange={(event) => setCoachFeedback(event.target.value)}
-                  rows={3}
-                  placeholder="Reply with coaching feedback the member should see..."
-                  style={{ fontSize: 12, lineHeight: 1.4 }}
-                />
-              </div>
-              <div style={{ display: "grid", gap: 6 }}>
-                <FitText
-                  excludeGlobalScale
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 800,
-                    color: colors.textMuted,
-                  }}
-                >
-                  Assessment report
-                </FitText>
-                <FitTextArea
-                  id="coach-appointment-reply-assessment-report"
-                  name="coachAppointmentReplyAssessmentReport"
-                  aria-label="Coach appointment reply assessment report"
-                  value={assessmentReport}
-                  onChange={(event) => setAssessmentReport(event.target.value)}
-                  rows={3}
-                  placeholder="Optional assessment notes, progress, or next goal..."
-                  style={{ fontSize: 12, lineHeight: 1.4 }}
-                />
-              </div>
-            </div>
-            <FitButton
-              variant="primary"
-              label="SAVE COACH REPLY"
-              disabled={isSubmitting || !coachFeedback.trim() || !onSaveFeedback}
-              onClick={() =>
-                onSaveFeedback?.({
-                  assessmentReport: assessmentReport.trim() || undefined,
-                  coachFeedback: coachFeedback.trim(),
-                })
-              }
-              style={actionPillStyle(colors)}
-              textStyle={{
-                fontSize: 13,
-                fontWeight: 800,
-                color: colors.onBrand,
-              }}
+            <FitTextArea
+              value={sessionNotes}
+              onChange={(event) => setSessionNotes(event.target.value)}
+              rows={3}
+              placeholder="Capture the session handoff or client progress..."
+              aria-label="Session notes"
+              disabled={isSubmitting || !isConfirmed}
+              style={{ fontSize: 12, lineHeight: 1.4 }}
+            />
+            <FitTextArea
+              value={assessmentReport}
+              onChange={(event) => setAssessmentReport(event.target.value)}
+              rows={3}
+              placeholder="Optional assessment summary..."
+              aria-label="Assessment report"
+              disabled={isSubmitting || !isConfirmed}
+              style={{ fontSize: 12, lineHeight: 1.4 }}
             />
           </div>
-        ) : null}
-
-        {canManageRecurringPlan && isRecurring && !isCoachView ? (
-          <div style={{ ...overlaySurfaceStyle(colors), gap: 14 }}>
-            <div style={{ display: "grid", gap: 4 }}>
-              <FitText
-                excludeGlobalScale
-              style={{
-                fontSize: 15,
-                fontWeight: 800,
-                color: colors.textPrimary,
-              }}
-            >
-                Recurring booking controls
-              </FitText>
-              <FitText
-                excludeGlobalScale
-                style={{ fontSize: 12, color: colors.textMuted }}
-              >
-                Recurring payments are tracked by billing cycle. The cycle total
-                stays fixed for the block, while due now and remaining show the
-                next collectable slice.
-              </FitText>
-              {cancellationClosed ? (
-                <FitText
-                  excludeGlobalScale
-                  style={{
-                    fontSize: 12,
-                    color: colors.warning,
-                    lineHeight: 1.35,
-                  }}
-                >
-                  Cancellation is closed for this session. Coach appointments
-                  can only be cancelled until the day before{" "}
-                  {scheduleWindow.dateLabel}.
-                </FitText>
-              ) : null}
-            </div>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-                gap: 10,
-              }}
-            >
-              <div style={metricChipStyle(colors)}>
-                <FitText
-                  excludeGlobalScale
-                  style={{ fontSize: 11, fontWeight: 800, color: colors.textMuted }}
-                >
-                  SESSION PRICE
-                </FitText>
-                <FitText
-                  excludeGlobalScale
-                  style={{
-                    fontSize: 15,
-                    fontWeight: 800,
-                    color: colors.textPrimary,
-                  }}
-                >
-                  {sessionPrice != null ? formatPeso(Number(sessionPrice)) : "Not set"}
-                </FitText>
-              </div>
-              <div style={metricChipStyle(colors)}>
-                <FitText
-                  excludeGlobalScale
-                  style={{ fontSize: 11, fontWeight: 800, color: colors.textMuted }}
-                >
-                  CURRENT CYCLE TOTAL
-                </FitText>
-                <FitText
-                  excludeGlobalScale
-                  style={{
-                    fontSize: 15,
-                    fontWeight: 800,
-                    color: colors.textPrimary,
-                  }}
-                >
-                  {nextBillingCycle
-                    ? formatPeso(Number(nextBillingCycle.amount))
-                    : "No cycle"}
-                </FitText>
-              </div>
-              <div style={metricChipStyle(colors)}>
-                <FitText
-                  excludeGlobalScale
-                  style={{ fontSize: 11, fontWeight: 800, color: colors.textMuted }}
-                >
-                  DUE DATE
-                </FitText>
-                <FitText
-                  excludeGlobalScale
-                  style={{
-                    fontSize: 15,
-                    fontWeight: 800,
-                    color: colors.textPrimary,
-                  }}
-                >
-                  {nextBillingCycle
-                    ? formatCompactDate(nextBillingCycle.dueDate)
-                    : "-"}
-                </FitText>
-              </div>
-              <div style={metricChipStyle(colors)}>
-                <FitText
-                  excludeGlobalScale
-                  style={{ fontSize: 11, fontWeight: 800, color: colors.textMuted }}
-                >
-                  PAYMENT STATUS
-                </FitText>
-                <FitText
-                  excludeGlobalScale
-                  style={{
-                    fontSize: 15,
-                    fontWeight: 800,
-                    color:
-                      nextBillingCycle?.status === "paid"
-                        ? colors.success
-                        : colors.brand,
-                  }}
-                >
-                  {nextBillingCycle?.status.replace(/_/g, " ") ?? "-"}
-                </FitText>
-              </div>
-            </div>
-            {billingCycles.length > 0 ? (
-              <div style={{ display: "grid", gap: 8 }}>
-                {billingCycles.slice(0, 4).map((cycle) => (
-                  <div
-                    key={cycle.id}
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr auto",
-                      gap: 12,
-                      alignItems: "center",
-                      padding: "10px 0 0",
-                      borderTop: `1px solid ${colors.border}`,
-                      backgroundColor: "transparent",
-                    }}
-                  >
-                    <FitText
-                      excludeGlobalScale
-                      style={{
-                        fontSize: 12,
-                        color: colors.textMuted,
-                        lineHeight: 1.35,
-                      }}
-                    >
-                      {formatCompactDate(cycle.cycleStartDate)} -{" "}
-                      {formatCompactDate(cycle.cycleEndDate)}
-                      {` / ${formatPeso(Number(cycle.amount))}`}
-                      {cycle.paidAt
-                        ? ` / paid ${formatCompactDate(cycle.paidAt)}`
-                        : ""}
-                    </FitText>
-                    <FitText
-                      excludeGlobalScale
-                      style={{
-                        fontSize: 12,
-                        fontWeight: 800,
-                        color:
-                          cycle.status === "paid"
-                            ? colors.success
-                            : colors.textPrimary,
-                        textTransform: "uppercase",
-                      }}
-                    >
-                      {cycle.status.replace(/_/g, " ")}
-                    </FitText>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-            {nextBillingCycle &&
-            nextBillingCycle.status !== "paid" &&
-            nextBillingCycle.status !== "cancelled" ? (
-              <div
-                style={{
-                  display: "grid",
-                  gap: 8,
-                  padding: "12px 0 0",
-                  borderTop: `1px solid ${colors.border}`,
-                  backgroundColor: "transparent",
-                }}
-              >
-                <FitText
-                  excludeGlobalScale
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 800,
-                    color: colors.textPrimary,
-                  }}
-                >
-                  Billing-cycle payment
-                </FitText>
-                <FitText
-                  excludeGlobalScale
-                  style={{
-                    fontSize: 12,
-                    color: colors.textMuted,
-                    lineHeight: 1.35,
-                  }}
-                >
-                  Paying this cycle marks every generated recurring session
-                  inside the selected cycle window as paid. Editing a single
-                  session does not split the cycle charge into a one-session
-                  payment.
-                </FitText>
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                  {nextBillingCycle.status === "awaiting_verification" &&
-                  nextBillingCycle.paymentId ? (
-                    <FitButton
-                      variant="primary"
-                      label="APPROVE CASH PAYMENT"
-                      onClick={() =>
-                        onPayRecurringCycle?.(nextBillingCycle, "cash")
-                      }
-                      disabled={isSubmitting || !onPayRecurringCycle}
-                      style={actionPillStyle(colors, true)}
-                      textStyle={{ fontSize: 12, fontWeight: 800 }}
-                    />
-                  ) : (
-                    <>
-                      <FitButton
-                        variant="primary"
-                        label="ACCEPT CASH FOR CYCLE"
-                        onClick={() =>
-                          onPayRecurringCycle?.(nextBillingCycle, "cash")
-                        }
-                        disabled={isSubmitting || !onPayRecurringCycle}
-                        style={actionPillStyle(colors, true)}
-                        textStyle={{ fontSize: 12, fontWeight: 800 }}
-                      />
-                      <FitButton
-                        variant="ghost"
-                        label="OPEN PAYMONGO FOR CYCLE"
-                        onClick={() =>
-                          onPayRecurringCycle?.(nextBillingCycle, "paymongo")
-                        }
-                        disabled={isSubmitting || !onPayRecurringCycle}
-                        style={actionPillStyle(colors)}
-                        textStyle={{ fontSize: 12, fontWeight: 800 }}
-                      />
-                    </>
-                  )}
-                </div>
-              </div>
-            ) : null}
-            <div
-              style={{
-                display: "grid",
-                gap: 8,
-                padding: "12px 0 0",
-                borderTop: `1px solid ${colors.border}`,
-                backgroundColor: "transparent",
-              }}
-            >
-              <FitText
-                excludeGlobalScale
-                style={{
-                  fontSize: 12,
-                  fontWeight: 800,
-                  color: colors.textPrimary,
-                }}
-              >
-                Schedule edit scope
-              </FitText>
-              <FitText
-                excludeGlobalScale
-                style={{
-                  fontSize: 12,
-                  color: colors.textMuted,
-                  lineHeight: 1.35,
-                }}
-              >
-                Use these actions only when changing the recurring schedule.
-              </FitText>
-              <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              <FitButton
-                variant="ghost"
-                label="EDIT THIS SESSION"
-                onClick={onEditRecurringSession}
-                disabled={isSubmitting || !onEditRecurringSession}
-                style={actionPillStyle(colors)}
-                textStyle={{ fontSize: 13, fontWeight: 700 }}
-              />
-              <FitButton
-                variant="ghost"
-                label="EDIT THIS + FUTURE"
-                onClick={onEditRecurringFuture}
-                disabled={isSubmitting || !onEditRecurringFuture}
-                style={actionPillStyle(colors)}
-                textStyle={{ fontSize: 13, fontWeight: 700 }}
-              />
-              <FitButton
-                variant="ghost"
-                label="CANCEL PLAN"
-                onClick={onCancelRecurringPlan}
-                disabled={
-                  isSubmitting ||
-                  !onCancelRecurringPlan ||
-                  !canCancelAppointment
-                }
-                style={actionPillStyle(colors)}
-                textStyle={{
-                  fontSize: 13,
-                  fontWeight: 700,
-                  color: colors.danger,
-                }}
-              />
-              </div>
-            </div>
-          </div>
-        ) : null}
-
-        {coachDecisionOptions.length > 0 ? (
-        <div style={{ ...overlaySurfaceStyle(colors), gap: 14 }}>
-          <FitText
-            excludeGlobalScale
-            style={{ fontSize: 15, fontWeight: 800, color: colors.textPrimary }}
-          >
-            {isCoachView ? "Decision path" : "Payment / status decision"}
-          </FitText>
-          <FitText
-            excludeGlobalScale
-            style={{ fontSize: 12, color: colors.textMuted, lineHeight: 1.35 }}
-          >
-            {isCoachView
-              ? "Select one action, then submit it. Payment, rejection, completion, and cancellation no longer compete as separate decision buttons."
-              : "Select the payment or status action that matches the member's verified booking state."}
-          </FitText>
-          {cancellationClosed ? (
-            <FitText
-              excludeGlobalScale
-              style={{
-                fontSize: 12,
-                color: colors.warning,
-                lineHeight: 1.35,
-              }}
-            >
-              Cancellation is closed for this session. Coach appointments can
-              only be cancelled until the day before {scheduleWindow.dateLabel}.
+          <div style={{ ...overlaySurfaceStyle(colors), gap: 10 }}>
+            <FitText excludeGlobalScale style={{ fontSize: 15, fontWeight: 800, color: colors.textPrimary }}>
+              Coach feedback
             </FitText>
-          ) : null}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "minmax(220px, 1fr)",
-              gap: 12,
-              alignItems: "center",
-            }}
-          >
+            <FitTextArea
+              value={coachFeedback}
+              onChange={(event) => setCoachFeedback(event.target.value)}
+              rows={5}
+              placeholder={isConfirmed ? "Required before marking the session complete..." : "Feedback is available after completion."}
+              aria-label="Coach feedback"
+              disabled={isSubmitting || !isConfirmed}
+              style={{ fontSize: 12, lineHeight: 1.4 }}
+            />
+            {isFeedbackReady ? (
+              <FitButton
+                variant="ghost"
+                label={isSubmitting ? "SAVING..." : "SAVE FEEDBACK"}
+                aria-label="Save coach feedback"
+                onClick={saveFeedback}
+                disabled={isFeedbackDisabled}
+                style={{ ...actionPillStyle(colors), justifySelf: "start" }}
+                textStyle={{ fontSize: 13, fontWeight: 700 }}
+              />
+            ) : null}
+          </div>
+        </div>
+
+        {actionOptions.length > 0 ? (
+          <div style={{ ...overlaySurfaceStyle(colors), gap: 10 }}>
+            <FitText excludeGlobalScale style={{ fontSize: 15, fontWeight: 800, color: colors.textPrimary }}>
+              Session action
+            </FitText>
             <FitSelect
-              options={coachDecisionOptions.map((value) => ({
-                label: COACH_DECISION_LABELS[value],
+              options={actionOptions.map((value) => ({
+                label: value === "mark_complete" ? "Mark complete" : "Cancel session",
                 value,
               }))}
-              value={coachDecision}
-              onChange={(event) =>
-                setCoachDecision(event.target.value as CoachDecision)
-              }
-              disabled={isSubmitting || coachDecisionOptions.length === 0}
+              value={action}
+              onChange={(event) => setAction(event.target.value as "mark_complete" | "cancel")}
+              disabled={isSubmitting}
               fullWidth
+              aria-label="Session action"
+              style={{ minWidth: 220 }}
             />
+            {action === "cancel" ? (
+              <FitTextArea
+                value={note}
+                onChange={(event) => setNote(event.target.value)}
+                rows={2}
+                placeholder="Optional cancellation note..."
+                aria-label="Cancellation note"
+                disabled={isSubmitting}
+                style={{ fontSize: 12, lineHeight: 1.4 }}
+              />
+            ) : null}
+            {!canCancel && !isTerminal ? (
+              <FitText excludeGlobalScale style={{ fontSize: 12, color: colors.warning, lineHeight: 1.35 }}>
+                Cancellation is closed because the session date is too close.
+              </FitText>
+            ) : null}
           </div>
-        </div>
-        ) : (
-          <div style={{ ...overlaySurfaceStyle(colors), gap: 10 }}>
-            <FitText
-              excludeGlobalScale
-              style={{ fontSize: 15, fontWeight: 800, color: colors.textPrimary }}
-            >
-              No appointment decision needed
-            </FitText>
-            <FitText
-              excludeGlobalScale
-              style={{ fontSize: 12, color: colors.textMuted, lineHeight: 1.35 }}
-            >
-              {cancellationClosed
-                ? `Cancellation is closed because coach appointments can only be cancelled until the day before ${scheduleWindow.dateLabel}.`
-                : "This session is already resolved. Review the client details, member review, and coach reply above."}
-            </FitText>
-          </div>
-        )}
+        ) : null}
       </div>
     </OverlayFrame>
   );

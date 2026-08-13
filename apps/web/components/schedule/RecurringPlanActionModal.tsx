@@ -226,6 +226,14 @@ export function RecurringPlanActionModal({
           >
             Current session: {formatRecurringDateTime(action.appointment.scheduledAt)}
           </FitText>
+          {action.mode === "single" ? (
+            <FitText
+              excludeGlobalScale
+              style={{ fontSize: 11, color: colors.textMuted }}
+            >
+              Rescheduling changes one session only; other recurring sessions stay unchanged.
+            </FitText>
+          ) : null}
         </div>
 
         {action.mode === "cancel" ? (

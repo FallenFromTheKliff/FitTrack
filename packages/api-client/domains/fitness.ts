@@ -269,6 +269,7 @@ type TrainingPlanScheduleDayApiRecord = {
   exercises: TrainingPlanExerciseApiRecord[];
   focus_label: string | null;
   id: string;
+  is_rest_day?: boolean | null;
   notes: string | null;
   week_number: number;
 };
@@ -871,6 +872,7 @@ function mapTrainingPlanDetail(
       })),
       focusLabel: day.focus_label,
       id: day.id,
+      isRestDay: day.is_rest_day ?? null,
       notes: day.notes,
       weekNumber: day.week_number,
     })),
@@ -911,6 +913,7 @@ function toTrainingPlanMutationPayload(input: CreateTrainingPlanInput) {
         weight_kg_target: exercise.weightKgTarget,
       })),
       focus_label: day.focusLabel,
+      is_rest_day: day.isRestDay,
       week_number: day.weekNumber,
     })),
     title: input.title,
@@ -1643,14 +1646,28 @@ function toMasteryListParams(params?: FitnessMasteryListParams) {
   };
 }
 
+const CANONICAL_UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function normalizeMuscleLeaderboardSeasonId(value?: string) {
+  const candidate = value?.trim();
+  if (!candidate) return undefined;
+  if (!CANONICAL_UUID_PATTERN.test(candidate)) {
+    throw new Error("season_id must be a valid UUID");
+  }
+  return candidate;
+}
+
 function toMuscleLeaderboardParams(params: FitnessMuscleLeaderboardListParams) {
+  const seasonId = normalizeMuscleLeaderboardSeasonId(params.seasonId);
+
   return {
     scope: params.scope,
     muscle_key: params.muscleKey,
     ...(params.cursor ? { cursor: params.cursor } : {}),
     ...(params.page !== undefined ? { page: params.page } : {}),
     ...(params.limit !== undefined ? { limit: params.limit } : {}),
-    ...(params.seasonId ? { season_id: params.seasonId } : {}),
+    ...(seasonId ? { season_id: seasonId } : {}),
     ...(params.snapshot ? { snapshot: params.snapshot } : {}),
   };
 }
@@ -1809,6 +1826,16 @@ export function createFitnessApi(transport: ApiTransport) {
           params: toMuscleDefinitionListParams(params),
         }),
         "Unable to load muscle definitions.",
+      );
+      const records = Array.isArray(result) ? result : (result.data ?? []);
+      return records.map(mapMuscleDefinition);
+    },
+    async listMemberMuscleDefinitions(): Promise<MuscleDefinitionRecord[]> {
+      const result = await unwrapResponse<
+        MuscleDefinitionApiRecord[] | { data?: MuscleDefinitionApiRecord[] }
+      >(
+        transport.get("/fitness/member/muscle-definitions"),
+        "Unable to load active muscle definitions.",
       );
       const records = Array.isArray(result) ? result : (result.data ?? []);
       return records.map(mapMuscleDefinition);

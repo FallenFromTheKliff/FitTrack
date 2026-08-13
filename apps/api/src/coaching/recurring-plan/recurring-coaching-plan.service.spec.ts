@@ -1,4 +1,4 @@
-import { HttpException } from '@nestjs/common';
+import { GoneException, HttpException } from '@nestjs/common';
 import {
   Prisma,
   RecurringCoachingBillingCycleStatus,
@@ -6,8 +6,13 @@ import {
   UserRole,
 } from '@prisma/client';
 
-import { RecurringCoachingPlanRepository } from './recurring-coaching-plan.repository';
+import {
+  RECURRING_COACHING_ACTIVE_ENTITLEMENT_CONFLICT_TYPE,
+  RecurringCoachingPlanRepository,
+} from './recurring-coaching-plan.repository';
 import { RecurringCoachingPlanService } from './recurring-coaching-plan.service';
+import { CoachingCommerceService } from '../commerce/coaching-commerce.service';
+import { CoachAvailabilityService } from '../availability/coach-availability.service';
 
 type CreatePlanWithSessionsInput = Parameters<
   RecurringCoachingPlanRepository['createPlanWithSessions']
@@ -21,14 +26,22 @@ describe('RecurringCoachingPlanService', () => {
     findActiveMember: jest.fn(),
     findCoachContext: jest.fn(),
     findCoachAuthoredTrainingPlan: jest.fn(),
+    findClientProgram: jest.fn(),
     findMemberCoachEnrollment: jest.fn(),
     findConflictingAppointments: jest.fn(),
     createPlanWithSessions: jest.fn(),
+    fillPendingPlanWithSessions: jest.fn(),
     fillPaidPlanWithSessions: jest.fn(),
     findPlanWithSessions: jest.fn(),
   };
   const paymentRepository = {};
   const paymongoCheckoutService = {};
+  const commerceCheckoutService = {
+    createMonthlyCheckout: jest.fn(),
+  };
+  const coachAvailabilityService = {
+    check: jest.fn(),
+  };
 
   let service: RecurringCoachingPlanService;
 
@@ -53,12 +66,45 @@ describe('RecurringCoachingPlanService', () => {
     repo.findCoachAuthoredTrainingPlan.mockResolvedValue({
       id: 'training-plan-1',
     });
+    repo.findClientProgram.mockResolvedValue({
+      id: 'training-plan-1',
+      schedule_days: [
+        {
+          id: 'training-day-week-1-monday',
+          week_number: 1,
+          day_of_week: 1,
+          focus_label: 'Lower strength',
+          exercises: [{ exercise: { name: 'Back Squat' } }],
+        },
+        {
+          id: 'training-day-week-1-wednesday',
+          week_number: 1,
+          day_of_week: 3,
+          focus_label: 'Upper push',
+          exercises: [{ exercise: { name: 'Bench Press' } }],
+        },
+      ],
+    });
     repo.findMemberCoachEnrollment.mockResolvedValue(null);
     repo.findConflictingAppointments.mockResolvedValue([]);
+    coachAvailabilityService.check.mockResolvedValue({
+      available: true,
+      conflictReasons: [],
+    });
+    commerceCheckoutService.createMonthlyCheckout.mockResolvedValue({
+      hold_id: 'hold-monthly-1',
+      kind: 'monthly',
+      status: 'held',
+      checkout_url: 'https://checkout.paymongo.com/monthly-1',
+      expires_at: '2099-04-01T00:00:00.000Z',
+      payment_id: 'payment-monthly-1',
+    });
     service = new RecurringCoachingPlanService(
       repo as never,
       paymentRepository as never,
       paymongoCheckoutService as never,
+      commerceCheckoutService as never,
+      coachAvailabilityService as never,
     );
   });
 
@@ -161,6 +207,62 @@ describe('RecurringCoachingPlanService', () => {
     }
   });
 
+  it('derives workout candidates and selects no more than the purchased count', async () => {
+    const start = targetMonthStart();
+    const result = await service.previewPlan(
+      { role: UserRole.coach, sub: 'coach-user-1' } as never,
+      {
+        coach_id: 'coach-1',
+        member_id: 'member-1',
+        start_date: start.toISOString().slice(0, 10),
+        training_plan_id: 'training-plan-1',
+      } as never,
+    );
+
+    expect(result).toMatchObject({
+      can_confirm: true,
+      purchased_session_count: 4,
+      selected_session_count: 4,
+      total_sessions: 4,
+    });
+    expect(typeof result.candidate_count).toBe('number');
+    expect(typeof result.eligible_session_count).toBe('number');
+    expect(result.candidate_count).toBeGreaterThan(4);
+    expect(result.sessions.filter((session) => session.selected)).toHaveLength(
+      4,
+    );
+    expect(typeof result.sessions[0]?.date).toBe('string');
+    expect(result.sessions[0]).toMatchObject({
+      time: '00:00',
+      workout: {
+        exercise_count: 1,
+        exercise_names: ['Back Squat'],
+        label: 'Lower strength',
+      },
+    });
+  });
+
+  it('requires member enrollment before creating a pre-payment derived schedule', async () => {
+    const start = targetMonthStart();
+    await expect(
+      service.createPlan(
+        { role: UserRole.coach, sub: 'coach-user-1' } as never,
+        {
+          coach_id: 'coach-1',
+          member_id: 'member-1',
+          start_date: start.toISOString().slice(0, 10),
+          training_plan_id: 'training-plan-1',
+        } as never,
+      ),
+    ).rejects.toMatchObject({
+      response: {
+        status: 403,
+        title: 'Member Enrollment Required',
+      },
+    });
+    expect(repo.createPlanWithSessions).not.toHaveBeenCalled();
+  });
+
   it('rejects recurrence templates with more than five weekly days', async () => {
     const startDate = new Date(Date.now() + 24 * 60 * 60 * 1000)
       .toISOString()
@@ -192,13 +294,15 @@ describe('RecurringCoachingPlanService', () => {
   it('keeps recurring plan mutations read-only for members', async () => {
     repo.findPlanWithSessions.mockResolvedValue({
       appointments: [],
-      billing_cycles: [],
+      billing_cycles: [
+        { status: RecurringCoachingBillingCycleStatus.paid },
+      ],
       coach: { user_id: 'coach-user-1' },
       coach_id: 'coach-1',
       id: 'plan-1',
       member_id: 'member-1',
       schedule_items: [],
-      status: 'awaiting_payment',
+      status: RecurringCoachingPlanStatus.active,
     });
 
     await expect(
@@ -259,7 +363,7 @@ describe('RecurringCoachingPlanService', () => {
       conflict_count: 0,
       total_sessions: 5,
     });
-    expect(repo.findConflictingAppointments).toHaveBeenCalledTimes(5);
+    expect(coachAvailabilityService.check).toHaveBeenCalledTimes(5);
   });
 
   it('rejects an irregular explicit monthly schedule with six sessions in one gym week', async () => {
@@ -342,9 +446,10 @@ describe('RecurringCoachingPlanService', () => {
   });
 
   it('surfaces a coach availability conflict in an explicit preview', async () => {
-    repo.findConflictingAppointments.mockResolvedValue([
-      { id: 'appointment-1' },
-    ]);
+    coachAvailabilityService.check.mockResolvedValue({
+      available: false,
+      conflictReasons: ['coach_appointment_conflict'],
+    });
     const start = new Date();
     start.setUTCDate(start.getUTCDate() + 21);
     start.setUTCHours(1, 0, 0, 0);
@@ -455,49 +560,110 @@ describe('RecurringCoachingPlanService', () => {
     });
   });
 
-  it('creates a paid-first enrollment shell without schedule rows or sessions', async () => {
-    const shell = makePlan();
-    repo.createPlanWithSessions.mockResolvedValue(shell);
+  it('starts a full-payment monthly checkout without creating a plan shell', async () => {
+    const startDate = targetMonthStart().toISOString().slice(0, 10);
 
-    await service.enroll({ role: UserRole.member, sub: 'member-1' } as never, {
-      coach_id: 'coach-1',
-      start_date: targetMonthStart().toISOString().slice(0, 10),
-    });
-
-    const input = (
-      repo.createPlanWithSessions.mock.calls as Array<
-        [CreatePlanWithSessionsInput]
-      >
-    )[0]?.[0];
-    expect(input).toBeDefined();
-    if (!input) {
-      throw new Error('Expected enrollment creation input.');
-    }
-    expect(input.plan.status).toBe(
-      RecurringCoachingPlanStatus.awaiting_payment,
+    const result = await service.enroll(
+      { role: UserRole.member, sub: 'member-1' } as never,
+      { coach_id: 'coach-1', start_date: startDate },
+      '4d36dc38-74c9-4f7e-a7d0-fd4102a4e8b0',
     );
-    expect(input.plan.preferred_days).toEqual([]);
-    expect(input.plan.total_sessions).toBe(0);
-    expect(input.scheduleItems).toBeUndefined();
-    expect(input.appointments).toBeUndefined();
-    expect(input.billingCycles).toHaveLength(1);
-    expect(Number(input.billingCycles[0]?.amount)).toBe(12000);
+
+    expect(commerceCheckoutService.createMonthlyCheckout).toHaveBeenCalledWith(
+      expect.objectContaining({
+        amount: new Prisma.Decimal('12000'),
+        coachId: 'coach-1',
+        durationMinutes: 60,
+        idempotencyKey: '4d36dc38-74c9-4f7e-a7d0-fd4102a4e8b0',
+        sessionCount: 4,
+        userId: 'member-1',
+      }),
+    );
+    expect(repo.createPlanWithSessions).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      hold_id: 'hold-monthly-1',
+      kind: 'monthly',
+      checkout_url: 'https://checkout.paymongo.com/monthly-1',
+    });
   });
 
-  it('rejects duplicate pending or active enrollment', async () => {
+  it('does not treat an awaiting-payment row as a recurring entitlement', async () => {
     repo.findMemberCoachEnrollment.mockResolvedValue(makePlan());
 
-    await expect(
-      service.enroll({ role: UserRole.member, sub: 'member-1' } as never, {
+    const result = await service.enroll(
+      { role: UserRole.member, sub: 'member-1' } as never,
+      {
         coach_id: 'coach-1',
-      }),
+        start_date: targetMonthStart().toISOString().slice(0, 10),
+      },
+      '4d36dc38-74c9-4f7e-a7d0-fd4102a4e8b0',
+    );
+
+    expect(result).toMatchObject({
+      hold_id: 'hold-monthly-1',
+      kind: 'monthly',
+    });
+    expect(commerceCheckoutService.createMonthlyCheckout).toHaveBeenCalledTimes(
+      1,
+    );
+  });
+
+  it.each([
+    RecurringCoachingPlanStatus.active,
+    RecurringCoachingPlanStatus.paused,
+  ])('keeps %s recurring plans as typed active-entitlement blockers', async (status) => {
+    repo.findMemberCoachEnrollment.mockResolvedValue(makePlan({ status }));
+
+    await expect(
+      service.enroll(
+        { role: UserRole.member, sub: 'member-1' } as never,
+        {
+          coach_id: 'coach-1',
+          start_date: targetMonthStart().toISOString().slice(0, 10),
+        },
+        '4d36dc38-74c9-4f7e-a7d0-fd4102a4e8b0',
+      ),
     ).rejects.toMatchObject({
       response: {
+        conflict_kind: 'active_entitlement',
         status: 409,
         title: 'Recurring Coaching Enrollment Already Exists',
+        type: RECURRING_COACHING_ACTIVE_ENTITLEMENT_CONFLICT_TYPE,
       },
     });
-    expect(repo.createPlanWithSessions).not.toHaveBeenCalled();
+    expect(commerceCheckoutService.createMonthlyCheckout).not.toHaveBeenCalled();
+  });
+
+  it('passes the authenticated coach owner into the monthly client-program lookup', async () => {
+    repo.findClientProgram.mockResolvedValueOnce(null);
+    const startDate = targetMonthStart().toISOString().slice(0, 10);
+
+    await expect(
+      service.previewPlan(
+        { role: UserRole.coach, sub: 'coach-user-1' } as never,
+        {
+          coach_id: 'coach-1',
+          duration_minutes: 60,
+          duration_months: 1,
+          frequency: 'monthly',
+          member_id: 'member-1',
+          preferred_days: [1],
+          preferred_time: '09:00',
+          start_date: startDate,
+          training_plan_id: 'training-plan-1',
+        } as never,
+      ),
+    ).rejects.toMatchObject({
+      response: {
+        status: 422,
+        title: 'Client Program Not Found',
+      },
+    });
+    expect(repo.findClientProgram).toHaveBeenCalledWith({
+      coachUserId: 'coach-user-1',
+      memberId: 'member-1',
+      trainingPlanId: 'training-plan-1',
+    });
   });
 
   it('rejects inactive monthly offers', async () => {
@@ -596,13 +762,7 @@ describe('RecurringCoachingPlanService', () => {
     });
   });
 
-  it('forbids cash as a member recurring-cycle payment method', async () => {
-    repo.findPlanWithSessions.mockResolvedValue(
-      makePlan({
-        status: RecurringCoachingPlanStatus.awaiting_payment,
-      }),
-    );
-
+  it('retires recurring billing-cycle payment with HTTP 410', async () => {
     await expect(
       service.initiateBillingCyclePayment(
         { role: UserRole.member, sub: 'member-1' } as never,
@@ -610,11 +770,6 @@ describe('RecurringCoachingPlanService', () => {
         'cycle-1',
         { provider: 'cash', reference_no: 'cash-1' } as never,
       ),
-    ).rejects.toMatchObject({
-      response: {
-        status: 403,
-        title: 'Online Payment Required',
-      },
-    });
+    ).rejects.toBeInstanceOf(GoneException);
   });
 });

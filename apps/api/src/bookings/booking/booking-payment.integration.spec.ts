@@ -11,6 +11,7 @@ import {
 import { PaymentRepository } from '../../membership/payment/payment.repository';
 import { PaymongoCheckoutService } from '../../membership/payment/paymongo-checkout.service';
 import { CoachService } from '../../coaching/coach/coach.service';
+import { CoachingCommerceService } from '../../coaching/commerce/coaching-commerce.service';
 import { MembershipCardService } from '../../membership/card/card.service';
 import {
   PAYMENT_COMPLETED_EVENT,
@@ -65,6 +66,10 @@ describe('Booking payment integration', () => {
     validateCoachForBooking: jest.fn(),
   };
 
+  const coachingCommerceService = {
+    createVenueCheckout: jest.fn(),
+  };
+
   const redis = {
     set: jest.fn(),
     del: jest.fn(),
@@ -89,6 +94,7 @@ describe('Booking payment integration', () => {
         { provide: MembershipCardService, useValue: membershipCardService },
         { provide: SubscriptionService, useValue: subscriptionService },
         { provide: CoachService, useValue: coachService },
+        { provide: CoachingCommerceService, useValue: coachingCommerceService },
         { provide: 'default_IORedisModuleConnectionToken', useValue: redis },
       ],
     }).compile();

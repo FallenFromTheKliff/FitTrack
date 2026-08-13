@@ -18,6 +18,7 @@ import {
 
 import { BaseRepository } from '../../common/base-repository/base-repository';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CoachAvailabilityService } from '../availability/coach-availability.service';
 import { DateRangeDTO } from '../../user/dto/user-dto';
 import { StaffAppointmentFilterDTO } from './dto/appointment.dto';
 
@@ -382,8 +383,8 @@ export class AppointmentRepository extends BaseRepository {
           scheduled_at: input.scheduledAt,
           duration_minutes: input.durationMinutes,
           total_amount: input.totalAmount,
-          downpayment_amount: input.downpaymentAmount,
-          balance_amount: input.balanceAmount,
+          downpayment_amount: new Prisma.Decimal(0),
+          balance_amount: new Prisma.Decimal(0),
           gym_revenue: input.gymRevenue,
           coach_earnings: input.coachEarnings,
           member_notes: input.memberNotes ?? null,
@@ -416,6 +417,37 @@ export class AppointmentRepository extends BaseRepository {
     verifiedBy: string;
   }): Promise<CoachAppointment> {
     return this.transaction(async (tx) => {
+      const existingPayment = await tx.payment.findUnique({
+        where: { idempotency_key: input.idempotencyKey },
+        select: { payable_id: true, payable_type: true },
+      });
+      if (existingPayment) {
+        if (existingPayment.payable_type !== 'coaching') {
+          throw new ConflictException({
+            type: 'CONFLICT',
+            title: 'Idempotency Key Already Used',
+            status: 409,
+            detail: 'The idempotency key is already associated with another payment.',
+          });
+        }
+        return tx.coachAppointment.findUniqueOrThrow({
+          where: { id: existingPayment.payable_id },
+        });
+      }
+
+      if (input.paymentStage && input.paymentStage !== PaymentStage.full) {
+        throw new ConflictException({
+          type: 'CONFLICT',
+          title: 'Full Payment Required',
+          status: 409,
+          detail: 'Manual coaching appointments must be recorded as fully paid.',
+        });
+      }
+      await CoachAvailabilityService.assertAvailableWithClient(tx, {
+        coachId: input.coachId,
+        durationMinutes: input.durationMinutes,
+        startsAt: input.scheduledAt,
+      });
       const availableSlot = await tx.coachAvailabilitySlot.findFirst({
         where: {
           coach_id: input.coachId,
@@ -462,28 +494,23 @@ export class AppointmentRepository extends BaseRepository {
       }
 
       const paidAt = new Date();
-      const paymentStage = input.paymentStage ?? PaymentStage.full;
       const isFreeSession = input.totalAmount.equals(0);
-      const isFullPayment = paymentStage === PaymentStage.full;
-      const isConfirmedOnCreate = isFreeSession || isFullPayment;
 
       const appointment = await tx.coachAppointment.create({
         data: {
           user: { connect: { id: input.userId } },
           coach: { connect: { id: input.coachId } },
-          status: isConfirmedOnCreate
-            ? AppointmentStatus.confirmed
-            : AppointmentStatus.pending_payment,
+          status: AppointmentStatus.confirmed,
           is_free_session: isFreeSession,
           scheduled_at: input.scheduledAt,
           duration_minutes: input.durationMinutes,
           total_amount: input.totalAmount,
-          downpayment_amount: input.downpaymentAmount,
-          balance_amount: input.balanceAmount,
+          downpayment_amount: new Prisma.Decimal(0),
+          balance_amount: new Prisma.Decimal(0),
           gym_revenue: input.gymRevenue,
           coach_earnings: input.coachEarnings,
-          downpayment_paid_at: isConfirmedOnCreate ? paidAt : null,
-          balance_paid_at: isConfirmedOnCreate ? paidAt : null,
+          downpayment_paid_at: paidAt,
+          balance_paid_at: paidAt,
           member_notes: input.memberNotes ?? null,
         },
       });
@@ -494,14 +521,12 @@ export class AppointmentRepository extends BaseRepository {
           verifier: { connect: { id: input.verifiedBy } },
           payable_type: 'coaching',
           payable_id: appointment.id,
-          payment_stage: paymentStage,
-          amount: input.paymentAmount ?? input.totalAmount,
+          payment_stage: PaymentStage.full,
+          amount: input.totalAmount,
           provider: PaymentProvider.cash,
           idempotency_key: input.idempotencyKey,
-          status: isConfirmedOnCreate
-            ? PaymentStatus.completed
-            : PaymentStatus.awaiting_verification,
-          verified_at: isConfirmedOnCreate ? paidAt : null,
+          status: PaymentStatus.completed,
+          verified_at: paidAt,
         },
       });
 

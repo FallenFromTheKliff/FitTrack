@@ -1,10 +1,17 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft, CheckCircle2, XCircle } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { webApiClient } from "@/lib/api-client";
+import {
+  clearCommerceCheckoutHold,
+  readCommerceCheckoutHold,
+  type StoredCommerceCheckoutHold,
+} from "@/lib/commerce-checkout";
 import { AuthStatusPage } from "./AuthStatusPage";
 
 type PaymentReturnVariant = "cancel" | "success";
@@ -32,6 +39,124 @@ type PaymentReturnContent = {
   tone: "success" | "warning";
 };
 
+type CheckoutHoldState =
+  | "pending"
+  | "succeeded"
+  | "expired"
+  | "failed"
+  | "error"
+  | "retry";
+
+function resolveCheckoutHoldContent(
+  baseContent: PaymentReturnContent,
+  state: CheckoutHoldState | null | undefined,
+  hasHold: boolean,
+): PaymentReturnContent {
+  if (!hasHold || state === undefined || state === null) {
+    return baseContent;
+  }
+
+  if (state === "succeeded") {
+    return {
+      ...baseContent,
+      body:
+        "FitTrack received the successful full-payment confirmation. The related access or booking can now move to its active state.",
+      heroAccent: "Confirmed.",
+      heroStats: ["Full payment confirmed", "Access or booking can activate", "Refresh the original FitTrack screen"],
+      heroSubtitle:
+        "The checkout hold is complete. The original FitTrack screen is now the source of truth for the active result.",
+      noticeBody:
+        "The full payment was confirmed. Reopen the original FitTrack screen and refresh it to see the active booking or access.",
+      noticeTitle: "Checkout complete.",
+      title: "Payment Confirmed",
+      tone: "success",
+    };
+  }
+
+  if (state === "expired") {
+    return {
+      ...baseContent,
+      body:
+        "This checkout hold expired before FitTrack received a successful confirmation, so the related booking or access stays unchanged.",
+      heroAccent: "Hold expired.",
+      heroStats: ["Checkout hold expired", "Full payment not confirmed", "Retry from the original screen"],
+      heroSubtitle:
+        "The hold reached its expiry time without a successful confirmation. No product booking or active access should be created from this attempt.",
+      noticeBody:
+        "Return to the original FitTrack flow to start a fresh attempt. Do not reuse this expired checkout.",
+      noticeTitle: "Checkout hold expired.",
+      title: "Checkout Hold Expired",
+      tone: "warning",
+    };
+  }
+
+  if (state === "failed") {
+    return {
+      ...baseContent,
+      body:
+        "The full checkout failed, so FitTrack left the related booking or access unchanged.",
+      heroAccent: "Not completed.",
+      heroStats: ["Checkout failed", "Full payment not confirmed", "Retry from the original screen"],
+      heroSubtitle:
+        "The checkout returned a failed result. No product booking or active access should be created from this attempt.",
+      noticeBody:
+        "Return to the original FitTrack flow if you still want to try again. Avoid starting a second attempt until this result is clear.",
+      noticeTitle: "Checkout failed.",
+      title: "Checkout Failed",
+      tone: "warning",
+    };
+  }
+
+  if (state === "error") {
+    return {
+      ...baseContent,
+      body:
+        "FitTrack could not read the checkout hold status. The related booking or access stays unchanged until the status is known.",
+      heroAccent: "Status unavailable.",
+      heroStats: ["Checkout returned", "Status lookup failed", "Retry status lookup"],
+      heroSubtitle:
+        "The browser return arrived, but the server status could not be loaded safely.",
+      noticeBody:
+        "Retry the status lookup. If it continues to fail, return to the original FitTrack screen or contact staff before starting another checkout.",
+      noticeTitle: "Checkout status unavailable.",
+      title: "Checkout Status Error",
+      tone: "warning",
+    };
+  }
+
+  if (state === "retry") {
+    return {
+      ...baseContent,
+      body:
+        "FitTrack is retrying the checkout hold status lookup. The related booking or access stays unchanged until the server confirms the result.",
+      heroAccent: "Retrying.",
+      heroStats: ["Checkout returned", "Retrying status lookup", "Access stays unchanged until success"],
+      heroSubtitle:
+        "The status lookup was requested again and will keep the hold matched to its original return.",
+      noticeBody:
+        "Keep this checkout attempt intact while FitTrack retries. Do not start a duplicate checkout.",
+      noticeTitle: "Retrying checkout status.",
+      title: "Retrying Checkout Status",
+      tone: "success",
+    };
+  }
+
+  return {
+    ...baseContent,
+    body:
+      "FitTrack is still processing the full-payment confirmation. The related booking or access stays unchanged until the checkout succeeds.",
+    heroAccent: "Processing.",
+    heroStats: ["Checkout returned", "Waiting for full-payment confirmation", "Access stays unchanged until success"],
+    heroSubtitle:
+      "The checkout return arrived, and FitTrack is polling the hold status before activating the related product.",
+    noticeBody:
+      "Keep this attempt intact for a short while, then refresh the original FitTrack screen. Do not start a duplicate checkout.",
+    noticeTitle: "Checkout confirmation is processing.",
+    title: "Checkout Processing",
+    tone: "success",
+  };
+}
+
 function resolveGenericContent(variant: PaymentReturnVariant): PaymentReturnContent {
   if (variant === "success") {
     return {
@@ -47,7 +172,7 @@ function resolveGenericContent(variant: PaymentReturnVariant): PaymentReturnCont
         },
         {
           body:
-            "Reopen the screen where you started the checkout and refresh it there. If the payment is still pending after a short wait, contact staff before starting a second attempt.",
+            "Reopen the screen where you started the checkout and refresh it there. If confirmation has not arrived after a short wait, contact staff before starting a second attempt.",
           title: "What to do next"
         }
       ],
@@ -90,7 +215,7 @@ function resolveGenericContent(variant: PaymentReturnVariant): PaymentReturnCont
     heroAccent: "Cancelled.",
     heroStats: ["Payment not confirmed", "Original purchase stays unchanged", "Retry from the source screen"],
     heroSubtitle:
-      "FitTrack should keep the purchase unchanged until a verified backend confirmation says otherwise.",
+      "FitTrack should keep the purchase unchanged until a successful backend confirmation says otherwise.",
     heroTitle: "Payment Return",
     noticeBody:
       "Do not mark a payment as settled just because the browser reached this page. Retry from the original FitTrack flow if you still want to continue.",
@@ -108,11 +233,11 @@ function resolveMembershipCardContent(variant: PaymentReturnVariant): PaymentRet
       Icon: CheckCircle2,
       badge: "Membership Card Return",
       body:
-        "Your membership-card checkout returned from PayMongo. The card can stay pending briefly until FitTrack receives and processes the backend payment confirmation.",
+        "Your membership-card checkout returned from PayMongo. Access becomes active only after FitTrack receives and processes the successful payment confirmation.",
       detailItems: [
         {
           body:
-            "Reopen the member Profile screen where you started the purchase. That screen is the source of truth for whether the card is still pending, active, or needs staff follow-up.",
+            "Reopen the member Profile screen where you started the purchase. That screen is the source of truth for whether access is active after the checkout confirmation.",
           title: "Best next step"
         },
         {
@@ -124,9 +249,9 @@ function resolveMembershipCardContent(variant: PaymentReturnVariant): PaymentRet
       footerNote:
         "This page is public so PayMongo can safely redirect here even if the original member session was opened from the mobile app.",
       heroAccent: "Returned.",
-      heroStats: ["Membership-card checkout came back", "Card may stay pending briefly", "Refresh Profile for final state"],
+      heroStats: ["Membership-card checkout came back", "Access activates after confirmation", "Refresh Profile for final state"],
       heroSubtitle:
-        "The browser return reached FitTrack, but the member card becomes trustworthy only after the backend confirmation path finishes.",
+        "The browser return reached FitTrack, but member access becomes active only after the backend confirmation path finishes.",
       heroTitle: "Membership Card",
       noticeBody:
         "Do not start another membership-card purchase right away. First reopen Profile and confirm whether the current attempt is still processing or already completed.",
@@ -160,10 +285,10 @@ function resolveMembershipCardContent(variant: PaymentReturnVariant): PaymentRet
       heroAccent: "Cancelled.",
       heroStats: ["Card not activated", "Account stays unchanged", "Retry from Profile if needed"],
       heroSubtitle:
-        "FitTrack should leave membership-card access unchanged until a verified payment event confirms otherwise.",
+        "FitTrack should leave membership-card access unchanged until a successful payment confirmation says otherwise.",
       heroTitle: "Membership Card",
       noticeBody:
-        "If a previous attempt still appears pending in Profile, wait for it to settle or ask staff to confirm the payment state before trying again.",
+        "If access has not activated in Profile, wait for the checkout status to finish before trying again.",
       noticeTitle: "Avoid stacking duplicate card purchases.",
       primaryActionHref: "/profile",
       primaryActionLabel: "Return to Profile",
@@ -174,7 +299,48 @@ function resolveMembershipCardContent(variant: PaymentReturnVariant): PaymentRet
 
 export function PaymentReturnPage({ variant }: { variant: PaymentReturnVariant }) {
   const searchParams = useSearchParams();
-  const content = useMemo(() => {
+  const queryClient = useQueryClient();
+  const [storedHold, setStoredHold] = useState<StoredCommerceCheckoutHold | null>(null);
+  const queryHoldId = searchParams.get("hold_id") ?? searchParams.get("checkout_hold_id");
+
+  useEffect(() => {
+    setStoredHold(readCommerceCheckoutHold());
+  }, []);
+
+  const holdId = queryHoldId ?? storedHold?.holdId ?? null;
+  const matchingStoredHold = storedHold?.holdId === holdId ? storedHold : null;
+  const holdQuery = useQuery({
+    enabled: variant === "success" && Boolean(holdId),
+    queryFn: () => webApiClient.commerceCheckout.getHoldStatus(holdId!),
+    queryKey: ["commerce-checkout-return", holdId],
+    refetchInterval: (query) => (query.state.data?.state === "pending" ? 2000 : false),
+    retry: 2
+  });
+
+  const checkoutState: CheckoutHoldState | null | undefined =
+    holdQuery.isError
+      ? holdQuery.isFetching
+        ? "retry"
+        : "error"
+      : holdQuery.data?.state === "pending" &&
+          (holdQuery.data.expiresAt ?? matchingStoredHold?.expiresAt) &&
+          Date.parse(holdQuery.data.expiresAt ?? matchingStoredHold?.expiresAt ?? "") <= Date.now()
+        ? "expired"
+        : holdQuery.data?.state ?? (holdQuery.isFetching ? "pending" : undefined);
+
+  useEffect(() => {
+    if (variant === "cancel") {
+      clearCommerceCheckoutHold(holdId);
+      return;
+    }
+
+    if (checkoutState && ["succeeded", "expired", "failed"].includes(checkoutState)) {
+      clearCommerceCheckoutHold(holdId);
+      void queryClient.invalidateQueries();
+    }
+  }, [checkoutState, holdId, queryClient, variant]);
+
+  const baseContent = useMemo(() => {
     const flow = searchParams.get("flow");
 
     if (flow === "membership-card") {
@@ -183,6 +349,15 @@ export function PaymentReturnPage({ variant }: { variant: PaymentReturnVariant }
 
     return resolveGenericContent(variant);
   }, [searchParams, variant]);
+  const content = useMemo(
+    () =>
+      resolveCheckoutHoldContent(
+        baseContent,
+        checkoutState,
+        Boolean(holdId),
+      ),
+    [baseContent, checkoutState, holdId],
+  );
 
   return (
     <AuthStatusPage

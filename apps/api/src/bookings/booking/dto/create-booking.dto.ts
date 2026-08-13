@@ -1,21 +1,22 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { BookingStatus, PaymentProvider } from '@prisma/client';
 import {
-  IsEnum,
+  BookingStatus,
+  CommerceCheckoutHoldKind,
+  CommerceCheckoutHoldStatus,
+  PaymentProvider,
+} from '@prisma/client';
+import {
   IsISO8601,
-  IsNotEmpty,
+  IsIn,
   IsOptional,
   IsString,
-  IsUrl,
   IsUUID,
   MaxLength,
-  ValidateIf,
 } from 'class-validator';
 
 import { IsOnOrAfter, TrimString } from '../../../common/validators';
 
 export enum CreateBookingPaymentStage {
-  downpayment = 'downpayment',
   full = 'full',
 }
 
@@ -53,11 +54,11 @@ export class CreateBookingDTO {
   ends_at: string;
 
   @ApiProperty({
-    enum: PaymentProvider,
+    enum: [PaymentProvider.paymongo],
     example: PaymentProvider.paymongo,
   })
-  @IsEnum(PaymentProvider, {
-    message: `provider must be one of: ${Object.values(PaymentProvider).join(', ')}`,
+  @IsIn([PaymentProvider.paymongo], {
+    message: 'provider must be paymongo for self-service venue checkout',
   })
   provider: PaymentProvider;
 
@@ -65,11 +66,11 @@ export class CreateBookingDTO {
     enum: CreateBookingPaymentStage,
     example: CreateBookingPaymentStage.full,
     description:
-      'Self-service facility reservations are paid in full through PayMongo. The legacy downpayment value is retained only for internal compatibility and is rejected for member/coach requests.',
+      'Self-service facility reservations are paid in full through PayMongo.',
   })
   @IsOptional()
-  @IsEnum(CreateBookingPaymentStage, {
-    message: `payment_stage must be one of: ${Object.values(CreateBookingPaymentStage).join(', ')}`,
+  @IsIn([CreateBookingPaymentStage.full], {
+    message: 'payment_stage must be full for new venue bookings',
   })
   payment_stage?: CreateBookingPaymentStage;
 
@@ -84,16 +85,18 @@ export class CreateBookingDTO {
 }
 
 export class BookingCheckoutResponseDTO {
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: '22222222-2222-4222-8222-222222222222',
+    nullable: true,
   })
-  booking_id: string;
+  booking_id?: string | null;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     enum: BookingStatus,
     example: BookingStatus.pending,
+    nullable: true,
   })
-  status: BookingStatus;
+  status?: BookingStatus | CommerceCheckoutHoldStatus;
 
   @ApiPropertyOptional({
     example: 'https://checkout.paymongo.com/cs_test_123',
@@ -106,37 +109,24 @@ export class BookingCheckoutResponseDTO {
     nullable: true,
   })
   payment_id?: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  hold_id?: string | null;
+
+  @ApiPropertyOptional({ enum: CommerceCheckoutHoldKind, nullable: true })
+  kind?: CommerceCheckoutHoldKind | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  expires_at?: string | null;
 }
 
 export class ProcessBalanceDTO {
   @ApiProperty({
-    enum: PaymentProvider,
+    enum: [PaymentProvider.paymongo],
     example: PaymentProvider.paymongo,
   })
-  @IsEnum(PaymentProvider, {
-    message: `provider must be one of: ${Object.values(PaymentProvider).join(', ')}`,
+  @IsIn([PaymentProvider.paymongo], {
+    message: 'provider must be paymongo for legacy compatibility only',
   })
   provider: PaymentProvider;
-
-  @ApiPropertyOptional({
-    example: 'https://cdn.fittrack.test/receipts/or-2026-03-23.png',
-  })
-  @ValidateIf(
-    (dto: ProcessBalanceDTO) =>
-      dto.provider === PaymentProvider.cash &&
-      typeof dto.screenshot_url === 'string' &&
-      dto.screenshot_url.trim().length > 0,
-  )
-  @IsUrl({}, { message: 'screenshot_url must be a valid URL' })
-  screenshot_url?: string;
-
-  @ApiPropertyOptional({
-    example: 'OR-2026-001',
-  })
-  @ValidateIf((dto: ProcessBalanceDTO) => dto.provider === PaymentProvider.cash)
-  @TrimString()
-  @IsString({ message: 'reference_no must be a string' })
-  @IsNotEmpty({ message: 'reference_no is required' })
-  @MaxLength(100, { message: 'reference_no must not exceed 100 characters' })
-  reference_no?: string;
 }

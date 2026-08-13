@@ -24,6 +24,7 @@ describe('ExerciseService', () => {
     listReviewSubmissionStatusesByUserIds: jest.fn(),
     listReviewSubmissions: jest.fn(),
     listMuscleDefinitions: jest.fn(),
+    listActiveMuscleDefinitions: jest.fn(),
     listActiveMuscleDefinitionsByKeys: jest.fn(),
     createMuscleDefinition: jest.fn(),
     updateMuscleDefinition: jest.fn(),
@@ -231,6 +232,33 @@ describe('ExerciseService', () => {
         }),
       ],
     });
+  });
+
+  it('maps only active member muscle definitions, including non-default keys', async () => {
+    repo.listActiveMuscleDefinitions.mockResolvedValue([
+      makeMuscleDefinition({ key: 'chest', name: 'Chest' }),
+      makeMuscleDefinition({
+        key: 'latissimus_dorsi',
+        name: 'Latissimus Dorsi',
+        is_active: true,
+      }),
+      makeMuscleDefinition({
+        key: 'legacy_muscle',
+        name: 'Legacy Muscle',
+        is_active: false,
+      }),
+    ]);
+
+    await expect(service.listMemberMuscleDefinitions()).resolves.toEqual({
+      data: [
+        expect.objectContaining({ key: 'chest', is_active: true }),
+        expect.objectContaining({
+          key: 'latissimus_dorsi',
+          is_active: true,
+        }),
+      ],
+    });
+    expect(repo.listActiveMuscleDefinitions).toHaveBeenCalledWith();
   });
 
   it('creates canonical muscle definitions with normalized keys and aliases', async () => {

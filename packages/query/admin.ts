@@ -251,44 +251,6 @@ export function createAdminManualExpGrantMutationOptions(
   });
 }
 
-export function confirmAdminBookingMutationOptions(
-  client: Pick<ApiClient, "admin">,
-  queryClient: QueryClient,
-) {
-  return mutationOptions({
-    mutationFn: (bookingId: string) => client.admin.confirmBooking(bookingId),
-    onSuccess: async () => {
-      await Promise.all([
-        invalidateAdminBookingsQuery(queryClient),
-        invalidateAnalyticsQueries(queryClient),
-        invalidateStaffBookingQueries(queryClient),
-      ]);
-    },
-  });
-}
-
-export function rejectAdminBookingMutationOptions(
-  client: Pick<ApiClient, "admin">,
-  queryClient: QueryClient,
-) {
-  return mutationOptions({
-    mutationFn: ({
-      bookingId,
-      reason,
-    }: {
-      bookingId: string;
-      reason?: string;
-    }) => client.admin.rejectBooking(bookingId, reason),
-    onSuccess: async () => {
-      await Promise.all([
-        invalidateAdminBookingsQuery(queryClient),
-        invalidateAnalyticsQueries(queryClient),
-        invalidateStaffBookingQueries(queryClient),
-      ]);
-    },
-  });
-}
-
 export function completeAdminBookingMutationOptions(
   client: Pick<ApiClient, "admin">,
   queryClient: QueryClient,

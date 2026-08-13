@@ -8,6 +8,8 @@ import {
   MilestoneCategory,
   MilestoneDefinitionStatus,
   MilestoneEvidenceRequirement,
+  MilestoneEvidenceSubmissionStatus,
+  MilestoneEvidenceType,
   MilestoneProgressStatus,
   MilestoneTriggerType,
   MilestoneVerificationPolicy,
@@ -26,8 +28,14 @@ import {
   SessionStatus,
 } from '@prisma/client';
 import { seedExternalId, seedId } from '../ids';
-import { dateInsideRange, daysFrom } from '../time';
+import { daysFrom } from '../time';
 import type { DynamicSeedContext, SeedAccount } from '../types';
+import {
+  activityDateFor,
+  isMonthlyCoachingMember,
+  memberAccessWindow,
+  memberVolumeCount,
+} from '../volumes';
 import {
   DEFAULT_MILESTONE_ICON_KEY,
   DEFAULT_MUSCLE_ICON_KEY,
@@ -469,8 +477,14 @@ export function getSeedRankingVisibility(
 }
 
 async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
-  const memberKeys = ctx.state.premiumMemberKeys.slice(0, 36);
+  const memberKeys = [
+    ...ctx.state.activeMemberKeys,
+    ...ctx.state.historicalMemberKeys,
+  ];
   const coachKeys = ctx.state.coachAccountKeys;
+  const coachedMemberKeys = new Set(
+    memberKeys.filter((memberKey) => isMonthlyCoachingMember(ctx, memberKey)),
+  );
   const exerciseKeys = EXERCISE_SEEDS.map((exercise) => exercise.key);
   const scheduleRows: Prisma.TrainingScheduleDayCreateManyInput[] = [];
   const planExerciseRows: Prisma.PlanExerciseCreateManyInput[] = [];
@@ -488,13 +502,6 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
       return exerciseId ? ([[exerciseId, exerciseKey]] as const) : [];
     }),
   );
-  const lucaHistoryTarget = Math.min(12, ctx.config.exerciseHistory);
-  const remainingHistory = ctx.config.exerciseHistory - lucaHistoryTarget;
-  const otherMemberCount = Math.max(1, memberKeys.length - 1);
-  const baseHistoryPerOtherMember = Math.floor(
-    remainingHistory / otherMemberCount,
-  );
-  const otherHistoryRemainder = remainingHistory % otherMemberCount;
   const presetsPerMember = ctx.config.splitPresetsPerMember;
 
   for (const [memberIndex, memberKey] of memberKeys.entries()) {
@@ -503,10 +510,16 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
     // explicit so her active PPL plan is always a real Seed Coach assignment,
     // rather than an AI draft that happens to share the same title.
     const isLucaDemoMember = memberKey === 'member-premium';
-    const coachKey = isLucaDemoMember
+    const isQaOneTimeMember = memberKey === 'member-active';
+    const coachKey = isLucaDemoMember || isQaOneTimeMember
       ? 'coach'
       : coachKeys[memberIndex % coachKeys.length];
     const activePlanId = seedId(`training-plan:${memberKey}`);
+    const planCreatedAt = daysFrom(
+      memberAccessWindow(ctx, memberKey).startsAt ?? ctx.config.anchorDate,
+      -7,
+      8,
+    );
 
     for (
       let presetIndex = 0;
@@ -517,10 +530,14 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
         presetIndex === 0
           ? activePlanId
           : seedId(`training-plan:${memberKey}:preset:${presetIndex}`);
+      const hasCoachingRelationship =
+        isLucaDemoMember ||
+        isQaOneTimeMember ||
+        coachedMemberKeys.has(memberKey);
       const source =
-        isLucaDemoMember || memberIndex % 2 === 0
+        presetIndex === 0 && hasCoachingRelationship
           ? PlanSource.coach_assigned
-          : presetIndex === 0
+          : presetIndex === 2
             ? PlanSource.ai_generated
             : PlanSource.self_created;
       await ctx.prisma.trainingPlan.upsert({
@@ -542,14 +559,17 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
               ? ctx.state.userIds[coachKey]
               : null,
           days_per_week: presetIndex === 2 ? 4 : 3,
-          duration_weeks: 8,
+          duration_weeks:
+            presetIndex === 0 && isQaOneTimeMember ? 1 : 8,
           goal:
             memberIndex % 3 === 0
               ? FitnessGoal.bulking
               : memberIndex % 3 === 1
                 ? FitnessGoal.cutting
                 : FitnessGoal.maintenance,
-          is_active: presetIndex === 0,
+          is_active:
+            presetIndex === 0 &&
+            !ctx.state.historicalMemberKeys.includes(memberKey),
           is_template: false,
           source,
           title:
@@ -558,6 +578,7 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
               : presetIndex === 1
                 ? 'Upper Lower Backup Split'
                 : 'Conditioning Preset',
+          created_at: planCreatedAt,
         },
         create: {
           id: planId,
@@ -577,14 +598,17 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
               ? ctx.state.userIds[coachKey]
               : null,
           days_per_week: presetIndex === 2 ? 4 : 3,
-          duration_weeks: 8,
+          duration_weeks:
+            presetIndex === 0 && isQaOneTimeMember ? 1 : 8,
           goal:
             memberIndex % 3 === 0
               ? FitnessGoal.bulking
               : memberIndex % 3 === 1
                 ? FitnessGoal.cutting
                 : FitnessGoal.maintenance,
-          is_active: presetIndex === 0,
+          is_active:
+            presetIndex === 0 &&
+            !ctx.state.historicalMemberKeys.includes(memberKey),
           is_template: false,
           source,
           title:
@@ -593,87 +617,98 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
               : presetIndex === 1
                 ? 'Upper Lower Backup Split'
                 : 'Conditioning Preset',
+          created_at: planCreatedAt,
           user_id: userId,
         },
       });
 
-      for (let dayIndex = 0; dayIndex < 7; dayIndex += 1) {
-        const isRestDay =
-          presetIndex === 0 ? dayIndex === 3 : dayIndex % 3 === 2;
-        const scheduleDayId = seedId(
-          `schedule-day:${memberKey}:${presetIndex}:${dayIndex}`,
-        );
-        scheduleRows.push({
-          id: scheduleDayId,
-          day_of_week: dayIndex,
-          focus_label: isRestDay
-            ? 'Rest'
-            : presetIndex === 0
-              ? ['Push', 'Pull', 'Legs', 'Rest', 'Push', 'Pull', 'Legs'][
-                  dayIndex
-                ]
-              : dayIndex % 2 === 0
-                ? 'Upper'
-                : 'Lower',
-          notes: isRestDay
-            ? 'Rest day in the recurring weekly split.'
-            : 'Training day prepared for plan detail review.',
-          plan_id: planId,
-          week_number: 1,
-        });
-
-        if (isRestDay) {
-          continue;
-        }
-
-        for (let orderIndex = 0; orderIndex < 3; orderIndex += 1) {
-          const exerciseKey =
-            exerciseKeys[
-              (memberIndex + presetIndex + dayIndex + orderIndex) %
-                exerciseKeys.length
-            ];
-          const planExerciseId = seedId(
-            `plan-exercise:${memberKey}:${presetIndex}:${dayIndex}:${orderIndex}`,
+      const populatedWeeks = isLucaDemoMember
+        ? 8
+        : isQaOneTimeMember
+          ? 1
+          : 1;
+      for (let weekNumber = 1; weekNumber <= populatedWeeks; weekNumber += 1) {
+        for (let dayIndex = 0; dayIndex < 7; dayIndex += 1) {
+          const isRestDay =
+            presetIndex === 0 ? dayIndex === 3 : dayIndex % 3 === 2;
+          const weekSuffix = weekNumber === 1 ? '' : `:week:${weekNumber}`;
+          const scheduleDayId = seedId(
+            `schedule-day:${memberKey}:${presetIndex}:${dayIndex}${weekSuffix}`,
           );
-          const reps = exerciseKey === 'run' ? null : 8 + orderIndex * 2;
-          const sets = exerciseKey === 'run' ? 1 : 3;
-          const durationSeconds =
-            exerciseKey === 'run' || exerciseKey === 'plank'
-              ? 600 + orderIndex * 60
-              : null;
-          const weightKg =
-            exerciseKey === 'run' || exerciseKey === 'plank'
-              ? null
-              : 25 + memberIndex + orderIndex * 5;
-          planExerciseRows.push({
-            id: planExerciseId,
-            duration_seconds: durationSeconds,
-            exercise_id: ctx.state.exerciseIds[exerciseKey],
-            notes: 'Plan exercise with realistic set prescription.',
-            order_index: orderIndex,
-            reps,
-            rest_seconds: exerciseKey === 'run' ? 90 : 75,
-            schedule_day_id: scheduleDayId,
-            sets,
-            weight_kg_target:
-              weightKg == null ? null : new Prisma.Decimal(weightKg),
+          scheduleRows.push({
+            id: scheduleDayId,
+            day_of_week: dayIndex,
+            focus_label: isRestDay
+              ? 'Rest'
+              : presetIndex === 0
+                ? ['Push', 'Pull', 'Legs', 'Rest', 'Push', 'Pull', 'Legs'][
+                    dayIndex
+                  ]
+                : dayIndex % 2 === 0
+                  ? 'Upper'
+                  : 'Lower',
+            notes: isRestDay
+              ? 'Rest day in the recurring weekly split.'
+              : 'Training day prepared for plan detail review.',
+            plan_id: planId,
+            created_at: planCreatedAt,
+            week_number: weekNumber,
           });
 
-          if (presetIndex === 0) {
-            const activePlanExercises =
-              activePlanExercisesByMember.get(memberKey) ?? [];
-            activePlanExercises.push({
-              dayOfWeek: dayIndex,
-              durationSeconds,
-              exerciseId: ctx.state.exerciseIds[exerciseKey],
-              exerciseKey,
-              planExerciseId,
+          if (isRestDay) {
+            continue;
+          }
+
+          for (let orderIndex = 0; orderIndex < 3; orderIndex += 1) {
+            const exerciseKey =
+              exerciseKeys[
+                (memberIndex + presetIndex + dayIndex + orderIndex) %
+                  exerciseKeys.length
+              ];
+            const planExerciseId = seedId(
+              `plan-exercise:${memberKey}:${presetIndex}:${dayIndex}:${orderIndex}${weekSuffix}`,
+            );
+            const reps = exerciseKey === 'run' ? null : 8 + orderIndex * 2;
+            const sets = exerciseKey === 'run' ? 1 : 3;
+            const durationSeconds =
+              exerciseKey === 'run' || exerciseKey === 'plank'
+                ? 600 + orderIndex * 60
+                : null;
+            const weightKg =
+              exerciseKey === 'run' || exerciseKey === 'plank'
+                ? null
+                : 25 + memberIndex + orderIndex * 5;
+            planExerciseRows.push({
+              id: planExerciseId,
+              duration_seconds: durationSeconds,
+              exercise_id: ctx.state.exerciseIds[exerciseKey],
+              notes: 'Plan exercise with realistic set prescription.',
+              order_index: orderIndex,
               reps,
-              scheduleDayId,
+              rest_seconds: exerciseKey === 'run' ? 90 : 75,
+              schedule_day_id: scheduleDayId,
               sets,
-              weightKg,
+              weight_kg_target:
+                weightKg == null ? null : new Prisma.Decimal(weightKg),
+              created_at: planCreatedAt,
             });
-            activePlanExercisesByMember.set(memberKey, activePlanExercises);
+
+            if (presetIndex === 0) {
+              const activePlanExercises =
+                activePlanExercisesByMember.get(memberKey) ?? [];
+              activePlanExercises.push({
+                dayOfWeek: dayIndex,
+                durationSeconds,
+                exerciseId: ctx.state.exerciseIds[exerciseKey],
+                exerciseKey,
+                planExerciseId,
+                reps,
+                scheduleDayId,
+                sets,
+                weightKg,
+              });
+              activePlanExercisesByMember.set(memberKey, activePlanExercises);
+            }
           }
         }
       }
@@ -692,16 +727,19 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
         new Map(),
       ),
     ].map(([, dayExercises]) => dayExercises);
-    const otherMemberIndex = Math.max(0, memberIndex - 1);
-    const sessionsForMember = isLucaDemoMember
-      ? lucaHistoryTarget
-      : baseHistoryPerOtherMember +
-        (otherMemberIndex < otherHistoryRemainder ? 1 : 0);
-    const historyEndBeforeToday = daysFrom(ctx.config.historyEndDate, -1, 20);
-    const effectiveHistoryStart =
-      ctx.config.historyStartDate <= historyEndBeforeToday
-        ? ctx.config.historyStartDate
-        : daysFrom(historyEndBeforeToday, -1, 8);
+    const sessionsForMember = memberVolumeCount(
+      ctx,
+      memberKey,
+      'workouts',
+      ctx.config.workoutDensity,
+    );
+    const exerciseLogBudget = memberVolumeCount(
+      ctx,
+      memberKey,
+      'exerciseLogs',
+      ctx.config.workoutDensity,
+    );
+    let exerciseLogsCreated = 0;
 
     for (
       let sessionIndex = 0;
@@ -712,12 +750,16 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
         ? activePlanDays[sessionIndex % activePlanDays.length]
         : ctx.rng.pick(activePlanDays);
       const sessionId = seedId(`workout-session:${memberKey}:${sessionIndex}`);
-      const startedAt = dateInsideRange(
-        effectiveHistoryStart,
-        historyEndBeforeToday,
-        (sessionIndex + 1) / (sessionsForMember + 1),
+      const startedAt = activityDateFor(
+        ctx,
+        memberKey,
+        sessionIndex,
+        sessionsForMember,
         ctx.rng.int(7, 19),
       );
+      if (!startedAt) {
+        continue;
+      }
       const durationSeconds = ctx.rng.int(2_400, 4_500);
       const completedAt = new Date(
         startedAt.getTime() + durationSeconds * 1_000,
@@ -743,6 +785,9 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
               );
 
         for (let setIndex = 0; setIndex < exercise.sets; setIndex += 1) {
+          if (exerciseLogsCreated >= exerciseLogBudget) {
+            continue;
+          }
           const exerciseLogId = seedId(
             `exercise-log:${memberKey}:${sessionIndex}:${exercise.planExerciseId}:${setIndex}`,
           );
@@ -771,6 +816,7 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
                 ? null
                 : new Prisma.Decimal(completedWeightKg),
           });
+          exerciseLogsCreated += 1;
 
           if (completedWeightKg != null && completedReps != null) {
             totalVolumeKg += completedWeightKg * completedReps;
@@ -781,6 +827,7 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
       sessionRows.push({
         id: sessionId,
         completed_at: completedAt,
+        created_at: daysFrom(startedAt, -1, 9),
         duration_seconds: durationSeconds,
         last_activity_at: completedAt,
         plan_id: activePlanId,
@@ -903,6 +950,15 @@ async function seedGamification(ctx: DynamicSeedContext) {
   const upcomingSeasonId = seedId('season:dynamic-upcoming');
   const memberKeys = ctx.state.memberKeys;
   const activeMemberKeys = ctx.state.activeMemberKeys;
+  const historyMemberKeys = [
+    ...ctx.state.activeMemberKeys,
+    ...ctx.state.historicalMemberKeys,
+  ];
+  const activeMuscles = await ctx.prisma.muscleDefinition.findMany({
+    where: { is_active: true },
+    orderBy: [{ sort_order: 'asc' }, { key: 'asc' }],
+    select: { key: true },
+  });
   const adminId = ctx.state.userIds[ctx.state.adminKeys[0]];
   const existingActiveSeason = await ctx.prisma.seasonDefinition.findFirst({
     where: { status: SeasonStatus.active },
@@ -1080,14 +1136,12 @@ async function seedGamification(ctx: DynamicSeedContext) {
   }
 
   for (const account of ctx.state.accounts.filter(
-    (candidate) => candidate.role === 'member' || candidate.role === 'admin',
+    (candidate) =>
+      candidate.role === 'admin' || historyMemberKeys.includes(candidate.key),
   )) {
     const userId = ctx.state.userIds[account.key];
     const memberIndex = memberKeys.indexOf(account.key);
-    const points =
-      account.role === 'admin'
-        ? 0
-        : 150 + (memberIndex % 12) * 65;
+    const points = account.role === 'admin' ? 0 : 150 + (memberIndex % 12) * 65;
     const totalXp = getRepresentativeLifetimeXp(account, memberIndex);
     await ctx.prisma.userProgressionProfile.upsert({
       where: { user_id: userId },
@@ -1133,8 +1187,7 @@ async function seedGamification(ctx: DynamicSeedContext) {
           account.memberPersona === 'suspended'
             ? RankingGovernanceStatus.hidden_by_admin
             : RankingGovernanceStatus.normal,
-        visibility:
-          getSeedRankingVisibility(account),
+        visibility: getSeedRankingVisibility(account),
       },
       create: {
         id: seedId(`ranking-profile:${account.key}`),
@@ -1262,10 +1315,8 @@ async function seedGamification(ctx: DynamicSeedContext) {
     }
   }
 
-  for (const [memberIndex, memberKey] of activeMemberKeys
-    .slice(0, 40)
-    .entries()) {
-    for (const [muscleIndex, muscle] of ['chest', 'quads', 'core'].entries()) {
+  for (const [memberIndex, memberKey] of historyMemberKeys.entries()) {
+    for (const [muscleIndex, { key: muscle }] of activeMuscles.entries()) {
       const xpPoints = getRepresentativeMuscleXp(memberIndex, muscleIndex);
       const totalVolumeKg = new Prisma.Decimal(
         4_500 + memberIndex * 125 + muscleIndex * 300,
@@ -1278,11 +1329,7 @@ async function seedGamification(ctx: DynamicSeedContext) {
           },
         },
         update: {
-          last_ranked_at: daysFrom(
-            ctx.config.anchorDate,
-            -2 - muscleIndex,
-            20,
-          ),
+          last_ranked_at: daysFrom(ctx.config.anchorDate, -2 - muscleIndex, 20),
           rank: evaluateExpRank(xpPoints),
           total_volume_kg: totalVolumeKg,
           xp_points: xpPoints,
@@ -1300,20 +1347,14 @@ async function seedGamification(ctx: DynamicSeedContext) {
     }
   }
 
-  for (const [memberIndex, memberKey] of activeMemberKeys
-    .slice(0, 40)
-    .entries()) {
-    for (const [muscleIndex, muscle] of ['chest', 'quads', 'core'].entries()) {
+  for (const [memberIndex, memberKey] of activeMemberKeys.entries()) {
+    for (const [muscleIndex, { key: muscle }] of activeMuscles.entries()) {
       const rows = [
         {
           id: seedId(`season-muscle:${activeSeasonId}:${memberKey}:${muscle}`),
           is_disqualified: memberKey === 'member-suspended',
           is_hidden: false,
-          last_earned_at: daysFrom(
-            ctx.config.anchorDate,
-            -2 - muscleIndex,
-            20,
-          ),
+          last_earned_at: daysFrom(ctx.config.anchorDate, -2 - muscleIndex, 20),
           muscle_group: muscle,
           muscle_points: 900 - memberIndex * 9 + muscleIndex * 35,
           rank_position: memberIndex + 1,
@@ -1362,54 +1403,83 @@ async function seedGamification(ctx: DynamicSeedContext) {
     }
   }
 
-  const sourceRows = activeMemberKeys.slice(0, 48).map((memberKey, index) => ({
-    id: seedId(`progression-source:${memberKey}:workout`),
-    created_at: daysFrom(ctx.config.anchorDate, -7 + (index % 5), 19),
-    processed_at: daysFrom(ctx.config.anchorDate, -7 + (index % 5), 19, 5),
-    source_context: {
-      source: 'dynamic-seed',
-      workoutSessionId: seedId(`workout-session:${memberKey}:0`),
+  const completedWorkouts = await ctx.prisma.workoutSession.findMany({
+    where: {
+      status: SessionStatus.completed,
+      user_id: { in: historyMemberKeys.map((memberKey) => ctx.state.userIds[memberKey]) },
     },
-    source_id: seedExternalId(`source:workout:${memberKey}`),
-    source_status:
-      index % 11 === 0
-        ? ProgressionSourceStatus.reduced
-        : ProgressionSourceStatus.applied,
-    source_type: ProgressionSourceType.workout_session_completed,
-    user_id: ctx.state.userIds[memberKey],
-  }));
+    orderBy: [{ user_id: 'asc' }, { completed_at: 'asc' }],
+    select: {
+      completed_at: true,
+      id: true,
+      started_at: true,
+      total_volume_kg: true,
+      user_id: true,
+    },
+  });
+  const sourceCounts = new Map<string, number>();
+  const sourceRows = completedWorkouts.flatMap((workout) => {
+    const sourceCount = sourceCounts.get(workout.user_id) ?? 0;
+    if (sourceCount >= 60) {
+      return [];
+    }
+    sourceCounts.set(workout.user_id, sourceCount + 1);
+    return [{
+      id: seedId(`progression-source:workout:${workout.id}`),
+      created_at: workout.completed_at ?? workout.started_at,
+      processed_at: workout.completed_at ?? workout.started_at,
+      source_context: {
+        source: 'dynamic-seed',
+        workoutSessionId: workout.id,
+      },
+      source_id: seedExternalId(`source:workout:${workout.id}`),
+      source_status: ProgressionSourceStatus.applied,
+      source_type: ProgressionSourceType.workout_session_completed,
+      user_id: workout.user_id,
+      workoutId: workout.id,
+      volume: Number(workout.total_volume_kg ?? 0),
+    }];
+  });
+  const sourceEventIdByUser = new Map<string, string>();
+  for (const source of sourceRows) {
+    if (!sourceEventIdByUser.has(source.user_id)) {
+      sourceEventIdByUser.set(source.user_id, source.id);
+    }
+  }
 
   for (const [index, source] of sourceRows.entries()) {
+    const { workoutId, volume, ...sourceRecord } = source;
     await ctx.prisma.progressionSourceEvent.upsert({
       where: { id: source.id },
       update: {
         created_at: source.created_at,
         processed_at: source.processed_at,
-        source_context: source.source_context,
-        source_id: source.source_id,
-        source_status: source.source_status,
-        source_type: source.source_type,
-        user_id: source.user_id,
+        source_context: sourceRecord.source_context,
+        source_id: sourceRecord.source_id,
+        source_status: sourceRecord.source_status,
+        source_type: sourceRecord.source_type,
+        user_id: sourceRecord.user_id,
       },
-      create: source,
+      create: sourceRecord,
     });
 
     const grants = [
       {
-        id: seedId(`progression-grant:${source.user_id}:xp`),
-        amount: 120 + (index % 8) * 10,
+        id: seedId(`progression-grant:${source.workoutId}:xp`),
+        amount: Math.max(80, Math.min(260, 80 + Math.round(volume / 18))),
         created_at: source.created_at,
         grant_status: ProgressionGrantStatus.applied,
         grant_type: ProgressionGrantType.xp,
         metadata: { source: 'dynamic-seed' },
-        muscle_group: index % 2 === 0 ? 'chest' : 'quads',
+        muscle_group:
+          activeMuscles[index % Math.max(1, activeMuscles.length)]?.key ?? null,
         reason: 'Completed workout reward.',
         season_id: activeSeasonId,
         source_event_id: source.id,
         user_id: source.user_id,
       },
       {
-        id: seedId(`progression-grant:${source.user_id}:season`),
+        id: seedId(`progression-grant:${source.workoutId}:season`),
         amount: 45 + (index % 5) * 5,
         created_at: source.created_at,
         grant_status: ProgressionGrantStatus.applied,
@@ -1443,38 +1513,183 @@ async function seedGamification(ctx: DynamicSeedContext) {
     }
   }
 
+  const seededGrants = sourceRows.length
+    ? await ctx.prisma.progressionGrantLedger.findMany({
+        where: { source_event_id: { in: sourceRows.map((source) => source.id) } },
+        select: {
+          amount: true,
+          created_at: true,
+          grant_type: true,
+          muscle_group: true,
+          season_id: true,
+          user_id: true,
+        },
+      })
+    : [];
+  const totalXpByUser = new Map<string, number>();
+  const seasonPointsByUser = new Map<string, number>();
+  const muscleXpByUser = new Map<string, Map<string, number>>();
+  const lastProgressedAtByUser = new Map<string, Date>();
+  const volumeByUser = new Map<string, number>();
+  for (const workout of completedWorkouts) {
+    volumeByUser.set(
+      workout.user_id,
+      (volumeByUser.get(workout.user_id) ?? 0) +
+        Number(workout.total_volume_kg ?? 0),
+    );
+  }
+  for (const source of sourceRows) {
+    const previous = lastProgressedAtByUser.get(source.user_id);
+    if (!previous || source.created_at > previous) {
+      lastProgressedAtByUser.set(source.user_id, source.created_at);
+    }
+  }
+  for (const grant of seededGrants) {
+    const amount = Number(grant.amount);
+    if (grant.grant_type === ProgressionGrantType.xp) {
+      totalXpByUser.set(
+        grant.user_id,
+        (totalXpByUser.get(grant.user_id) ?? 0) + amount,
+      );
+      if (grant.muscle_group) {
+        const muscleTotals = muscleXpByUser.get(grant.user_id) ?? new Map();
+        muscleTotals.set(
+          grant.muscle_group,
+          (muscleTotals.get(grant.muscle_group) ?? 0) + amount,
+        );
+        muscleXpByUser.set(grant.user_id, muscleTotals);
+      }
+    }
+    if (
+      grant.grant_type === ProgressionGrantType.season_points &&
+      grant.season_id === activeSeasonId
+    ) {
+      seasonPointsByUser.set(
+        grant.user_id,
+        (seasonPointsByUser.get(grant.user_id) ?? 0) + amount,
+      );
+    }
+  }
+
+  for (const memberKey of historyMemberKeys) {
+    const userId = ctx.state.userIds[memberKey];
+    const totalXp = totalXpByUser.get(userId) ?? 0;
+    const seasonPoints = seasonPointsByUser.get(userId) ?? 0;
+    const lastProgressedAt =
+      lastProgressedAtByUser.get(userId) ??
+      activityDateFor(ctx, memberKey, 0, 1, 19) ??
+      daysFrom(ctx.config.anchorDate, -1, 19);
+    await ctx.prisma.userProgressionProfile.update({
+      where: { user_id: userId },
+      data: {
+        current_season_points: seasonPoints,
+        last_progressed_at: lastProgressedAt,
+        total_xp: totalXp,
+      },
+    });
+
+    const muscleTotals = muscleXpByUser.get(userId) ?? new Map<string, number>();
+    for (const { key: muscle } of activeMuscles) {
+      const xpPoints = muscleTotals.get(muscle) ?? 0;
+      await ctx.prisma.muscleMasteryProgress.upsert({
+        where: {
+          user_id_muscle_group: { muscle_group: muscle, user_id: userId },
+        },
+        update: {
+          last_ranked_at: lastProgressedAt,
+          rank: evaluateExpRank(xpPoints),
+          total_volume_kg: new Prisma.Decimal(
+            (volumeByUser.get(userId) ?? 0).toFixed(2),
+          ),
+          xp_points: xpPoints,
+        },
+        create: {
+          id: seedId(`mastery:${memberKey}:${muscle}`),
+          last_ranked_at: lastProgressedAt,
+          muscle_group: muscle,
+          rank: evaluateExpRank(xpPoints),
+          total_volume_kg: new Prisma.Decimal(
+            (volumeByUser.get(userId) ?? 0).toFixed(2),
+          ),
+          user_id: userId,
+          xp_points: xpPoints,
+        },
+      });
+    }
+  }
+  for (const [memberIndex, memberKey] of activeMemberKeys.entries()) {
+    const userId = ctx.state.userIds[memberKey];
+    const seasonPoints = seasonPointsByUser.get(userId) ?? 0;
+    const muscleTotals = muscleXpByUser.get(userId) ?? new Map<string, number>();
+    await ctx.prisma.seasonalStanding.updateMany({
+      where: { season_id: activeSeasonId, user_id: userId },
+      data: {
+        last_earned_at:
+          lastProgressedAtByUser.get(userId) ??
+          daysFrom(ctx.config.anchorDate, -1, 19),
+        rank_position: memberIndex + 1,
+        season_points: seasonPoints,
+      },
+    });
+    for (const { key: muscle } of activeMuscles) {
+      await ctx.prisma.seasonalMuscleStanding.updateMany({
+        where: {
+          muscle_group: muscle,
+          season_id: activeSeasonId,
+          user_id: userId,
+        },
+        data: {
+          last_earned_at:
+            lastProgressedAtByUser.get(userId) ??
+            daysFrom(ctx.config.anchorDate, -1, 19),
+          muscle_points: muscleTotals.get(muscle) ?? 0,
+          rank_position: memberIndex + 1,
+        },
+      });
+    }
+  }
+
   const milestoneKeys = DYNAMIC_MILESTONES.map((milestone) => milestone.key);
-  const milestoneProgressRows = activeMemberKeys
-    .slice(0, 36)
+  const completedWorkoutCountByUser = new Map<string, number>();
+  for (const workout of completedWorkouts) {
+    completedWorkoutCountByUser.set(
+      workout.user_id,
+      (completedWorkoutCountByUser.get(workout.user_id) ?? 0) + 1,
+    );
+  }
+  const milestoneProgressRows = historyMemberKeys
     .flatMap((memberKey, index) =>
       milestoneKeys.map((milestoneKey, milestoneIndex) => {
         const milestone = DYNAMIC_MILESTONES[milestoneIndex];
         const isLifetimeXpMilestone = milestone.metric === 'total_xp';
-        const lifetimeXp = getRepresentativeLifetimeXp(
-          { role: 'member' },
-          index,
-        );
+        const lifetimeXp =
+          totalXpByUser.get(ctx.state.userIds[memberKey]) ?? 0;
+        const progressValue =
+          milestone.metric === 'completed_workout_sessions'
+            ? completedWorkoutCountByUser.get(ctx.state.userIds[memberKey]) ?? 0
+            : isLifetimeXpMilestone
+              ? lifetimeXp
+              : milestoneIndex === 1
+                ? Math.min(milestone.target, index % 5)
+                : index % 2;
         const automaticallyUnlocked =
-          isLifetimeXpMilestone && lifetimeXp >= milestone.target;
+          progressValue >= milestone.target;
         const isClaimed =
-          milestoneIndex === 0 ||
-          (automaticallyUnlocked && index % 3 === 0);
+          milestoneIndex === 0 || (automaticallyUnlocked && index % 3 === 0);
 
         return {
           id: seedId(`milestone-progress:${memberKey}:${milestoneKey}`),
           claimed_at: isClaimed
             ? daysFrom(ctx.config.anchorDate, -1, 10)
             : null,
-          milestone_definition_id: seedId(`milestone-definition:${milestoneKey}`),
+          milestone_definition_id: seedId(
+            `milestone-definition:${milestoneKey}`,
+          ),
           progress_payload: {
             memberKey,
             source: 'dynamic-seed',
           },
-          progress_value: isLifetimeXpMilestone
-            ? lifetimeXp
-            : milestoneIndex === 0
-              ? 1
-              : index % 2,
+          progress_value: progressValue,
           reward_granted_at: isClaimed
             ? daysFrom(ctx.config.anchorDate, -1, 10)
             : null,
@@ -1512,6 +1727,51 @@ async function seedGamification(ctx: DynamicSeedContext) {
     });
   }
 
+  const evidenceMemberKeys = activeMemberKeys.slice(0, 3);
+  await ctx.prisma.milestoneEvidenceSubmission.createMany({
+    data: evidenceMemberKeys.map((memberKey, index) => {
+      const milestoneKey =
+        DYNAMIC_MILESTONES[index % DYNAMIC_MILESTONES.length].key;
+      const status =
+        index === 0
+          ? MilestoneEvidenceSubmissionStatus.approved
+          : index === 1
+            ? MilestoneEvidenceSubmissionStatus.rejected
+            : MilestoneEvidenceSubmissionStatus.pending;
+      return {
+        id: seedId(`milestone-evidence:${memberKey}:${index}`),
+        caption: 'Seeded evidence fixture for milestone review filters.',
+        evidence_type:
+          index % 2 === 0
+            ? MilestoneEvidenceType.image
+            : MilestoneEvidenceType.video,
+        file_url: `/seed-fixtures/milestones/${memberKey}-${index}.bin`,
+        mime_type: index % 2 === 0 ? 'image/jpeg' : 'video/mp4',
+        milestone_definition_id: seedId(`milestone-definition:${milestoneKey}`),
+        milestone_progress_id: seedId(
+          `milestone-progress:${memberKey}:${milestoneKey}`,
+        ),
+        original_filename: `${memberKey}-milestone-${index}.bin`,
+        reviewed_at:
+          status === MilestoneEvidenceSubmissionStatus.pending
+            ? null
+            : daysFrom(ctx.config.anchorDate, -2 + index, 11),
+        reviewed_by_user_id:
+          status === MilestoneEvidenceSubmissionStatus.pending ? null : adminId,
+        reviewer_notes:
+          status === MilestoneEvidenceSubmissionStatus.pending
+            ? null
+            : status === MilestoneEvidenceSubmissionStatus.approved
+              ? 'Evidence accepted for the seeded demo flow.'
+              : 'Evidence retained as a rejected review example.',
+        size_bytes: 24_000 + index * 1_000,
+        status,
+        user_id: ctx.state.userIds[memberKey],
+      };
+    }),
+    skipDuplicates: true,
+  });
+
   const riskyMembers = [
     'member-suspended',
     'member-frozen',
@@ -1546,9 +1806,7 @@ async function seedGamification(ctx: DynamicSeedContext) {
       reason_code: index === 0 ? 'suspicious_spike' : 'manual_review',
       risk_level:
         index === 0 ? IntegrityRiskLevel.high : IntegrityRiskLevel.medium,
-      source_event_id: activeMemberKeys.includes(memberKey)
-        ? seedId(`progression-source:${memberKey}:workout`)
-        : null,
+      source_event_id: sourceEventIdByUser.get(ctx.state.userIds[memberKey]) ?? null,
       user_id: ctx.state.userIds[memberKey],
     })),
     skipDuplicates: true,
@@ -1567,9 +1825,7 @@ async function seedGamification(ctx: DynamicSeedContext) {
       integrity_case_id: seedId(`integrity-case:${memberKey}`),
       rationale: 'Moderation action for governance audit.',
       season_id: activeSeasonId,
-      source_event_id: activeMemberKeys.includes(memberKey)
-        ? seedId(`progression-source:${memberKey}:workout`)
-        : null,
+      source_event_id: sourceEventIdByUser.get(ctx.state.userIds[memberKey]) ?? null,
       target_user_id: ctx.state.userIds[memberKey],
     })),
     skipDuplicates: true,
@@ -1593,7 +1849,10 @@ export async function seedFitnessGamification(ctx: DynamicSeedContext) {
   return {
     counts: {
       exercises: EXERCISE_SEEDS.length,
-      trainingMembers: ctx.state.premiumMemberKeys.slice(0, 36).length,
+      trainingMembers: [
+        ...ctx.state.activeMemberKeys,
+        ...ctx.state.historicalMemberKeys,
+      ].length,
     },
   };
 }

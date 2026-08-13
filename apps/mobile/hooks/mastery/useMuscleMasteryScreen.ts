@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   fitnessIntegritySummaryQueryOptions,
+  fitnessMemberMuscleDefinitionsQueryOptions,
   fitnessLeaderboardQueryOptions,
   fitnessMuscleLeaderboardQueryOptions,
   fitnessMasteryQueryOptions,
@@ -33,6 +34,12 @@ import { getFitnessExpProgressionState } from "@fittrack/types";
 import { useAuth } from "@/contexts/AuthContext";
 import { mobileApiClient } from "@/lib/api-client";
 import { useTimedMessage } from "@fittrack/hooks";
+import {
+  resolveSeasonHistoryId,
+  resolveSeasonHistoryMuscleOptions,
+  resolveSeasonHistoryMuscleRows,
+  retainMuscleSelection,
+} from "./seasonHistorySelection";
 
 type UseMuscleMasteryScreenOptions = {
   isFocused?: boolean;
@@ -378,7 +385,7 @@ export function useMuscleMasteryScreen({
   const [muscleLeaderboardScope, setMuscleLeaderboardScope] =
     useState<"lifetime" | "season">("season");
   const [selectedLeaderboardMuscle, setSelectedLeaderboardMuscle] =
-    useState("chest");
+    useState("");
   const [celebrationKey, setCelebrationKey] = useState(0);
   const [celebratedMilestoneId, setCelebratedMilestoneId] = useState<
     string | null
@@ -387,7 +394,7 @@ export function useMuscleMasteryScreen({
   const [seasonHistoryScope, setSeasonHistoryScope] =
     useState<SeasonHistoryScope>("overall");
   const [seasonHistoryMuscleKey, setSeasonHistoryMuscleKey] =
-    useState("chest");
+    useState("");
   const [selectedSeasonHistoryId, setSelectedSeasonHistoryId] = useState<
     string | null
   >(null);
@@ -408,6 +415,18 @@ export function useMuscleMasteryScreen({
     ...fitnessMasteryQueryOptions(mobileApiClient, user?.id),
     enabled: canLoadProgression,
   });
+  const muscleDefinitionsQuery = useQuery({
+    ...fitnessMemberMuscleDefinitionsQueryOptions(mobileApiClient),
+    enabled: canLoadProgression,
+  });
+  const muscleDefinitionOptions = useMemo(
+    () => resolveSeasonHistoryMuscleOptions(muscleDefinitionsQuery.data),
+    [muscleDefinitionsQuery.data],
+  );
+  const muscleDefinitionsReady =
+    !muscleDefinitionsQuery.isPending &&
+    !muscleDefinitionsQuery.error &&
+    muscleDefinitionOptions.length > 0;
   const leaderboardQuery = useQuery({
     ...fitnessLeaderboardQueryOptions(mobileApiClient, user?.id, {
       limit: LEADERBOARD_PAGE_SIZE,
@@ -425,7 +444,9 @@ export function useMuscleMasteryScreen({
     enabled:
       canLoadProgression &&
       activeTab === "leaderboard" &&
-      leaderboardMode === "muscle",
+      leaderboardMode === "muscle" &&
+      muscleDefinitionsReady &&
+      muscleDefinitionOptions.includes(selectedLeaderboardMuscle),
   });
   const seasonHistoryQuery = useQuery({
     ...fitnessSeasonHistoryQueryOptions(mobileApiClient, user?.id, {
@@ -435,19 +456,44 @@ export function useMuscleMasteryScreen({
       canLoadProgression &&
       (activeTab === "leaderboard" || isSeasonHistoryOpen),
   });
+  const seasonHistory = useMemo(
+    () => seasonHistoryQuery.data ?? [],
+    [seasonHistoryQuery.data],
+  );
+  const seasonHistoryMuscleOptions = muscleDefinitionOptions;
+  const selectedSeasonHistoryUuid = useMemo(
+    () => resolveSeasonHistoryId(seasonHistory, selectedSeasonHistoryId),
+    [seasonHistory, selectedSeasonHistoryId],
+  );
   const seasonHistoryMuscleQuery = useQuery({
     ...fitnessMuscleLeaderboardQueryOptions(mobileApiClient, user?.id, {
       limit: 10,
       muscleKey: seasonHistoryMuscleKey,
       scope: "season",
-      seasonId: selectedSeasonHistoryId ?? undefined,
+      seasonId: selectedSeasonHistoryUuid ?? undefined,
     }),
     enabled:
       canLoadProgression &&
       isSeasonHistoryOpen &&
       seasonHistoryScope === "muscle" &&
-      !!selectedSeasonHistoryId,
+      muscleDefinitionsReady &&
+      seasonHistoryMuscleOptions.includes(seasonHistoryMuscleKey) &&
+      !!selectedSeasonHistoryUuid,
   });
+
+  useEffect(() => {
+    if (muscleDefinitionOptions.length === 0) {
+      setSelectedLeaderboardMuscle("");
+      setSeasonHistoryMuscleKey("");
+      return;
+    }
+    setSelectedLeaderboardMuscle((current) =>
+      retainMuscleSelection(muscleDefinitionOptions, current),
+    );
+    setSeasonHistoryMuscleKey((current) =>
+      retainMuscleSelection(muscleDefinitionOptions, current),
+    );
+  }, [muscleDefinitionOptions]);
   const progressionProfileQuery = useQuery({
     ...fitnessProgressionProfileQueryOptions(mobileApiClient, user?.id),
     enabled: canLoadProgression,
@@ -495,17 +541,7 @@ export function useMuscleMasteryScreen({
   );
   const leaderboard = leaderboardRows;
   const muscleLeaderboard = muscleLeaderboardRows;
-  const leaderboardMuscleOptions = useMemo(() => {
-    const values = new Set(
-      mastery.map((entry) => entry.muscleGroup.trim().toLowerCase()),
-    );
-    values.add("chest");
-    return [...values].sort();
-  }, [mastery]);
-  const seasonHistory = useMemo(
-    () => seasonHistoryQuery.data ?? [],
-    [seasonHistoryQuery.data],
-  );
+  const leaderboardMuscleOptions = muscleDefinitionOptions;
   const topMuscle = mastery[0] ?? null;
   const highestRankEntry = resolveHighestRank(mastery);
   const totalXp =
@@ -653,6 +689,7 @@ export function useMuscleMasteryScreen({
 
   const baseQueries = [
     masteryQuery,
+    muscleDefinitionsQuery,
     leaderboardQuery,
     progressionProfileQuery,
     rankingProfileQuery,
@@ -671,6 +708,7 @@ export function useMuscleMasteryScreen({
     activeQueries.some((query) => query.status === "pending");
   const isError = activeQueries.some((query) => query.isError);
   const errorMessage =
+    (muscleDefinitionsQuery.error as Error | null)?.message ??
     (masteryQuery.error as Error | null)?.message ??
     (leaderboardQuery.error as Error | null)?.message ??
     (progressionProfileQuery.error as Error | null)?.message ??
@@ -711,11 +749,11 @@ export function useMuscleMasteryScreen({
     if (
       selectedSeasonHistoryId &&
       seasonHistory.length > 0 &&
-      !seasonHistory.some((season) => season.seasonId === selectedSeasonHistoryId)
+      !selectedSeasonHistoryUuid
     ) {
       setSelectedSeasonHistoryId(seasonHistory[0]?.seasonId ?? null);
     }
-  }, [seasonHistory, selectedSeasonHistoryId]);
+  }, [seasonHistory, selectedSeasonHistoryId, selectedSeasonHistoryUuid]);
 
   useEffect(() => {
     const unlockedIds = new Set(
@@ -971,13 +1009,21 @@ export function useMuscleMasteryScreen({
     seasonRankLabel,
     seasonHistory,
     seasonHistoryMuscleKey,
-    seasonHistoryMuscleLeaderboard: seasonHistoryMuscleQuery.data?.data ?? [],
+    seasonHistoryMuscleLeaderboard: resolveSeasonHistoryMuscleRows(
+      seasonHistoryMuscleQuery.data?.data,
+      seasonHistoryMuscleQuery.isFetching,
+    ),
     seasonHistoryMuscleError:
       (seasonHistoryMuscleQuery.error as Error | null)?.message ?? null,
-    seasonHistoryMuscleLoading: seasonHistoryMuscleQuery.isPending,
+    seasonHistoryMuscleLoading:
+      seasonHistoryMuscleQuery.isPending || seasonHistoryMuscleQuery.isFetching,
     seasonHistoryError:
       (seasonHistoryQuery.error as Error | null)?.message ?? null,
     seasonHistoryLoading: seasonHistoryQuery.isPending,
+    muscleDefinitionsError:
+      (muscleDefinitionsQuery.error as Error | null)?.message ?? null,
+    muscleDefinitionsLoading: muscleDefinitionsQuery.isPending,
+    seasonHistoryMuscleOptions,
     seasonHistoryOpen: isSeasonHistoryOpen,
     seasonHistoryScope,
     seasonStanding,
@@ -995,7 +1041,7 @@ export function useMuscleMasteryScreen({
     setSelectedSeasonHistoryId,
     setMuscleRankFilter,
     setMuscleSearch,
-    selectedSeasonHistoryId,
+    selectedSeasonHistoryId: selectedSeasonHistoryUuid,
     sortedMilestones,
     statusMessage,
     selectedLeaderboardMuscle,

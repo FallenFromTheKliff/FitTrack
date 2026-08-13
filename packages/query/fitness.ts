@@ -69,6 +69,15 @@ export function fitnessMuscleDefinitionsQueryOptions(
   });
 }
 
+export function fitnessMemberMuscleDefinitionsQueryOptions(
+  client: Pick<ApiClient, "fitness">,
+) {
+  return queryOptions({
+    queryKey: queryKeys.fitnessMemberMuscleDefinitions(),
+    queryFn: () => client.fitness.listMemberMuscleDefinitions(),
+  });
+}
+
 export function createFitnessExerciseMutationOptions(
   client: Pick<ApiClient, "fitness">,
   queryClient: QueryClient,

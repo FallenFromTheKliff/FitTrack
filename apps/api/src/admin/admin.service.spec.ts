@@ -1,3 +1,4 @@
+import { GoneException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { AccountDeletionRequestStatus } from '@prisma/client';
 import { AdminService } from './admin.service';
@@ -27,6 +28,16 @@ describe('AdminService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  it('retires legacy venue booking confirmation without mutating data', () => {
+    expect(() => service.confirmBooking('booking-1')).toThrow(GoneException);
+  });
+
+  it('retires legacy venue booking rejection without mutating data', () => {
+    expect(() => service.rejectBooking('booking-1', 'No longer used')).toThrow(
+      GoneException,
+    );
   });
 
   it('approves a pending deletion request using the lowercase status contract', async () => {

@@ -25,6 +25,39 @@ if (!forwardedArgs.some((arg) => arg.startsWith('--mode'))) {
 }
 
 const pnpmCommand = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
+const targetArg = forwardedArgs.find((arg) => arg.startsWith('--target='));
+const modeArg = forwardedArgs.find((arg) => arg.startsWith('--mode='));
+const target = targetArg?.slice('--target='.length) ?? 'local';
+const mode = modeArg?.slice('--mode='.length) ?? 'reset';
+
+if (target === 'local' && mode === 'reset') {
+  const migrationArgs = [
+    '--filter',
+    '@fittrack/api',
+    'exec',
+    'npx',
+    'prisma',
+    'migrate',
+    'deploy',
+    '--schema=prisma/schema.prisma',
+  ];
+  console.log(`[seed:realistic] pnpm ${migrationArgs.join(' ')}`);
+  const migrationResult = spawnSync(pnpmCommand, migrationArgs, {
+    cwd: process.cwd(),
+    shell: process.platform === 'win32',
+    stdio: 'inherit',
+  });
+
+  if (migrationResult.error) {
+    throw migrationResult.error;
+  }
+
+  if ((migrationResult.status ?? 1) !== 0) {
+    process.exitCode = migrationResult.status ?? 1;
+    process.exit();
+  }
+}
+
 const seedArgs = [
   '--filter',
   '@fittrack/api',

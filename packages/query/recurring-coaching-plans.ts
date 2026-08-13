@@ -2,12 +2,16 @@ import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react
 import type {
   ApiClient,
   BulkUpdateRecurringCoachingSessionsInput,
-  RecurringCoachingBillingCyclePaymentInput,
+  RecurringCoachingEnrollmentInput,
   RecurringCoachingPlanInput,
+  StaffRecurringCashEnrollmentInput,
   UpdateRecurringCoachingSessionInput,
 } from "@fittrack/api-client";
 
-import { invalidateStaffCoachManagementQueries } from "./cache";
+import {
+  invalidateCoachScheduleQueries,
+  invalidateStaffCoachManagementQueries,
+} from "./cache";
 import { queryKeys } from "./query-keys";
 
 export function recurringCoachingPlanSessionsQueryOptions(
@@ -26,6 +30,40 @@ export function recurringCoachingPlansQueryOptions(
   return queryOptions({
     queryKey: queryKeys.recurringCoachingPlans(),
     queryFn: () => client.recurringCoachingPlans.list(),
+  });
+}
+
+export function createRecurringCoachingCashEnrollmentMutationOptions(
+  client: Pick<ApiClient, "recurringCoachingPlans">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: (input: StaffRecurringCashEnrollmentInput) =>
+      client.recurringCoachingPlans.createCashEnrollment(input),
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.recurringCoachingPlans(),
+      });
+      await invalidateCoachScheduleQueries(queryClient, variables.coachId);
+      await invalidateStaffCoachManagementQueries(queryClient, variables.coachId);
+    },
+  });
+}
+
+export function enrollRecurringCoachingPlanMutationOptions(
+  client: Pick<ApiClient, "recurringCoachingPlans">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: (input: RecurringCoachingEnrollmentInput) =>
+      client.recurringCoachingPlans.enroll(input),
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.recurringCoachingPlans(),
+      });
+      await invalidateCoachScheduleQueries(queryClient, variables.coachId);
+      await invalidateStaffCoachManagementQueries(queryClient, variables.coachId);
+    },
   });
 }
 
@@ -54,33 +92,7 @@ export function createRecurringCoachingPlanMutationOptions(
   });
 }
 
-export function payRecurringCoachingBillingCycleMutationOptions(
-  client: Pick<ApiClient, "recurringCoachingPlans">,
-  queryClient: QueryClient,
-) {
-  return mutationOptions({
-    mutationFn: ({
-      cycleId,
-      input,
-      planId,
-    }: {
-      cycleId: string;
-      input: RecurringCoachingBillingCyclePaymentInput;
-      planId: string;
-    }) => client.recurringCoachingPlans.payBillingCycle(planId, cycleId, input),
-    onSuccess: async (_data, variables) => {
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.recurringCoachingPlans(),
-      });
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.recurringCoachingPlanSessions({
-          planId: variables.planId,
-        }),
-      });
-      await invalidateStaffCoachManagementQueries(queryClient);
-    },
-  });
-}
+
 
 export function updateRecurringCoachingSessionMutationOptions(
   client: Pick<ApiClient, "recurringCoachingPlans">,
@@ -96,10 +108,16 @@ export function updateRecurringCoachingSessionMutationOptions(
       planId: string;
       sessionId: string;
     }) => client.recurringCoachingPlans.updateSession(planId, sessionId, input),
-    onSuccess: async () => {
+    onSuccess: async (_data, variables) => {
       await queryClient.invalidateQueries({
         queryKey: queryKeys.recurringCoachingPlans(),
       });
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.recurringCoachingPlanSessions({
+          planId: variables.planId,
+        }),
+      });
+      await invalidateCoachScheduleQueries(queryClient, variables.input.coachId);
       await invalidateStaffCoachManagementQueries(queryClient);
     },
   });

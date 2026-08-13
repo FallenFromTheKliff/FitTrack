@@ -8,6 +8,7 @@ import {
 import { Test, TestingModule } from '@nestjs/testing';
 
 import { AuditAction } from '../../audit/audit.service';
+import { CoachAvailabilityService } from '../availability/coach-availability.service';
 import { CoachRepository } from './coach.repository';
 import { CoachService } from './coach.service';
 
@@ -32,6 +33,9 @@ describe('CoachService', () => {
   };
   const eventEmitter = {
     emit: jest.fn(),
+  };
+  const coachAvailabilityService = {
+    assertAvailable: jest.fn(),
   };
 
   const makeCoach = (overrides: Record<string, unknown> = {}) => ({
@@ -75,12 +79,17 @@ describe('CoachService', () => {
         CoachService,
         { provide: CoachRepository, useValue: repo },
         { provide: EventEmitter2, useValue: eventEmitter },
+        {
+          provide: CoachAvailabilityService,
+          useValue: coachAvailabilityService,
+        },
       ],
     }).compile();
 
     service = module.get<CoachService>(CoachService);
     jest.clearAllMocks();
     repo.listActiveBookingDateKeys.mockResolvedValue([]);
+    coachAvailabilityService.assertAvailable.mockResolvedValue(undefined);
   });
 
   it('maps paginated coach browse results to response DTOs', async () => {
@@ -406,9 +415,6 @@ describe('CoachService', () => {
         ],
       }),
     );
-    repo.hasActiveAppointmentConflict.mockResolvedValue(false);
-    repo.hasActiveLinkedBookingConflict.mockResolvedValue(false);
-
     await expect(
       service.assertCoachReservableForBookingWindow(
         'coach-1',
@@ -417,32 +423,19 @@ describe('CoachService', () => {
       ),
     ).resolves.toMatchObject({ id: 'coach-1' });
 
-    expect(repo.hasActiveAppointmentConflict).toHaveBeenCalledWith(
-      'coach-1',
+    expect(coachAvailabilityService.assertAvailable).toHaveBeenCalledWith({
+      coachId: 'coach-1',
+      durationMinutes: 60,
       startsAt,
-      endsAt,
-    );
-    expect(repo.hasActiveLinkedBookingConflict).toHaveBeenCalledWith(
-      'coach-1',
-      startsAt,
-      endsAt,
-    );
+    });
   });
 
   it('rejects coach-linked reservation windows outside active availability', async () => {
     const startsAt = new Date('2099-03-23T03:00:00.000Z');
     const endsAt = new Date('2099-03-23T04:00:00.000Z');
-    repo.findCoachByIdOrThrow.mockResolvedValue(
-      makeCoach({
-        availability_slots: [
-          {
-            id: 'slot-1',
-            day_of_week: 1,
-            start_time: START_TIME,
-            end_time: END_TIME,
-          },
-        ],
-      }),
+    repo.findCoachByIdOrThrow.mockResolvedValue(makeCoach());
+    coachAvailabilityService.assertAvailable.mockRejectedValue(
+      new HttpException('Coach unavailable', 422),
     );
 
     await expect(
@@ -453,8 +446,7 @@ describe('CoachService', () => {
       ),
     ).rejects.toBeInstanceOf(HttpException);
 
-    expect(repo.hasActiveAppointmentConflict).not.toHaveBeenCalled();
-    expect(repo.hasActiveLinkedBookingConflict).not.toHaveBeenCalled();
+    expect(coachAvailabilityService.assertAvailable).toHaveBeenCalled();
   });
 
   it('rejects coach-linked reservation windows when another coach appointment overlaps', async () => {
@@ -472,8 +464,9 @@ describe('CoachService', () => {
         ],
       }),
     );
-    repo.hasActiveAppointmentConflict.mockResolvedValue(true);
-    repo.hasActiveLinkedBookingConflict.mockResolvedValue(false);
+    coachAvailabilityService.assertAvailable.mockRejectedValue(
+      new ConflictException('Coach schedule conflict'),
+    );
 
     await expect(
       service.assertCoachReservableForBookingWindow(

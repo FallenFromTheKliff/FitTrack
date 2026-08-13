@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsEnum,
+  IsIn,
   IsISO8601,
   IsInt,
   IsOptional,
@@ -15,7 +16,6 @@ import {
 import { IsOnOrAfter, TrimString } from '../../common/validators';
 
 export enum CreateStaffInitialPaymentStage {
-  downpayment = 'downpayment',
   full = 'full',
 }
 
@@ -61,11 +61,11 @@ export class CreateStaffVenueBookingDTO {
     enum: CreateStaffInitialPaymentStage,
     example: CreateStaffInitialPaymentStage.full,
     description:
-      'Cashier/admin/staff facility bookings record full cash payment. The legacy downpayment value is rejected by the booking service.',
+      'Cashier/admin/staff facility bookings record full cash payment.',
   })
   @IsOptional()
-  @IsEnum(CreateStaffInitialPaymentStage, {
-    message: `payment_stage must be one of: ${Object.values(CreateStaffInitialPaymentStage).join(', ')}`,
+  @IsIn([CreateStaffInitialPaymentStage.full], {
+    message: 'payment_stage must be full for new cash registrations',
   })
   payment_stage?: CreateStaffInitialPaymentStage;
 }
@@ -104,11 +104,11 @@ export class CreateStaffCoachBookingDTO {
     enum: CreateStaffInitialPaymentStage,
     example: CreateStaffInitialPaymentStage.full,
     description:
-      'Cash payment stage recorded by staff at creation time. Defaults to full to preserve existing manual-booking behavior.',
+      'Cash payment stage recorded by staff at creation time. Defaults to full.',
   })
   @IsOptional()
-  @IsEnum(CreateStaffInitialPaymentStage, {
-    message: `payment_stage must be one of: ${Object.values(CreateStaffInitialPaymentStage).join(', ')}`,
+  @IsIn([CreateStaffInitialPaymentStage.full], {
+    message: 'payment_stage must be full for new cash registrations',
   })
   payment_stage?: CreateStaffInitialPaymentStage;
 }

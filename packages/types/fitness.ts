@@ -556,6 +556,7 @@ export type TrainingPlanScheduleDayRecord = {
   exercises: TrainingPlanExerciseRecord[];
   focusLabel: string | null;
   id: string;
+  isRestDay?: boolean | null;
   notes: string | null;
   weekNumber: number;
 };
@@ -594,6 +595,7 @@ export type CreateTrainingPlanScheduleDayInput = {
   dayOfWeek: number;
   exercises: CreateTrainingPlanExerciseInput[];
   focusLabel?: string;
+  isRestDay?: boolean;
   weekNumber: number;
 };
 

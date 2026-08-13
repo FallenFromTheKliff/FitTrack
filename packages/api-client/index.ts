@@ -7,6 +7,7 @@ import { createUsersApi } from "./domains/users";
 import { createVenuesApi } from "./domains/venues";
 import { createBookingsApi } from "./domains/bookings";
 import { createAppointmentsApi } from "./domains/appointments";
+import { createCommerceCheckoutApi } from "./domains/commerce-checkout";
 import { createCoachesApi } from "./domains/coaches";
 import { createCoachSpecialtiesApi } from "./domains/coach-specialties";
 import { createAdminApi } from "./domains/admin";
@@ -94,17 +95,24 @@ export type {
   VerifyEmailPayload,
 } from "./domains/auth";
 export type {
-  AppointmentCheckoutResponse,
+  AppointmentAvailabilitySlot,
   AppointmentReviewSummary,
   AppointmentRecord,
-  AppointmentPaymentProvider,
-  AppointmentPaymentStage,
   CoachScheduleRecord,
   CreateAppointmentPayload,
+  RescheduleAppointmentPayload,
 } from "./domains/appointments";
+export {
+  mapCommerceCheckoutAttempt,
+} from "./domains/commerce-checkout";
+export type {
+  CommerceCheckoutApiRecord,
+  CommerceCheckoutAttempt,
+  CommerceCheckoutHoldState,
+  CommerceCheckoutKind,
+} from "./domains/commerce-checkout";
 export type {
   BookingCheckoutResponse,
-  BookingBalancePaymentProvider,
   CreateBookingPayload,
   VenueBookingListParams,
   VenueBookingRecord,
@@ -115,6 +123,8 @@ export type {
   CoachAppointmentScheduleRecord,
   CoachAvailabilityResponse,
   CoachAvailabilitySlot,
+  CoachClientListParams,
+  CoachClientRelationshipRecord,
   CoachListFilters,
   CreateCoachManagedAppointmentPayload,
   ReplaceCoachAvailabilityPayload,
@@ -271,6 +281,7 @@ export type {
   RecurringCoachingBillingCycleStatus,
   RecurringCoachingFrequency,
   RecurringCoachingEnrollmentInput,
+  StaffRecurringCashEnrollmentInput,
   RecurringCoachingPlanInput,
   RecurringCoachingPlanMutationResult,
   RecurringCoachingPlanPreviewResult,
@@ -381,6 +392,7 @@ export function createApiClient(config: CreateApiClientConfig) {
     venues: createVenuesApi(transport),
     bookings: createBookingsApi(transport),
     appointments: createAppointmentsApi(transport),
+    commerceCheckout: createCommerceCheckoutApi(transport),
     coaches: createCoachesApi(transport),
     coachSpecialties: createCoachSpecialtiesApi(transport),
     admin: createAdminApi(transport),

@@ -4,9 +4,15 @@ import { PrismaClient } from '@prisma/client';
 import { bootstrapDefaults } from './defaults';
 import { getDatabaseUrl, parseDynamicSeedConfig } from './dynamic-seed/config';
 import {
+  runSeedIntegrityAudit,
+  SeedIntegrityError,
+} from './dynamic-seed/integrity';
+import {
   buildModelCounts,
+  invalidateDynamicSeedManifest,
   writeDynamicSeedManifest,
 } from './dynamic-seed/manifest';
+import type { DynamicSeedIntegritySummary } from './dynamic-seed/manifest';
 import { SeedRandom } from './dynamic-seed/random';
 import { resetDatabaseForDynamicSeed } from './dynamic-seed/reset';
 import {
@@ -20,6 +26,7 @@ import { seedFitnessGamification } from './dynamic-seed/domains/fitness-gamifica
 import { seedMembershipPayments } from './dynamic-seed/domains/membership-payments';
 import { seedNutritionInventory } from './dynamic-seed/domains/nutrition-inventory';
 import { seedUsersAuthProfiles } from './dynamic-seed/domains/users-auth-profiles';
+import { reconcileCoachingContracts } from './dynamic-seed/reconcile';
 
 const config = parseDynamicSeedConfig();
 const adapter = new PrismaPg({ connectionString: getDatabaseUrl() });
@@ -43,6 +50,8 @@ async function runDomain(
 }
 
 async function main() {
+  const seedStartedAt = Date.now();
+  await invalidateDynamicSeedManifest();
   console.log(
     [
       `[dynamic-seed] target=${config.target}`,
@@ -66,29 +75,69 @@ async function main() {
   };
 
   await runDomain('users-auth-profiles', seedUsersAuthProfiles, ctx);
-  await bootstrapDefaults(prisma, { includeUsers: false });
+  await bootstrapDefaults(prisma, {
+    includeUsers: false,
+    referenceDate: config.anchorDate,
+  });
   await runDomain('membership-payments', seedMembershipPayments, ctx);
   await runDomain('facilities-coaching', seedFacilitiesCoaching, ctx);
   await runDomain('fitness-gamification', seedFitnessGamification, ctx);
+  await runDomain(
+    'coaching-contract-reconciliation',
+    reconcileCoachingContracts,
+    ctx,
+  );
   await runDomain('nutrition-inventory', seedNutritionInventory, ctx);
   await runDomain('ai-gym-analytics', seedAiGymAnalytics, ctx);
 
-  const counts = await buildModelCounts(prisma);
+  let integrity: DynamicSeedIntegritySummary;
+  let counts: Record<string, number>;
+  try {
+    integrity = await runSeedIntegrityAudit(ctx);
+  } catch (error) {
+    if (!(error instanceof SeedIntegrityError)) {
+      throw error;
+    }
+    counts = await buildModelCounts(prisma);
+    await writeDynamicSeedManifest({
+      config,
+      counts,
+      credentials: ctx.state.demoCredentials,
+      integrity: error.outcome,
+      notableIds: ctx.notableIds,
+    });
+    throw error;
+  }
+  console.log(
+    `[dynamic-seed][integrity] PASS checks=${integrity.checks} ` +
+      `categories=${Object.keys(integrity.summary).length}`,
+  );
+  counts = await buildModelCounts(prisma);
+  console.log(
+    `[dynamic-seed] summary users=${counts.user ?? 0} memberships=${counts.subscription ?? 0} ` +
+      `bookings=${counts.amenityBooking ?? 0} coaching=${counts.coachAppointment ?? 0} ` +
+      `workouts=${counts.workoutSession ?? 0} facilities=${counts.amenity ?? 0} ` +
+      `payments=${counts.payment ?? 0} upcoming=${integrity.scenarioMatrix.has_upcoming} ` +
+      `no_upcoming=${integrity.scenarioMatrix.no_upcoming} audit=PASS`,
+  );
   const manifest = await writeDynamicSeedManifest({
     config,
     counts,
     credentials: ctx.state.demoCredentials,
+    integrity,
     notableIds: ctx.notableIds,
   });
 
   console.log('[dynamic-seed] complete');
+  console.log(`[dynamic-seed] elapsedMs=${Date.now() - seedStartedAt}`);
   console.log(`[dynamic-seed] manifest written to ${manifest.manifestPath}`);
   console.log(
     `[dynamic-seed] demo credentials: ${ctx.state.demoCredentials
       .map((credential) => `${credential.email} / ${credential.password}`)
       .join(', ')}`,
   );
-  console.log(JSON.stringify(counts, null, 2));
+  console.log(`[dynamic-seed] rowCounts=${JSON.stringify(counts)}`);
+  console.log('SEED VALIDATION PASSED');
 }
 
 main()

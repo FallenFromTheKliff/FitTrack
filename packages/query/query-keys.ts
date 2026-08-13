@@ -1,4 +1,7 @@
-import type { CoachSpecialtyListParams } from "@fittrack/api-client";
+import type {
+  CoachClientListParams,
+  CoachSpecialtyListParams,
+} from "@fittrack/api-client";
 import type { MemberDirectoryFilters } from "@fittrack/types";
 
 type BookingScope = "all" | "pending";
@@ -116,6 +119,14 @@ const memberKeys = {
       : (["bookings", "detail"] as const),
   appointments: (userId?: string) =>
     userId ? (["appointments", userId] as const) : (["appointments"] as const),
+  appointmentAvailability: (
+    coachId?: string,
+    date?: string,
+    durationMinutes?: number,
+  ) =>
+    coachId && date && durationMinutes
+      ? (["appointments", "availability", coachId, date, durationMinutes] as const)
+      : (["appointments", "availability"] as const),
   appointmentDetail: (appointmentId?: string) =>
     appointmentId
       ? (["appointments", "detail", appointmentId] as const)
@@ -220,6 +231,18 @@ const coachKeys = {
     userId
       ? (["coach", "schedule", userId] as const)
       : (["coach", "schedule"] as const),
+  venueWork: (userId?: string, params?: BookingListFilters) =>
+    userId
+      ? params
+        ? (["coach", "venue-work", userId, params] as const)
+        : (["coach", "venue-work", userId] as const)
+      : params
+        ? (["coach", "venue-work", params] as const)
+        : (["coach", "venue-work"] as const),
+  clients: (params?: CoachClientListParams) =>
+    params
+      ? (["coach", "clients", params] as const)
+      : (["coach", "clients"] as const),
   selfProfile: (userId?: string) =>
     userId
       ? (["coach", "profile", userId] as const)
@@ -422,6 +445,8 @@ const fitnessKeys = {
     params
       ? (["fitness", "muscle-definitions", params] as const)
       : (["fitness", "muscle-definitions"] as const),
+  memberMuscleDefinitions: () =>
+    ["fitness", "member-muscle-definitions"] as const,
   plans: (userId?: string, params?: { limit?: number; page?: number }) =>
     userId
       ? params
@@ -602,6 +627,7 @@ export const queryKeys = {
   bookings: memberKeys.bookings,
   bookingDetail: memberKeys.bookingDetail,
   appointments: memberKeys.appointments,
+  appointmentAvailability: memberKeys.appointmentAvailability,
   appointmentDetail: memberKeys.appointmentDetail,
   profileDeletionStatus: memberKeys.profileDeletionStatus,
   attendanceQr: memberKeys.attendanceQr,
@@ -617,6 +643,8 @@ export const queryKeys = {
   coachSpecialties: coachKeys.specialties,
   coachDetail: coachKeys.detail,
   coachSchedule: coachKeys.schedule,
+  coachVenueWork: coachKeys.venueWork,
+  coachClients: coachKeys.clients,
   coachSelfProfile: coachKeys.selfProfile,
   coachAvailability: coachKeys.availability,
   coachOwnAvailability: coachKeys.ownAvailability,
@@ -644,6 +672,7 @@ export const queryKeys = {
   fitnessExercises: fitnessKeys.exercises,
   fitnessExerciseReviewSubmissions: fitnessKeys.exerciseReviewSubmissions,
   fitnessMuscleDefinitions: fitnessKeys.muscleDefinitions,
+  fitnessMemberMuscleDefinitions: fitnessKeys.memberMuscleDefinitions,
   fitnessPlans: fitnessKeys.plans,
   fitnessPlanDetail: fitnessKeys.planDetail,
   fitnessPlanProgression: fitnessKeys.planProgression,

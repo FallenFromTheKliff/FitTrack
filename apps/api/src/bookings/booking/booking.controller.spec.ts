@@ -12,6 +12,10 @@ function getGuardMetadata(
     | 'createBooking'
     | 'getMyBookings'
     | 'getAllBookings'
+    | 'getCoachVenueWork'
+    | 'completeCoachVenueWork'
+    | 'cancelCoachVenueWork'
+    | 'markCoachVenueWorkNoShow'
     | 'cancelBooking'
     | 'processBalance',
 ): unknown[] | undefined {
@@ -28,7 +32,13 @@ function getGuardMetadata(
 }
 
 function getRolesMetadata(
-  methodName: 'getAllBookings' | 'processBalance',
+  methodName:
+    | 'getAllBookings'
+    | 'getCoachVenueWork'
+    | 'completeCoachVenueWork'
+    | 'cancelCoachVenueWork'
+    | 'markCoachVenueWorkNoShow'
+    | 'processBalance',
 ): UserRole[] | undefined {
   const handler: unknown = Object.getOwnPropertyDescriptor(
     BookingController.prototype,
@@ -48,6 +58,10 @@ describe('BookingController', () => {
     createBooking: jest.fn(),
     getMyBookings: jest.fn(),
     getAllBookings: jest.fn(),
+    getCoachVenueWork: jest.fn(),
+    completeCoachVenueWork: jest.fn(),
+    cancelCoachVenueWork: jest.fn(),
+    markCoachVenueWorkNoShow: jest.fn(),
     cancelBooking: jest.fn(),
     processBalance: jest.fn(),
   };
@@ -84,6 +98,16 @@ describe('BookingController', () => {
 
   it('protects booking cancellation with JWT auth', () => {
     expect(getGuardMetadata('cancelBooking')).toEqual([JwtAuthGuard]);
+  });
+
+  it.each([
+    'getCoachVenueWork',
+    'completeCoachVenueWork',
+    'cancelCoachVenueWork',
+    'markCoachVenueWorkNoShow',
+  ] as const)('locks %s to the coach role', (methodName) => {
+    expect(getGuardMetadata(methodName)).toEqual([JwtAuthGuard, RolesGuard]);
+    expect(getRolesMetadata(methodName)).toEqual([UserRole.coach]);
   });
 
   it('locks balance collection to admin and staff roles', () => {

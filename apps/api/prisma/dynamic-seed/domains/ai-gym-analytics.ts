@@ -15,6 +15,7 @@ import {
 import { seedId } from '../ids';
 import { dateOnly, daysFrom, fixedTime } from '../time';
 import type { DynamicSeedContext } from '../types';
+import { activityDateFor, memberVolumeCount } from '../volumes';
 
 const GYM_EQUIPMENT = [
   [
@@ -85,7 +86,7 @@ const GYM_EQUIPMENT = [
   ],
 ] as const;
 
-import { buildBrodigyHistoryKeys, pickBrodigyQuestion } from '../brodigy';
+import { pickBrodigyQuestion } from '../brodigy';
 const FAQS = [
   [
     GymFaqCategory.hours,
@@ -114,21 +115,45 @@ const FAQS = [
   ],
 ] as const;
 
+function seedChatDate(
+  ctx: DynamicSeedContext,
+  userKey: string,
+  index: number,
+  total: number,
+  hour: number,
+  minute = 0,
+) {
+  const account = ctx.state.accounts.find((candidate) => candidate.key === userKey);
+  if (account?.role === 'member') {
+    return (
+      activityDateFor(ctx, userKey, index, total, hour, minute) ??
+      daysFrom(ctx.config.anchorDate, -1, hour, minute)
+    );
+  }
+  return daysFrom(ctx.config.anchorDate, -4 + (index % 3), hour, minute);
+}
+
 async function seedAiChat(ctx: DynamicSeedContext) {
-  const prioritizedMemberKeys = [
-    'member-active',
-    'member-premium',
-    ...ctx.state.premiumMemberKeys.slice(0, 24),
-  ];
-  const userKeys = buildBrodigyHistoryKeys(
-    ctx.state.accounts.map((account) => account.key),
-    prioritizedMemberKeys,
+  const eligibleAccounts = ctx.state.accounts.filter(
+    (account) =>
+      account.role !== 'member' ||
+      !ctx.state.restrictedMemberKeys.includes(account.key),
   );
+  const userKeys = eligibleAccounts.flatMap((account) => {
+    const turns =
+      account.role === 'member'
+        ? Math.floor(memberVolumeCount(ctx, account.key, 'chats') / 4)
+        : 3;
+    return Array.from({ length: Math.max(1, turns) }, () => account.key);
+  });
+  const threadCounts = new Map<string, number>();
   const sessionRows: Prisma.AiChatSessionCreateManyInput[] = [];
   const messageRows: Prisma.AiChatMessageCreateManyInput[] = [];
   const interactionRows: Prisma.AiInteractionLogCreateManyInput[] = [];
 
   userKeys.forEach((userKey, index) => {
+    const threadIndex = threadCounts.get(userKey) ?? 0;
+    threadCounts.set(userKey, threadIndex + 1);
     const userId = ctx.state.userIds[userKey];
     const question = pickBrodigyQuestion(ctx.rng);
     const context =
@@ -137,13 +162,29 @@ async function seedAiChat(ctx: DynamicSeedContext) {
         : index % 3 === 1
           ? ChatContext.nutrition
           : ChatContext.general;
-    const sessionId = seedId('ai-session:' + userKey + ':' + context);
+    const sessionId = seedId(
+      'ai-session:' + userKey + ':' + context + ':' + threadIndex,
+    );
+    const userMessageAt = seedChatDate(
+      ctx,
+      userKey,
+      threadIndex * 2,
+      Math.max(1, threadCounts.get(userKey) ?? 1) * 2,
+      18,
+      index % 50,
+    );
+    const assistantMessageAt = daysFrom(
+      userMessageAt,
+      0,
+      userMessageAt.getUTCHours(),
+      userMessageAt.getUTCMinutes() + 2,
+    );
     sessionRows.push({
       id: sessionId,
       context_type: context,
-      created_at: daysFrom(ctx.config.anchorDate, -4 + (index % 3), 17),
-      is_active: index < 12,
-      last_activity_at: daysFrom(ctx.config.anchorDate, -1 + (index % 2), 18),
+      created_at: userMessageAt,
+      is_active: threadIndex === 0,
+      last_activity_at: assistantMessageAt,
       title:
         context === ChatContext.training_plan
           ? 'Training block check-in'
@@ -155,39 +196,34 @@ async function seedAiChat(ctx: DynamicSeedContext) {
 
     messageRows.push(
       {
-        id: seedId('ai-message:' + userKey + ':user'),
+        id: seedId('ai-message:' + userKey + ':' + threadIndex + ':user'),
         action_triggered:
           context === ChatContext.nutrition ? 'nutrition_review' : null,
         content: question.prompt,
-        created_at: daysFrom(ctx.config.anchorDate, -1, 18, index % 50),
+        created_at: userMessageAt,
         role: ChatRole.user,
         session_id: sessionId,
       },
       {
-        id: seedId('ai-message:' + userKey + ':assistant'),
+        id: seedId('ai-message:' + userKey + ':' + threadIndex + ':assistant'),
         action_triggered:
           context === ChatContext.training_plan ? 'plan_adjustment' : null,
         content: question.answer,
-        created_at: daysFrom(
-          ctx.config.anchorDate,
-          -1,
-          18,
-          (index % 50) + 2,
-        ),
+        created_at: assistantMessageAt,
         role: ChatRole.assistant,
         session_id: sessionId,
       },
     );
     interactionRows.push({
-      id: seedId('ai-interaction:' + userKey),
+      id: seedId('ai-interaction:' + userKey + ':' + threadIndex),
       action_result: { status: 'seeded', applied: index % 2 === 0 },
       action_triggered:
         context === ChatContext.training_plan ? 'plan_adjustment' : null,
       created_at: daysFrom(
-        ctx.config.anchorDate,
-        -1,
-        18,
-        (index % 50) + 3,
+        assistantMessageAt,
+        0,
+        assistantMessageAt.getUTCHours(),
+        assistantMessageAt.getUTCMinutes() + 1,
       ),
       interaction_type:
         context === ChatContext.training_plan
@@ -228,17 +264,6 @@ async function seedAiChat(ctx: DynamicSeedContext) {
 }
 
 async function seedNotifications(ctx: DynamicSeedContext) {
-  const userKeys = [
-    'admin',
-    'staff',
-    'coach',
-    'member-active',
-    'member-premium',
-    'member-pending',
-    'member-expired',
-    'member-suspended',
-    ...ctx.state.premiumMemberKeys.slice(0, 32),
-  ].filter((key, index, source) => source.indexOf(key) === index);
   const types = [
     NotificationType.payment_confirmed,
     NotificationType.booking_confirmed,
@@ -249,52 +274,65 @@ async function seedNotifications(ctx: DynamicSeedContext) {
     NotificationType.system,
   ] as const;
 
-  await ctx.prisma.notification.createMany({
-    data: userKeys.flatMap((userKey, userIndex) =>
-      [0, 1, 2].map((rowIndex) => {
-        const type = types[(userIndex + rowIndex) % types.length];
-        const status =
-          rowIndex === 0
-            ? NotificationStatus.read
-            : rowIndex === 1
-              ? NotificationStatus.sent
-              : NotificationStatus.pending;
-        return {
-          id: seedId(`notification:${userKey}:${rowIndex}`),
-          body:
-            type === NotificationType.low_stock
-          ? 'Inventory alert: review low stock products before closing.'
-          : 'Notification used for filters and badge counts.',
-          channel:
-            rowIndex === 2
-              ? NotificationChannel.in_app
-              : NotificationChannel.email,
-          created_at: daysFrom(
-            ctx.config.anchorDate,
-            -4 + rowIndex,
-            9 + rowIndex,
-          ),
-          data: { source: 'dynamic-seed', type },
-          read_at:
-            status === NotificationStatus.read
-              ? daysFrom(ctx.config.anchorDate, -1, 14)
-              : null,
-          sent_at:
-            status === NotificationStatus.pending
-              ? null
-              : daysFrom(ctx.config.anchorDate, -2 + rowIndex, 10),
-          status,
-          title:
-            type === NotificationType.low_stock
-              ? 'Low stock review'
-              : type === NotificationType.rank_up
-                ? 'Rank progress'
+  const notificationRows: Prisma.NotificationCreateManyInput[] = [];
+  ctx.state.accounts.forEach((account, userIndex) => {
+    const isMember = account.role === 'member';
+    const isRestricted = ctx.state.restrictedMemberKeys.includes(account.key);
+    const total = isMember
+      ? Math.min(200, isRestricted ? Math.min(3, memberVolumeCount(ctx, account.key, 'notifications')) : memberVolumeCount(ctx, account.key, 'notifications'))
+      : 8;
+    for (let rowIndex = 0; rowIndex < total; rowIndex += 1) {
+      const type = isRestricted
+        ? [NotificationType.system, NotificationType.payment_failed, NotificationType.subscription_expired][rowIndex % 3]
+        : types[(userIndex + rowIndex) % types.length];
+      const status =
+        rowIndex % 5 === 0
+          ? NotificationStatus.read
+          : rowIndex % 5 === 1
+            ? NotificationStatus.sent
+            : NotificationStatus.pending;
+      const createdAt = isMember
+        ? seedChatDate(ctx, account.key, rowIndex, total, 9 + (rowIndex % 8), rowIndex % 50)
+        : daysFrom(ctx.config.anchorDate, -4 + (rowIndex % 3), 9 + (rowIndex % 8), rowIndex % 50);
+      notificationRows.push({
+        id: seedId(`notification:${account.key}:${rowIndex}`),
+        body:
+          type === NotificationType.low_stock
+            ? 'Inventory alert: review low stock products before closing.'
+            : isRestricted
+              ? 'Account status update: finish verification or contact the support desk.'
+              : 'Notification used for filters and badge counts.',
+        channel:
+          rowIndex % 3 === 2
+            ? NotificationChannel.in_app
+            : NotificationChannel.email,
+        created_at: createdAt,
+        data: { source: 'dynamic-seed', type, cohort: isMember ? ctx.state.memberCohorts[account.key] : null },
+        read_at:
+          status === NotificationStatus.read
+            ? daysFrom(createdAt, 0, createdAt.getUTCHours() + 2, createdAt.getUTCMinutes())
+            : null,
+        sent_at:
+          status === NotificationStatus.pending
+            ? null
+            : daysFrom(createdAt, 0, createdAt.getUTCHours() + 1, createdAt.getUTCMinutes()),
+        status,
+        title:
+          type === NotificationType.low_stock
+            ? 'Low stock review'
+            : type === NotificationType.rank_up
+              ? 'Rank progress'
+              : isRestricted
+                ? 'Account status update'
                 : 'FitTrack update',
-          type,
-          user_id: ctx.state.userIds[userKey],
-        };
-      }),
-    ),
+        type,
+        user_id: ctx.state.userIds[account.key],
+      });
+    }
+  });
+
+  await ctx.prisma.notification.createMany({
+    data: notificationRows,
     skipDuplicates: true,
   });
 }
@@ -435,64 +473,95 @@ async function seedGymLayoutAndKnowledge(ctx: DynamicSeedContext) {
 
 async function seedGymChat(ctx: DynamicSeedContext) {
   const memberKeys = [
-    'member-active',
-    'member-premium',
-    ...ctx.state.activeMemberKeys.slice(0, 20),
-  ].filter((key, index, source) => source.indexOf(key) === index);
+    ...ctx.state.activeMemberKeys,
+    ...ctx.state.historicalMemberKeys,
+    ...ctx.state.restrictedMemberKeys,
+  ];
   const sessionRows: Prisma.GymChatSessionCreateManyInput[] = [];
   const messageRows: Prisma.GymChatMessageCreateManyInput[] = [];
   const interactionRows: Prisma.GymChatInteractionLogCreateManyInput[] = [];
 
-  memberKeys.forEach((memberKey, index) => {
-    const sessionId = seedId(`gym-chat-session:${memberKey}`);
-    sessionRows.push({
-      id: sessionId,
-      created_at: daysFrom(ctx.config.anchorDate, -2 + (index % 2), 12),
-      is_active: index < 10,
-      last_activity_at: daysFrom(ctx.config.anchorDate, -1, 13 + (index % 4)),
-      title: 'Gym policy and schedule help',
-      user_id: ctx.state.userIds[memberKey],
-    });
-    messageRows.push(
-      {
-        id: seedId(`gym-chat-message:${memberKey}:user`),
-        content:
-          index % 2 === 0
-            ? 'What are today hours?'
-            : 'Can I book the boxing ring?',
-        created_at: daysFrom(ctx.config.anchorDate, -1, 13),
-        grounded_sources: Prisma.JsonNull,
+  memberKeys.forEach((memberKey, memberIndex) => {
+    const chatBudget = memberVolumeCount(ctx, memberKey, 'chats');
+    const aiMessageCount = ctx.state.restrictedMemberKeys.includes(memberKey)
+      ? 0
+      : Math.floor(chatBudget / 4) * 2;
+    const gymTurns = Math.max(1, Math.floor(Math.max(2, chatBudget - aiMessageCount) / 2));
+    for (let threadIndex = 0; threadIndex < gymTurns; threadIndex += 1) {
+      const sessionId = seedId(`gym-chat-session:${memberKey}:${threadIndex}`);
+      const userMessageAt = seedChatDate(
+        ctx,
+        memberKey,
+        threadIndex * 2,
+        Math.max(2, gymTurns * 2),
+        12 + (threadIndex % 6),
+        memberIndex % 50,
+      );
+      const assistantMessageAt = daysFrom(
+        userMessageAt,
+        0,
+        userMessageAt.getUTCHours(),
+        userMessageAt.getUTCMinutes() + 1,
+      );
+      sessionRows.push({
+        id: sessionId,
+        created_at: userMessageAt,
+        is_active: threadIndex === 0,
+        last_activity_at: assistantMessageAt,
+        title: 'Gym policy and schedule help',
+        user_id: ctx.state.userIds[memberKey],
+      });
+      const restricted = ctx.state.restrictedMemberKeys.includes(memberKey);
+      messageRows.push(
+        {
+          id: seedId(`gym-chat-message:${memberKey}:${threadIndex}:user`),
+          content: restricted
+            ? 'How do I finish account verification?'
+            : threadIndex % 2 === 0
+              ? 'What are today hours?'
+              : 'Can I book the boxing ring?',
+          created_at: userMessageAt,
+          grounded_sources: Prisma.JsonNull,
+          out_of_scope: false,
+          role: GymChatRole.user,
+          session_id: sessionId,
+        },
+        {
+          id: seedId(`gym-chat-message:${memberKey}:${threadIndex}:assistant`),
+          content: restricted
+            ? 'Please complete verification or contact the support desk for help with onboarding.'
+            : 'Check operating hours and amenity availability from FitTrack gym content.',
+          created_at: assistantMessageAt,
+          grounded_sources: restricted
+            ? [{ type: 'support', id: seedId('gym-faq:1') }]
+            : [
+                { type: 'operating_hours', id: seedId('operating-hour:1') },
+                { type: 'faq', id: seedId('gym-faq:3') },
+              ],
+          out_of_scope: false,
+          role: GymChatRole.assistant,
+          session_id: sessionId,
+        },
+      );
+      interactionRows.push({
+        id: seedId(`gym-chat-interaction:${memberKey}:${threadIndex}`),
+        created_at: daysFrom(
+          assistantMessageAt,
+          0,
+          assistantMessageAt.getUTCHours(),
+          assistantMessageAt.getUTCMinutes() + 1,
+        ),
+        grounding_payload: { sources: restricted ? ['support'] : ['operating_hours', 'faq'] },
+        latency_ms: 240 + memberIndex * 8 + threadIndex,
+        model_used: 'seeded-grounded-gym-chat',
         out_of_scope: false,
-        role: GymChatRole.user,
+        request_payload: { prompt: restricted ? 'seeded onboarding question' : 'seeded gym question' },
+        response_payload: { grounded: true, response: 'seeded gym answer' },
         session_id: sessionId,
-      },
-      {
-        id: seedId(`gym-chat-message:${memberKey}:assistant`),
-        content:
-          'Check operating hours and amenity availability from FitTrack gym content.',
-        created_at: daysFrom(ctx.config.anchorDate, -1, 13, 1),
-        grounded_sources: [
-          { type: 'operating_hours', id: seedId('operating-hour:1') },
-          { type: 'faq', id: seedId('gym-faq:3') },
-        ],
-        out_of_scope: false,
-        role: GymChatRole.assistant,
-        session_id: sessionId,
-      },
-    );
-    interactionRows.push({
-      id: seedId(`gym-chat-interaction:${memberKey}`),
-      created_at: daysFrom(ctx.config.anchorDate, -1, 13, 2),
-      grounding_payload: { sources: ['operating_hours', 'faq'] },
-      latency_ms: 240 + index * 8,
-      model_used: 'seeded-grounded-gym-chat',
-      out_of_scope: false,
-      request_payload: { prompt: 'seeded gym question' },
-      response_payload: { grounded: true, response: 'seeded gym answer' },
-      session_id: sessionId,
-      token_count: 140 + index,
-      user_id: ctx.state.userIds[memberKey],
-    });
+        token_count: 140 + memberIndex + threadIndex,
+        user_id: ctx.state.userIds[memberKey],
+      });
+    }
   });
 
   await ctx.prisma.gymChatSession.createMany({
@@ -517,7 +586,7 @@ async function seedAuditAndAnalytics(ctx: DynamicSeedContext) {
       id: seedId('audit:payment-verified:member-premium'),
       action: 'PAYMENT_VERIFIED',
       after: { status: 'completed' },
-      before: { status: 'awaiting_verification' },
+      before: { status: 'processing' },
       created_at: daysFrom(ctx.config.anchorDate, -7, 11),
       entity: 'Payment',
       entity_id: seedId('payment:subscription:member-premium:current'),

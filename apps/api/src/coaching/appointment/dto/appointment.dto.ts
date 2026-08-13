@@ -72,6 +72,39 @@ export class SetAvailabilityDTO {
   slots: AvailabilitySlotInputDTO[];
 }
 
+export class CoachAvailabilityQueryDTO {
+  @ApiProperty({ example: '2026-08-20' })
+  @IsISO8601(
+    { strict: false },
+    { message: 'date must be a valid ISO 8601 date string' },
+  )
+  date: string;
+
+  @ApiProperty({ example: 60 })
+  @Type(() => Number)
+  @IsInt({ message: 'duration_minutes must be an integer' })
+  @Min(30, { message: 'duration_minutes must be at least 30' })
+  @Max(180, { message: 'duration_minutes must not exceed 180' })
+  duration_minutes: number;
+}
+
+export class CoachAvailabilitySlotResponseDTO {
+  @ApiProperty({ example: true })
+  available: boolean;
+
+  @ApiProperty({ example: [] })
+  conflict_reasons: string[];
+
+  @ApiProperty({ example: 60 })
+  duration_minutes: number;
+
+  @ApiProperty({ example: '2026-08-20T02:00:00.000Z' })
+  end_at: string;
+
+  @ApiProperty({ example: '2026-08-20T01:00:00.000Z' })
+  start_at: string;
+}
+
 export class CreateAppointmentDTO {
   @ApiProperty({ example: '22222222-2222-4222-8222-222222222222' })
   @IsUUID('all', { message: 'coach_id must be a valid UUID' })
@@ -150,6 +183,30 @@ export class CreateCoachManagedAppointmentDTO {
   member_notes?: string;
 }
 
+export class RescheduleAppointmentDTO {
+  @ApiProperty({
+    example: '2026-04-08T08:00:00.000Z',
+    description:
+      'New start time for this paid one-time appointment. This changes this session only.',
+  })
+  @IsISO8601(
+    {},
+    { message: 'scheduled_at must be a valid ISO 8601 date string' },
+  )
+  scheduled_at: string;
+
+  @ApiProperty({
+    example: 60,
+    description:
+      'New duration for this session only; the paid entitlement is preserved.',
+  })
+  @Type(() => Number)
+  @IsInt({ message: 'duration_minutes must be an integer' })
+  @Min(30, { message: 'duration_minutes must be at least 30' })
+  @Max(180, { message: 'duration_minutes must not exceed 180' })
+  duration_minutes: number;
+}
+
 export class RespondAppointmentDTO {
   @ApiProperty({ example: true })
   @IsBoolean({ message: 'accepted must be a boolean value' })
@@ -178,61 +235,36 @@ export class CancelAppointmentDTO {
 
 export class InitiateAppointmentPaymentDTO {
   @ApiProperty({
-    enum: PaymentProvider,
+    enum: [PaymentProvider.paymongo],
     example: PaymentProvider.paymongo,
   })
-  @IsEnum(PaymentProvider, {
-    message: `provider must be one of: ${Object.values(PaymentProvider).join(', ')}`,
+  @IsIn([PaymentProvider.paymongo], {
+    message: 'provider must be paymongo for appointment checkout',
   })
   provider: PaymentProvider;
 
   @ApiPropertyOptional({
-    enum: [PaymentStage.downpayment, PaymentStage.full],
+    enum: [PaymentStage.full],
     example: PaymentStage.full,
     description:
-      'Members and coaches must use full. The downpayment value is retained for cashier/admin compatibility only.',
+      'Legacy product-visible appointment payment is retired; this field remains full-only for compatibility.',
   })
   @IsOptional()
-  @IsIn([PaymentStage.downpayment, PaymentStage.full], {
-    message: 'payment_stage must be either downpayment or full',
+  @IsIn([PaymentStage.full], {
+    message: 'payment_stage must be full',
   })
-  payment_stage?: Extract<
-    PaymentStage,
-    typeof PaymentStage.downpayment | typeof PaymentStage.full
-  >;
+  payment_stage?: 'full';
 }
 
 export class AppointmentBalanceDTO {
   @ApiProperty({
-    enum: PaymentProvider,
+    enum: [PaymentProvider.paymongo],
     example: PaymentProvider.paymongo,
   })
-  @IsEnum(PaymentProvider, {
-    message: `provider must be one of: ${Object.values(PaymentProvider).join(', ')}`,
+  @IsIn([PaymentProvider.paymongo], {
+    message: 'provider must be paymongo for legacy compatibility only',
   })
   provider: PaymentProvider;
-
-  @ApiPropertyOptional({
-    example: 'https://cdn.fittrack.test/receipts/or-2026-03-23.png',
-  })
-  @ValidateIf(
-    (dto: AppointmentBalanceDTO) =>
-      dto.provider === PaymentProvider.cash &&
-      typeof dto.screenshot_url === 'string' &&
-      dto.screenshot_url.trim().length > 0,
-  )
-  @IsUrl({}, { message: 'screenshot_url must be a valid URL' })
-  screenshot_url?: string;
-
-  @ApiPropertyOptional({ example: 'OR-2026-001' })
-  @ValidateIf(
-    (dto: AppointmentBalanceDTO) => dto.provider === PaymentProvider.cash,
-  )
-  @TrimString()
-  @IsString({ message: 'reference_no must be a string' })
-  @IsNotEmpty({ message: 'reference_no is required' })
-  @MaxLength(100, { message: 'reference_no must not exceed 100 characters' })
-  reference_no?: string;
 }
 
 export class CompleteAppointmentDTO {

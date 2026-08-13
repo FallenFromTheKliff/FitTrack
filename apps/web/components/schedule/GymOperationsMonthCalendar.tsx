@@ -398,6 +398,7 @@ export function GymOperationsMonthCalendar() {
                     </span>
                     {dayEvents.length > 0 ? (
                       <div
+                        data-volatile="schedule-count"
                         style={{
                           alignItems: "center",
                           alignSelf: "end",

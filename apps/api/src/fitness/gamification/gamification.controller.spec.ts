@@ -1,8 +1,11 @@
 import { GUARDS_METADATA } from '@nestjs/common/constants';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
 
 import type { JwtPayload } from '../../auth/types/jwt-payload.type';
 import { ActiveMemberCardGuard } from '../../common/guards/active-member-card.guard';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { MuscleLeaderboardFilterDTO } from './dto/gamification.dto';
 import { GamificationController } from './gamification.controller';
 
 function getGuardMetadata(
@@ -15,6 +18,7 @@ function getGuardMetadata(
     | 'updateRankingProfile'
     | 'listMilestones'
     | 'listMastery'
+    | 'listMuscleLeaderboard'
     | 'listLeaderboard',
 ): unknown[] | undefined {
   return Reflect.getMetadata(
@@ -32,6 +36,7 @@ describe('GamificationController', () => {
     listProgressionSources: jest.fn(),
     getRankingProfile: jest.fn(),
     getMuscleMastery: jest.fn(),
+    listMuscleLeaderboard: jest.fn(),
     getLeaderboard: jest.fn(),
     updateRankingProfile: jest.fn(),
   };
@@ -76,6 +81,10 @@ describe('GamificationController', () => {
       JwtAuthGuard,
       ActiveMemberCardGuard,
     ]);
+    expect(getGuardMetadata('listMuscleLeaderboard')).toEqual([
+      JwtAuthGuard,
+      ActiveMemberCardGuard,
+    ]);
     expect(getGuardMetadata('listLeaderboard')).toEqual([
       JwtAuthGuard,
       ActiveMemberCardGuard,
@@ -93,6 +102,48 @@ describe('GamificationController', () => {
       { muscle_group: 'legs' },
     );
   });
+
+  it.each([
+    ['v4', '33333333-3333-4333-8333-333333333333'],
+    ['v5', '33333333-3333-5333-8333-333333333333'],
+  ])(
+    'accepts a %s season UUID for the muscle leaderboard route',
+    async (_version, seasonId) => {
+      const user = { sub: 'user-1' } as JwtPayload;
+      const dto = plainToInstance(MuscleLeaderboardFilterDTO, {
+        scope: 'season',
+        muscle_key: 'chest',
+        season_id: seasonId,
+      });
+
+      await expect(validate(dto)).resolves.toEqual([]);
+
+      await controller.listMuscleLeaderboard(user, dto);
+
+      expect(gamificationService.listMuscleLeaderboard).toHaveBeenCalledWith(
+        dto,
+        'user-1',
+      );
+    },
+  );
+
+  it.each([
+    ['a malformed UUID', 'not-a-uuid'],
+    ['a season label', 'Q3'],
+  ])(
+    'rejects %s for the muscle leaderboard season_id',
+    async (_label, seasonId) => {
+      const dto = plainToInstance(MuscleLeaderboardFilterDTO, {
+        scope: 'season',
+        muscle_key: 'chest',
+        season_id: seasonId,
+      });
+
+      const errors = await validate(dto);
+
+      expect(errors.some((error) => error.property === 'season_id')).toBe(true);
+    },
+  );
 
   it('loads the leaderboard through the service', async () => {
     gamificationService.getLeaderboard.mockResolvedValue({

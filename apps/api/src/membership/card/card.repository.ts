@@ -61,6 +61,13 @@ export class MembershipCardRepository extends BaseRepository {
     });
   }
 
+  async getMembershipCardPrice(): Promise<Prisma.Decimal> {
+    const settings = await this.prisma.membershipCatalogSettings.findFirst({
+      select: { membership_card_price: true },
+    });
+    return settings?.membership_card_price ?? DEFAULT_MEMBERSHIP_CARD_PRICE;
+  }
+
   findMembershipCardByIdOrThrow(id: string): Promise<MembershipCard> {
     return this.findByIdOrThrow<MembershipCard>(
       this.prisma.membershipCard,

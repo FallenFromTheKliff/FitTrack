@@ -1,6 +1,16 @@
 import type { ApiTransport } from "../transport/createAxiosTransport";
-import { unwrapResponse, unwrapVoidResponse } from "../request";
+import type { PaginatedResult } from "@fittrack/types";
+import {
+  unwrapPaginatedResponse,
+  unwrapResponse,
+  unwrapVoidResponse,
+} from "../request";
 import { resolveAmenityId } from "./venue-compat";
+import {
+  mapCommerceCheckoutAttempt,
+  type CommerceCheckoutApiRecord,
+  type CommerceCheckoutAttempt,
+} from "./commerce-checkout";
 
 export type BookingVenueSummary = {
   capacity?: number | null;
@@ -31,35 +41,29 @@ export type BookingCoachSummary = {
   user?: BookingUserSummary | null;
 };
 
-export type BookingPaymentStage = "downpayment" | "full";
-export type BookingPaymentPlan = "downpayment" | "free" | "full";
-
 export type VenueBookingRecord = {
-  amountDueNow?: number | null;
-  balancePaidAt?: string | null;
   cancelReason?: string | null;
   cancelledAt?: string | null;
   coach?: BookingCoachSummary | null;
   coachId?: string | null;
   createdAt?: string;
-  downpaymentPaidAt?: string | null;
   durationHours: number;
   endTime: string;
   id: string;
-  nextPaymentDate?: string | null;
-  paymentPlan?: BookingPaymentPlan;
+  productKind?: "venue_coach_addon";
   purpose?: string | null;
-  remainingBalance?: number | null;
   startTime: string;
   status?: string;
   totalAmount?: number | null;
+  coachAmount?: number | null;
   user?: BookingUserSummary | null;
   userId?: string;
   venue?: BookingVenueSummary | null;
+  venueAmount?: number | null;
   venueId: string | number;
 };
 
-type AmenityBookingApiRecord = {
+export type AmenityBookingApiRecord = {
   amenity?: {
     capacity?: number | null;
     hourly_rate?: number | string | null;
@@ -90,16 +94,15 @@ type AmenityBookingApiRecord = {
   } | null;
   coach_id?: string | null;
   created_at?: string;
-  downpayment_amount?: number | string | null;
-  downpayment_paid_at?: string | null;
-  balance_amount?: number | string | null;
-  balance_paid_at?: string | null;
   ends_at: string;
   id: string;
   notes?: string | null;
+  product_kind?: "venue_coach_addon";
   starts_at: string;
   status?: string;
   total_amount?: number | string | null;
+  coach_amount?: number | string | null;
+  venue_amount?: number | string | null;
   user?: {
     email?: string | null;
     id?: string;
@@ -116,6 +119,7 @@ type AmenityBookingApiRecord = {
 export type CreateBookingPayload = {
   coachId?: string;
   durationHours: number;
+  idempotencyKey?: string;
   paymentStage?: "full";
   purpose?: string;
   provider?: "paymongo";
@@ -123,27 +127,23 @@ export type CreateBookingPayload = {
   venueId: string | number;
 };
 
-type BookingCheckoutApiResponse = {
-  booking_id: string;
+export type BookingCheckoutApiResponse = CommerceCheckoutApiRecord & {
+  booking_id?: string | null;
   checkout_url?: string | null;
   payment_id?: string | null;
   status: string;
 };
 
-export type BookingCheckoutResponse = {
+export type LegacyBookingCheckoutResponse = {
   bookingId: string;
   checkoutUrl: string | null;
   paymentId: string | null;
   status: string;
 };
 
-export type BookingBalancePaymentProvider = "cash" | "paymongo";
-export type BookingBalanceCheckoutResponse = {
-  bookingId: string;
-  checkoutUrl: string | null;
-  paymentId?: string | null;
-  status: string;
-};
+export type BookingCheckoutResponse =
+  | CommerceCheckoutAttempt
+  | LegacyBookingCheckoutResponse;
 
 export type VenueBookingListParams = {
   endDate?: string;
@@ -225,11 +225,15 @@ function createIdempotencyKey() {
   });
 }
 
-function mapBookingCheckoutResponse(
+export function mapBookingCheckoutResponse(
   record: BookingCheckoutApiResponse,
 ): BookingCheckoutResponse {
+  if (record.hold_id && record.expires_at && record.kind) {
+    return mapCommerceCheckoutAttempt(record);
+  }
+
   return {
-    bookingId: record.booking_id,
+    bookingId: record.booking_id ?? "",
     checkoutUrl: record.checkout_url ?? null,
     paymentId: record.payment_id ?? null,
     status: record.status,
@@ -292,33 +296,11 @@ export function mapAmenityBookingToVenueBookingRecord(
     record.amenity_id ??
     legacyVenueIdFromAmenityName(venueName);
   const totalAmount = toAmountNumber(record.total_amount);
-  const downpaymentAmount = toAmountNumber(record.downpayment_amount);
-  const balanceAmount = toAmountNumber(record.balance_amount);
-  const balancePaidAt = record.balance_paid_at ?? null;
-  const downpaymentPaidAt = record.downpayment_paid_at ?? null;
-  const remainingBalance = balancePaidAt ? 0 : balanceAmount;
-  const amountDueNow =
-    record.status === "pending"
-      ? downpaymentAmount
-      : remainingBalance && remainingBalance > 0
-        ? remainingBalance
-        : 0;
-  const paymentPlan: BookingPaymentPlan =
-    totalAmount == null || totalAmount <= 0
-      ? "free"
-      : balanceAmount && balanceAmount > 0
-        ? "downpayment"
-        : "full";
 
   return {
     totalAmount,
-    amountDueNow,
-    balancePaidAt,
-    downpaymentPaidAt,
-    remainingBalance,
-    nextPaymentDate:
-      remainingBalance && remainingBalance > 0 ? record.starts_at : null,
-    paymentPlan,
+    coachAmount: toAmountNumber(record.coach_amount),
+    productKind: record.product_kind,
     id: record.id,
     venueId,
     coachId: record.coach?.id ?? record.coach_id ?? null,
@@ -358,6 +340,7 @@ export function mapAmenityBookingToVenueBookingRecord(
       capacity: record.amenity?.capacity ?? null,
       hourlyRate: toHourlyRate(record.amenity?.hourly_rate),
     },
+    venueAmount: toAmountNumber(record.venue_amount),
   };
 }
 
@@ -401,7 +384,7 @@ export function createBookingsApi(transport: ApiTransport) {
           },
           {
             headers: {
-              "Idempotency-Key": createIdempotencyKey(),
+              "Idempotency-Key": payload.idempotencyKey ?? createIdempotencyKey(),
             },
           },
         ),
@@ -416,30 +399,38 @@ export function createBookingsApi(transport: ApiTransport) {
         "Unable to cancel booking.",
       );
     },
-    processBalance(
-      bookingId: string,
-      payload: {
-        provider: BookingBalancePaymentProvider;
-        referenceNo?: string;
-        screenshotUrl?: string;
-      },
-    ) {
-      return unwrapResponse<BookingCheckoutApiResponse>(
-        transport.post(`/bookings/amenity/${bookingId}/balance`, {
-          provider: payload.provider,
-          ...(payload.referenceNo ? { reference_no: payload.referenceNo } : {}),
-          ...(payload.screenshotUrl
-            ? { screenshot_url: payload.screenshotUrl }
-            : {}),
+    async listCoachWork(
+      params?: VenueBookingListParams,
+    ): Promise<PaginatedResult<VenueBookingRecord>> {
+      const result = await unwrapPaginatedResponse<AmenityBookingApiRecord>(
+        transport.get("/bookings/coach-work", {
+          params: toVenueBookingListParams(params),
         }),
-        "Unable to collect booking balance.",
-      ).then(
-        (record): BookingBalanceCheckoutResponse => ({
-          bookingId: record.booking_id,
-          checkoutUrl: record.checkout_url ?? null,
-          paymentId: record.payment_id ?? null,
-          status: record.status,
+        "Unable to load assigned venue coaching work.",
+      );
+      return {
+        data: result.data.map(mapAmenityBookingToVenueBookingRecord),
+        meta: result.meta,
+      };
+    },
+    completeCoachWork(bookingId: string) {
+      return unwrapVoidResponse(
+        transport.patch(`/bookings/coach-work/${bookingId}/complete`),
+        "Unable to mark assigned venue coaching work complete.",
+      );
+    },
+    cancelCoachWork(bookingId: string, reason?: string) {
+      return unwrapVoidResponse(
+        transport.patch(`/bookings/coach-work/${bookingId}/cancel`, {
+          reason,
         }),
+        "Unable to cancel assigned venue coaching work.",
+      );
+    },
+    noShowCoachWork(bookingId: string) {
+      return unwrapVoidResponse(
+        transport.patch(`/bookings/coach-work/${bookingId}/no-show`),
+        "Unable to mark assigned venue coaching work as no-show.",
       );
     },
   };

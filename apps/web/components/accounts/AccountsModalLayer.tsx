@@ -14,12 +14,12 @@ import {
   getDirectoryRoleLabel,
   getEditDraftValues,
   getMembershipFieldValue,
-  getScanReadinessLabel,
   validateEditDraft,
 } from "@/components/accounts/accountComponentUtils";
 
 import { AccountInspectorBody, AccountInspectorFooter } from "./AccountsInspectorSurface";
 import { useAccountsPage } from "./AccountsPageContext";
+import CoachClientModalLayer from "./coach-client/CoachClientModalLayer";
 
 export default function AccountsModalLayer() {
   const { colors } = useTheme();
@@ -54,6 +54,7 @@ export default function AccountsModalLayer() {
     isApproveDeletionPending,
     isRejectDeletionPending,
     isMembershipCardPending,
+    isCoach,
     isScanAttendancePending,
     membershipCardLoadingLabel,
     mobileInspectorOpen,
@@ -97,7 +98,7 @@ export default function AccountsModalLayer() {
 
   return (
     <>
-      {canInspectAccounts ? (
+      {canInspectAccounts && !isCoach ? (
         <FitModal
           isOpen={
             mobileInspectorOpen &&
@@ -171,10 +172,6 @@ export default function AccountsModalLayer() {
                 {
                   label: "Access",
                   value: getDirectoryAccessLabel(editTarget, pendingRequestsByUserId),
-                },
-                {
-                  label: "Scan status",
-                  value: getScanReadinessLabel(editTarget),
                 },
               ].map((item) => (
                 <div key={item.label} style={{ display: "grid", gap: 3 }}>
@@ -353,7 +350,7 @@ export default function AccountsModalLayer() {
           onCancel={() => setRejectTerminationTarget(null)}
         />
       ) : null}
-      {canInspectAccounts ? (
+      {canInspectAccounts && !isCoach ? (
         <ConfirmModal
           isOpen={!!deleteTarget}
           title="Approve Termination Request"
@@ -369,6 +366,7 @@ export default function AccountsModalLayer() {
           onCancel={() => setDeleteTarget(null)}
         />
       ) : null}
+      {isCoach ? <CoachClientModalLayer /> : null}
       {archiveTarget ? (
         <ConfirmModal
           isOpen={!!archiveTarget}

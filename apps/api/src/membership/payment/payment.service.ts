@@ -18,6 +18,7 @@ import { randomUUID } from 'crypto';
 import { AuditAction, AuditEvent } from '../../audit/audit.service';
 import { PaginatedResult } from '../../common/base-repository/base-repository';
 import { ACCOUNT_ACTIVITY_EVENT } from '../../user/events/account-activity.event';
+import { CoachingCommerceService } from '../../coaching/commerce/coaching-commerce.service';
 import {
   ManualPaymentDTO,
   PaymentFilterDTO,
@@ -62,6 +63,7 @@ export class PaymentService {
     private readonly repo: PaymentRepository,
     private readonly paymongoWebhookService: PaymongoWebhookService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly commerceCheckoutService: CoachingCommerceService,
   ) {}
 
   async getMyPayments(
@@ -84,6 +86,18 @@ export class PaymentService {
     return this.repo.findPaymentByIdForOwnerOrThrow(paymentId, requesterId);
   }
 
+  getCheckoutHoldStatus(
+    holdId: string,
+    requesterId: string,
+    requesterRole: UserRole,
+  ) {
+    return this.commerceCheckoutService.getHoldStatusForUser(
+      holdId,
+      requesterId,
+      requesterRole,
+    );
+  }
+
   getAllPayments(
     dto: PaymentFilterDTO,
   ): Promise<PaginatedResult<PaymentDetails>> {
@@ -95,7 +109,7 @@ export class PaymentService {
     requesterRole: UserRole,
     dto: ManualPaymentDTO,
   ): Promise<Payment> {
-    this.assertMembershipCardPaymentRouteRetired(dto.payable_type);
+    this.assertLegacyProductPaymentRouteRetired(dto.payable_type);
     const paymentOwnerId = await this.resolvePaymentOwnerId(dto);
     const isStaffReviewer = this.isStaffReviewer(requesterRole);
 
@@ -119,7 +133,7 @@ export class PaymentService {
     adminId: string,
   ): Promise<void> {
     const payment = await this.repo.findPaymentByIdForStaffOrThrow(paymentId);
-    this.assertMembershipCardPaymentRouteRetired(payment.payable_type);
+    this.assertLegacyProductPaymentRouteRetired(payment.payable_type);
     this.assertRejectionReason(dto);
     this.assertAwaitingVerification(payment);
 
@@ -221,6 +235,31 @@ export class PaymentService {
       return this.successAck();
     }
 
+    if (payment.payable_type === PayableType.commerce_checkout_hold) {
+      const verifiedAt = this.extractWebhookPaidAt(event) ?? new Date();
+      const transition = await this.repo.completePaymongoCommerceCheckout(
+        payment.id,
+        {
+          gatewayEventId: event.data.id,
+          gatewayMetadata: this.toWebhookGatewayMetadata(payment, event),
+          verifiedAt,
+        },
+      );
+
+      if (transition.transitioned && transition.productCreated) {
+        this.emitPaymentCompleted({
+          paymentId: transition.payment.id,
+          userId: transition.payment.user_id,
+          payableType: transition.payment.payable_type,
+          payableId: transition.payment.payable_id,
+          amount: transition.payment.amount.toString(),
+          verifiedBy: null,
+        });
+      }
+
+      return this.successAck();
+    }
+
     if (payment.payable_type === PayableType.membership_card) {
       const verifiedAt = this.extractWebhookPaidAt(event) ?? new Date();
       const gatewayMetadata = this.toWebhookGatewayMetadata(payment, event);
@@ -301,6 +340,31 @@ export class PaymentService {
     const failureReason =
       this.extractPaymongoFailureReason(event) ??
       'PayMongo reported that this payment failed.';
+
+    if (payment.payable_type === PayableType.commerce_checkout_hold) {
+      const transition = await this.repo.failPaymongoCommerceCheckout(
+        payment.id,
+        {
+          gatewayEventId: event.data.id,
+          gatewayMetadata: this.toWebhookGatewayMetadata(payment, event),
+          rejectionReason: failureReason,
+        },
+      );
+
+      if (transition.transitioned) {
+        this.emitPaymentFailed({
+          paymentId: transition.payment.id,
+          userId: transition.payment.user_id,
+          payableType: transition.payment.payable_type,
+          payableId: transition.payment.payable_id,
+          amount: transition.payment.amount.toString(),
+          reason: failureReason,
+          failedAt,
+        });
+      }
+
+      return this.successAck();
+    }
 
     if (payment.payable_type === PayableType.membership_card) {
       const transition = await this.repo.failPaymongoMembershipCardPayment(
@@ -455,19 +519,30 @@ export class PaymentService {
     }
   }
 
-  private assertMembershipCardPaymentRouteRetired(
+  private assertLegacyProductPaymentRouteRetired(
     payableType: PayableType,
   ): void {
-    if (payableType !== PayableType.membership_card) {
+    if (
+      !(
+        [
+        PayableType.subscription,
+        PayableType.booking,
+        PayableType.coaching,
+        PayableType.recurring_coaching,
+        PayableType.membership_card,
+        PayableType.commerce_checkout_hold,
+        ] as PayableType[]
+      ).includes(payableType)
+    ) {
       return;
     }
 
     throw new GoneException({
       type: 'GONE',
-      title: 'Membership Card Payment Verification Retired',
+      title: 'Partial Payment And Verification Flow Retired',
       status: 410,
       detail:
-        'Member cash membership-card payment requests and payment verification are retired. Authorized admin or staff users must grant membership-card access from the members directory.',
+        'Downpayments, partial balances, product-visible pending payments, and cash verification are retired. Admin/staff must use the atomic full-cash registration endpoints for new records.',
     });
   }
 

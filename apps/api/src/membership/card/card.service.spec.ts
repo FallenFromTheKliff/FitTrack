@@ -3,7 +3,6 @@ import {
   MembershipCardStatus,
   NotificationType,
   PaymentProvider,
-  PaymentStage,
   PayableType,
   Prisma,
   UserRole,
@@ -14,22 +13,16 @@ import { MembershipCardService } from './card.service';
 describe('MembershipCardService', () => {
   const repo = {
     activateMembershipCard: jest.fn(),
-    createOrRefreshPendingPurchase: jest.fn(),
     findMembershipCardByIdOrThrow: jest.fn(),
     findMembershipCardWithUserProfileByIdOrThrow: jest.fn(),
     findMembershipCardByUserId: jest.fn(),
     findMembershipOwnerByIdOrThrow: jest.fn(),
+    getMembershipCardPrice: jest.fn(),
     revokeMembershipCard: jest.fn(),
   };
 
-  const paymentRepo = {
-    findLatestPaymentForPayableStage: jest.fn(),
-    findPaymentByIdempotencyKey: jest.fn(),
-    updatePayment: jest.fn(),
-  };
-
-  const paymongoCheckoutService = {
-    createCheckoutSession: jest.fn(),
+  const commerceCheckoutService = {
+    createMembershipCardCheckout: jest.fn(),
   };
 
   const notificationsService = {
@@ -46,40 +39,30 @@ describe('MembershipCardService', () => {
     jest.clearAllMocks();
     service = new MembershipCardService(
       repo as never,
-      paymentRepo as never,
-      paymongoCheckoutService as never,
+      commerceCheckoutService as never,
       notificationsService as never,
       eventEmitter as never,
     );
   });
 
   it('starts a PayMongo checkout for a new membership-card purchase', async () => {
-    const membershipCard = createPendingMembershipCard();
-    const payment = createPendingPayment();
-
     repo.findMembershipOwnerByIdOrThrow.mockResolvedValue({
       id: 'member-1',
       role: UserRole.member,
       deletedAt: null,
     });
-    paymentRepo.findPaymentByIdempotencyKey.mockResolvedValue(null);
     repo.findMembershipCardByUserId.mockResolvedValue(null);
-    repo.createOrRefreshPendingPurchase.mockResolvedValue({
-      membershipCard,
-      payment,
-    });
-    paymongoCheckoutService.createCheckoutSession.mockResolvedValue({
-      providerRef: 'cs_test_card_checkout',
-      checkoutUrl: 'https://checkout.paymongo.test/card-1',
-      gatewayMetadata: {
-        checkout_url: 'https://checkout.paymongo.test/card-1',
-      },
-    });
-    paymentRepo.updatePayment.mockResolvedValue({
-      ...payment,
-      status: 'processing',
-      provider_ref: 'cs_test_card_checkout',
-    });
+    repo.getMembershipCardPrice.mockResolvedValue(new Prisma.Decimal('400'));
+    const checkout = {
+      checkout_url: 'https://checkout.paymongo.test/card-1',
+      hold_id: 'hold-card-1',
+      kind: 'membership_card',
+      payment_id: 'payment-card-1',
+      status: 'held',
+    };
+    commerceCheckoutService.createMembershipCardCheckout.mockResolvedValue(
+      checkout,
+    );
 
     const result = await service.purchase(
       'member-1',
@@ -87,47 +70,15 @@ describe('MembershipCardService', () => {
       '44444444-4444-4444-8444-444444444444',
     );
 
-    expect(repo.createOrRefreshPendingPurchase).toHaveBeenCalledWith({
+    expect(repo.getMembershipCardPrice).toHaveBeenCalledTimes(1);
+    expect(
+      commerceCheckoutService.createMembershipCardCheckout,
+    ).toHaveBeenCalledWith({
+      amount: new Prisma.Decimal('400'),
       idempotencyKey: '44444444-4444-4444-8444-444444444444',
-      provider: PaymentProvider.paymongo,
-      source: MembershipCardSource.paymongo,
       userId: 'member-1',
     });
-    expect(paymongoCheckoutService.createCheckoutSession).toHaveBeenCalledWith({
-      amount: 40000,
-      cancelQuery: {
-        flow: 'membership-card',
-        portal: 'member',
-        surface: 'profile',
-      },
-      description: 'SertFit membership card',
-      idempotencyKey: payment.idempotency_key,
-      metadata: {
-        membership_card_id: membershipCard.id,
-        payment_id: payment.id,
-      },
-      successQuery: {
-        flow: 'membership-card',
-        portal: 'member',
-        surface: 'profile',
-      },
-    });
-    expect(paymentRepo.updatePayment).toHaveBeenCalledWith(
-      payment.id,
-      expect.objectContaining({
-        gateway_metadata: {
-          checkout_url: 'https://checkout.paymongo.test/card-1',
-        },
-        provider_ref: 'cs_test_card_checkout',
-        status: 'processing',
-      }),
-    );
-    expect(result).toMatchObject({
-      checkout_url: 'https://checkout.paymongo.test/card-1',
-      membership_card: membershipCard,
-      message: 'Membership card checkout started.',
-      payment,
-    });
+    expect(result).toEqual(checkout);
   });
 
   it('retires member cash membership-card requests without creating access or payment records', async () => {
@@ -147,8 +98,9 @@ describe('MembershipCardService', () => {
       status: 410,
     });
 
-    expect(repo.createOrRefreshPendingPurchase).not.toHaveBeenCalled();
-    expect(paymentRepo.updatePayment).not.toHaveBeenCalled();
+    expect(
+      commerceCheckoutService.createMembershipCardCheckout,
+    ).not.toHaveBeenCalled();
   });
 
   it('notifies after a matching PayMongo completion has atomically activated the card', async () => {
@@ -268,30 +220,6 @@ function createPendingMembershipCard() {
     revoked_at: null,
     revoked_by: null,
     revoke_reason: null,
-    created_at: new Date('2026-03-24T00:00:00.000Z'),
-    updated_at: new Date('2026-03-24T00:00:00.000Z'),
-  };
-}
-
-function createPendingPayment() {
-  return {
-    id: 'payment-card-1',
-    user_id: 'member-1',
-    payable_type: PayableType.membership_card,
-    payable_id: 'card-1',
-    payment_stage: PaymentStage.full,
-    amount: new Prisma.Decimal('400'),
-    currency: 'PHP',
-    provider: PaymentProvider.paymongo,
-    provider_ref: null,
-    gateway_event_id: null,
-    idempotency_key: '44444444-4444-4444-8444-444444444444',
-    status: 'pending',
-    gateway_metadata: null,
-    screenshot_url: null,
-    rejection_reason: null,
-    verified_by: null,
-    verified_at: null,
     created_at: new Date('2026-03-24T00:00:00.000Z'),
     updated_at: new Date('2026-03-24T00:00:00.000Z'),
   };

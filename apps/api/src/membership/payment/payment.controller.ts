@@ -22,6 +22,7 @@ import { UserRole } from '@prisma/client';
 import type { JwtPayload } from '../../auth/types/jwt-payload.type';
 import { CurrentUser, Roles } from '../../common/decorators';
 import { JwtAuthGuard, RolesGuard } from '../../common/guards';
+import { CommerceCheckoutHoldStatusResponseDTO } from '../../coaching/commerce/dto/coaching-commerce.dto';
 import {
   ManualPaymentDTO,
   PaymentDetailsResponseDTO,
@@ -68,7 +69,11 @@ function paginatedEnvelopeSchema(itemSchemaRef: string) {
 }
 
 @ApiTags('Payments')
-@ApiExtraModels(PaymentResponseDTO, PaymentDetailsResponseDTO)
+@ApiExtraModels(
+  PaymentResponseDTO,
+  PaymentDetailsResponseDTO,
+  CommerceCheckoutHoldStatusResponseDTO,
+)
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard)
 @Controller('payments')
@@ -87,6 +92,29 @@ export class PaymentController {
     @Query() dto: PaymentHistoryDTO,
   ) {
     return this.paymentService.getMyPayments(user.sub, dto);
+  }
+
+  @Get('checkout-holds/:holdId')
+  @ApiOperation({
+    summary:
+      'Get the authenticated owner status of an internal checkout hold. Expired holds are normalized before the response.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Checkout hold status returned.',
+    schema: apiEnvelopeSchema(getSchemaPath(CommerceCheckoutHoldStatusResponseDTO)),
+  })
+  @ApiResponse({ status: 403, description: 'Forbidden.' })
+  @ApiResponse({ status: 404, description: 'Checkout hold not found.' })
+  getCheckoutHoldStatus(
+    @Param('holdId', ParseUUIDPipe) holdId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.paymentService.getCheckoutHoldStatus(
+      holdId,
+      user.sub,
+      user.role,
+    );
   }
 
   @Get(':id')

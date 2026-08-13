@@ -11,9 +11,15 @@ import {
 } from "../request";
 import {
   mapAmenityBookingToVenueBookingRecord,
+  mapBookingCheckoutResponse,
+  type BookingCheckoutApiResponse,
   toVenueBookingListParams,
   type VenueBookingListParams,
 } from "./bookings";
+import {
+  mapAppointmentRecord,
+  type AppointmentApiRecord,
+} from "./appointments";
 import type { UpdateCoachProfilePayload } from "./coaches";
 
 export type StaffAppointmentListParams = {
@@ -28,7 +34,6 @@ export type StaffAppointmentListParams = {
 export type StaffAppointmentRecord = {
   activePaymentId?: string | null;
   activePaymentProvider?: "cash" | "paymongo" | null;
-  activePaymentStage?: "balance" | "downpayment" | "full" | null;
   activePaymentStatus?:
     | "awaiting_verification"
     | "completed"
@@ -36,9 +41,7 @@ export type StaffAppointmentRecord = {
     | "pending"
     | "processing"
     | null;
-  amountDueNow?: number | null;
   assessmentReport?: string | null;
-  balancePaidAt?: string | null;
   coach: {
     contactEmail?: string | null;
     displayName?: string | null;
@@ -65,7 +68,6 @@ export type StaffAppointmentRecord = {
   originalScheduledAt?: string | null;
   recurringPlanId?: string | null;
   recurringState?: string | null;
-  remainingBalance?: number | null;
   review?: {
     comment?: string | null;
     createdAt: string;
@@ -77,7 +79,6 @@ export type StaffAppointmentRecord = {
   sessionNotes?: string | null;
   status?: string;
   totalAmount?: number | null;
-  downpaymentPaidAt?: string | null;
   completedAt?: string | null;
   updatedAt: string;
   user: {
@@ -104,6 +105,7 @@ export type CreateStaffVenueBookingPayload = {
   amenityId: string;
   coachId?: string;
   endsAt: string;
+  idempotencyKey?: string;
   memberId: string;
   notes?: string;
   paymentStage?: "full";
@@ -113,6 +115,7 @@ export type CreateStaffVenueBookingPayload = {
 export type CreateStaffCoachBookingPayload = {
   coachId: string;
   durationMinutes: number;
+  idempotencyKey?: string;
   memberId: string;
   memberNotes?: string;
   paymentStage?: "full";
@@ -136,6 +139,18 @@ export type CreateStaffCoachPayload = {
   scheduleType?: "full_time" | "part_time";
   specialties?: string[];
 };
+
+function createIdempotencyKey() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (char) => {
+    const rand = Math.floor(Math.random() * 16);
+    const value = char === "x" ? rand : (rand & 0x3) | 0x8;
+    return value.toString(16);
+  });
+}
 
 export type CompleteStaffAppointmentPayload = {
   assessmentReport?: string;
@@ -166,7 +181,6 @@ type StaffAppointmentCoachApiRecord = {
 type StaffAppointmentApiRecord = {
   active_payment_id?: string | null;
   active_payment_provider?: "cash" | "paymongo" | null;
-  active_payment_stage?: "balance" | "downpayment" | "full" | null;
   active_payment_status?:
     | "awaiting_verification"
     | "completed"
@@ -174,13 +188,9 @@ type StaffAppointmentApiRecord = {
     | "pending"
     | "processing"
     | null;
-  balance_amount?: number | string | null;
-  balance_paid_at?: string | null;
   coach: StaffAppointmentCoachApiRecord;
   coach_id: string;
   created_at: string;
-  downpayment_amount?: number | string | null;
-  downpayment_paid_at?: string | null;
   duration_minutes: number;
   assessment_report?: string | null;
   coach_earnings?: number | string | null;
@@ -376,20 +386,10 @@ function mapStaffAppointment(
   record: StaffAppointmentApiRecord,
 ): StaffAppointmentRecord {
   const totalAmount = toNullableNumber(record.total_amount);
-  const downpaymentAmount = toNullableNumber(record.downpayment_amount);
-  const remainingBalance = toNullableNumber(record.balance_amount);
-  const activePaymentStage = record.active_payment_stage ?? null;
-  const isPaidInFull = Boolean(
-    record.downpayment_paid_at && record.balance_paid_at,
-  );
-  const isFullPaymentFlow = activePaymentStage === "full" || isPaidInFull;
-  const hasPaymentSummary =
-    (totalAmount ?? 0) > 0 && (downpaymentAmount ?? 0) > 0;
 
   return {
     activePaymentId: record.active_payment_id ?? null,
     activePaymentProvider: record.active_payment_provider ?? null,
-    activePaymentStage,
     activePaymentStatus: record.active_payment_status ?? null,
     id: record.id,
     userId: record.user_id,
@@ -406,22 +406,6 @@ function mapStaffAppointment(
     assessmentReport: record.assessment_report ?? null,
     gymRevenue: toNullableNumber(record.gym_revenue),
     totalAmount,
-    amountDueNow: hasPaymentSummary
-      ? isFullPaymentFlow
-        ? totalAmount
-        : record.status === "pending_payment"
-          ? downpaymentAmount
-          : (remainingBalance ?? 0) > 0 && !record.balance_paid_at
-            ? remainingBalance
-            : downpaymentAmount
-      : null,
-    remainingBalance: hasPaymentSummary
-      ? isFullPaymentFlow
-        ? 0
-        : remainingBalance
-      : null,
-    downpaymentPaidAt: record.downpayment_paid_at ?? null,
-    balancePaidAt: record.balance_paid_at ?? null,
     notes: record.member_notes ?? null,
     sessionNotes: record.session_notes ?? null,
     originalScheduledAt: record.original_scheduled_at ?? null,
@@ -633,21 +617,6 @@ export function createStaffApi(transport: ApiTransport) {
         mapAmenityBookingToVenueBookingRecord(record as never),
       ) as T[];
     },
-    confirmBooking(bookingId: string) {
-      return unwrapVoidResponse(
-        transport.patch(`/staff/bookings/${bookingId}/confirm`, {}),
-        "Unable to confirm booking.",
-      );
-    },
-    rejectBooking(bookingId: string, reason?: string) {
-      return unwrapVoidResponse(
-        transport.patch(
-          `/staff/bookings/${bookingId}/reject`,
-          reason ? { reason } : {},
-        ),
-        "Unable to reject booking.",
-      );
-    },
     completeBooking(bookingId: string) {
       return unwrapVoidResponse(
         transport.patch(`/staff/bookings/${bookingId}/complete`, {}),
@@ -670,35 +639,26 @@ export function createStaffApi(transport: ApiTransport) {
       );
     },
     createBooking(payload: CreateStaffVenueBookingPayload) {
-      return unwrapVoidResponse(
-        transport.post("/staff/bookings", {
-          amenity_id: payload.amenityId,
-          ...(payload.coachId ? { coach_id: payload.coachId } : {}),
-          ends_at: payload.endsAt,
-          member_id: payload.memberId,
-          ...(payload.notes ? { notes: payload.notes } : {}),
-          payment_stage: payload.paymentStage ?? "full",
-          starts_at: payload.startsAt,
-        }),
+      return unwrapResponse<BookingCheckoutApiResponse>(
+        transport.post(
+          "/staff/bookings",
+          {
+            amenity_id: payload.amenityId,
+            ...(payload.coachId ? { coach_id: payload.coachId } : {}),
+            ends_at: payload.endsAt,
+            member_id: payload.memberId,
+            ...(payload.notes ? { notes: payload.notes } : {}),
+            payment_stage: payload.paymentStage ?? "full",
+            starts_at: payload.startsAt,
+          },
+          {
+            headers: {
+              "Idempotency-Key": payload.idempotencyKey ?? createIdempotencyKey(),
+            },
+          },
+        ),
         "Unable to create venue booking.",
-      );
-    },
-    respondToAppointment(
-      appointmentId: string,
-      accepted: boolean,
-      reason?: string,
-    ) {
-      return unwrapVoidResponse(
-        transport.patch(`/staff/appointments/${appointmentId}/respond`, {
-          accepted,
-          ...(accepted
-            ? {}
-            : { rejection_reason: reason ?? "Rejected by staff." }),
-        }),
-        accepted
-          ? "Unable to confirm coach appointment."
-          : "Unable to reject coach appointment.",
-      );
+      ).then(mapBookingCheckoutResponse);
     },
     completeAppointment(
       appointmentId: string,
@@ -737,17 +697,25 @@ export function createStaffApi(transport: ApiTransport) {
       );
     },
     createAppointment(payload: CreateStaffCoachBookingPayload) {
-      return unwrapVoidResponse(
-        transport.post("/staff/appointments", {
-          coach_id: payload.coachId,
-          duration_minutes: payload.durationMinutes,
-          member_id: payload.memberId,
-          ...(payload.memberNotes ? { member_notes: payload.memberNotes } : {}),
-          payment_stage: payload.paymentStage ?? "full",
-          scheduled_at: payload.scheduledAt,
-        }),
+      return unwrapResponse<AppointmentApiRecord>(
+        transport.post(
+          "/staff/appointments",
+          {
+            coach_id: payload.coachId,
+            duration_minutes: payload.durationMinutes,
+            member_id: payload.memberId,
+            ...(payload.memberNotes ? { member_notes: payload.memberNotes } : {}),
+            payment_stage: payload.paymentStage ?? "full",
+            scheduled_at: payload.scheduledAt,
+          },
+          {
+            headers: {
+              "Idempotency-Key": payload.idempotencyKey ?? createIdempotencyKey(),
+            },
+          },
+        ),
         "Unable to create coach booking.",
-      );
+      ).then(mapAppointmentRecord);
     },
   };
 }

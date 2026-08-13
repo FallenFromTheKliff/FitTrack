@@ -44,7 +44,7 @@ const credentials = {
   coach: {
     email: 'seed.coach@fittrack.com',
     loginRoute: '/login',
-    password: 'SeedCoach!2026',
+    password: 'SeedMember!2026',
   },
   member: {
     email: 'seed.member.active@fittrack.com',

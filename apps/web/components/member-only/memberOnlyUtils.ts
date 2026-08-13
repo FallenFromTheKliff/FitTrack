@@ -16,37 +16,25 @@ import type {
 } from "@fittrack/types";
 
 export type MemberBookingItem = Booking & {
-  activePaymentStage?: "balance" | "downpayment" | "full" | null;
-  amountDueNow?: number;
   bookingType?: "recurring" | "single";
   coachId?: string;
   detailSubtitle?: string;
   detailTitle?: string;
-  nextPaymentDate?: string;
   participantLabel?: string;
   participantName?: string;
-  paymentPlan?: "downpayment" | "free" | "full";
-  remainingBalance?: number;
   recurringPlanId?: string | null;
   totalAmount?: number;
 };
 
 export type AppointmentLikeRecord = {
-  activePaymentStage?: "balance" | "downpayment" | "full" | null;
-  amountDueNow?: number | null;
-  balancePaidAt?: string | null;
   coach?: {
     displayName?: string | null;
     hourlyRate?: number | null;
   } | null;
   coachId?: string;
-  downpaymentPaidAt?: string | null;
   duration: number;
   id: string;
-  nextPaymentDate?: string | null;
   notes?: string | null;
-  paymentPlan?: "downpayment" | "free" | "full";
-  remainingBalance?: number | null;
   recurringPlanId?: string | null;
   scheduledAt: string;
   sessionType?: string | null;
@@ -112,7 +100,6 @@ export const FACILITY_BLUEPRINT_COPY: Record<
 
 export const BOOKING_STATUS_FILTERS = [
   { label: "All Statuses", value: "all" },
-  { label: "Pending", value: "pending" },
   { label: "Active", value: "confirmed" },
   { label: "Completed", value: "completed" },
   { label: "No Show", value: "no_show" },
@@ -176,10 +163,7 @@ export function formatTitle(value: string) {
 
 export function formatStatusLabel(status: string) {
   const explicitLabels: Record<string, string> = {
-    pending_downpayment: "Pending Downpayment",
-    pending_payment: "Pending Payment",
-    pending_full_payment: "Pending Full Payment",
-    balance_pending: "Pending Full Payment",
+    pending_verification: "Access processing",
   };
 
   if (explicitLabels[status]) return explicitLabels[status];
@@ -191,14 +175,14 @@ export function formatGoalLabel(value?: string | null) {
 }
 
 export function getMembershipStatusLabel(membershipCardStatus: string, hasMemberCardAccess: boolean) {
-  if (membershipCardStatus === "pending_verification") return "Pending verification";
+  if (membershipCardStatus === "pending_verification") return "Access processing";
   if (membershipCardStatus === "revoked") return "Revoked";
   return hasMemberCardAccess ? "Member" : "Non-member";
 }
 
 export function getMemberLockMessage(membershipCardStatus: string, featureName: string) {
   if (membershipCardStatus === "pending_verification") {
-    return `Your membership card payment is waiting for verification. ${featureName} unlocks as soon as staff confirms it.`;
+    return `${featureName} unlocks after membership access finishes processing.`;
   }
   if (membershipCardStatus === "revoked") {
     return "Your membership card access is revoked right now. Ask the front desk to repair the account if this is unexpected.";
@@ -290,18 +274,9 @@ export function toMemberAppointment(appointment: AppointmentLikeRecord): MemberB
   const { startLabel, endLabel, date } = toDateTimeRange(appointment.scheduledAt, appointment.duration);
   const standaloneName = appointment.coach?.displayName?.trim();
   const coachName = standaloneName && !standaloneName.includes("@") ? standaloneName : "Coach Session";
-  const normalizedStatus =
-    appointment.status === "pending_payment" && appointment.activePaymentStage === "full"
-      ? "pending_full_payment"
-      : appointment.status === "pending_payment" && appointment.activePaymentStage === "downpayment"
-        ? "pending_downpayment"
-        : appointment.status === "confirmed" && Number(appointment.remainingBalance ?? 0) > 0 && !appointment.balancePaidAt
-          ? "pending_full_payment"
-          : normalizeBookingStatus(appointment.status);
+  const normalizedStatus = normalizeBookingStatus(appointment.status);
 
   return {
-    activePaymentStage: appointment.activePaymentStage ?? null,
-    amountDueNow: appointment.amountDueNow ?? undefined,
     bookingType: appointment.recurringPlanId ? "recurring" : "single",
     coachId: appointment.coachId ?? undefined,
     date,
@@ -310,12 +285,9 @@ export function toMemberAppointment(appointment: AppointmentLikeRecord): MemberB
     detailTitle: "Appointment Details",
     endTime: endLabel,
     id: appointment.id,
-    nextPaymentDate: appointment.nextPaymentDate ?? undefined,
     participantLabel: "Coach",
     participantName: coachName,
-    paymentPlan: appointment.paymentPlan ?? undefined,
     price: appointment.coach?.hourlyRate ?? 0,
-    remainingBalance: appointment.remainingBalance ?? undefined,
     recurringPlanId: appointment.recurringPlanId ?? null,
     resourceId: appointment.coachId ?? "coach",
     resourceName: coachName,

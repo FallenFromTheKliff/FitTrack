@@ -4,6 +4,7 @@ import {
   ArrayMinSize,
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsEnum,
   IsInt,
   IsNotEmpty,
@@ -14,7 +15,11 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidationArguments,
+  ValidatorConstraint,
+  ValidatorConstraintInterface,
   ValidateNested,
+  registerDecorator,
 } from 'class-validator';
 import { ExerciseCategory, FitnessGoal, PlanSource } from '@prisma/client';
 
@@ -95,6 +100,34 @@ export class CreateTrainingPlanExerciseDTO {
   order_index?: number;
 }
 
+@ValidatorConstraint({ name: 'trainingPlanDayExercises', async: false })
+class TrainingPlanDayExercisesConstraint implements ValidatorConstraintInterface {
+  validate(value: unknown, args: ValidationArguments): boolean {
+    if (!Array.isArray(value)) return false;
+
+    const day = args.object as CreateTrainingPlanScheduleDayDTO;
+    return day.is_rest_day === true ? value.length === 0 : value.length > 0;
+  }
+
+  defaultMessage(args: ValidationArguments): string {
+    const day = args.object as CreateTrainingPlanScheduleDayDTO;
+    return day.is_rest_day === true
+      ? 'rest day must not contain exercises'
+      : 'exercises must contain at least 1 item';
+  }
+}
+
+function ValidateTrainingPlanDayExercises(): PropertyDecorator {
+  return (target: object, propertyName: string | symbol) => {
+    registerDecorator({
+      name: 'trainingPlanDayExercises',
+      target: target.constructor,
+      propertyName: propertyName.toString(),
+      validator: TrainingPlanDayExercisesConstraint,
+    });
+  };
+}
+
 export class CreateTrainingPlanScheduleDayDTO {
   @ApiProperty({ example: 1 })
   @Type(() => Number)
@@ -118,12 +151,22 @@ export class CreateTrainingPlanScheduleDayDTO {
   })
   focus_label?: string;
 
+  @ApiPropertyOptional({
+    example: false,
+    nullable: true,
+    description:
+      'Explicitly identifies a recovery day. Omitted legacy rows use the exact-label fallback in clients.',
+  })
+  @IsOptional()
+  @IsBoolean({ message: 'is_rest_day must be a boolean' })
+  is_rest_day?: boolean;
+
   @ApiProperty({
     type: CreateTrainingPlanExerciseDTO,
     isArray: true,
   })
   @IsArray({ message: 'exercises must be an array' })
-  @ArrayMinSize(1, { message: 'exercises must contain at least 1 item' })
+  @ValidateTrainingPlanDayExercises()
   @ValidateNested({ each: true })
   @Type(() => CreateTrainingPlanExerciseDTO)
   exercises: CreateTrainingPlanExerciseDTO[];
@@ -234,6 +277,14 @@ export class TrainingPlanScheduleDayResponseDTO {
 
   @ApiPropertyOptional({ example: null, nullable: true })
   notes: string | null;
+
+  @ApiPropertyOptional({
+    example: false,
+    nullable: true,
+    description:
+      'Null means the legacy row has no explicit day kind; clients may use the conservative exact-label fallback.',
+  })
+  is_rest_day: boolean | null;
 
   @ApiProperty({
     type: TrainingPlanExerciseResponseDTO,

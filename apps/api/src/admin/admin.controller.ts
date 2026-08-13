@@ -25,6 +25,7 @@ import {
 } from './dto/admin.dto';
 import { BookingService } from 'src/booking-venue/booking/booking.service';
 import { ReviewDeletionRequestDto } from 'src/user/dto/deletion-request.dto';
+import { ApiGoneResponse, ApiOperation } from '@nestjs/swagger';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN')
@@ -157,19 +158,27 @@ export class AdminController {
     return this.bookingService.getAllBookings();
   }
 
-  /**
-   * Confirm a booking
-   */
   @Patch('bookings/:id/confirm')
-  async confirmBooking(@Param('id') id: string) {
+  @ApiOperation({
+    summary: 'Legacy compatibility route; pending booking confirmation is retired.',
+  })
+  @ApiGoneResponse({
+    description:
+      'Venue bookings are confirmed by full payment or atomic staff cash registration.',
+  })
+  confirmBooking(@Param('id') id: string) {
     return this.adminService.confirmBooking(id);
   }
 
-  /**
-   * Reject a booking
-   */
   @Patch('bookings/:id/reject')
-  async rejectBooking(
+  @ApiOperation({
+    summary: 'Legacy compatibility route; pending booking rejection is retired.',
+  })
+  @ApiGoneResponse({
+    description:
+      'Pending commercial booking rejection is no longer an active workflow.',
+  })
+  rejectBooking(
     @Param('id') id: string,
     @Body('reason') reason?: string,
   ) {

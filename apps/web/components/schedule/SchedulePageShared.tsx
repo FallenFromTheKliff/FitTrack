@@ -3,7 +3,6 @@
 import { type CSSProperties, type ReactNode } from "react";
 import { CalendarDays, ClipboardList, UsersRound } from "lucide-react";
 import type {
-  RecurringCoachingBillingCycleRecord,
   RecurringCoachingPlanInput,
   StaffAppointmentRecord,
 } from "@fittrack/api-client";
@@ -11,7 +10,6 @@ import { toYmd } from "@fittrack/utils";
 
 import { FitText } from "@/components/fit";
 import type { FieldConfig } from "@/components/modals";
-import type { VenueBookingRecord } from "@/contexts/ScheduleContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { COACH_SPECIALTY_OPTIONS } from "./GymOperationsOverlayShared";
 
@@ -25,50 +23,6 @@ export type ScheduleSurfaceTab =
 export type ScheduleRangeMode = "weekly" | "daily";
 export type CoachVisibilityScope = "all" | "hidden" | "visible";
 export type RecurringPlanActionMode = "single" | "future" | "cancel";
-export type PaymentCollectionProvider = "cash" | "paymongo";
-export type PaymentConfirmState =
-  | {
-      kind: "coachInitial";
-      appointment: StaffAppointmentRecord;
-      provider: PaymentCollectionProvider;
-      paymentStage: "downpayment" | "full";
-      title: string;
-      message: string;
-      confirmLabel: string;
-    }
-  | {
-      kind: "coachBalance";
-      appointment: StaffAppointmentRecord;
-      provider: PaymentCollectionProvider;
-      title: string;
-      message: string;
-      confirmLabel: string;
-    }
-  | {
-      kind: "coachPaymentApproval";
-      appointment: StaffAppointmentRecord;
-      paymentId: string;
-      title: string;
-      message: string;
-      confirmLabel: string;
-    }
-  | {
-      kind: "recurringCycle";
-      cycle: RecurringCoachingBillingCycleRecord;
-      provider: PaymentCollectionProvider;
-      title: string;
-      message: string;
-      confirmLabel: string;
-    }
-  | {
-      kind: "venueBalance";
-      booking: VenueBookingRecord;
-      provider: PaymentCollectionProvider;
-      title: string;
-      message: string;
-      confirmLabel: string;
-    };
-
 export type RecurringPlanFormState = {
   coachId: string;
   durationMinutes: number;
@@ -78,11 +32,7 @@ export type RecurringPlanFormState = {
   preferredDays: number[];
   preferredTime: string;
   quotedAmount: number;
-  scheduleItems: Array<{
-    date: string;
-    durationMinutes: number;
-    time: string;
-  }>;
+  selectedCandidateIndexes: number[];
   startDate: string;
   trainingPlanId: string;
 };
@@ -99,9 +49,6 @@ export const EMPTY_APPOINTMENT_RESULT = {
 
 export const STATUS_OPTIONS = [
   { label: "All statuses", value: "all" },
-  { label: "Pending coach", value: "pending_coach" },
-  { label: "Pending payment", value: "pending_payment" },
-  { label: "Pending full payment", value: "pending_full_payment" },
   { label: "Confirmed", value: "confirmed" },
   { label: "Completed", value: "completed" },
   { label: "Cancelled", value: "cancelled" },
@@ -130,8 +77,6 @@ export const SCHEDULE_TIMELINE_HOURS = Array.from(
 
 export const VENUE_STATUS_OPTIONS = [
   { label: "All statuses", value: "all" },
-  { label: "Pending", value: "pending" },
-  { label: "Pending full payment", value: "balance_pending" },
   { label: "Confirmed", value: "confirmed" },
   { label: "Completed", value: "completed" },
   { label: "Cancelled", value: "cancelled" },
@@ -157,7 +102,7 @@ export const WEEKDAY_OPTIONS = [
 export const RECURRING_FREQUENCY_OPTIONS = [
   { label: "Weekly", value: "weekly" },
   { label: "Biweekly", value: "biweekly" },
-  { label: "Monthly — actual dates", value: "monthly" },
+  { label: "Monthly — generated schedule", value: "monthly" },
 ];
 
 export const RECURRING_DURATION_OPTIONS = [
@@ -177,93 +122,10 @@ export function createDefaultRecurringPlanForm(): RecurringPlanFormState {
     preferredDays: [tomorrow.getDay()],
     preferredTime: "09:00",
     quotedAmount: 0,
-    scheduleItems: [],
+    selectedCandidateIndexes: [],
     startDate: toYmd(tomorrow),
     trainingPlanId: "",
   };
-}
-
-export function createFreshMonthlyScheduleDraft(
-  sessionCount: number,
-  durationMinutes: number,
-  preferredTime: string,
-) {
-  const today = new Date();
-  const monthStart = new Date(today.getFullYear(), today.getMonth() + 1, 1);
-  const daysInMonth = new Date(
-    monthStart.getFullYear(),
-    monthStart.getMonth() + 1,
-    0,
-  ).getDate();
-  const sessionsByGymWeek = new Map<string, number>();
-  const rows: RecurringPlanFormState["scheduleItems"] = [];
-
-  for (
-    let day = 1;
-    day <= daysInMonth && rows.length < sessionCount;
-    day += 1
-  ) {
-    const date = new Date(monthStart.getFullYear(), monthStart.getMonth(), day);
-    const weekStart = new Date(date);
-    weekStart.setDate(date.getDate() - ((date.getDay() + 6) % 7));
-    const weekKey = toYmd(weekStart);
-    const count = sessionsByGymWeek.get(weekKey) ?? 0;
-    if (count >= 5) continue;
-    sessionsByGymWeek.set(weekKey, count + 1);
-    rows.push({
-      date: toYmd(date),
-      durationMinutes,
-      time: preferredTime,
-    });
-  }
-
-  return rows;
-}
-
-export function getRecurringScheduleIssue(
-  scheduleItems: RecurringPlanFormState["scheduleItems"],
-  expectedCount?: number,
-) {
-  if (expectedCount != null && scheduleItems.length !== expectedCount) {
-    return `Add exactly ${expectedCount} actual session date${expectedCount === 1 ? "" : "s"} from the monthly offer.`;
-  }
-
-  const seen = new Set<string>();
-  const sessionsByGymWeek = new Map<string, number>();
-  const monthKey = scheduleItems[0]?.date.slice(0, 7) ?? "";
-
-  for (const item of scheduleItems) {
-    if (!item.date || !item.time) {
-      return "Every monthly session needs an actual date and time.";
-    }
-    if (!Number.isFinite(item.durationMinutes) || item.durationMinutes <= 0) {
-      return "Every monthly session needs a valid duration.";
-    }
-    if (!monthKey || item.date.slice(0, 7) !== monthKey) {
-      return "Every session in a fresh plan must stay inside the same calendar month.";
-    }
-
-    const slotKey = `${item.date}T${item.time}`;
-    if (seen.has(slotKey)) {
-      return `Duplicate session date and time: ${item.date} at ${item.time}.`;
-    }
-    seen.add(slotKey);
-
-    const date = new Date(`${item.date}T00:00:00`);
-    if (Number.isNaN(date.getTime())) {
-      return "One or more monthly session dates are invalid.";
-    }
-    const monday = new Date(date);
-    monday.setDate(date.getDate() - ((date.getDay() + 6) % 7));
-    const weekKey = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, "0")}-${String(monday.getDate()).padStart(2, "0")}`;
-    const weekCount = (sessionsByGymWeek.get(weekKey) ?? 0) + 1;
-    if (weekCount > 5) {
-      return `A monthly plan cannot place more than five sessions in the gym week of ${weekKey}.`;
-    }
-    sessionsByGymWeek.set(weekKey, weekCount);
-  }
-
-  return null;
 }
 
 export function buildLocalIso(date: string, time: string) {
@@ -292,33 +154,18 @@ export function getRecurringInput(
   form: RecurringPlanFormState,
   conflictOverrides?: RecurringCoachingPlanInput["sessionOverrides"],
 ): RecurringCoachingPlanInput {
-  const scheduleItems =
-    form.frequency === "monthly" && form.scheduleItems.length > 0
-      ? form.scheduleItems.map((item, index) => ({
-          durationMinutes: item.durationMinutes,
-          scheduledAt: buildLocalIso(item.date, item.time),
-          sequenceIndex: index + 1,
-        }))
-      : undefined;
-  const preferredDays =
-    form.frequency === "monthly" && scheduleItems?.length
-      ? Array.from(
-          new Set(
-            scheduleItems.map((item) => new Date(item.scheduledAt).getUTCDay()),
-          ),
-        )
-      : form.preferredDays;
-
   return {
     coachId: form.coachId,
     durationMinutes: form.durationMinutes,
     durationMonths: form.durationMonths,
     frequency: form.frequency,
     memberId: form.memberId,
-    preferredDays,
+    preferredDays: form.preferredDays,
     preferredTime: form.preferredTime,
     ...(form.quotedAmount > 0 ? { quotedAmount: form.quotedAmount } : {}),
-    ...(scheduleItems?.length ? { scheduleItems } : {}),
+    ...(form.selectedCandidateIndexes.length
+      ? { selectedCandidateIndexes: form.selectedCandidateIndexes }
+      : {}),
     sessionOverrides: conflictOverrides,
     startDate: form.startDate,
     ...(form.trainingPlanId ? { trainingPlanId: form.trainingPlanId } : {}),

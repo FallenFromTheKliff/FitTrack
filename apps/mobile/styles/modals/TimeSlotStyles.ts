@@ -51,7 +51,8 @@ export function makeTimeSlotModalStyles() {
     legendText: { fontSize: 12 },
     grid: { flexDirection: "row", flexWrap: "wrap", flexGrow: 1, padding: 12, paddingBottom: 24, gap: 8 },
     slotCard: {
-      width: "31%",
+      width: "48.5%",
+      minHeight: 66,
       borderRadius: R.md,
       borderWidth: 1,
       paddingVertical: 10,
@@ -60,8 +61,8 @@ export function makeTimeSlotModalStyles() {
       gap: 2,
       position: "relative"
     },
-    slotTime: { fontSize: 17, fontWeight: "600", textAlign: "center" },
-    slotDuration: { fontSize: 13, textAlign: "center" },
+    slotTime: { fontSize: 15, fontWeight: "700", textAlign: "center" },
+    slotDuration: { fontSize: 11, lineHeight: 15, textAlign: "center" },
     slotSpots: { fontSize: 13, fontWeight: "700", textAlign: "center" },
     slotCheck: { position: "absolute", top: 5, right: 5 },
     emptyText: { width: "100%", paddingVertical: 24, fontSize: 14, textAlign: "center" },

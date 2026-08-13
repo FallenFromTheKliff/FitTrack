@@ -11,6 +11,7 @@ import {
 import { seedId, seedExternalId } from '../ids';
 import { daysFrom } from '../time';
 import type { DynamicSeedContext, MemberPersona, SeedAccount } from '../types';
+import { memberAccessWindow } from '../volumes';
 
 const PLAN_SEEDS = [
   {
@@ -78,7 +79,7 @@ function subscriptionStatusForPersona(persona: MemberPersona) {
   switch (persona) {
     case 'pending':
     case 'unverified':
-      return SubscriptionStatus.pending_payment;
+      return null;
     case 'expired':
     case 'archived':
       return SubscriptionStatus.expired;
@@ -91,23 +92,18 @@ function subscriptionStatusForPersona(persona: MemberPersona) {
 }
 
 function paymentStatusForPersona(persona: MemberPersona) {
-  switch (persona) {
-    case 'pending':
-    case 'unverified':
-      return PaymentStatus.awaiting_verification;
-    case 'suspended':
-      return PaymentStatus.failed;
-    default:
-      return PaymentStatus.completed;
-  }
+  void persona;
+  return PaymentStatus.completed;
 }
 
 function cardStatusForPersona(persona: MemberPersona) {
   switch (persona) {
     case 'pending':
     case 'unverified':
-      return MembershipCardStatus.pending_verification;
+      return null;
     case 'archived':
+    case 'expired':
+    case 'frozen':
     case 'suspended':
       return MembershipCardStatus.revoked;
     default:
@@ -163,25 +159,38 @@ async function seedCards(ctx: DynamicSeedContext) {
   for (const [index, account] of ctx.state.accounts
     .filter((candidate) => candidate.role === 'member')
     .entries()) {
+    if (!account.memberPersona) {
+      continue;
+    }
     const persona = personaFor(account);
     const status = cardStatusForPersona(persona);
+    if (status === null) {
+      continue;
+    }
     const userId = ctx.state.userIds[account.key];
     const cardId = seedId(`membership-card:${account.key}`);
-    const purchasedAt = daysFrom(ctx.config.anchorDate, -65 + (index % 42), 10);
+    const accessWindow = memberAccessWindow(ctx, account.key);
+    const purchasedAt = accessWindow.startsAt
+      ? daysFrom(accessWindow.startsAt, -3, 10)
+      : daysFrom(ctx.config.anchorDate, -5 - (index % 4), 10);
+    const revokedAt =
+      status === MembershipCardStatus.revoked
+        ? account.memberPersona === 'suspended'
+          ? daysFrom(ctx.config.anchorDate, -1, 13)
+          : daysFrom(
+              accessWindow.expiresAt ?? purchasedAt,
+              0,
+              13,
+            )
+        : null;
 
     await ctx.prisma.membershipCard.upsert({
       where: { user_id: userId },
       update: {
-        activated_at:
-          status === MembershipCardStatus.active
-            ? daysFrom(purchasedAt, 0, 10, 30)
-            : null,
+        activated_at: daysFrom(purchasedAt, 0, 10, 30),
         price: new Prisma.Decimal('400'),
         purchased_at: purchasedAt,
-        revoked_at:
-          status === MembershipCardStatus.revoked
-            ? daysFrom(ctx.config.anchorDate, -8 - (index % 8), 13)
-            : null,
+        revoked_at: revokedAt,
         revoked_by: status === MembershipCardStatus.revoked ? adminId : null,
         revoke_reason:
           status === MembershipCardStatus.revoked
@@ -192,24 +201,15 @@ async function seedCards(ctx: DynamicSeedContext) {
             ? MembershipCardSource.paymongo
             : MembershipCardSource.cash,
         status,
-        verified_at:
-          status === MembershipCardStatus.active
-            ? daysFrom(purchasedAt, 0, 11)
-            : null,
-        verified_by: status === MembershipCardStatus.active ? adminId : null,
+        verified_at: daysFrom(purchasedAt, 0, 11),
+        verified_by: adminId,
       },
       create: {
         id: cardId,
-        activated_at:
-          status === MembershipCardStatus.active
-            ? daysFrom(purchasedAt, 0, 10, 30)
-            : null,
+        activated_at: daysFrom(purchasedAt, 0, 10, 30),
         price: new Prisma.Decimal('400'),
         purchased_at: purchasedAt,
-        revoked_at:
-          status === MembershipCardStatus.revoked
-            ? daysFrom(ctx.config.anchorDate, -8 - (index % 8), 13)
-            : null,
+        revoked_at: revokedAt,
         revoked_by: status === MembershipCardStatus.revoked ? adminId : null,
         revoke_reason:
           status === MembershipCardStatus.revoked
@@ -221,11 +221,8 @@ async function seedCards(ctx: DynamicSeedContext) {
             : MembershipCardSource.cash,
         status,
         user_id: userId,
-        verified_at:
-          status === MembershipCardStatus.active
-            ? daysFrom(purchasedAt, 0, 11)
-            : null,
-        verified_by: status === MembershipCardStatus.active ? adminId : null,
+        verified_at: daysFrom(purchasedAt, 0, 11),
+        verified_by: adminId,
       },
     });
   }
@@ -239,41 +236,34 @@ async function seedSubscriptionsAndPayments(ctx: DynamicSeedContext) {
   const adminId = ctx.state.userIds[ctx.state.adminKeys[0]];
 
   for (const [index, account] of members.entries()) {
+    if (!account.memberPersona) {
+      continue;
+    }
     const persona = personaFor(account);
     const subscriptionStatus = subscriptionStatusForPersona(persona);
+    if (subscriptionStatus === null) {
+      continue;
+    }
     const planKey = planKeyForPersona(persona, index);
     const planId = ctx.state.membershipPlanIds[planKey];
     const userId = ctx.state.userIds[account.key];
     const subscriptionId = seedId(`subscription:${account.key}:current`);
     const paymentId = seedId(`payment:subscription:${account.key}:current`);
+    const accessWindow = memberAccessWindow(ctx, account.key);
     const startsAt =
-      subscriptionStatus === SubscriptionStatus.pending_payment
-        ? null
-        : daysFrom(
-            ctx.config.anchorDate,
-            persona === 'expired' ? -76 : -22 - (index % 16),
-            9,
-          );
+      accessWindow.startsAt ?? daysFrom(ctx.config.anchorDate, -90 - (index % 20), 9);
     const expiresAt =
-      subscriptionStatus === SubscriptionStatus.pending_payment
-        ? null
-        : persona === 'expired' || persona === 'archived'
-          ? daysFrom(ctx.config.anchorDate, -6 - (index % 15), 23, 59)
-          : daysFrom(ctx.config.anchorDate, 8 + (index % 45), 23, 59);
-    const completed =
-      paymentStatusForPersona(persona) === PaymentStatus.completed;
+      accessWindow.expiresAt ?? daysFrom(ctx.config.anchorDate, 30 + (index % 20), 23, 59);
+    const completed = paymentStatusForPersona(persona) === PaymentStatus.completed;
+    const subscriptionPaymentCreatedAt = startsAt
+      ? daysFrom(startsAt, -2, 12)
+      : daysFrom(ctx.config.anchorDate, -4 - (index % 8), 12);
 
     await ctx.prisma.subscription.upsert({
       where: { id: subscriptionId },
       update: {
-        cancellation_reason:
-          subscriptionStatus === SubscriptionStatus.suspended
-            ? 'Frozen or suspended membership retained for review.'
-            : null,
-        cancelled_at:
-          subscriptionStatus === SubscriptionStatus.suspended
-            ? daysFrom(ctx.config.anchorDate, -3 - (index % 5), 12)
-            : null,
+        cancellation_reason: null,
+        cancelled_at: null,
         expires_at: expiresAt,
         payment_id: paymentId,
         plan_id: planId,
@@ -292,14 +282,8 @@ async function seedSubscriptionsAndPayments(ctx: DynamicSeedContext) {
       },
       create: {
         id: subscriptionId,
-        cancellation_reason:
-          subscriptionStatus === SubscriptionStatus.suspended
-            ? 'Frozen or suspended membership retained for review.'
-            : null,
-        cancelled_at:
-          subscriptionStatus === SubscriptionStatus.suspended
-            ? daysFrom(ctx.config.anchorDate, -3 - (index % 5), 12)
-            : null,
+        cancellation_reason: null,
+        cancelled_at: null,
         expires_at: expiresAt,
         payment_id: paymentId,
         plan_id: planId,
@@ -329,7 +313,7 @@ async function seedSubscriptionsAndPayments(ctx: DynamicSeedContext) {
     paymentRows.push({
       id: paymentId,
       amount: new Prisma.Decimal(amount),
-      created_at: daysFrom(ctx.config.anchorDate, -22 - (index % 12), 12),
+      created_at: subscriptionPaymentCreatedAt,
       gateway_event_id:
         index % 5 === 0
           ? seedExternalId(`gateway:subscription:${account.key}`)
@@ -351,15 +335,12 @@ async function seedSubscriptionsAndPayments(ctx: DynamicSeedContext) {
         index % 3 === 0
           ? seedExternalId(`paymongo:subscription:${account.key}`)
           : null,
-      rejection_reason:
-        paymentStatusForPersona(persona) === PaymentStatus.failed
-          ? 'Failed payment retained for suspended member review.'
-          : null,
+      rejection_reason: null,
       screenshot_url: null,
       status: paymentStatusForPersona(persona),
       user_id: userId,
       verified_at: completed
-        ? daysFrom(ctx.config.anchorDate, -21 - (index % 10), 14)
+        ? daysFrom(subscriptionPaymentCreatedAt, 0, 14)
         : null,
       verified_by: completed ? adminId : null,
     });
@@ -411,11 +392,19 @@ async function seedSubscriptionsAndPayments(ctx: DynamicSeedContext) {
       });
     }
 
+    const cardStatus = cardStatusForPersona(persona);
+    if (cardStatus === null) {
+      continue;
+    }
     const cardPaymentId = seedId(`payment:membership-card:${account.key}`);
+    const cardPurchasedAt =
+      accessWindow.startsAt !== null
+        ? daysFrom(accessWindow.startsAt, -3, 10)
+        : daysFrom(ctx.config.anchorDate, -5 - (index % 4), 10);
     paymentRows.push({
       id: cardPaymentId,
       amount: new Prisma.Decimal('400'),
-      created_at: daysFrom(ctx.config.anchorDate, -64 + (index % 20), 11),
+      created_at: cardPurchasedAt,
       gateway_event_id: null,
       gateway_metadata: { accountKey: account.key, payable: 'membership-card' },
       idempotency_key: seedExternalId(`payment:membership-card:${account.key}`),
@@ -428,20 +417,10 @@ async function seedSubscriptionsAndPayments(ctx: DynamicSeedContext) {
         index % 4 === 0
           ? seedExternalId(`paymongo:membership-card:${account.key}`)
           : null,
-      status:
-        cardStatusForPersona(persona) ===
-        MembershipCardStatus.pending_verification
-          ? PaymentStatus.awaiting_verification
-          : PaymentStatus.completed,
+      status: PaymentStatus.completed,
       user_id: userId,
-      verified_at:
-        cardStatusForPersona(persona) === MembershipCardStatus.active
-          ? daysFrom(ctx.config.anchorDate, -63 + (index % 20), 12)
-          : null,
-      verified_by:
-        cardStatusForPersona(persona) === MembershipCardStatus.active
-          ? adminId
-          : null,
+      verified_at: daysFrom(cardPurchasedAt, 0, 12),
+      verified_by: adminId,
     });
   }
 
@@ -464,6 +443,10 @@ export async function seedMembershipPayments(ctx: DynamicSeedContext) {
   ctx.notableIds.demoPendingPaymentId = seedId(
     'payment:subscription:member-pending:current',
   );
+  ctx.notableIds.qaMonthlyEligibleMemberId =
+    ctx.state.userIds['member-active'];
+  ctx.notableIds.qaCheckoutAbandonedMemberId =
+    ctx.state.userIds['member-checkout-abandoned'];
 
   return {
     counts: {

@@ -17,11 +17,8 @@ export const TIME_SLOTS: TimeSlot[] = [
 ];
 
 export const STATUS_COLORS: Record<string, string> = {
-  pending: "#3B82F6",
+  pending: "#64748B",
   pending_coach: "#3B82F6",
-  pending_downpayment: "#F59E0B",
-  pending_payment: "#F59E0B",
-  pending_full_payment: "#F59E0B",
   confirmed: "#22C55E",
   completed: "#64748B",
   declined: "#F97316",
@@ -30,11 +27,10 @@ export const STATUS_COLORS: Record<string, string> = {
   cancelled: "#EF4444"
 };
 
-export type StatusFilter = "all" | "pending" | "confirmed" | "completed" | "no_show" | "cancelled";
+export type StatusFilter = "all" | "confirmed" | "completed" | "no_show" | "cancelled";
 
 export const FILTER_OPTIONS: { label: string; value: StatusFilter }[] = [
   { label: "All", value: "all" },
-  { label: "Pending", value: "pending" },
   { label: "Active", value: "confirmed" },
   { label: "Completed", value: "completed" },
   { label: "No Show", value: "no_show" },
@@ -42,6 +38,6 @@ export const FILTER_OPTIONS: { label: string; value: StatusFilter }[] = [
 ];
 
 export function getTodayString(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const gymNow = new Date(Date.now() + 8 * 60 * 60 * 1000);
+  return `${gymNow.getUTCFullYear()}-${String(gymNow.getUTCMonth() + 1).padStart(2, "0")}-${String(gymNow.getUTCDate()).padStart(2, "0")}`;
 }

@@ -8,6 +8,7 @@ import {
 import { seedId } from './ids';
 import { SeedRandom, slugify } from './random';
 import { yearsAgo } from './time';
+import { buildMemberCohortMap } from './volumes';
 import type {
   DynamicSeedConfig,
   MemberPersona,
@@ -18,12 +19,14 @@ import type {
 
 export const DYNAMIC_SEED_PASSWORD = 'SeedMember!2026';
 
-const DEFAULT_PASSWORDS = {
-  admin: DYNAMIC_SEED_PASSWORD,
-  coach: DYNAMIC_SEED_PASSWORD,
+export const DYNAMIC_SEED_PASSWORDS = {
+  admin: 'SeedAdmin!2026',
+  coach: 'SeedCoach!2026',
   member: DYNAMIC_SEED_PASSWORD,
-  staff: DYNAMIC_SEED_PASSWORD,
+  staff: 'SeedStaff!2026',
 } as const;
+
+const DEFAULT_PASSWORDS = DYNAMIC_SEED_PASSWORDS;
 
 export const DEMO_ACCOUNTS: readonly SeedAccount[] = [
   {
@@ -62,6 +65,7 @@ export const DEMO_ACCOUNTS: readonly SeedAccount[] = [
   },
   {
     email: 'seed.member.active@fittrack.com',
+    emailVerified: true,
     firstName: 'Ava',
     isDemo: true,
     key: 'member-active',
@@ -71,9 +75,11 @@ export const DEMO_ACCOUNTS: readonly SeedAccount[] = [
     password: DEFAULT_PASSWORDS.member,
     phone: '+639110000005',
     role: UserRole.member,
+    status: UserStatus.active,
   },
   {
     email: 'seed.member.premium@fittrack.com',
+    emailVerified: true,
     firstName: 'Luca',
     isDemo: true,
     key: 'member-premium',
@@ -83,6 +89,20 @@ export const DEMO_ACCOUNTS: readonly SeedAccount[] = [
     password: DEFAULT_PASSWORDS.member,
     phone: '+639110000006',
     role: UserRole.member,
+    status: UserStatus.active,
+  },
+  {
+    email: 'seed.member.checkout.abandoned@fittrack.com',
+    emailVerified: true,
+    firstName: 'Nia',
+    isDemo: true,
+    key: 'member-checkout-abandoned',
+    label: 'Member Checkout Abandoned',
+    lastName: 'Santos',
+    password: DEFAULT_PASSWORDS.member,
+    phone: '+639110000017',
+    role: UserRole.member,
+    status: UserStatus.active,
   },
   {
     email: 'seed.member.frozen@fittrack.com',
@@ -422,10 +442,75 @@ function buildGeneratedAccounts(config: DynamicSeedConfig) {
 }
 
 export function buildSeedAccounts(config: DynamicSeedConfig) {
-  return [...DEMO_ACCOUNTS, ...buildGeneratedAccounts(config)].slice(
+  const accounts = [...DEMO_ACCOUNTS, ...buildGeneratedAccounts(config)].slice(
     0,
     config.users,
   );
+  const memberKeys = accounts
+    .filter((account) => account.role === UserRole.member)
+    .map((account) => account.key);
+  const cohorts = buildMemberCohortMap(memberKeys);
+  let generatedRestrictedIndex = 0;
+
+  return accounts.map((account) => {
+    if (account.role !== UserRole.member) {
+      return account;
+    }
+    if (account.key === 'member-checkout-abandoned') {
+      return {
+        ...account,
+        emailVerified: true,
+        status: UserStatus.active,
+      };
+    }
+    const cohort = cohorts[account.key];
+    if (cohort === 'power') {
+      return {
+        ...account,
+        memberPersona: 'premium' as const,
+        status: UserStatus.active,
+      };
+    }
+    if (cohort === 'frequent' || cohort === 'regular') {
+      return {
+        ...account,
+        memberPersona: 'active' as const,
+        status: UserStatus.active,
+      };
+    }
+    if (cohort === 'light_trial') {
+      return {
+        ...account,
+        memberPersona: 'trial' as const,
+        status: UserStatus.active,
+      };
+    }
+    if (cohort === 'historical_only') {
+      const memberPersona = ['frozen', 'expired', 'archived'].includes(
+        account.memberPersona ?? '',
+      )
+        ? account.memberPersona
+        : 'expired';
+      return { ...account, memberPersona, status: UserStatus.active };
+    }
+
+    const memberPersona = ['pending', 'unverified', 'suspended'].includes(
+      account.memberPersona ?? '',
+    )
+      ? account.memberPersona
+      : generatedRestrictedIndex++ % 7 === 0
+        ? 'suspended'
+        : generatedRestrictedIndex % 5 === 0
+          ? 'unverified'
+          : 'pending';
+    return {
+      ...account,
+      emailVerified: memberPersona !== 'unverified',
+      memberPersona,
+      status:
+        memberPersona === 'suspended' ? UserStatus.suspended : UserStatus.pending,
+    };
+  });
 }
 
 export function populateAccountState(
@@ -433,6 +518,11 @@ export function populateAccountState(
   accounts: SeedAccount[],
 ) {
   state.accounts = accounts;
+  state.memberCohorts = buildMemberCohortMap(
+    accounts
+      .filter((account) => account.role === UserRole.member)
+      .map((account) => account.key),
+  );
   state.demoCredentials = accounts
     .filter((account) => account.isDemo)
     .map(toSeedCredential);
@@ -455,18 +545,32 @@ export function populateAccountState(
     .filter(
       (account) =>
         account.role === UserRole.member &&
-        !['archived', 'suspended', 'unverified'].includes(
-          account.memberPersona ?? 'active',
+        ['power', 'frequent', 'regular', 'light_trial'].includes(
+          state.memberCohorts[account.key] ?? '',
         ),
+    )
+    .map((account) => account.key);
+  state.historicalMemberKeys = accounts
+    .filter(
+      (account) =>
+        account.role === UserRole.member &&
+        state.memberCohorts[account.key] === 'historical_only',
+    )
+    .map((account) => account.key);
+  state.restrictedMemberKeys = accounts
+    .filter(
+      (account) =>
+        account.role === UserRole.member &&
+        state.memberCohorts[account.key] === 'pending_unverified_suspended',
     )
     .map((account) => account.key);
   state.premiumMemberKeys = accounts
     .filter(
       (account) =>
         account.role === UserRole.member &&
-        (account.memberPersona === 'premium' ||
-          account.memberPersona === 'active' ||
-          account.memberPersona === 'trial'),
+        ['power', 'frequent', 'regular', 'light_trial'].includes(
+          state.memberCohorts[account.key] ?? '',
+        ),
     )
     .map((account) => account.key);
 }

@@ -1,0 +1,88 @@
+- generic [ref=e73]:
+  - generic [ref=e74]:
+    - img [ref=e76] [cursor=pointer]
+    - generic [ref=e77]:
+      - generic [ref=e78]: Home
+      - generic [ref=e79]: Check out your progress!
+    - generic [ref=e80]:
+      - button "Open page help" [ref=e81] [cursor=pointer]:
+        - img [ref=e82]
+      - button "6 unread notifications" [ref=e236] [cursor=pointer]:
+        - img [ref=e86]
+        - generic [ref=e238]: "6"
+  - generic [ref=e98]:
+    - generic [ref=e99]:
+      - generic [ref=e100]: Welcome Back, Ava!
+      - generic [ref=e101]: Thursday, August 13, 2026 | 2:20 PM
+    - generic [ref=e103]:
+      - generic [ref=e105]:
+        - img [ref=e106]
+        - generic [ref=e108]: "0"
+        - generic [ref=e109]: Today Bookings
+      - generic [ref=e111]:
+        - img [ref=e112]
+        - generic [ref=e118]: "0"
+        - generic [ref=e119]: 7 Day Activity
+      - generic [ref=e121]:
+        - img [ref=e122]
+        - generic [ref=e128]: "--"
+        - generic [ref=e129]: Gym Rank
+      - generic [ref=e131]:
+        - img [ref=e132]
+        - generic [ref=e135]: 3.9K
+        - generic [ref=e136]: Total EXP
+    - generic [ref=e138]:
+      - img [ref=e239]
+      - generic [ref=e143]:
+        - generic [ref=e144]: "Pinned Goal: build a 3-day streak"
+        - generic [ref=e145]: You are on a 0-day streak. Log 3 more active days to hit the next consistency checkpoint.
+    - generic [ref=e147]:
+      - generic [ref=e148]: SCHEDULE FOR TODAY
+      - generic [ref=e149]: Use the home FAB when you want to book a venue or coach slot.
+      - generic [ref=e151]:
+        - img [ref=e152]
+        - generic [ref=e154]: No bookings scheduled for today
+    - generic [ref=e156]:
+      - generic [ref=e157]: LIVE SNAPSHOT
+      - generic [ref=e158]:
+        - generic [ref=e159]:
+          - generic:
+            - img [ref=e162]
+            - generic [ref=e166]:
+              - generic [ref=e167]:
+                - generic [ref=e168]: Nutrition Target
+                - generic [ref=e171]: 2263 kcal left
+              - generic [ref=e172]: Logged 0 of 2,262.56 kcal today.
+        - generic [ref=e173]:
+          - generic:
+            - img [ref=e176]
+            - generic [ref=e182]:
+              - generic [ref=e183]:
+                - generic [ref=e184]: Workout Momentum
+                - generic [ref=e187]: Bronze
+              - generic [ref=e188]: 0 completed sessions across 0 active days in the last 7 days, with a current 0-day streak.
+        - generic [ref=e190]:
+          - generic:
+            - img [ref=e192]
+            - generic [ref=e198]:
+              - generic [ref=e199]:
+                - generic [ref=e200]: Muscle Mastery
+                - generic [ref=e203]: "--"
+              - generic [ref=e204]: 25 tracked muscle groups. core leads the board right now.
+    - generic [ref=e208]:
+      - generic [ref=e209]: WORKOUT SUGGESTIONS
+      - generic [ref=e211]:
+        - button "Start Workout. No completed workout is logged this week yet. Start one now." [ref=e242] [cursor=pointer]:
+          - img [ref=e244]
+          - generic [ref=e250]:
+            - generic [ref=e251]: Start Workout
+            - generic [ref=e252]: No completed workout is logged this week yet. Start one now.
+        - button "Book Now. No booking is lined up for today yet. Reserve one in a few taps." [ref=e253] [cursor=pointer]:
+          - img [ref=e223]
+          - generic [ref=e225]:
+            - generic [ref=e226]: Book Now
+            - generic [ref=e227]: No booking is lined up for today yet. Reserve one in a few taps.
+  - button "Open quick actions menu" [ref=e229] [cursor=pointer]:
+    - generic [ref=e230]:
+      - img [ref=e232]
+      - img [ref=e234]

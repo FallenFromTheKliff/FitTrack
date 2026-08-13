@@ -3,13 +3,20 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   Param,
   ParseUUIDPipe,
   Patch,
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiGoneResponse,
+  ApiHeader,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
@@ -129,23 +136,34 @@ export class StaffController {
   }
 
   @Post('bookings')
+  @ApiHeader({
+    name: 'Idempotency-Key',
+    required: true,
+    description: 'UUID v4 reused when retrying the atomic cash registration.',
+  })
   @ApiOperation({
     summary: 'Create a manual venue booking from Gym Operations.',
   })
   createManualBooking(
     @Body() dto: CreateStaffVenueBookingDTO,
     @CurrentUser() user: JwtPayload,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
   ) {
     return this.bookingService.createStaffManualBooking(
       dto.member_id,
       dto,
       user.sub,
+      idempotencyKey,
     );
   }
 
   @Patch('bookings/:id/confirm')
   @ApiOperation({
-    summary: 'Confirm a pending booking from the staff schedule surface.',
+    summary: 'Legacy compatibility route; pending booking confirmation is retired.',
+  })
+  @ApiGoneResponse({
+    description:
+      'Venue bookings are confirmed by full payment or atomic staff cash registration.',
   })
   confirmBooking(
     @Param('id', ParseUUIDPipe) id: string,
@@ -156,7 +174,11 @@ export class StaffController {
 
   @Patch('bookings/:id/reject')
   @ApiOperation({
-    summary: 'Reject a pending booking from the staff schedule surface.',
+    summary: 'Legacy compatibility route; pending booking rejection is retired.',
+  })
+  @ApiGoneResponse({
+    description:
+      'Pending commercial booking rejection is no longer an active workflow.',
   })
   rejectBooking(
     @Param('id', ParseUUIDPipe) id: string,
@@ -204,17 +226,24 @@ export class StaffController {
   }
 
   @Post('appointments')
+  @ApiHeader({
+    name: 'Idempotency-Key',
+    required: true,
+    description: 'UUID v4 reused when retrying the atomic cash registration.',
+  })
   @ApiOperation({
     summary: 'Create a confirmed manual coach booking from Gym Operations.',
   })
   createManualAppointment(
     @Body() dto: CreateStaffCoachBookingDTO,
     @CurrentUser() user: JwtPayload,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
   ) {
     return this.appointmentService.createStaffManualAppointment(
       dto.member_id,
       dto,
       user.sub,
+      idempotencyKey,
     );
   }
 

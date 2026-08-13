@@ -12,8 +12,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
-  RecurringCoachingBillingCycleRecord,
-  RecurringCoachingPlanRecord,
   RecurringCoachingPlanPreviewResult,
   StaffAppointmentRecord,
   SubmitCoachAppointmentFeedbackPayload,
@@ -31,25 +29,18 @@ import {
   cancelRecurringCoachingPlanMutationOptions,
   coachScheduleQueryOptions,
   coachSelfProfileQueryOptions,
+  coachVenueWorkQueryOptions,
   completeCoachAppointmentMutationOptions,
   completeStaffAppointmentMutationOptions,
-  confirmCoachAppointmentMutationOptions,
   createStaffAppointmentMutationOptions,
   createStaffBookingMutationOptions,
   createUserMutationOptions,
-  declineCoachAppointmentMutationOptions,
   fitnessClientPlansQueryOptions,
   markCoachPayoutPaidMutationOptions,
-  payAppointmentDownpaymentMutationOptions,
   createRecurringCoachingPlanMutationOptions,
   previewRecurringCoachingPlanMutationOptions,
-  processAppointmentBalanceMutationOptions,
-  processBookingBalanceMutationOptions,
-  payRecurringCoachingBillingCycleMutationOptions,
-  recurringCoachingPlansQueryOptions,
   recurringCoachingPlanSessionsQueryOptions,
   replaceStaffCoachAvailabilityMutationOptions,
-  respondToStaffAppointmentMutationOptions,
   queryKeys,
   staffAppointmentsQueryOptions,
   staffCoachesQueryOptions,
@@ -58,7 +49,6 @@ import {
   updateRecurringCoachingSessionMutationOptions,
   updateStaffCoachProfileMutationOptions,
   venuesQueryOptions,
-  verifyMembershipPaymentMutationOptions,
 } from "@fittrack/query";
 import { coachProfileSchema } from "@fittrack/validators";
 
@@ -74,10 +64,12 @@ import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
 import { usePowerSlide } from "@/hooks/animations/usePowerSlide";
 import { useFitSensors } from "@/hooks/useFitSensors";
 import { toYmd } from "@fittrack/utils";
-import { repeatMonthlyScheduleDraft } from "@fittrack/app-core";
+import {
+  getRecurringPlanSelectionIssue,
+  summarizeRecurringPlanSelection,
+} from "@fittrack/app-core";
 import {
   getPersonDisplayName,
-  isPendingFullCoachPayment,
   mapAppointmentToTimelineBooking,
 } from "@/components/schedule/operationsUtils";
 import { getDefaultDateInput } from "@/components/schedule/GymOperationsOverlayShared";
@@ -88,16 +80,12 @@ import {
   SCHEDULE_TIMELINE_HOURS,
   buildLocalIso,
   createDefaultRecurringPlanForm,
-  createFreshMonthlyScheduleDraft,
   getErrorMessage,
   getRecurringInput,
-  getRecurringScheduleIssue,
   normalizeOperationsTab,
   normalizeScheduleSurfaceTab,
   type CoachVisibilityScope,
   type GymOperationsTab,
-  type PaymentCollectionProvider,
-  type PaymentConfirmState,
   type RecurringPlanActionState,
   type RecurringPlanFormState,
   type ScheduleRangeMode,
@@ -109,6 +97,23 @@ import {
   getWeekStart,
   mapCoachesToRoster,
 } from "@/app/(auth)/schedule/helpers";
+
+const PRODUCT_BOOKING_STATUSES = new Set(["confirmed", "completed", "cancelled", "no_show"]);
+
+function appointmentMatchesMemberSearch(
+  appointment: StaffAppointmentRecord,
+  normalizedSearch: string,
+) {
+  if (!normalizedSearch) return true;
+  const memberName = getPersonDisplayName(
+    appointment.user.profile,
+    appointment.user.email,
+    "Member",
+  );
+  return `${memberName} ${appointment.user.email ?? ""}`
+    .toLowerCase()
+    .includes(normalizedSearch);
+}
 
 function isBookableOperationsMember(member: MemberRecord) {
   const role = (
@@ -150,9 +155,7 @@ function useGymOperationsPageState() {
   const {
     cancelBooking,
     completeBooking,
-    confirmBooking,
     noShowBooking,
-    rejectBooking,
     bookingDateRange,
     setBookingDateRange,
     rawBookings,
@@ -187,6 +190,7 @@ function useGymOperationsPageState() {
       queryKeys.staffCoaches(),
       queryKeys.staffUsers(),
       queryKeys.recurringCoachingPlanSessions(),
+      queryKeys.coachVenueWork(user?.id),
       queryKeys.venues(),
       queryKeys.analyticsSnapshot(),
       queryKeys.analyticsOverview(),
@@ -287,6 +291,7 @@ function useGymOperationsPageState() {
   const [draggingBooking, setDraggingBooking] = useState<Booking | null>(null);
   const [coachFilterId, setCoachFilterId] = useState<string | null>(null);
   const [appointmentStatusFilter, setAppointmentStatusFilter] = useState("all");
+  const [appointmentMemberSearch, setAppointmentMemberSearch] = useState("");
   const [venueFilterId, setVenueFilterId] = useState("all");
   const [venueStatusFilter, setVenueStatusFilter] = useState("all");
   const [venueStartCalendarOpen, setVenueStartCalendarOpen] = useState(false);
@@ -309,6 +314,8 @@ function useGymOperationsPageState() {
     useState<RecurringPlanFormState>(() => createDefaultRecurringPlanForm());
   const [recurringPlanPreview, setRecurringPlanPreview] =
     useState<RecurringCoachingPlanPreviewResult | null>(null);
+  const [recurringPlanPreviewStale, setRecurringPlanPreviewStale] =
+    useState(false);
   const [recurringPlanAction, setRecurringPlanAction] =
     useState<RecurringPlanActionState | null>(null);
   const [recurringActionDate, setRecurringActionDate] = useState("");
@@ -316,8 +323,6 @@ function useGymOperationsPageState() {
   const [recurringActionCoachId, setRecurringActionCoachId] = useState("");
   const [recurringActionDays, setRecurringActionDays] = useState<number[]>([]);
   const [recurringActionReason, setRecurringActionReason] = useState("");
-  const [paymentConfirm, setPaymentConfirm] =
-    useState<PaymentConfirmState | null>(null);
 
   const { data: staffCoachProfiles = [] } = useQuery({
     ...staffCoachesQueryOptions(webApiClient),
@@ -328,11 +333,6 @@ function useGymOperationsPageState() {
     ...coachSelfProfileQueryOptions<CoachProfileRecord>(webApiClient, user?.id),
     enabled: isCoach && Boolean(user?.id),
     staleTime: 60_000,
-  });
-  const { data: recurringPlans = [] } = useQuery({
-    ...recurringCoachingPlansQueryOptions(webApiClient),
-    enabled: canManageCoaching,
-    staleTime: 20_000,
   });
   const coachProfiles = useMemo(
     () =>
@@ -372,8 +372,7 @@ function useGymOperationsPageState() {
             ),
           }),
       ...(coachFilterId ? { coachId: coachFilterId } : {}),
-      ...(appointmentStatusFilter !== "all" &&
-      appointmentStatusFilter !== "pending_full_payment"
+      ...(appointmentStatusFilter !== "all"
         ? { status: appointmentStatusFilter }
         : {}),
     }),
@@ -430,27 +429,100 @@ function useGymOperationsPageState() {
     enabled: isCoach && Boolean(user?.id),
     staleTime: 30_000,
   });
-  const appointmentRows = isCoach
-    ? coachScheduleAppointments
-    : appointmentResult.data;
-  const rosterAppointmentRows = isCoach
-    ? coachScheduleAppointments
-    : rosterAppointmentResult.data;
+  const {
+    data: coachVenueWorkResult,
+    isLoading: coachVenueWorkLoading,
+  } = useQuery({
+    ...coachVenueWorkQueryOptions(webApiClient, user?.id, {
+      limit: 100,
+      page: 1,
+      startDate: toYmd(visibleTimelineDays[0] ?? weekStart),
+      endDate: toYmd(
+        visibleTimelineDays[visibleTimelineDays.length - 1] ?? weekStart,
+      ),
+    }),
+    enabled: isCoach && Boolean(user?.id),
+    staleTime: 30_000,
+  });
+  const normalizedAppointmentMemberSearch = appointmentMemberSearch
+    .trim()
+    .toLowerCase();
+  const appointmentRows = useMemo(
+    () =>
+      (isCoach ? coachScheduleAppointments : appointmentResult.data).filter(
+        (appointment) =>
+          PRODUCT_BOOKING_STATUSES.has((appointment.status ?? "").toLowerCase()) &&
+          (appointmentStatusFilter === "all" ||
+            (appointment.status ?? "").toLowerCase() ===
+              appointmentStatusFilter.toLowerCase()) &&
+          appointmentMatchesMemberSearch(
+            appointment,
+            normalizedAppointmentMemberSearch,
+          ),
+      ),
+    [
+      appointmentResult.data,
+      appointmentStatusFilter,
+      coachScheduleAppointments,
+      isCoach,
+      normalizedAppointmentMemberSearch,
+    ],
+  );
+  const rosterAppointmentRows = useMemo(
+    () =>
+      (isCoach ? coachScheduleAppointments : rosterAppointmentResult.data).filter(
+        (appointment) =>
+          PRODUCT_BOOKING_STATUSES.has((appointment.status ?? "").toLowerCase()) &&
+          (!isCoach ||
+            ((appointmentStatusFilter === "all" ||
+              (appointment.status ?? "").toLowerCase() ===
+                appointmentStatusFilter.toLowerCase()) &&
+              appointmentMatchesMemberSearch(
+                appointment,
+                normalizedAppointmentMemberSearch,
+              ))),
+      ),
+    [
+      appointmentStatusFilter,
+      coachScheduleAppointments,
+      isCoach,
+      normalizedAppointmentMemberSearch,
+      rosterAppointmentResult.data,
+    ],
+  );
+  const coachVenueWork = useMemo(
+    () =>
+      (coachVenueWorkResult?.data ?? []).filter((booking) => {
+        const status = (booking.status ?? "").toLowerCase();
+        if (!PRODUCT_BOOKING_STATUSES.has(status)) return false;
+        if (
+          appointmentStatusFilter !== "all" &&
+          status !== appointmentStatusFilter.toLowerCase()
+        ) {
+          return false;
+        }
+        if (!normalizedAppointmentMemberSearch) return true;
+        const memberName = getPersonDisplayName(
+          booking.user?.profile,
+          booking.user?.email,
+          "Member",
+        );
+        return `${memberName} ${booking.user?.email ?? ""}`
+          .toLowerCase()
+          .includes(normalizedAppointmentMemberSearch);
+      }) as VenueBookingRecord[],
+    [
+      appointmentStatusFilter,
+      coachVenueWorkResult?.data,
+      normalizedAppointmentMemberSearch,
+    ],
+  );
   const appointmentsLoading = isCoach
     ? coachScheduleLoading
     : staffAppointmentsLoading;
 
   const replaceAvailabilityMutation = useMutation(
     replaceStaffCoachAvailabilityMutationOptions(webApiClient, queryClient),
-  );
-  const respondAppointmentMutation = useMutation(
-    respondToStaffAppointmentMutationOptions(webApiClient, queryClient),
-  );
-  const confirmCoachAppointmentMutation = useMutation(
-    confirmCoachAppointmentMutationOptions(webApiClient, queryClient),
-  );
-  const declineCoachAppointmentMutation = useMutation(
-    declineCoachAppointmentMutationOptions(webApiClient, queryClient),
   );
   const completeAppointmentMutation = useMutation(
     completeStaffAppointmentMutationOptions(webApiClient, queryClient),
@@ -495,6 +567,7 @@ function useGymOperationsPageState() {
   const createRecurringPlanMutation = useMutation(
     createRecurringCoachingPlanMutationOptions(webApiClient, queryClient),
   );
+  const recurringCreateInFlightRef = useRef(false);
   const updateRecurringSessionMutation = useMutation(
     updateRecurringCoachingSessionMutationOptions(webApiClient, queryClient),
   );
@@ -507,28 +580,9 @@ function useGymOperationsPageState() {
   const cancelRecurringPlanMutation = useMutation(
     cancelRecurringCoachingPlanMutationOptions(webApiClient, queryClient),
   );
-  const processAppointmentBalanceMutation = useMutation(
-    processAppointmentBalanceMutationOptions(webApiClient, queryClient),
-  );
   const markCoachPayoutPaidMutation = useMutation(
     markCoachPayoutPaidMutationOptions(webApiClient, queryClient),
   );
-  const processBookingBalanceMutation = useMutation(
-    processBookingBalanceMutationOptions(webApiClient, queryClient),
-  );
-  const payRecurringCycleMutation = useMutation(
-    payRecurringCoachingBillingCycleMutationOptions(webApiClient, queryClient),
-  );
-  const payAppointmentInitialMutation = useMutation(
-    payAppointmentDownpaymentMutationOptions(webApiClient, queryClient),
-  );
-  const verifyPaymentMutation = useMutation(
-    verifyMembershipPaymentMutationOptions(webApiClient, queryClient),
-  );
-  const respondAppointmentPending =
-    respondAppointmentMutation.isPending ||
-    confirmCoachAppointmentMutation.isPending ||
-    declineCoachAppointmentMutation.isPending;
   const completeAppointmentPending =
     completeAppointmentMutation.isPending ||
     completeCoachAppointmentMutation.isPending;
@@ -618,11 +672,8 @@ function useGymOperationsPageState() {
     [recurringTrainingPlanResult?.data, user?.id],
   );
   const coachAppointments = useMemo(
-    () =>
-      appointmentStatusFilter === "pending_full_payment"
-        ? appointmentRows.filter(isPendingFullCoachPayment)
-        : appointmentRows,
-    [appointmentRows, appointmentStatusFilter],
+    () => appointmentRows,
+    [appointmentRows],
   );
   const activeRecurringPlanId =
     recurringPlanAction?.appointment.recurringPlanId ??
@@ -656,12 +707,6 @@ function useGymOperationsPageState() {
     updateRecurringSessionMutation.isPending ||
     bulkUpdateRecurringSessionsMutation.isPending ||
     cancelRecurringPlanMutation.isPending;
-  const paymentConfirmLoading =
-    payAppointmentInitialMutation.isPending ||
-    processAppointmentBalanceMutation.isPending ||
-    payRecurringCycleMutation.isPending ||
-    processBookingBalanceMutation.isPending ||
-    verifyPaymentMutation.isPending;
   const recurringMonthlyRate = Number(recurringCoachOffer?.monthlyRate);
   const recurringMonthlySessionCount = Number(
     recurringCoachOffer?.monthlySessionCount,
@@ -685,26 +730,11 @@ function useGymOperationsPageState() {
     const offerDuration = Number(
       coachSelfProfile.monthlySessionDurationMinutes,
     );
-    const offerSessionCount = Number(coachSelfProfile.monthlySessionCount);
     setRecurringPlanForm((current) => {
       const duration =
         Number.isInteger(offerDuration) && offerDuration > 0
           ? offerDuration
           : current.durationMinutes;
-      const scheduleItems =
-        current.memberId &&
-        current.scheduleItems.length === 0 &&
-        Number.isInteger(offerSessionCount) &&
-        offerSessionCount > 0
-          ? createFreshMonthlyScheduleDraft(
-              offerSessionCount,
-              duration,
-              current.preferredTime,
-            )
-          : current.scheduleItems.map((item) => ({
-              ...item,
-              durationMinutes: duration,
-            }));
       return {
         ...current,
         coachId: String(coachSelfProfile.id),
@@ -715,8 +745,6 @@ function useGymOperationsPageState() {
           Number.isFinite(offerRate) && offerRate > 0
             ? offerRate
             : current.quotedAmount,
-        scheduleItems,
-        startDate: scheduleItems[0]?.date ?? current.startDate,
       };
     });
   }, [coachSelfProfile, isCoach, recurringPlanOpen]);
@@ -738,43 +766,21 @@ function useGymOperationsPageState() {
     });
   }, [recurringPlanOpen, recurringTrainingPlanOptions]);
 
-  useEffect(() => {
-    if (
-      !recurringPlanOpen ||
-      !recurringPlanForm.memberId ||
-      !recurringMonthlyOfferConfigured ||
-      recurringPlanForm.scheduleItems.length > 0
-    ) {
-      return;
-    }
-    const scheduleItems = createFreshMonthlyScheduleDraft(
-      recurringMonthlySessionCount,
-      recurringMonthlyDuration,
-      recurringPlanForm.preferredTime,
-    );
-    setRecurringPlanForm((current) => ({
-      ...current,
-      scheduleItems,
-      startDate: scheduleItems[0]?.date ?? current.startDate,
-    }));
-  }, [
-    recurringMonthlyDuration,
-    recurringMonthlyOfferConfigured,
-    recurringMonthlySessionCount,
-    recurringPlanForm.memberId,
-    recurringPlanForm.preferredTime,
-    recurringPlanForm.scheduleItems.length,
-    recurringPlanOpen,
-  ]);
-
   const recurringPlanMinStartDate = getDefaultDateInput();
   const recurringPlanStartDateInvalid =
     !recurringPlanForm.startDate ||
     recurringPlanForm.startDate < recurringPlanMinStartDate;
-  const recurringScheduleIssue = getRecurringScheduleIssue(
-    recurringPlanForm.scheduleItems,
-    recurringMonthlyOfferConfigured ? recurringMonthlySessionCount : undefined,
+  const recurringSelectionSummary = summarizeRecurringPlanSelection(
+    recurringPlanPreview,
+    recurringPlanForm.selectedCandidateIndexes,
   );
+  const recurringScheduleIssue = recurringPlanPreview
+    ? getRecurringPlanSelectionIssue(
+        recurringPlanPreview,
+        recurringPlanForm.selectedCandidateIndexes,
+        recurringPlanPreviewStale,
+      )
+    : null;
   const recurringPlanInputInvalid =
     !isCoach ||
     recurringPlanForm.frequency !== "monthly" ||
@@ -785,47 +791,7 @@ function useGymOperationsPageState() {
     !recurringPlanForm.preferredTime ||
     !recurringMonthlyOfferConfigured ||
     recurringPlanForm.quotedAmount !== recurringMonthlyRate ||
-    recurringPlanForm.durationMinutes !== recurringMonthlyDuration ||
-    Boolean(recurringScheduleIssue);
-  const repeatableRecurringPlan =
-    useMemo<RecurringCoachingPlanRecord | null>(() => {
-      const candidates = recurringPlans.filter(
-        (plan) =>
-          plan.frequency === "monthly" &&
-          plan.status !== "cancelled" &&
-          plan.memberId === recurringPlanForm.memberId &&
-          (!recurringPlanForm.coachId ||
-            plan.coachId === recurringPlanForm.coachId) &&
-          (plan.scheduleItems?.length ?? 0) > 0,
-      );
-
-      return (
-        [...candidates].sort((left, right) => {
-          const leftDate = Math.max(
-            ...(left.scheduleItems ?? []).map((item) =>
-              new Date(item.scheduledAt).getTime(),
-            ),
-          );
-          const rightDate = Math.max(
-            ...(right.scheduleItems ?? []).map((item) =>
-              new Date(item.scheduledAt).getTime(),
-            ),
-          );
-          return rightDate - leftDate;
-        })[0] ?? null
-      );
-    }, [recurringPlanForm.coachId, recurringPlanForm.memberId, recurringPlans]);
-  const recurringPreviewConflictOverrides = useMemo(
-    () =>
-      recurringPlanPreview?.sessions
-        .filter((session) => session.conflict)
-        .map((session) => ({
-          action: "skip" as const,
-          reason: "Skipped during recurring plan conflict review.",
-          scheduledAt: session.scheduledAt,
-        })) ?? [],
-    [recurringPlanPreview],
-  );
+    recurringPlanForm.durationMinutes !== recurringMonthlyDuration;
   const appointmentBookings = useMemo<Booking[]>(
     () =>
       coachAppointments.map((appointment) =>
@@ -920,8 +886,7 @@ function useGymOperationsPageState() {
           coachAppointments.filter(
             (appointment) =>
               appointment.coachId === appointmentReviewTarget?.coachId &&
-              (appointment.status === "confirmed" ||
-                appointment.status === "pending_coach"),
+              appointment.status === "confirmed",
           ).length,
       ),
       trustLabel:
@@ -935,9 +900,6 @@ function useGymOperationsPageState() {
   const appointmentSummary = useMemo(
     () => ({
       visible: coachAppointments.length,
-      pendingCoach: coachAppointments.filter(
-        (appointment) => appointment.status === "pending_coach",
-      ).length,
       confirmed: coachAppointments.filter(
         (appointment) => appointment.status === "confirmed",
       ).length,
@@ -1279,6 +1241,9 @@ function useGymOperationsPageState() {
   const filteredVenueBookings = useMemo(
     () =>
       rawBookings.filter((booking) => {
+        if (!PRODUCT_BOOKING_STATUSES.has((booking.status ?? "").toLowerCase())) {
+          return false;
+        }
         if (
           venueFilterId !== "all" &&
           String(booking.venueId) !== venueFilterId
@@ -1318,9 +1283,6 @@ function useGymOperationsPageState() {
   const venueBookingSummary = useMemo(
     () => ({
       visible: filteredVenueBookings.length,
-      pending: filteredVenueBookings.filter(
-        (booking) => booking.status === "pending",
-      ).length,
       confirmed: filteredVenueBookings.filter(
         (booking) => booking.status === "confirmed",
       ).length,
@@ -1330,21 +1292,6 @@ function useGymOperationsPageState() {
     }),
     [filteredVenueBookings],
   );
-
-  const toggleRecurringPlanDay = (day: number) => {
-    setRecurringPlanPreview(null);
-    setRecurringPlanForm((current) => {
-      const exists = current.preferredDays.includes(day);
-      const preferredDays = exists
-        ? current.preferredDays.filter((value) => value !== day)
-        : [...current.preferredDays, day].sort((left, right) => left - right);
-
-      return {
-        ...current,
-        preferredDays: preferredDays.length > 0 ? preferredDays : [day],
-      };
-    });
-  };
 
   const toggleRecurringActionDay = (day: number) => {
     setRecurringActionDays((current) => {
@@ -1359,7 +1306,7 @@ function useGymOperationsPageState() {
   const handlePreviewRecurringPlan = async () => {
     if (recurringPlanInputInvalid) {
       showFeedback(
-        "Choose a member, coach, start date today or later, time, and at least one weekday.",
+        "Choose a member, client workout program, start date today or later, and time.",
         "danger",
       );
       return;
@@ -1370,10 +1317,17 @@ function useGymOperationsPageState() {
         getRecurringInput(recurringPlanForm),
       );
       setRecurringPlanPreview(preview);
+      setRecurringPlanPreviewStale(false);
+      setRecurringPlanForm((current) => ({
+        ...current,
+        selectedCandidateIndexes: preview.sessions
+          .filter((session) => session.selected)
+          .map((session) => session.candidateIndex),
+      }));
       showFeedback(
         preview.conflictCount > 0
           ? `${preview.conflictCount} generated session conflict(s) need review.`
-          : `${preview.totalSessions} recurring sessions are clear to confirm.`,
+          : `${preview.selectedSessionCount} of ${preview.purchasedSessionCount} package session(s) selected.`,
         preview.conflictCount > 0 ? "danger" : "success",
       );
     } catch (error) {
@@ -1384,7 +1338,10 @@ function useGymOperationsPageState() {
     }
   };
 
-  const handleConfirmRecurringPlan = async (skipConflicts = false) => {
+  const handleConfirmRecurringPlan = async () => {
+    if (recurringCreateInFlightRef.current || createRecurringPlanMutation.isPending) {
+      return;
+    }
     if (recurringPlanInputInvalid) {
       showFeedback(
         "Complete the recurring plan details with a start date today or later before confirming.",
@@ -1399,71 +1356,68 @@ function useGymOperationsPageState() {
       );
       return;
     }
-    if (recurringPlanPreview.conflictCount > 0 && !skipConflicts) {
+    if (!recurringSelectionSummary.canConfirm || recurringPlanPreviewStale) {
       showFeedback(
-        "Resolve conflicts first, or confirm while skipping conflicted sessions.",
+        recurringScheduleIssue ??
+          "Resolve the generated schedule selection before confirming.",
         "danger",
       );
       return;
     }
 
+    recurringCreateInFlightRef.current = true;
     try {
       const result = await createRecurringPlanMutation.mutateAsync(
-        getRecurringInput(
-          recurringPlanForm,
-          skipConflicts ? recurringPreviewConflictOverrides : undefined,
-        ),
+        getRecurringInput(recurringPlanForm),
       );
       showFeedback(
-        `Recurring coaching plan created with ${result.sessions.length} session(s).`,
+        result.sessions.length > 0
+          ? `Recurring coaching plan activated with ${result.sessions.length} session(s).`
+          : "Plan saved. No sessions were generated for the selected schedule.",
       );
       setRecurringPlanOpen(false);
       setRecurringPlanPreview(null);
+      setRecurringPlanPreviewStale(false);
       setRecurringPlanForm(createDefaultRecurringPlanForm());
     } catch (error) {
       showFeedback(
         getErrorMessage(error, "Unable to create recurring coaching plan."),
         "danger",
       );
+    } finally {
+      recurringCreateInFlightRef.current = false;
     }
   };
 
-  const handleRepeatLastRecurringSchedule = () => {
-    if (!repeatableRecurringPlan?.scheduleItems?.length) {
-      showFeedback(
-        "Choose a member with a previous monthly schedule before repeating it.",
-        "danger",
-      );
-      return;
-    }
-
-    const scheduleItems = repeatMonthlyScheduleDraft(
-      repeatableRecurringPlan.scheduleItems,
+  const toggleRecurringPlanCandidate = (candidateIndex: number) => {
+    if (!recurringPlanPreview) return;
+    const requiredSessionCount = Math.min(
+      recurringPlanPreview.purchasedSessionCount,
+      recurringPlanPreview.eligibleSessionCount,
     );
-    const firstItem = scheduleItems[0];
-    if (!firstItem) return;
+    setRecurringPlanForm((current) => {
+      const selected = current.selectedCandidateIndexes;
+      const isSelected = selected.includes(candidateIndex);
+      if (!isSelected && selected.length >= requiredSessionCount) {
+        return current;
+      }
+      return {
+        ...current,
+        selectedCandidateIndexes: isSelected
+          ? selected.filter((index) => index !== candidateIndex)
+          : [...selected, candidateIndex].sort((left, right) => left - right),
+      };
+    });
+    setRecurringPlanPreviewStale(true);
+  };
 
+  const resetRecurringPlanPreview = () => {
     setRecurringPlanPreview(null);
+    setRecurringPlanPreviewStale(false);
     setRecurringPlanForm((current) => ({
       ...current,
-      coachId: repeatableRecurringPlan.coachId,
-      durationMinutes: firstItem.durationMinutes,
-      durationMonths: 1,
-      frequency: "monthly",
-      memberId: repeatableRecurringPlan.memberId,
-      preferredDays: scheduleItems.map((item) => {
-        const [year, month, day] = item.date.split("-").map(Number);
-        return new Date(year, month - 1, day).getDay();
-      }),
-      preferredTime: firstItem.time,
-      quotedAmount: Number(repeatableRecurringPlan.quotedAmount),
-      scheduleItems,
-      startDate: firstItem.date,
+      selectedCandidateIndexes: [],
     }));
-    showFeedback(
-      "Last monthly schedule copied as an editable prefill. Review dates, conflicts, and quote before confirming.",
-      "success",
-    );
   };
 
   const handleRecurringSessionReschedule = async () => {
@@ -1577,61 +1531,6 @@ function useGymOperationsPageState() {
     }
   };
 
-  const handleConfirmAppointment = async () => {
-    if (!appointmentReviewTarget) return;
-
-    try {
-      if (isCoach) {
-        await confirmCoachAppointmentMutation.mutateAsync({
-          appointmentId: appointmentReviewTarget.id,
-          userId: user?.id,
-        });
-      } else {
-        await respondAppointmentMutation.mutateAsync({
-          accepted: true,
-          appointmentId: appointmentReviewTarget.id,
-          coachId: appointmentReviewTarget.coachId,
-        });
-      }
-      showFeedback("Coach appointment confirmed.");
-      setAppointmentReviewTarget(null);
-    } catch (error) {
-      showFeedback(
-        getErrorMessage(error, "Unable to confirm coach appointment."),
-        "danger",
-      );
-    }
-  };
-
-  const handleRejectAppointment = async (
-    appointment: StaffAppointmentRecord,
-    value: string,
-  ) => {
-    try {
-      if (isCoach) {
-        await declineCoachAppointmentMutation.mutateAsync({
-          appointmentId: appointment.id,
-          reason: value,
-          userId: user?.id,
-        });
-      } else {
-        await respondAppointmentMutation.mutateAsync({
-          accepted: false,
-          appointmentId: appointment.id,
-          coachId: appointment.coachId,
-          reason: value,
-        });
-      }
-      showFeedback("Coach appointment rejected.");
-      setAppointmentReviewTarget(null);
-    } catch (error) {
-      showFeedback(
-        getErrorMessage(error, "Unable to reject coach appointment."),
-        "danger",
-      );
-    }
-  };
-
   const handleCancelAppointment = async (
     appointment: StaffAppointmentRecord,
     value: string,
@@ -1703,176 +1602,6 @@ function useGymOperationsPageState() {
     }
   };
 
-  const executeCollectAppointmentInitialPayment = async (
-    appointment: StaffAppointmentRecord,
-    provider: PaymentCollectionProvider,
-    paymentStage: "downpayment" | "full",
-  ) => {
-    try {
-      const result = await payAppointmentInitialMutation.mutateAsync({
-        appointmentId: appointment.id,
-        paymentStage,
-        provider,
-        userId: appointment.userId,
-      });
-
-      if (provider === "cash" && result.paymentId) {
-        showFeedback(
-          paymentStage === "full"
-            ? "Coach full cash payment recorded for approval."
-            : "Coach cash downpayment recorded for approval.",
-        );
-        await Promise.all([
-          queryClient.invalidateQueries({
-            queryKey: queryKeys.staffAppointments(),
-          }),
-          queryClient.invalidateQueries({
-            queryKey: queryKeys.membershipReviewPayments(),
-          }),
-          queryClient.invalidateQueries({
-            queryKey: queryKeys.appointments(),
-          }),
-        ]);
-        setAppointmentReviewTarget(null);
-        return;
-      }
-
-      if (result.checkoutUrl) {
-        window.open(result.checkoutUrl, "_blank", "noopener,noreferrer");
-        showFeedback("PayMongo coach checkout opened.");
-        return;
-      }
-
-      showFeedback("Coach payment request updated.");
-    } catch (error) {
-      showFeedback(
-        getErrorMessage(error, "Unable to collect coach payment."),
-        "danger",
-      );
-    }
-  };
-
-  const requestCollectAppointmentInitialPayment = (
-    appointment: StaffAppointmentRecord,
-    provider: PaymentCollectionProvider,
-    paymentStage: "downpayment" | "full",
-  ) => {
-    const stageLabel = paymentStage === "full" ? "full payment" : "downpayment";
-    const providerLabel = provider === "cash" ? "cash" : "PayMongo";
-    setPaymentConfirm({
-      kind: "coachInitial",
-      appointment,
-      provider,
-      paymentStage,
-      title: "Confirm coach payment",
-      message: `Continue with ${providerLabel} ${stageLabel} for this coach appointment?`,
-      confirmLabel:
-        provider === "cash"
-          ? paymentStage === "full"
-            ? "RECORD CASH FULL"
-            : "RECORD CASH DOWNPAYMENT"
-          : "OPEN PAYMONGO",
-    });
-  };
-
-  const executeApproveAppointmentPayment = async (
-    appointment: StaffAppointmentRecord,
-    paymentId: string,
-  ) => {
-    try {
-      await verifyPaymentMutation.mutateAsync({
-        affectedUserId: appointment.userId,
-        paymentId,
-        payload: { action: "approve" },
-      });
-      showFeedback("Coach appointment payment approved.");
-      setAppointmentReviewTarget(null);
-    } catch (error) {
-      showFeedback(
-        getErrorMessage(error, "Unable to approve coach payment."),
-        "danger",
-      );
-    }
-  };
-
-  const requestApproveAppointmentPayment = (
-    appointment: StaffAppointmentRecord,
-    paymentId: string,
-  ) => {
-    const paymentLabel =
-      appointment.activePaymentStage === "full"
-        ? "full payment"
-        : appointment.activePaymentStage === "balance"
-          ? "balance payment"
-          : "downpayment";
-    setPaymentConfirm({
-      kind: "coachPaymentApproval",
-      appointment,
-      paymentId,
-      title: "Approve coach payment",
-      message: `Approve the submitted ${paymentLabel} for this coach appointment? The session will move forward only after this approval is recorded.`,
-      confirmLabel: "APPROVE PAYMENT",
-    });
-  };
-
-  const executeCollectAppointmentBalance = async (
-    appointment: StaffAppointmentRecord,
-    provider: PaymentCollectionProvider,
-  ) => {
-    try {
-      const result = await processAppointmentBalanceMutation.mutateAsync({
-        appointmentId: appointment.id,
-        provider,
-        referenceNo:
-          provider === "cash" ? `COACH-BAL-${Date.now()}` : undefined,
-        userId: appointment.userId,
-      });
-
-      if (provider === "cash" && result.paymentId) {
-        await verifyPaymentMutation.mutateAsync({
-          affectedUserId: appointment.userId,
-          paymentId: result.paymentId,
-          payload: { action: "approve" },
-        });
-        showFeedback("Coach appointment balance accepted.");
-        setAppointmentReviewTarget(null);
-        return;
-      }
-
-      if (result.checkoutUrl) {
-        window.open(result.checkoutUrl, "_blank", "noopener,noreferrer");
-        showFeedback("PayMongo balance checkout opened.");
-        return;
-      }
-
-      showFeedback("Coach appointment balance request updated.");
-    } catch (error) {
-      showFeedback(
-        getErrorMessage(error, "Unable to collect coach balance."),
-        "danger",
-      );
-    }
-  };
-
-  const requestCollectAppointmentBalance = (
-    appointment: StaffAppointmentRecord,
-    provider: PaymentCollectionProvider,
-  ) => {
-    const label =
-      provider === "cash"
-        ? "accept this cash balance"
-        : "open PayMongo balance checkout";
-    setPaymentConfirm({
-      kind: "coachBalance",
-      appointment,
-      provider,
-      title: "Confirm coach balance",
-      message: `Continue and ${label}?`,
-      confirmLabel:
-        provider === "cash" ? "ACCEPT CASH BALANCE" : "OPEN PAYMONGO",
-    });
-  };
-
   const handleSaveAppointmentFeedback = async (
     appointment: StaffAppointmentRecord,
     payload: SubmitCoachAppointmentFeedbackPayload,
@@ -1927,104 +1656,6 @@ function useGymOperationsPageState() {
         "danger",
       );
     }
-  };
-
-  const executeRecurringCyclePayment = async (
-    cycle: RecurringCoachingBillingCycleRecord,
-    provider: PaymentCollectionProvider,
-  ) => {
-    const planId = cycle.recurringPlanId;
-    if (!planId) return;
-
-    if (
-      cycle.status === "awaiting_verification" &&
-      cycle.paymentId &&
-      provider === "cash"
-    ) {
-      try {
-        await verifyPaymentMutation.mutateAsync({
-          affectedUserId: appointmentReviewTarget?.userId,
-          paymentId: cycle.paymentId,
-          payload: { action: "approve" },
-        });
-        showFeedback("Recurring coach payment approved.");
-      } catch (error) {
-        showFeedback(
-          getErrorMessage(error, "Unable to approve recurring coach payment."),
-          "danger",
-        );
-      }
-      return;
-    }
-
-    try {
-      const result = await payRecurringCycleMutation.mutateAsync({
-        cycleId: cycle.id,
-        input: {
-          provider,
-          referenceNo:
-            provider === "cash" ? `RECUR-COACH-${Date.now()}` : undefined,
-        },
-        planId,
-      });
-
-      if (provider === "cash") {
-        await verifyPaymentMutation.mutateAsync({
-          affectedUserId: appointmentReviewTarget?.userId,
-          paymentId: result.paymentId,
-          payload: { action: "approve" },
-        });
-        showFeedback("Recurring coach cash payment accepted.");
-        return;
-      }
-
-      if (result.checkoutUrl) {
-        window.open(result.checkoutUrl, "_blank", "noopener,noreferrer");
-        showFeedback("PayMongo recurring coach checkout opened.");
-        return;
-      }
-
-      showFeedback("Recurring coach payment request updated.");
-    } catch (error) {
-      showFeedback(
-        getErrorMessage(error, "Unable to process recurring coach payment."),
-        "danger",
-      );
-    }
-  };
-
-  const requestRecurringCyclePayment = (
-    cycle: RecurringCoachingBillingCycleRecord,
-    provider: PaymentCollectionProvider,
-  ) => {
-    if (
-      cycle.status === "awaiting_verification" &&
-      cycle.paymentId &&
-      provider === "cash"
-    ) {
-      setPaymentConfirm({
-        kind: "recurringCycle",
-        cycle,
-        provider,
-        title: "Approve recurring cash payment",
-        message: "Approve this recurring coach cash payment now?",
-        confirmLabel: "APPROVE CASH PAYMENT",
-      });
-      return;
-    }
-
-    const label =
-      provider === "cash"
-        ? "accept this recurring coach cash payment"
-        : "open PayMongo for this recurring coach cycle";
-    setPaymentConfirm({
-      kind: "recurringCycle",
-      cycle,
-      provider,
-      title: "Confirm recurring coach payment",
-      message: `Continue and ${label}?`,
-      confirmLabel: provider === "cash" ? "ACCEPT CASH CYCLE" : "OPEN PAYMONGO",
-    });
   };
 
   const handleSaveAvailability = async (
@@ -2188,140 +1819,6 @@ function useGymOperationsPageState() {
     }
   };
 
-  const handleApproveVenueBooking = async (note: string) => {
-    if (!venueReviewTarget) return;
-
-    const result = await confirmBooking(venueReviewTarget.id);
-    if (!result.success) {
-      showFeedback(
-        result.error ?? "Unable to approve venue booking.",
-        "danger",
-      );
-      return;
-    }
-
-    showFeedback(
-      note
-        ? "Venue booking approved and note captured."
-        : "Venue booking approved.",
-    );
-    setVenueReviewTarget(null);
-  };
-
-  const executeCollectVenueBalance = async (
-    booking: VenueBookingRecord,
-    provider: PaymentCollectionProvider,
-  ) => {
-    try {
-      const result = await processBookingBalanceMutation.mutateAsync({
-        bookingId: booking.id,
-        provider,
-        referenceNo:
-          provider === "cash" ? `VENUE-BAL-${Date.now()}` : undefined,
-      });
-
-      if (provider === "cash" && result.paymentId) {
-        await verifyPaymentMutation.mutateAsync({
-          affectedUserId: booking.userId,
-          paymentId: result.paymentId,
-          payload: { action: "approve" },
-        });
-        showFeedback("Venue booking balance accepted.");
-        setVenueReviewTarget(null);
-        return;
-      }
-
-      if (result.checkoutUrl) {
-        window.open(result.checkoutUrl, "_blank", "noopener,noreferrer");
-        showFeedback("PayMongo balance checkout opened.");
-        return;
-      }
-
-      showFeedback("Venue booking balance request updated.");
-    } catch (error) {
-      showFeedback(
-        getErrorMessage(error, "Unable to collect venue balance."),
-        "danger",
-      );
-    }
-  };
-
-  const requestCollectVenueBalance = (
-    booking: VenueBookingRecord,
-    provider: PaymentCollectionProvider,
-  ) => {
-    const label =
-      provider === "cash"
-        ? "accept this cash balance"
-        : "open PayMongo balance checkout";
-    setPaymentConfirm({
-      kind: "venueBalance",
-      booking,
-      provider,
-      title: "Confirm venue balance",
-      message: `Continue and ${label}?`,
-      confirmLabel:
-        provider === "cash" ? "ACCEPT CASH BALANCE" : "OPEN PAYMONGO",
-    });
-  };
-
-  const handleConfirmPaymentAction = async () => {
-    if (!paymentConfirm) return;
-
-    try {
-      switch (paymentConfirm.kind) {
-        case "coachInitial":
-          await executeCollectAppointmentInitialPayment(
-            paymentConfirm.appointment,
-            paymentConfirm.provider,
-            paymentConfirm.paymentStage,
-          );
-          break;
-        case "coachBalance":
-          await executeCollectAppointmentBalance(
-            paymentConfirm.appointment,
-            paymentConfirm.provider,
-          );
-          break;
-        case "coachPaymentApproval":
-          await executeApproveAppointmentPayment(
-            paymentConfirm.appointment,
-            paymentConfirm.paymentId,
-          );
-          break;
-        case "recurringCycle":
-          await executeRecurringCyclePayment(
-            paymentConfirm.cycle,
-            paymentConfirm.provider,
-          );
-          break;
-        case "venueBalance":
-          await executeCollectVenueBalance(
-            paymentConfirm.booking,
-            paymentConfirm.provider,
-          );
-          break;
-        default:
-          break;
-      }
-    } finally {
-      setPaymentConfirm(null);
-    }
-  };
-
-  const handleRejectVenueBooking = async (note: string) => {
-    if (!venueReviewTarget) return;
-
-    const result = await rejectBooking(venueReviewTarget.id, note || undefined);
-    if (!result.success) {
-      showFeedback(result.error ?? "Unable to reject venue booking.", "danger");
-      return;
-    }
-
-    showFeedback("Venue booking rejected.");
-    setVenueReviewTarget(null);
-  };
-
   const handleCompleteVenueBooking = async () => {
     if (!venueReviewTarget) return;
 
@@ -2447,6 +1944,7 @@ function useGymOperationsPageState() {
     appointmentReviewReadiness,
     appointmentReviewTarget,
     appointmentsLoading,
+    appointmentMemberSearch,
     appointmentStatusFilter,
     appointmentSummary,
     availabilityEditorCoach,
@@ -2471,6 +1969,8 @@ function useGymOperationsPageState() {
     coachRoster,
     coachRosterMaxHeight,
     coachVisibilityScope,
+    coachVenueWork,
+    coachVenueWorkLoading,
     colors,
     cancelAppointmentPending,
     completeAppointmentMutation,
@@ -2490,7 +1990,6 @@ function useGymOperationsPageState() {
     filteredVenueBookings,
     focusedCoachId,
     focusedCoachScheduleBookings,
-    handleApproveVenueBooking,
     handleBlockClick,
     handleBlockDelete,
     handleBlockSave,
@@ -2499,8 +1998,6 @@ function useGymOperationsPageState() {
     handleCoachFocus,
     handleCompleteAppointment,
     handleCompleteVenueBooking,
-    handleConfirmAppointment,
-    handleConfirmPaymentAction,
     handleConfirmRecurringPlan,
     handleCreateCoach,
     handleCreateCoachBooking,
@@ -2515,9 +2012,6 @@ function useGymOperationsPageState() {
     handleRecurringPlanCancel,
     handleRecurringSessionReschedule,
     handleRecurringSessionSkip,
-    handleRejectAppointment,
-    handleRepeatLastRecurringSchedule,
-    handleRejectVenueBooking,
     handleSaveAppointmentFeedback,
     handleSaveAvailability,
     handleSaveCoachProfile,
@@ -2528,13 +2022,7 @@ function useGymOperationsPageState() {
     markCoachPayoutPaidMutation,
     memberOptions,
     nextWeek,
-    payAppointmentInitialMutation,
-    paymentConfirm,
-    paymentConfirmLoading,
-    payRecurringCycleMutation,
     prevWeek,
-    processAppointmentBalanceMutation,
-    processBookingBalanceMutation,
     profileEditorCoach,
     recurringActionBusy,
     recurringActionCoachId,
@@ -2555,21 +2043,15 @@ function useGymOperationsPageState() {
     recurringPlanInputInvalid,
     recurringPlanOpen,
     recurringPlanPreview,
+    recurringPlanPreviewStale,
+    resetRecurringPlanPreview,
     recurringPlanSessions,
     recurringScheduleIssue,
     recurringTrainingPlanOptions,
-    repeatableRecurringPlan,
     recurringRemainingCount,
     refetchVenues,
     refreshGymOperationsData,
     replaceAvailabilityMutation,
-    requestApproveAppointmentPayment,
-    requestCollectAppointmentBalance,
-    requestCollectAppointmentInitialPayment,
-    requestCollectVenueBalance,
-    requestRecurringCyclePayment,
-    respondAppointmentMutation,
-    respondAppointmentPending,
     rightScrollRef,
     rosterBookings,
     scheduleLoading,
@@ -2589,6 +2071,7 @@ function useGymOperationsPageState() {
     setActiveOperationsTab,
     setActiveScheduleSurfaceTab,
     setAppointmentReviewTarget,
+    setAppointmentMemberSearch,
     setAppointmentStatusFilter,
     setAvailabilityEditorCoachId,
     setBlockDetailOpen,
@@ -2600,7 +2083,6 @@ function useGymOperationsPageState() {
     setCreateCoachOpen,
     setCreateVenueBookingOpen,
     setFeedbackModal,
-    setPaymentConfirm,
     setProfileEditorCoachId,
     setRecurringActionCoachId,
     setRecurringActionDate,
@@ -2621,7 +2103,7 @@ function useGymOperationsPageState() {
     slideStyle,
     themeTransition,
     toggleRecurringActionDay,
-    toggleRecurringPlanDay,
+    toggleRecurringPlanCandidate,
     updateCoachProfileMutation,
     updateCoachProfilePending,
     updateRecurringSessionMutation,
@@ -2634,7 +2116,6 @@ function useGymOperationsPageState() {
     venueReviewTarget,
     venueStartCalendarOpen,
     venueStatusFilter,
-    verifyPaymentMutation,
     visibleTimelineDays,
     visibleTimelineHours,
     weekStart,

@@ -20,26 +20,9 @@ export type CoachReadinessSummary = {
 };
 
 export type VenueDecision =
-  | "approve"
   | "cancel"
-  | "collect_cash_balance"
   | "mark_complete"
-  | "no_show"
-  | "paymongo_balance"
-  | "reject";
-export type CoachDecision =
-  | "accept_cash_balance"
-  | "accept_cash_downpayment"
-  | "accept_cash_full"
-  | "approve_payment"
-  | "cancel"
-  | "confirm"
-  | "mark_complete"
-  | "paymongo_balance"
-  | "paymongo_downpayment"
-  | "reject";
-export type StaffInitialPaymentStage = "downpayment" | "full";
-export type PaymentCollectionProvider = "cash" | "paymongo";
+  | "no_show";
 export type SelectOption = {
   coachUserId?: string;
   hourlyRate?: number | null;
@@ -81,27 +64,10 @@ export const COACH_SPECIALTY_OPTIONS = [
 export const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const PHONE_PATTERN = /^[+\d][\d\s().-]{6,39}$/;
 
-export const COACH_DECISION_LABELS: Record<CoachDecision, string> = {
-  accept_cash_balance: "Accept cash balance",
-  accept_cash_downpayment: "Record cash downpayment",
-  accept_cash_full: "Record cash full payment",
-  approve_payment: "Approve submitted payment",
-  cancel: "Cancel appointment",
-  confirm: "Confirm session",
-  mark_complete: "Mark complete",
-  paymongo_balance: "PayMongo balance",
-  paymongo_downpayment: "PayMongo downpayment",
-  reject: "Reject",
-};
-
 export const VENUE_DECISION_LABELS: Record<VenueDecision, string> = {
-  approve: "Approve / accept payment",
   cancel: "Cancel booking",
-  collect_cash_balance: "Accept cash balance",
   mark_complete: "Mark complete",
   no_show: "No show",
-  paymongo_balance: "PayMongo balance",
-  reject: "Reject",
 };
 
 export function splitListInput(value: string) {
@@ -121,19 +87,6 @@ export function formatPeso(value: number) {
     maximumFractionDigits: 2,
     minimumFractionDigits: 2,
   })}`;
-}
-
-export function roundCurrency(value: number) {
-  return Math.round((value + Number.EPSILON) * 100) / 100;
-}
-
-export function getInitialPaymentAmount(
-  totalAmount: number,
-  paymentStage: StaffInitialPaymentStage,
-) {
-  return paymentStage === "downpayment"
-    ? roundCurrency(totalAmount * 0.3)
-    : roundCurrency(totalAmount);
 }
 
 export function formatCompactDate(value: string) {
@@ -314,20 +267,7 @@ export function buildStatusTone(
       return {
         bg: colors.brand,
         color: colors.onBrand,
-        label:
-          status === "pending_coach" ? "Pending coach" : "Pending downpayment",
-      };
-    case "pending_payment":
-      return {
-        bg: colors.warning,
-        color: colors.onBrand,
-        label: "Pending payment",
-      };
-    case "balance_pending":
-      return {
-        bg: colors.warning,
-        color: colors.onBrand,
-        label: "Pending full payment",
+        label: status === "pending_coach" ? "Pending coach" : "Pending review",
       };
     case "confirmed":
       return {
@@ -362,7 +302,7 @@ export function buildStatusTone(
   }
 }
 
-export function overlaySurfaceStyle(colors: ThemeColors): CSSProperties {
+export function overlaySurfaceStyle(_colors: ThemeColors): CSSProperties {
   return {
     display: "grid",
     gap: 12,

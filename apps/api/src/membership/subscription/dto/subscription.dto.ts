@@ -2,6 +2,7 @@ import {
   IsEnum,
   IsBoolean,
   IsInt,
+  IsIn,
   IsNotEmpty,
   IsNumber,
   IsObject,
@@ -15,7 +16,12 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { PaymentProvider, SubscriptionStatus } from '@prisma/client';
+import {
+  CommerceCheckoutHoldKind,
+  CommerceCheckoutHoldStatus,
+  PaymentProvider,
+  SubscriptionStatus,
+} from '@prisma/client';
 
 import { TrimString } from '../../../common/validators';
 
@@ -147,18 +153,37 @@ export class CreateSubscriptionDTO {
   @IsUUID('4', { message: 'plan_id must be a valid UUID' })
   plan_id: string;
 
-  @ApiProperty({ enum: PaymentProvider, example: PaymentProvider.paymongo })
-  @IsEnum(PaymentProvider, {
-    message: `provider must be one of: ${Object.values(PaymentProvider).join(', ')}`,
+  @ApiProperty({ enum: [PaymentProvider.paymongo], example: PaymentProvider.paymongo })
+  @IsIn([PaymentProvider.paymongo], {
+    message: 'provider must be paymongo for membership checkout',
   })
   provider: PaymentProvider;
 }
 
 export class SubscriptionCheckoutResponseDTO {
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: 'https://checkout.paymongo.com/cs_test_123',
+    nullable: true,
   })
-  checkout_url: string;
+  checkout_url: string | null;
+
+  @ApiPropertyOptional({ example: '11111111-1111-4111-8111-111111111111' })
+  hold_id?: string;
+
+  @ApiPropertyOptional({ enum: CommerceCheckoutHoldKind })
+  kind?: CommerceCheckoutHoldKind;
+
+  @ApiPropertyOptional({ enum: CommerceCheckoutHoldStatus })
+  status?: CommerceCheckoutHoldStatus;
+
+  @ApiPropertyOptional({ example: '2026-08-13T09:15:00.000Z' })
+  expires_at?: string;
+
+  @ApiPropertyOptional({ nullable: true })
+  payment_id?: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  subscription_id?: string | null;
 }
 
 export class MembershipPlanResponseDTO {

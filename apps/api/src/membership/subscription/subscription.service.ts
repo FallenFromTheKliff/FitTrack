@@ -18,6 +18,10 @@ import { isUUID } from 'class-validator';
 import { AuditAction, AuditEvent } from '../../audit/audit.service';
 import { PaginatedResult } from '../../common/base-repository/base-repository';
 import { PaymentRepository } from '../payment/payment.repository';
+import {
+  CoachingCommerceService,
+  CoachingCheckoutResponse,
+} from '../../coaching/commerce/coaching-commerce.service';
 import { PAYMENT_COMPLETED_EVENT } from '../payment/events/payment-completed.event';
 import type { PaymentCompletedEvent } from '../payment/events/payment-completed.event';
 import {
@@ -76,6 +80,7 @@ export class SubscriptionService {
   constructor(
     private readonly repo: SubscriptionRepository,
     private readonly paymentRepo: PaymentRepository,
+    private readonly commerceCheckoutService: CoachingCommerceService,
     private readonly paymongoCheckoutService: PaymongoCheckoutService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
@@ -174,45 +179,19 @@ export class SubscriptionService {
     userId: string,
     dto: CreateSubscriptionDTO,
     idempotencyKey: string | undefined,
-  ): Promise<SubscriptionCheckoutResponseDTO> {
+  ): Promise<CoachingCheckoutResponse> {
     const normalizedIdempotencyKey =
       this.normalizeAndValidateIdempotencyKey(idempotencyKey);
     this.assertSupportedProvider(dto.provider);
 
-    const existingPayment = await this.paymentRepo.findPaymentByIdempotencyKey(
-      normalizedIdempotencyKey,
-    );
-
-    if (existingPayment) {
-      return this.resumeExistingCheckout(existingPayment, userId);
-    }
-
     const plan = await this.repo.findActivePlanByIdOrThrow(dto.plan_id);
 
-    try {
-      const initiation = await this.repo.createPendingSubscriptionWithPayment({
-        userId,
-        planId: plan.id,
-        amount: plan.price,
-        idempotencyKey: normalizedIdempotencyKey,
-        provider: 'paymongo',
-      });
-
-      return this.startCheckoutForPayment(
-        initiation.payment,
-        initiation.subscription.plan.name,
-      );
-    } catch (error) {
-      const resumedPayment = await this.paymentRepo.findPaymentByIdempotencyKey(
-        normalizedIdempotencyKey,
-      );
-
-      if (resumedPayment) {
-        return this.resumeExistingCheckout(resumedPayment, userId);
-      }
-
-      throw error;
-    }
+    return this.commerceCheckoutService.createSubscriptionCheckout({
+      amount: plan.price,
+      idempotencyKey: normalizedIdempotencyKey,
+      planId: plan.id,
+      userId,
+    });
   }
 
   getMySubscription(userId: string): Promise<SubscriptionWithPlan | null> {

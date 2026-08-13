@@ -5,7 +5,7 @@ import { FitButton, FitText, FitTextArea } from "@/components/fit";
 import FitModal from "@/components/modals/FitModal";
 import { useTheme } from "@/contexts/ThemeContext";
 
-type ActionMode = "cancel" | "complete" | "reject";
+type ActionMode = "cancel" | "complete";
 
 type Props = {
   appointmentLabel: string;
@@ -30,23 +30,12 @@ const COPY: Record<
     variant: "danger" | "primary";
   }
 > = {
-  reject: {
-    title: "Reject Appointment",
-    actionLabel: "REJECTING...",
-    buttonLabel: "REJECT APPOINTMENT",
-    description:
-      "Tell the member why this appointment cannot proceed so staff and coaching records stay aligned.",
-    fieldLabel: "Rejection Reason",
-    placeholder: "Explain why the requested slot is being declined.",
-    required: true,
-    variant: "danger",
-  },
   cancel: {
     title: "Cancel Appointment",
     actionLabel: "CANCELLING...",
     buttonLabel: "CANCEL APPOINTMENT",
     description:
-      "Use this when staff needs to cancel an already tracked appointment. Paid downpayments remain non-refundable.",
+      "Use this when staff needs to cancel an already tracked appointment. The cancellation reason is saved with the session record.",
     fieldLabel: "Cancellation Reason",
     placeholder: "Explain why this appointment is being cancelled.",
     required: true,

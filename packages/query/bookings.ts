@@ -1,13 +1,11 @@
 import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
 import type {
   ApiClient,
-  BookingBalancePaymentProvider,
   CreateBookingPayload,
+  VenueBookingListParams,
 } from "@fittrack/api-client";
 import {
-  invalidateAnalyticsQueries,
   invalidateBookingQueries,
-  invalidateStaffBookingQueries,
   invalidateVenueQueries,
 } from "./cache";
 import { queryKeys } from "./query-keys";
@@ -16,6 +14,69 @@ export function bookingsQueryOptions<T>(client: Pick<ApiClient, "bookings">, use
   return queryOptions({
     queryKey: queryKeys.bookings(userId),
     queryFn: () => client.bookings.listMine<T>()
+  });
+}
+
+export function coachVenueWorkQueryOptions(
+  client: Pick<ApiClient, "bookings">,
+  userId?: string,
+  params?: VenueBookingListParams,
+) {
+  return queryOptions({
+    queryKey: queryKeys.coachVenueWork(userId, params),
+    queryFn: () => client.bookings.listCoachWork(params),
+    enabled: Boolean(userId),
+  });
+}
+
+export function completeCoachVenueWorkMutationOptions(
+  client: Pick<ApiClient, "bookings">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: ({ bookingId }: { bookingId: string; userId?: string }) =>
+      client.bookings.completeCoachWork(bookingId),
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.coachVenueWork(variables.userId),
+      });
+    },
+  });
+}
+
+export function cancelCoachVenueWorkMutationOptions(
+  client: Pick<ApiClient, "bookings">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: ({
+      bookingId,
+      reason,
+    }: {
+      bookingId: string;
+      reason?: string;
+      userId?: string;
+    }) => client.bookings.cancelCoachWork(bookingId, reason),
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.coachVenueWork(variables.userId),
+      });
+    },
+  });
+}
+
+export function noShowCoachVenueWorkMutationOptions(
+  client: Pick<ApiClient, "bookings">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: ({ bookingId }: { bookingId: string; userId?: string }) =>
+      client.bookings.noShowCoachWork(bookingId),
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.coachVenueWork(variables.userId),
+      });
+    },
   });
 }
 
@@ -43,37 +104,5 @@ export function cancelBookingMutationOptions(client: Pick<ApiClient, "bookings">
     onSuccess: async (_data, variables) => {
       await invalidateBookingQueries(queryClient, variables.userId);
     }
-  });
-}
-
-export function processBookingBalanceMutationOptions(
-  client: Pick<ApiClient, "bookings">,
-  queryClient: QueryClient,
-) {
-  return mutationOptions({
-    mutationFn: ({
-      bookingId,
-      provider = "cash",
-      referenceNo,
-      screenshotUrl,
-    }: {
-      bookingId: string;
-      provider?: BookingBalancePaymentProvider;
-      referenceNo?: string;
-      screenshotUrl?: string;
-    }) =>
-      client.bookings.processBalance(bookingId, {
-        provider,
-        referenceNo,
-        screenshotUrl,
-      }),
-    onSuccess: async () => {
-      await Promise.all([
-        invalidateBookingQueries(queryClient),
-        invalidateStaffBookingQueries(queryClient),
-        invalidateVenueQueries(queryClient),
-        invalidateAnalyticsQueries(queryClient),
-      ]);
-    },
   });
 }

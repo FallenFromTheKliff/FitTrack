@@ -1,0 +1,52 @@
+- generic [ref=e1]:
+  - generic [ref=e360]:
+    - generic [ref=e361]:
+      - img [ref=e363]
+      - generic [ref=e369]:
+        - generic [ref=e370]: FitTrack
+        - generic [ref=e371]: SertFit Gym Member Portal
+    - generic [ref=e372]:
+      - generic [ref=e373]:
+        - generic [ref=e374]:
+          - generic [ref=e375]:
+            - generic [ref=e377]: Email
+            - generic [ref=e378]:
+              - img [ref=e379]
+              - textbox "Email" [ref=e382]:
+                - /placeholder: your.email@example.com
+                - text: seed.member.pending@fittrack.com
+          - generic [ref=e384]:
+            - generic [ref=e386]: Password
+            - generic [ref=e387]:
+              - img [ref=e388]
+              - textbox "Password" [ref=e391]:
+                - /placeholder: "********"
+                - text: SeedMember!2026
+              - button "Show password" [ref=e408] [cursor=pointer]:
+                - img [ref=e409]
+          - button "Forgot Password?" [ref=e397] [cursor=pointer]
+        - button "Sign In" [ref=e398] [cursor=pointer]:
+          - generic [ref=e399]: Sign In
+      - generic [ref=e412]: Verification code sent. Enter it to continue.
+      - generic [ref=e402]: New to SertFit?
+      - button "Create Account" [ref=e405] [cursor=pointer]:
+        - generic [ref=e406]: Create Account
+      - generic [ref=e407]: (c) 2026 SertFit Gym. All rights reserved.
+  - dialog [ref=e414]:
+    - generic [ref=e418]:
+      - img [ref=e420]
+      - generic [ref=e423]: Verify OTP
+      - generic [ref=e424]: Enter the 6-digit code sent to se***g@fittrack.com
+      - generic [ref=e425]:
+        - textbox [active] [ref=e426]
+        - textbox [ref=e427]
+        - textbox [ref=e428]
+        - textbox [ref=e429]
+        - textbox [ref=e430]
+        - textbox [ref=e431]
+      - button "Verify & Continue" [disabled]:
+        - generic [ref=e432]: Verify & Continue
+      - generic [ref=e433]:
+        - generic [ref=e434]: Resend OTP
+        - generic [ref=e435]: in 52 s
+      - generic [ref=e436]: (c) 2026 SertFit Gym. All rights reserved.

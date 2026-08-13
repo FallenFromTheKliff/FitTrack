@@ -216,6 +216,13 @@ export class ExerciseRepository extends BaseRepository {
     });
   }
 
+  listActiveMuscleDefinitions(): Promise<MuscleDefinitionRecord[]> {
+    return this.prisma.muscleDefinition.findMany({
+      where: { is_active: true },
+      orderBy: [{ sort_order: 'asc' }, { name: 'asc' }],
+    });
+  }
+
   listActiveMuscleDefinitionsByKeys(
     keys: string[],
   ): Promise<MuscleDefinitionRecord[]> {

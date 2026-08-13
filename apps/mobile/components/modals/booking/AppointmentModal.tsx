@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
   Linking,
@@ -10,17 +10,16 @@ import {
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import {
   CalendarDays,
-  CheckCircle,
   Clock,
-  SlidersHorizontal,
   Users,
 } from "lucide-react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { WEEKDAY_NAMES } from "@fittrack/app-config";
 
+import { ApiClientError } from "@fittrack/api-client";
 import type {
-  AppointmentRecord,
   CoachAvailabilityResponse,
+  CommerceCheckoutAttempt,
 } from "@fittrack/api-client";
 import type { CoachProfileRecord } from "@fittrack/types";
 import {
@@ -29,7 +28,6 @@ import {
   createAppointmentMutationOptions,
 } from "@fittrack/query";
 import {
-  expandCoachAvailabilitySlots,
   formatBookingDate,
   to12HourLabel,
 } from "@fittrack/utils";
@@ -38,26 +36,40 @@ import { mobileApiClient } from "@/lib/api-client";
 import { useOverlayAnim } from "@/hooks/animations/modal/useOverlayAnim";
 import { useThemeTransitionAnim } from "@/hooks/animations/core/useThemeTransition";
 import { useLoadingText } from "@fittrack/hooks";
-import { getTodayString } from "@/data/bookings";
 import { makeAppointmentModalStyles } from "@/styles/modals/AppointmentStyles";
+import { usePremiumFitnessAccess } from "@/hooks/membership/usePremiumFitnessAccess";
+import {
+  createCommerceAttemptIdempotencyKey,
+  useCommerceCheckoutReturn,
+} from "@/hooks/commerce/useCommerceCheckoutReturn";
 
 import { FitText } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
-import FitSearch from "@/components/fit/FitSearch";
 import CalendarModal from "@/components/modals/shared/CalendarModal";
 import ConfirmModal from "@/components/modals/shared/ConfirmModal";
+import NoticeModal from "@/components/modals/shared/NoticeModal";
 import FitModalScrollView from "@/components/modals/shared/FitModalScrollView";
 import TimeSlotModal, {
   type TimeSlot,
 } from "@/components/modals/shared/TimeSlotModal";
+import SearchableBookingPickerModal, {
+  type BookingPickerFilter,
+  type BookingPickerOption,
+} from "@/components/modals/booking/SearchableBookingPickerModal";
+import {
+  DEFAULT_COACH_PICKER_FILTER,
+  filterCoachProfiles,
+  type CoachPickerFilter,
+} from "@/components/modals/booking/bookingPickerFilters";
 
 export type AppointmentModalCheckoutResult = {
+  attempt?: CommerceCheckoutAttempt;
   checkoutUrl?: string | null;
   errorMessage?: string | null;
 };
 
 export type AppointmentModalSingleSubmission = {
-  appointment: AppointmentRecord;
+  appointment: CommerceCheckoutAttempt;
   checkoutUrl: string;
   coachId: string;
   durationMinutes: number;
@@ -72,6 +84,8 @@ export type AppointmentModalMonthlySubmission = {
   monthlyOfferDescription: string;
   monthlyRate: number;
   sessionCount: number;
+  startDate: string;
+  idempotencyKey: string;
 };
 
 type Props = {
@@ -91,7 +105,7 @@ type Props = {
 
 type CoachRecord = CoachProfileRecord;
 
-type AppointmentStep = "coach" | "time";
+type AppointmentStep = "coach" | "date" | "time";
 type AppointmentPlanMode = "single" | "monthly";
 type AppointmentConfirmationState = {
   message: string;
@@ -111,16 +125,11 @@ type SlotOption = {
   startTime: string;
 };
 
-const COACH_SPECIALIZATION_FILTERS = [
-  "Strength",
-  "Mobility",
-  "Boxing",
-  "Conditioning",
-] as const;
 const COACH_RATING_FILTERS = [
   { label: "Any rating", value: 0 },
   { label: "4+ stars", value: 4 },
 ] as const;
+const ONE_TIME_DURATION_OPTIONS = [30, 45, 60, 90] as const;
 const PLAN_OPTION_CARDS: PlanOptionCard[] = [
   {
     body: "Choose a coach, time, and pay in full now.",
@@ -139,22 +148,13 @@ const DEFAULT_CHECKOUT_FAILURE_MESSAGE =
   "PayMongo payment is currently unavailable. Your booking was not confirmed. Please try again.";
 const SINGLE_CHECKOUT_FAILURE_MESSAGE =
   "PayMongo payment is currently unavailable. Your booking was not confirmed. Please try again from Bookings.";
+const MONTHLY_CHECKOUT_FAILURE_MESSAGE =
+  "Unable to start the full monthly checkout. Your monthly coaching was not activated. Please try again.";
 
 function getCoachName(coach: CoachRecord) {
   const standaloneName = coach.displayName?.trim();
   if (standaloneName && !standaloneName.includes("@")) return standaloneName;
   return "Coach Profile";
-}
-
-function getCoachInitials(coach: CoachRecord) {
-  return (
-    getCoachName(coach)
-      .split(" ")
-      .filter((part) => part.length > 0)
-      .slice(0, 2)
-      .map((part) => part[0]?.toUpperCase() ?? "")
-      .join("") || "C"
-  );
 }
 
 function getCoachPrimarySpecialty(coach: CoachRecord) {
@@ -164,7 +164,7 @@ function getCoachPrimarySpecialty(coach: CoachRecord) {
 function getCoachPriceLabel(coach: CoachRecord) {
   const rate = Number(coach.hourlyRate);
   if (!Number.isFinite(rate) || rate <= 0) {
-    return "Rate pending";
+    return "Rate unavailable";
   }
 
   return formatCurrency(rate) + " / session";
@@ -195,7 +195,7 @@ function getMonthlyOffer(coach: CoachRecord | null) {
   return {
     description:
       coach?.monthlyOfferDescription?.trim() ||
-      "Coach-created monthly package.",
+      "Paid monthly coaching package.",
     durationMinutes: hasConfiguredValues ? monthlySessionDurationMinutes : null,
     isAvailable: coach?.monthlyOfferActive === true && hasConfiguredValues,
     rate: hasConfiguredValues ? monthlyRate : null,
@@ -212,20 +212,6 @@ function formatDurationLabel(minutes: number | null) {
   return `${minutes} minutes`;
 }
 
-function matchesDay(selectedDate: string, dayValue: number | string) {
-  const currentDate = new Date(`${selectedDate}T00:00:00`);
-  const dayIndex = currentDate.getDay();
-  if (typeof dayValue === "number") {
-    return dayValue === dayIndex;
-  }
-  const normalized = String(dayValue).trim().toLowerCase();
-  const numericDay = Number(normalized);
-  if (Number.isInteger(numericDay)) {
-    return numericDay === dayIndex;
-  }
-  return WEEKDAY_NAMES[dayIndex] === normalized;
-}
-
 function toGymWallClockIso(date: string, time: string) {
   const [year, month, day] = date.split("-").map(Number);
   const [hour, minute] = time.split(":").map(Number);
@@ -235,9 +221,28 @@ function toGymWallClockIso(date: string, time: string) {
   ).toISOString();
 }
 
+function getGymTodayString() {
+  const gymNow = new Date(Date.now() + 8 * 60 * 60 * 1000);
+  return `${gymNow.getUTCFullYear()}-${String(gymNow.getUTCMonth() + 1).padStart(2, "0")}-${String(gymNow.getUTCDate()).padStart(2, "0")}`;
+}
+
+function getGymCurrentMinutes() {
+  const gymNow = new Date(Date.now() + 8 * 60 * 60 * 1000);
+  return gymNow.getUTCHours() * 60 + gymNow.getUTCMinutes();
+}
+
 function timeValueToMinutes(value: string) {
   const [hour = 0, minute = 0] = value.split(":").map(Number);
   return hour * 60 + minute;
+}
+
+function isoToTimeValue(value: string) {
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return "";
+  const gymTime = new Date(timestamp + 8 * 60 * 60 * 1000);
+  return `${String(gymTime.getUTCHours()).padStart(2, "0")}:${String(
+    gymTime.getUTCMinutes(),
+  ).padStart(2, "0")}`;
 }
 
 function getUpcomingAvailableDates(dayValues: Array<number | string>) {
@@ -263,7 +268,7 @@ function getUpcomingAvailableDates(dayValues: Array<number | string>) {
   if (availableDays.size === 0) return [];
 
   const dates: string[] = [];
-  const cursor = new Date(`${getTodayString()}T00:00:00`);
+  const cursor = new Date(`${getGymTodayString()}T00:00:00`);
   for (let offset = 0; offset < 90; offset += 1) {
     const nextDate = new Date(cursor);
     nextDate.setDate(cursor.getDate() + offset);
@@ -286,11 +291,11 @@ function formatCurrency(value: number) {
 }
 
 function getMaxBookableDateKey() {
-  const maxDate = new Date();
-  maxDate.setFullYear(maxDate.getFullYear() + 1);
-  const year = maxDate.getFullYear();
-  const month = String(maxDate.getMonth() + 1).padStart(2, "0");
-  const day = String(maxDate.getDate()).padStart(2, "0");
+  const [gymYear, gymMonth, gymDay] = getGymTodayString().split("-").map(Number);
+  const maxDate = new Date(Date.UTC(gymYear + 1, gymMonth - 1, gymDay));
+  const year = maxDate.getUTCFullYear();
+  const month = String(maxDate.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(maxDate.getUTCDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
 
@@ -306,15 +311,60 @@ function makeCheckoutFailure(message?: string) {
   return error;
 }
 
+function hasProviderUnavailableMessage(message: string) {
+  const normalizedMessage = message.toLowerCase();
+  const mentionsProvider =
+    normalizedMessage.includes("paymongo") ||
+    normalizedMessage.includes("payment provider") ||
+    normalizedMessage.includes("checkout provider") ||
+    normalizedMessage.includes("payment gateway");
+  const indicatesUnavailable =
+    normalizedMessage.includes("unavailable") ||
+    normalizedMessage.includes("unreachable") ||
+    normalizedMessage.includes("timed out") ||
+    normalizedMessage.includes("timeout") ||
+    normalizedMessage.includes("failed") ||
+    normalizedMessage.includes("failure");
+
+  return mentionsProvider && indicatesUnavailable;
+}
+
+function isProviderUnavailableCheckoutError(error: unknown) {
+  if (error instanceof Error && error.name === "AppointmentCheckoutFailure") {
+    return true;
+  }
+
+  if (!(error instanceof ApiClientError)) {
+    return error instanceof Error && hasProviderUnavailableMessage(error.message);
+  }
+
+  if (error.kind === "network" || error.kind === "timeout") {
+    return true;
+  }
+
+  if (error.status === 502 || error.status === 503 || error.status === 504) {
+    return true;
+  }
+
+  const details =
+    error.details && typeof error.details === "object"
+      ? Object.values(error.details)
+          .filter((value): value is string => typeof value === "string")
+          .join(" ")
+      : "";
+  return hasProviderUnavailableMessage(`${error.message} ${details}`);
+}
+
 function getCallbackCheckoutFailureMessage(error: unknown) {
-  if (
-    error instanceof Error &&
-    error.name === "AppointmentCheckoutFailure" &&
-    error.message.trim()
-  ) {
+  if (isProviderUnavailableCheckoutError(error)) {
+    return DEFAULT_CHECKOUT_FAILURE_MESSAGE;
+  }
+
+  if (error instanceof Error && error.message.trim()) {
     return error.message.trim();
   }
-  return DEFAULT_CHECKOUT_FAILURE_MESSAGE;
+
+  return MONTHLY_CHECKOUT_FAILURE_MESSAGE;
 }
 
 export default function AppointmentModal({
@@ -325,73 +375,119 @@ export default function AppointmentModal({
   onMonthlySubmit,
 }: Props) {
   const { colors } = useTheme();
+  const {
+    hasActivePlan,
+    isPlanAccessLoading,
+    membershipAccessSummary,
+  } = usePremiumFitnessAccess();
   const { ic } = useThemeTransitionAnim();
   const { opacity, scale } = useOverlayAnim(isVisible, "scale");
   const s = useMemo(() => makeAppointmentModalStyles(colors), [colors]);
   const queryClient = useQueryClient();
+  const attemptIdempotencyKeyRef = useRef<string | null>(null);
+  const getAttemptIdempotencyKey = () => {
+    if (!attemptIdempotencyKeyRef.current) {
+      attemptIdempotencyKeyRef.current =
+        createCommerceAttemptIdempotencyKey();
+    }
+    return attemptIdempotencyKeyRef.current;
+  };
   const [step, setStep] = useState<AppointmentStep>("coach");
   const [planMode, setPlanMode] =
     useState<AppointmentPlanMode | null>(null);
   const [selectedCoachId, setSelectedCoachId] = useState<string | null>(null);
-  const [selectedDate, setSelectedDate] = useState(getTodayString());
+  const [selectedDuration, setSelectedDuration] = useState(60);
+  const [selectedDate, setSelectedDate] = useState(getGymTodayString());
+  const [monthlyStartDate, setMonthlyStartDate] = useState(getGymTodayString());
   const [selectedSlotLabel, setSelectedSlotLabel] = useState("");
   const [appointmentConfirmation, setAppointmentConfirmation] =
     useState<AppointmentConfirmationState | null>(null);
   const [isCalOpen, setIsCalOpen] = useState(false);
   const [isTimeOpen, setIsTimeOpen] = useState(false);
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [isCoachPickerOpen, setIsCoachPickerOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorText, setErrorText] = useState("");
-  const [coachSearch, setCoachSearch] = useState("");
-  const [selectedSpecialties, setSelectedSpecialties] = useState<string[]>(
-    [],
-  );
-  const [minimumRating, setMinimumRating] =
-    useState<(typeof COACH_RATING_FILTERS)[number]["value"]>(0);
+  const [checkoutNotice, setCheckoutNotice] = useState<{
+    message: string;
+    title: string;
+  } | null>(null);
+  const pendingSingleSubmissionRef =
+    useRef<AppointmentModalSingleSubmission | null>(null);
+  const checkoutModeRef = useRef<AppointmentPlanMode | null>(null);
+  const resetFormStateRef = useRef<() => void>(() => undefined);
+  const checkoutReturn = useCommerceCheckoutReturn({
+    onSucceeded: async (attempt) => {
+      const mode = checkoutModeRef.current;
+      const singleSubmission = pendingSingleSubmissionRef.current;
+      attemptIdempotencyKeyRef.current = null;
+      checkoutModeRef.current = null;
+      pendingSingleSubmissionRef.current = null;
+
+      if (mode === "single" && singleSubmission) {
+        try {
+          await onSingleBookingSubmitted?.({
+            ...singleSubmission,
+            appointment: attempt,
+          });
+        } catch {
+          // A host notification callback must not turn a confirmed checkout
+          // into a false payment failure.
+        }
+      }
+
+      resetFormStateRef.current();
+      setCheckoutNotice({
+        title: mode === "monthly" ? "Monthly coaching active" : "Session confirmed",
+        message:
+          mode === "monthly"
+            ? "Your full PayMongo payment was confirmed. Your coach will prepare your program and session schedule next."
+            : "Your full PayMongo payment was confirmed and the coaching session is now booked.",
+      });
+      onSuccess?.();
+    },
+    onTerminal: async (_, state) => {
+      attemptIdempotencyKeyRef.current = null;
+      checkoutModeRef.current = null;
+      pendingSingleSubmissionRef.current = null;
+      resetFormStateRef.current();
+      setCheckoutNotice({
+        title: "Checkout not completed",
+        message:
+          state === "expired"
+            ? "The PayMongo checkout expired. No coaching booking was confirmed."
+            : "The PayMongo checkout was not completed. No coaching booking was confirmed.",
+      });
+    },
+  });
+  const [coachPickerFilter, setCoachPickerFilter] =
+    useState<CoachPickerFilter>(DEFAULT_COACH_PICKER_FILTER);
 
   const {
     data: coaches = [],
     isLoading: coachesLoading,
     error: coachesError,
+    refetch: refetchCoaches,
   } = useQuery({
-    ...activeCoachesQueryOptions<CoachRecord>(mobileApiClient, {
-      ...(minimumRating > 0 ? { minRating: minimumRating } : {}),
-    }),
+    ...activeCoachesQueryOptions<CoachRecord>(mobileApiClient),
     enabled: isVisible && planMode !== null,
   });
 
+  const coachSpecialtyOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          coaches.flatMap((coach) =>
+            (coach.specialties ?? []).map((specialty) => specialty.trim()),
+          ),
+        ),
+      )
+        .filter(Boolean)
+        .sort((left, right) => left.localeCompare(right)),
+    [coaches],
+  );
+
   const filteredCoaches = useMemo(() => {
-    const query = coachSearch.trim().toLowerCase();
-    const selectedSpecialtySet = new Set(
-      selectedSpecialties.map((specialty) => specialty.toLowerCase()),
-    );
-    const matches = coaches.filter((coach) => {
-      const coachSpecialties = (coach.specialties ?? []).map((specialty) =>
-        specialty.toLowerCase(),
-      );
-      const matchesSpecialty =
-        selectedSpecialtySet.size === 0 ||
-        coachSpecialties.some((specialty) =>
-          selectedSpecialtySet.has(specialty),
-        );
-      const rating = Number(coach.averageRating ?? 0);
-      const matchesRating =
-        minimumRating === 0 ||
-        (Number.isFinite(rating) && rating >= minimumRating);
-      const haystack = [
-        getCoachName(coach),
-        coach.bio ?? "",
-        ...(coach.specialties ?? []),
-        ...(coach.certifications ?? []),
-      ]
-        .join(" ")
-        .toLowerCase();
-      return (
-        matchesSpecialty &&
-        matchesRating &&
-        (!query || haystack.includes(query))
-      );
-    });
+    const matches = filterCoachProfiles(coaches, coachPickerFilter);
 
     if (planMode !== "monthly") return matches;
     return matches.sort(
@@ -400,12 +496,48 @@ export default function AppointmentModal({
         Number(getMonthlyOffer(left).isAvailable),
     );
   }, [
-    coachSearch,
     coaches,
-    minimumRating,
+    coachPickerFilter,
     planMode,
-    selectedSpecialties,
   ]);
+
+  const coachPickerOptions = useMemo<BookingPickerOption[]>(
+    () =>
+      filteredCoaches.map((coach) => {
+        const coachMonthlyOffer = getMonthlyOffer(coach);
+        const monthlyUnavailable =
+          planMode === "monthly" && !coachMonthlyOffer.isAvailable;
+        return {
+          detail: coach.bio?.trim() || "No coach bio has been added yet.",
+          disabled: monthlyUnavailable,
+          id: String(coach.id),
+          keywords: [...(coach.specialties ?? []), ...(coach.certifications ?? [])],
+          subtitle:
+            planMode === "monthly"
+              ? coachMonthlyOffer.isAvailable
+                ? `${formatCurrency(coachMonthlyOffer.rate ?? 0)} · ${coachMonthlyOffer.sessionCount} sessions · ${formatDurationLabel(coachMonthlyOffer.durationMinutes)} each`
+                : "Monthly offer unavailable"
+              : `${getCoachPrimarySpecialty(coach)} · ${getCoachPriceLabel(coach)} · ${getCoachRatingLabel(coach)}`,
+          title: getCoachName(coach),
+        };
+      }),
+    [filteredCoaches, planMode],
+  );
+  const coachPickerFilters = useMemo<BookingPickerFilter[]>(
+    () => [
+      ...coachSpecialtyOptions.map((specialty) => ({
+        id: `specialty:${specialty}`,
+        label: specialty,
+        selected: coachPickerFilter.specialty === specialty,
+      })),
+      ...COACH_RATING_FILTERS.map((rating) => ({
+        id: `rating:${rating.value}`,
+        label: rating.label,
+        selected: coachPickerFilter.minimumRating === rating.value,
+      })),
+    ],
+    [coachPickerFilter, coachSpecialtyOptions],
+  );
 
   useEffect(() => {
     if (!selectedCoachId) return;
@@ -434,51 +566,65 @@ export default function AppointmentModal({
       mobileApiClient,
       selectedCoach ? String(selectedCoach.id) : undefined,
     ),
+      enabled:
+        isVisible && planMode === "single" && !!selectedCoach,
+  });
+  const {
+    data: canonicalDateSlots = [],
+    isLoading: canonicalDateSlotsLoading,
+    error: canonicalDateSlotsError,
+  } = useQuery({
+    queryKey: [
+      "mobile",
+      "appointment-availability",
+      selectedCoach ? String(selectedCoach.id) : "none",
+      selectedDate,
+      selectedDuration,
+    ],
+    queryFn: () =>
+      mobileApiClient.appointments.getAvailability(String(selectedCoach!.id), {
+        date: selectedDate,
+        durationMinutes: selectedDuration,
+      }),
     enabled:
-      isVisible && planMode === "single" && !!selectedCoach,
+      isVisible &&
+      planMode === "single" &&
+      !!selectedCoach &&
+      !!selectedDate &&
+      selectedDuration > 0,
+    staleTime: 15_000,
   });
 
-  const bookedCoachDates = useMemo(
-    () => availability?.bookedDates ?? [],
-    [availability?.bookedDates],
-  );
-  const bookedCoachDateSet = useMemo(
-    () => new Set(bookedCoachDates),
-    [bookedCoachDates],
-  );
-  const isSelectedCoachDateBooked =
-    planMode === "single" &&
-    selectedCoach != null &&
-    bookedCoachDateSet.has(selectedDate);
-  const now = new Date();
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const currentMinutes = getGymCurrentMinutes();
 
   const slotOptions = useMemo<SlotOption[]>(() => {
-    if (planMode !== "single" || !availability?.availability) {
+    if (planMode !== "single") {
       return [];
     }
-    if (bookedCoachDateSet.has(selectedDate)) {
-      return [];
-    }
-    return expandCoachAvailabilitySlots(availability.availability, "full_time")
-      .filter(
-        (slot) =>
-          slot.isAvailable &&
-          matchesDay(selectedDate, slot.dayOfWeek) &&
-          (selectedDate !== getTodayString() ||
-            timeValueToMinutes(slot.startTime) > currentMinutes),
-      )
-      .map((slot) => ({
-        label: to12HourLabel(slot.startTime),
-        startTime: slot.startTime,
-        durationMin: slot.durationMinutes,
-      }));
+    return canonicalDateSlots
+      .filter((slot) => {
+        const startTime = isoToTimeValue(slot.startAt);
+        return (
+          slot.available &&
+          !!startTime &&
+          (selectedDate !== getGymTodayString() ||
+            timeValueToMinutes(startTime) > currentMinutes)
+        );
+      })
+      .map((slot) => {
+        const startTime = isoToTimeValue(slot.startAt);
+        return {
+          label: to12HourLabel(startTime),
+          startTime,
+          durationMin: selectedDuration,
+        };
+      });
   }, [
-    availability,
-    bookedCoachDateSet,
+    canonicalDateSlots,
     currentMinutes,
     planMode,
     selectedDate,
+    selectedDuration,
   ]);
   const highlightedCoachDates = useMemo(
     () =>
@@ -496,7 +642,7 @@ export default function AppointmentModal({
     () =>
       slotOptions.map((slot) => ({
         time: slot.label,
-        duration: `${Math.max(1, Math.round(slot.durationMin / 60))} hr`,
+        duration: formatDurationLabel(slot.durationMin),
         status: "available",
         spots: 1,
       })),
@@ -511,8 +657,9 @@ export default function AppointmentModal({
   const createAppointmentMutation = useMutation(
     createAppointmentMutationOptions(mobileApiClient, queryClient),
   );
+  const isCheckoutActive = checkoutReturn.attempt != null;
   const isBusy =
-    createAppointmentMutation.isPending || isSubmitting;
+    createAppointmentMutation.isPending || isSubmitting || isCheckoutActive;
 
   const sendingRequestLabel = useLoadingText(
     "PROCESSING",
@@ -527,10 +674,10 @@ export default function AppointmentModal({
   const hasSelectedSlot = selectedSlot != null;
   const hasValidCoachRate = selectedCoachRate != null;
   const estimatedTotalAmount = useMemo(() => {
-    if (!selectedSlot || selectedCoachRate == null) return 0;
-    const slotHours = selectedSlot.durationMin / 60;
+    if (!selectedCoachRate || selectedCoachRate == null || selectedDuration <= 0) return 0;
+    const slotHours = selectedDuration / 60;
     return roundCurrency(selectedCoachRate * slotHours);
-  }, [selectedCoachRate, selectedSlot]);
+  }, [selectedCoachRate, selectedDuration]);
   const selectedPlan = useMemo(
     () =>
       PLAN_OPTION_CARDS.find((option) => option.key === planMode) ??
@@ -540,10 +687,10 @@ export default function AppointmentModal({
   const canShowPaymentBreakdown = hasSelectedSlot && hasValidCoachRate;
   const totalAmountLabel = canShowPaymentBreakdown
     ? formatCurrency(estimatedTotalAmount)
-    : "Pending";
+    : "Select a slot";
   const fullPaymentLabel = canShowPaymentBreakdown
     ? formatCurrency(estimatedTotalAmount)
-    : "Pending";
+    : "Select a slot";
   const paymentEstimateSummary = useMemo(() => {
     if (!hasSelectedSlot) {
       return {
@@ -556,7 +703,7 @@ export default function AppointmentModal({
     if (!hasValidCoachRate) {
       return {
         body: "This coach does not have a valid session rate yet.",
-        eyebrow: "Rate pending",
+        eyebrow: "Rate unavailable",
         title: "Payment unavailable",
       };
     }
@@ -604,19 +751,26 @@ export default function AppointmentModal({
         ? availabilityError.message
         : "Unable to load live availability for this coach.";
     }
-    if (isSelectedCoachDateBooked) {
-      return `${getCoachName(selectedCoach)} already has a booking on ${formatBookingDate(selectedDate)}. Pick another highlighted day.`;
+    if (canonicalDateSlotsLoading) {
+      return `Checking ${selectedDuration}-minute availability for ${formatBookingDate(selectedDate)}.`;
+    }
+    if (canonicalDateSlotsError) {
+      return canonicalDateSlotsError instanceof Error
+        ? canonicalDateSlotsError.message
+        : "Unable to load canonical appointment availability.";
     }
     if (slotOptions.length === 0) {
-      return `No active slots are available on ${formatBookingDate(selectedDate)}. Try another date or another coach.`;
+      return `No ${selectedDuration}-minute slots are available on ${formatBookingDate(selectedDate)}. Try another date or another coach.`;
     }
-    return `${slotOptions.length} available slot${slotOptions.length === 1 ? "" : "s"} on ${formatBookingDate(selectedDate)}.`;
+    return `${slotOptions.length} canonical available slot${slotOptions.length === 1 ? "" : "s"} on ${formatBookingDate(selectedDate)}.`;
   }, [
     availabilityError,
     availabilityLoading,
-    isSelectedCoachDateBooked,
+    canonicalDateSlotsError,
+    canonicalDateSlotsLoading,
     selectedCoach,
     selectedDate,
+    selectedDuration,
     slotOptions.length,
   ]);
 
@@ -624,41 +778,58 @@ export default function AppointmentModal({
     setStep("coach");
     setSelectedCoachId(null);
     setPlanMode(null);
-    setSelectedDate(getTodayString());
+    setSelectedDate(getGymTodayString());
+    setMonthlyStartDate(getGymTodayString());
+    setSelectedDuration(60);
     setSelectedSlotLabel("");
     setAppointmentConfirmation(null);
     setIsCalOpen(false);
     setIsTimeOpen(false);
-    setIsFilterOpen(false);
+    setIsCoachPickerOpen(false);
     setIsSubmitting(false);
     setErrorText("");
-    setCoachSearch("");
-    setSelectedSpecialties([]);
-    setMinimumRating(0);
+    setCoachPickerFilter(DEFAULT_COACH_PICKER_FILTER);
   };
+  resetFormStateRef.current = resetFormState;
 
   const resetAndClose = () => {
     if (isBusy) {
       return;
     }
     resetFormState();
+    if (!checkoutReturn.attempt) {
+      attemptIdempotencyKeyRef.current = null;
+    }
     onClose();
   };
 
   const handleModeSelect = (mode: AppointmentPlanMode) => {
     if (isBusy) return;
+    attemptIdempotencyKeyRef.current = null;
     setPlanMode(mode);
     setStep("coach");
     setSelectedCoachId(null);
+    setSelectedDuration(60);
     setSelectedSlotLabel("");
-    setIsFilterOpen(false);
+    setIsCoachPickerOpen(false);
+    setCoachPickerFilter(DEFAULT_COACH_PICKER_FILTER);
     setErrorText("");
+  };
+
+  const goToDateStep = () => {
+    if (planMode !== "single") return;
+    if (!selectedCoach) {
+      setErrorText("Select a coach to continue.");
+      return;
+    }
+    setErrorText("");
+    setStep("date");
   };
 
   const goToTimeStep = () => {
     if (planMode !== "single") return;
-    if (!selectedCoach) {
-      setErrorText("Select a coach to continue.");
+    if (!selectedDate) {
+      setErrorText("Select a date to continue.");
       return;
     }
     setErrorText("");
@@ -670,62 +841,58 @@ export default function AppointmentModal({
       planMode !== "single" ||
       !selectedCoach ||
       !selectedSlot ||
-      !hasValidCoachRate ||
-      isSelectedCoachDateBooked
+      !hasValidCoachRate
     ) {
       return;
     }
 
     setErrorText("");
     setIsSubmitting(true);
-    let createdAppointment: AppointmentRecord | null = null;
-    let didOpenCheckout = false;
+    let checkoutAttempt: CommerceCheckoutAttempt | null = null;
     try {
-      createdAppointment = await createAppointmentMutation.mutateAsync({
+      checkoutAttempt = await createAppointmentMutation.mutateAsync({
         payload: {
           coachId: String(selectedCoach.id),
           scheduledAt: toGymWallClockIso(selectedDate, selectedSlot.startTime),
-          duration: selectedSlot.durationMin,
+          duration: selectedDuration,
           bookingMode: "single",
           sessionCount: 1,
+          idempotencyKey: getAttemptIdempotencyKey(),
         },
       });
 
-      const checkout = await mobileApiClient.appointments.initiateDownpayment(
-        createdAppointment.id,
-        "paymongo",
-        "full",
-      );
-      const checkoutUrl = checkout.checkoutUrl?.trim();
+      const checkoutUrl = checkoutAttempt.checkoutUrl?.trim();
       if (!checkoutUrl) {
         throw new Error("PayMongo did not return a checkout link.");
       }
 
       await Linking.openURL(checkoutUrl);
-      didOpenCheckout = true;
-
-      try {
-        await onSingleBookingSubmitted?.({
-          appointment: createdAppointment,
-          checkoutUrl,
-          coachId: String(selectedCoach.id),
-          durationMinutes: selectedSlot.durationMin,
-          scheduledAt: toGymWallClockIso(
-            selectedDate,
-            selectedSlot.startTime,
-          ),
-        });
-      } catch {
-        // A host notification callback must not turn an already-open checkout
-        // into a false payment failure.
-      }
-
+      checkoutModeRef.current = "single";
+      pendingSingleSubmissionRef.current = {
+        appointment: checkoutAttempt,
+        checkoutUrl,
+        coachId: String(selectedCoach.id),
+        durationMinutes: selectedDuration,
+        scheduledAt: toGymWallClockIso(
+          selectedDate,
+          selectedSlot.startTime,
+        ),
+      };
+      checkoutReturn.start(checkoutAttempt);
       setAppointmentConfirmation(null);
       resetFormState();
+      setCheckoutNotice({
+        title: "PayMongo checkout opened",
+        message:
+          "Complete the full checkout, then return to FitTrack. The session is confirmed only after successful payment confirmation.",
+      });
     } catch (error: unknown) {
+      attemptIdempotencyKeyRef.current = null;
+      checkoutModeRef.current = null;
+      pendingSingleSubmissionRef.current = null;
       setAppointmentConfirmation(null);
       setErrorText(
-        createdAppointment
+        checkoutAttempt
           ? SINGLE_CHECKOUT_FAILURE_MESSAGE
           : error instanceof Error && error.message.trim()
             ? error.message
@@ -733,10 +900,6 @@ export default function AppointmentModal({
       );
     } finally {
       setIsSubmitting(false);
-    }
-
-    if (didOpenCheckout) {
-      onSuccess?.();
     }
   };
 
@@ -752,11 +915,6 @@ export default function AppointmentModal({
       setErrorText("This coach does not have a valid session rate yet.");
       return;
     }
-    if (isSelectedCoachDateBooked) {
-      setErrorText("This coach already has a booking on the selected date.");
-      return;
-    }
-
     const scheduleLabel = `${formatBookingDate(selectedDate)} at ${selectedSlot.label}`;
 
     setAppointmentConfirmation({
@@ -781,17 +939,29 @@ export default function AppointmentModal({
       setErrorText("This coach does not have an active monthly offer.");
       return;
     }
+    if (isPlanAccessLoading) {
+      setErrorText("Checking your active membership. Please wait a moment.");
+      return;
+    }
+    if (!hasActivePlan) {
+      setErrorText("An active membership is required for monthly coaching.");
+      return;
+    }
+    if (!monthlyStartDate || monthlyStartDate < getGymTodayString()) {
+      setErrorText("Choose a monthly coaching start date in gym time.");
+      return;
+    }
 
     setAppointmentConfirmation({
       title: "Confirm monthly booking?",
-      message:
-        "Pay " +
+        message:
+          "Pay " +
         formatCurrency(monthlyOffer.rate ?? 0) +
         " for " +
         monthlyOffer.sessionCount +
-        " sessions with " +
-        getCoachName(selectedCoach) +
-        ". Dates are agreed with the coach later.",
+            " sessions with " +
+            getCoachName(selectedCoach) +
+            ` starting ${formatBookingDate(monthlyStartDate)}. After payment, your coach prepares your program and session schedule.`,
       yesLabel: "Confirm & Pay",
     });
   };
@@ -800,19 +970,20 @@ export default function AppointmentModal({
     if (
       planMode !== "monthly" ||
       !selectedCoach ||
-      !monthlyOffer.isAvailable
+      !monthlyOffer.isAvailable ||
+      !hasActivePlan ||
+      !monthlyStartDate
     ) {
       return;
     }
     if (!onMonthlySubmit) {
       setAppointmentConfirmation(null);
-      setErrorText(DEFAULT_CHECKOUT_FAILURE_MESSAGE);
+      setErrorText(MONTHLY_CHECKOUT_FAILURE_MESSAGE);
       return;
     }
 
     setErrorText("");
     setIsSubmitting(true);
-    let didComplete = false;
     try {
       const result = await onMonthlySubmit({
         coach: selectedCoach,
@@ -822,29 +993,38 @@ export default function AppointmentModal({
         monthlyOfferDescription: monthlyOffer.description,
         monthlyRate: monthlyOffer.rate ?? 0,
         sessionCount: monthlyOffer.sessionCount ?? 0,
+        startDate: monthlyStartDate,
+        idempotencyKey: getAttemptIdempotencyKey(),
       });
 
-      if (result?.checkoutUrl !== undefined || result?.errorMessage) {
-        const checkoutUrl = result.checkoutUrl?.trim();
-        if (!checkoutUrl) {
-          throw makeCheckoutFailure(result.errorMessage ?? undefined);
-        }
-        await Linking.openURL(checkoutUrl);
+      const checkoutAttempt = result?.attempt;
+      const checkoutUrl = result?.checkoutUrl?.trim();
+      if (!checkoutAttempt?.holdId || !checkoutUrl) {
+        const callbackErrorMessage = result?.errorMessage?.trim();
+        throw callbackErrorMessage
+          ? new Error(callbackErrorMessage)
+          : makeCheckoutFailure("PayMongo did not return a checkout status handle.");
       }
 
-      didComplete = true;
+      await Linking.openURL(checkoutUrl);
+      checkoutModeRef.current = "monthly";
+      checkoutReturn.start(checkoutAttempt);
       setAppointmentConfirmation(null);
       resetFormState();
+      setCheckoutNotice({
+        title: "PayMongo checkout opened",
+        message:
+          "Complete the full checkout, then return to FitTrack. Your monthly coaching relationship activates after successful confirmation.",
+      });
     } catch (error: unknown) {
+      attemptIdempotencyKeyRef.current = null;
+      checkoutModeRef.current = null;
       setAppointmentConfirmation(null);
       setErrorText(getCallbackCheckoutFailureMessage(error));
     } finally {
       setIsSubmitting(false);
     }
 
-    if (didComplete) {
-      onSuccess?.();
-    }
   };
 
   const handleSubmitBooking = async () => {
@@ -863,8 +1043,10 @@ export default function AppointmentModal({
         visible={
           isVisible &&
           appointmentConfirmation == null &&
+          checkoutNotice == null &&
           !isCalOpen &&
-          !isTimeOpen
+          !isTimeOpen &&
+          !isCoachPickerOpen
         }
         transparent
         animationType="none"
@@ -888,9 +1070,11 @@ export default function AppointmentModal({
                       ? planMode === "monthly"
                         ? "Choose a monthly offer"
                         : planMode === "single"
-                          ? "Choose a coach"
+                          ? "Duration and coach"
                           : "Choose how you want to train"
-                      : "Step 2 of 2 - Book & Pay in Full"}
+                      : step === "date"
+                        ? "Step 2 of 4 - Choose a date"
+                        : "Step 3 of 4 - Choose an available time"}
                   </FitText>
                 </View>
               </Animated.View>
@@ -936,229 +1120,67 @@ export default function AppointmentModal({
                     </View>
                     {planMode !== null ? (
                       <>
-                    <View>
-                      <FitText style={s.sectionLabel}>
-                        AVAILABLE COACHES
-                      </FitText>
-                      <View style={s.filterPanel}>
-                        <View style={s.filterHeaderRow}>
-                          <View style={{ flex: 1 }}>
-                            <FitSearch
-                              value={coachSearch}
-                              onChangeText={setCoachSearch}
-                              placeholder="Search coaches"
-                            />
-                          </View>
-                          <Pressable
-                            style={[
-                              s.filterToggle,
-                              isFilterOpen && {
-                                borderColor: colors.brand,
-                                backgroundColor: colors.brand + "12",
-                              },
-                            ]}
-                            onPress={() => setIsFilterOpen((current) => !current)}
-                            accessibilityRole="button"
-                            accessibilityLabel={isFilterOpen ? "Hide coach filters" : "Show coach filters"}
-                            accessibilityState={{ expanded: isFilterOpen }}
-                          >
-                            <SlidersHorizontal size={17} color={isFilterOpen ? colors.brand : colors.textSecondary} />
-                          </Pressable>
-                        </View>
-                        {isFilterOpen ? (
-                          <View style={{ gap: 8 }}>
-                            <View style={s.filterChipRow}>
-                              {COACH_SPECIALIZATION_FILTERS.map((filter) => {
-                                const isActive = selectedSpecialties.includes(filter);
-                                return (
-                                  <Pressable
-                                    key={filter}
-                                    style={[
-                                      s.filterChip,
-                                      isActive && {
-                                        borderColor: colors.brand,
-                                        backgroundColor: colors.brand + "12",
-                                      },
-                                    ]}
-                                    onPress={() => {
-                                      setSelectedSpecialties((current) =>
-                                        isActive
-                                          ? current.filter((value) => value !== filter)
-                                          : [...current, filter],
-                                      );
-                                      setSelectedSlotLabel("");
-                                    }}
-                                    accessibilityRole="button"
-                                    accessibilityLabel={`Filter coaches by specialty: ${filter}`}
-                                    accessibilityState={{ selected: isActive }}
-                                  >
-                                    <FitText
-                                      style={[
-                                        s.filterChipText,
-                                        isActive && { color: colors.brand },
-                                      ]}
-                                    >
-                                      {filter}
-                                    </FitText>
-                                  </Pressable>
-                                );
-                              })}
-                            </View>
-                            <View style={s.filterChipRow}>
-                              {COACH_RATING_FILTERS.map((filter) => {
-                                const isActive = minimumRating === filter.value;
-                                return (
-                                  <Pressable
-                                    key={filter.label}
-                                    style={[
-                                      s.filterChip,
-                                      isActive && {
-                                        borderColor: colors.warning,
-                                        backgroundColor: colors.warning + "14",
-                                      },
-                                    ]}
-                                    onPress={() => setMinimumRating(filter.value)}
-                                    accessibilityRole="button"
-                                    accessibilityLabel={`Filter coaches by rating: ${filter.label}`}
-                                    accessibilityState={{ selected: isActive }}
-                                  >
-                                    <FitText
-                                      style={[
-                                        s.filterChipText,
-                                        isActive && { color: colors.warning },
-                                      ]}
-                                    >
-                                      {filter.label}
-                                    </FitText>
-                                  </Pressable>
-                                );
-                              })}
-                            </View>
-                          </View>
-                        ) : null}
-                      </View>
-                      {coachesLoading ? (
-                        <FitText style={s.helperText}>
-                          Loading coach profiles...
+                    {planMode === "single" ? (
+                      <View style={s.previewCard}>
+                        <FitText style={s.previewSectionTitle}>
+                          SESSION DURATION
                         </FitText>
-                      ) : filteredCoaches.length === 0 ? (
                         <FitText style={s.helperText}>
-                          No bookable coaches match those filters.
+                          Choose a duration first. FitTrack will show only canonical available times for this length.
                         </FitText>
-                      ) : (
-                        <View style={s.coachList}>
-                          {filteredCoaches.map((coach) => {
-                            const isActive = selectedCoach?.id === coach.id;
-                            const coachMonthlyOffer = getMonthlyOffer(coach);
-                            const isDisabled =
-                              planMode === "monthly" &&
-                              !coachMonthlyOffer.isAvailable;
+                        <View style={s.filterChipRow}>
+                          {ONE_TIME_DURATION_OPTIONS.map((duration) => {
+                            const isActive = selectedDuration === duration;
                             return (
                               <Pressable
-                                key={coach.id}
+                                key={duration}
                                 style={[
-                                  s.coachRow,
-                                  isDisabled && { opacity: 0.55 },
+                                  s.filterChip,
                                   isActive && {
                                     borderColor: colors.brand,
-                                    backgroundColor: colors.brand + "10",
+                                    backgroundColor: colors.brand + "12",
                                   },
                                 ]}
                                 onPress={() => {
-                                  if (isDisabled) return;
-                                  setSelectedCoachId(
-                                    isActive ? null : String(coach.id),
-                                  );
-                                  setErrorText("");
+                                  setSelectedDuration(duration);
                                   setSelectedSlotLabel("");
                                 }}
                                 accessibilityRole="button"
-                                accessibilityLabel={`Select coach ${getCoachName(coach)}. ${getCoachPrimarySpecialty(coach)}. ${getCoachPriceLabel(coach)}. ${getCoachRatingLabel(coach)}.`}
+                                accessibilityLabel={`Select ${duration}-minute session duration`}
                                 accessibilityState={{ selected: isActive }}
                               >
-                                <View
+                                <FitText
                                   style={[
-                                    s.coachAvatar,
-                                    isActive && {
-                                      backgroundColor: colors.brand,
-                                    },
+                                    s.filterChipText,
+                                    isActive && { color: colors.brand },
                                   ]}
                                 >
-                                  <FitText
-                                    style={[
-                                      s.coachAvatarText,
-                                      isActive && { color: colors.surface },
-                                    ]}
-                                  >
-                                    {getCoachInitials(coach)}
-                                  </FitText>
-                                </View>
-                                <View style={s.coachInfo}>
-                                  <FitText style={s.coachName}>
-                                    {getCoachName(coach)}
-                                  </FitText>
-                                  <FitText style={s.coachSpecialty}>
-                                    {planMode === "monthly"
-                                      ? coachMonthlyOffer.isAvailable
-                                        ? `${formatCurrency(coachMonthlyOffer.rate ?? 0)} | ${coachMonthlyOffer.sessionCount} sessions | ${formatDurationLabel(coachMonthlyOffer.durationMinutes)} each`
-                                        : "Monthly offer unavailable"
-                                      : `${getCoachPrimarySpecialty(coach)} - ${getCoachPriceLabel(coach)}`}
-                                  </FitText>
-                                  <FitText style={s.coachRating}>
-                                    {getCoachRatingLabel(coach)}
-                                  </FitText>
-                                  <FitText style={s.coachBio}>
-                                    {coach.bio?.trim() ||
-                                      "Staff has not added a coach bio yet."}
-                                  </FitText>
-                                  <View style={s.coachMetaRow}>
-                                    {(coach.specialties ?? [])
-                                      .slice(0, 2)
-                                      .map((specialty) => (
-                                        <View
-                                          key={`${coach.id}-${specialty}`}
-                                          style={s.coachMetaChip}
-                                        >
-                                          <FitText style={s.coachMetaChipText}>
-                                            {specialty}
-                                          </FitText>
-                                        </View>
-                                      ))}
-                                    {(coach.certifications ?? [])
-                                      .slice(0, 1)
-                                      .map((certification) => (
-                                        <View
-                                          key={`${coach.id}-${certification}`}
-                                          style={s.coachMetaChip}
-                                        >
-                                          <FitText style={s.coachMetaChipText}>
-                                            {certification}
-                                          </FitText>
-                                        </View>
-                                      ))}
-                                  </View>
-                                  {coach.recentReviews?.[0]?.comment ? (
-                                    <FitText style={s.coachReviewQuote}>
-                                      {coach.recentReviews[0].comment}
-                                    </FitText>
-                                  ) : null}
-                                </View>
-                                {isActive ? (
-                                  <CheckCircle
-                                    size={16}
-                                    color={colors.brand}
-                                    strokeWidth={2}
-                                  />
-                                ) : null}
+                                  {formatDurationLabel(duration)}
+                                </FitText>
                               </Pressable>
                             );
                           })}
                         </View>
-                      )}
-                      {coachesError ? (
-                        <FitText style={s.errorText}>
-                          {coachLoadMessage}
+                      </View>
+                    ) : null}
+                    <View>
+                      <FitText style={s.sectionLabel}>COACH</FitText>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={selectedCoach ? `Selected coach ${getCoachName(selectedCoach)}` : "Choose a coach"}
+                        style={[
+                          s.fieldBtn,
+                          { borderColor: selectedCoach ? colors.brand : colors.fieldBorder },
+                        ]}
+                        onPress={() => setIsCoachPickerOpen(true)}
+                      >
+                        <Users size={16} color={selectedCoach ? colors.brand : colors.textMuted} strokeWidth={2} />
+                        <FitText style={[s.fieldBtnText, selectedCoach && { color: colors.textPrimary }]}>
+                          {selectedCoach ? getCoachName(selectedCoach) : "Search and select a coach"}
                         </FitText>
+                      </Pressable>
+                      {!selectedCoach && errorText ? (
+                        <FitText style={s.errorText}>{errorText}</FitText>
                       ) : null}
                     </View>
                     <View style={s.previewCard}>
@@ -1213,13 +1235,56 @@ export default function AppointmentModal({
                             {formatDurationLabel(monthlyOffer.durationMinutes)} each
                           </FitText>
                           <FitText style={s.helperText}>
-                            Pay first. Agree on dates with your coach afterward.
+                            Full PayMongo payment activates this monthly coaching allocation.
+                          </FitText>
+                          <FitText style={[s.previewSectionTitle, { marginTop: 10 }]}>START DATE</FitText>
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={`Monthly coaching start date ${formatBookingDate(monthlyStartDate)}`}
+                            style={[s.fieldBtn, { borderColor: monthlyStartDate ? colors.brand : colors.fieldBorder }]}
+                            onPress={() => setIsCalOpen(true)}
+                          >
+                            <CalendarDays size={16} color={colors.brand} strokeWidth={2} />
+                            <FitText style={[s.fieldBtnText, { color: colors.textPrimary }]}>
+                              {formatBookingDate(monthlyStartDate)}
+                            </FitText>
+                          </Pressable>
+                          <FitText style={hasActivePlan || isPlanAccessLoading ? s.helperText : s.errorText}>
+                            {isPlanAccessLoading ? "Checking active membership..." : membershipAccessSummary}
                           </FitText>
                         </View>
                       ) : null}
                     </View>
                     </>
                   ) : null}
+                  </View>
+                ) : step === "date" ? (
+                  <View style={{ gap: 12 }}>
+                    <View style={s.previewCard}>
+                      <FitText style={s.previewSectionTitle}>
+                        DATE
+                      </FitText>
+                      <FitText style={s.previewTitle}>
+                        {selectedDuration}-minute session with {selectedCoach ? getCoachName(selectedCoach) : "your coach"}
+                      </FitText>
+                      <FitText style={s.helperText}>
+                        Pick a date first. The next step will load canonical available times for that date and duration.
+                      </FitText>
+                    </View>
+                    <Pressable
+                      style={[s.fieldBtn, { borderColor: colors.brand }]}
+                      onPress={() => setIsCalOpen(true)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Select appointment date. Current date ${formatBookingDate(selectedDate)}`}
+                    >
+                      <CalendarDays size={16} color={colors.brand} strokeWidth={2} />
+                      <FitText style={[s.fieldBtnText, { color: colors.textPrimary }]}>
+                        {formatBookingDate(selectedDate)}
+                      </FitText>
+                    </Pressable>
+                    <FitText style={s.helperText}>
+                      {availabilityStatusMessage}
+                    </FitText>
                   </View>
                 ) : (
                   <View style={{ gap: 12 }}>
@@ -1253,14 +1318,7 @@ export default function AppointmentModal({
                     <View>
                       <FitText style={s.sectionLabel}>SELECT DATE</FitText>
                       <Pressable
-                        style={[
-                          s.fieldBtn,
-                          {
-                            borderColor: isSelectedCoachDateBooked
-                              ? colors.danger
-                              : colors.fieldBorder,
-                          },
-                        ]}
+                        style={[s.fieldBtn, { borderColor: colors.fieldBorder }]}
                         onPress={() => setIsCalOpen(true)}
                         accessibilityRole="button"
                         accessibilityLabel={`Select appointment date. Current date ${formatBookingDate(selectedDate)}`}
@@ -1315,8 +1373,8 @@ export default function AppointmentModal({
                         PAYMENT ESTIMATE
                       </FitText>
                       <FitText style={s.helperText}>
-                        Pay the full amount through PayMongo. No payment means
-                        no confirmed booking.
+                         Pay the full amount through PayMongo to confirm the
+                         booking.
                       </FitText>
                       <FitText style={s.previewTitle}>
                         {paymentEstimateSummary.title}
@@ -1352,7 +1410,9 @@ export default function AppointmentModal({
                   label={step === "coach" ? "Cancel" : "Back"}
                   variant="ghost"
                   onPress={
-                    step === "coach" ? resetAndClose : () => setStep("coach")
+                    step === "coach"
+                      ? resetAndClose
+                      : () => setStep(step === "time" ? "date" : "coach")
                   }
                   disabled={isBusy}
                   flex={1}
@@ -1363,31 +1423,40 @@ export default function AppointmentModal({
                       ? planMode === "monthly"
                         ? "Confirm & Pay"
                         : planMode === "single"
-                          ? "Continue"
+                          ? "Choose date"
                           : "Select a mode"
-                      : isBusy
+                      : step === "date"
+                        ? "Choose available time"
+                        : isBusy
                         ? sendingRequestLabel
-                        : "Book & Pay in Full"
+                        : "Review & pay"
                   }
                   variant="primary"
                   onPress={
                     step === "coach"
                       ? planMode === "monthly"
                         ? handleMonthlyConfirm
-                        : goToTimeStep
-                      : handleConfirm
+                        : goToDateStep
+                      : step === "date"
+                        ? goToTimeStep
+                        : handleConfirm
                   }
                   disabled={
                     step === "time"
                       ? !selectedSlot ||
                         !hasValidCoachRate ||
-                        isSelectedCoachDateBooked ||
                         isBusy
-                      : planMode == null ||
-                        !selectedCoach ||
-                        coachesLoading ||
-                        isBusy ||
-                        (planMode === "monthly" && !monthlyOffer.isAvailable)
+                      : step === "date"
+                        ? !selectedDate || isBusy
+                        : planMode == null ||
+                          !selectedCoach ||
+                          coachesLoading ||
+                          isBusy ||
+                          (planMode === "monthly" &&
+                            (!monthlyOffer.isAvailable ||
+                              !monthlyStartDate ||
+                              !hasActivePlan ||
+                              isPlanAccessLoading))
                   }
                   loading={isBusy}
                   flex={2}
@@ -1397,24 +1466,87 @@ export default function AppointmentModal({
           </Animated.View>
         </KeyboardAvoidingView>
       </Modal>
+      <NoticeModal
+        isVisible={checkoutNotice != null}
+        title={checkoutNotice?.title ?? "Checkout"}
+        message={checkoutNotice?.message ?? ""}
+        onClose={() => setCheckoutNotice(null)}
+      />
+      <SearchableBookingPickerModal
+        isVisible={isCoachPickerOpen}
+        title="Select a Coach"
+        subtitle={planMode === "monthly" ? "Choose a live monthly offer." : "Choose a coach from live profiles."}
+        searchPlaceholder="Search coaches or specialties"
+        options={coachPickerOptions}
+        filters={coachPickerFilters}
+        selectedId={selectedCoachId}
+        isLoading={coachesLoading}
+        errorMessage={coachesError ? coachLoadMessage : null}
+        emptyMessage="No bookable coaches match the current search and filters."
+        onRetry={() => {
+          void refetchCoaches();
+        }}
+        onFilterPress={(id) => {
+          if (id.startsWith("specialty:")) {
+            const specialty = id.slice("specialty:".length);
+            setCoachPickerFilter((current) => ({
+              ...current,
+              specialty: current.specialty === specialty ? null : specialty,
+            }));
+            return;
+          }
+          if (id.startsWith("rating:")) {
+            const minimumRating = Number(id.slice("rating:".length));
+            if (minimumRating === 0 || minimumRating === 4) {
+              setCoachPickerFilter((current) => ({
+                ...current,
+                minimumRating,
+              }));
+            }
+          }
+        }}
+        onSelect={(coachId) => {
+          setSelectedCoachId(coachId);
+          setSelectedSlotLabel("");
+          setErrorText("");
+          setIsCoachPickerOpen(false);
+          setCoachPickerFilter(DEFAULT_COACH_PICKER_FILTER);
+        }}
+        onClose={() => {
+          setIsCoachPickerOpen(false);
+          setCoachPickerFilter(DEFAULT_COACH_PICKER_FILTER);
+        }}
+      />
       <CalendarModal
         isVisible={isCalOpen}
-        selectedDate={selectedDate}
-        blockPast
+        selectedDate={planMode === "monthly" ? monthlyStartDate : selectedDate}
+        minDate={getGymTodayString()}
         maxDate={getMaxBookableDateKey()}
-        defaultYear={new Date().getFullYear()}
-        defaultMonth={new Date().getMonth() + 1}
-        blockedDates={bookedCoachDates}
-        highlightedDates={highlightedCoachDates}
+        defaultYear={Number(getGymTodayString().slice(0, 4))}
+        defaultMonth={Number(getGymTodayString().slice(5, 7))}
+        blockedDates={[]}
+        highlightedDates={planMode === "single" ? highlightedCoachDates : []}
         onSelect={(date) => {
-          setSelectedDate(date);
-          setSelectedSlotLabel("");
+          if (date < getGymTodayString()) {
+            setErrorText("Choose today or a future date in gym time (UTC+8).");
+            setIsCalOpen(false);
+            return;
+          }
+          if (planMode === "monthly") {
+            setMonthlyStartDate(date);
+          } else {
+            setSelectedDate(date);
+            setSelectedSlotLabel("");
+          }
+          setErrorText("");
           setIsCalOpen(false);
         }}
         onClose={() => setIsCalOpen(false)}
       />
       <TimeSlotModal
         isVisible={isTimeOpen}
+        title={`Exact ${selectedDuration}-minute coach time`}
+        showAvailabilityLegend={false}
         slots={timeSlots}
         selectedTime={selectedSlotLabel}
         onSelect={(slot) => {

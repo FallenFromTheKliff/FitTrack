@@ -16,6 +16,7 @@ import type { PaymentCompletedEvent } from '../../membership/payment/events/paym
 import { PaymongoCheckoutService } from '../../membership/payment/paymongo-checkout.service';
 import { SubscriptionService } from '../../membership/subscription/subscription.service';
 import { RecurringCoachingPlanService } from '../recurring-plan/recurring-coaching-plan.service';
+import { RelationshipService } from '../relationship/relationship.service';
 import { AppointmentRepository } from './appointment.repository';
 import { AppointmentLifecycleService } from './appointment-lifecycle.service';
 import {
@@ -24,6 +25,8 @@ import {
   COACHING_REMINDER_JOB,
 } from './appointment.constants';
 import { AppointmentService } from './appointment.service';
+import { CoachingCommerceService } from '../commerce/coaching-commerce.service';
+import { CoachAvailabilityService } from '../availability/coach-availability.service';
 
 type PaymentRecord = Awaited<
   ReturnType<PaymentRepository['findPaymentByIdOrThrow']>
@@ -65,6 +68,18 @@ describe('Appointment payment integration', () => {
     refreshPlanProgress: jest.fn(),
   };
 
+  const relationshipService = {
+    assertActiveClientRelationship: jest.fn(),
+  };
+
+  const coachingCommerceService = {
+    createOneTimeCheckout: jest.fn(),
+  };
+
+  const coachAvailabilityService = {
+    getSlots: jest.fn(),
+  };
+
   const lifecycleQueue = {
     add: jest.fn(),
   };
@@ -88,6 +103,9 @@ describe('Appointment payment integration', () => {
           provide: RecurringCoachingPlanService,
           useValue: recurringPlanService,
         },
+        { provide: RelationshipService, useValue: relationshipService },
+        { provide: CoachingCommerceService, useValue: coachingCommerceService },
+        { provide: CoachAvailabilityService, useValue: coachAvailabilityService },
         { provide: NotificationsService, useValue: notificationsService },
         {
           provide: getQueueToken(COACHING_LIFECYCLE_QUEUE),

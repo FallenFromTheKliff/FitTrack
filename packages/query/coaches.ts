@@ -1,6 +1,7 @@
 import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
 import type {
   ApiClient,
+  CoachClientListParams,
   CoachSpecialtyListParams,
   CoachListFilters,
   SubmitCoachReviewPayload,
@@ -46,6 +47,16 @@ export function coachScheduleQueryOptions<T>(client: Pick<ApiClient, "coaches">,
   return queryOptions({
     queryKey: queryKeys.coachSchedule(userId),
     queryFn: () => client.coaches.listAppointmentSchedule<T>()
+  });
+}
+
+export function coachClientsQueryOptions(
+  client: Pick<ApiClient, "coaches">,
+  params?: CoachClientListParams,
+) {
+  return queryOptions({
+    queryKey: queryKeys.coachClients(params),
+    queryFn: () => client.coaches.listClients(params),
   });
 }
 

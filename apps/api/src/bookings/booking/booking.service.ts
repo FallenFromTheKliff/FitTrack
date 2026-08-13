@@ -3,6 +3,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  GoneException,
   HttpException,
   HttpStatus,
   Injectable,
@@ -20,7 +21,6 @@ import {
   Prisma,
   UserRole,
 } from '@prisma/client';
-import { randomUUID } from 'crypto';
 import { isUUID } from 'class-validator';
 import Redis from 'ioredis';
 
@@ -38,12 +38,19 @@ import {
 import { MembershipCardService } from '../../membership/card/card.service';
 import { SubscriptionService } from '../../membership/subscription/subscription.service';
 import {
+  CoachingCommerceService,
+  CoachingCheckoutResponse,
+} from '../../coaching/commerce/coaching-commerce.service';
+import {
   CreateStaffInitialPaymentStage,
   CreateStaffVenueBookingDTO,
 } from '../../staff/dto/staff-schedule.dto';
 import { DateRangeDTO } from '../../user/dto/user-dto';
 import { AmenityRepository } from '../amenity/amenity.repository';
-import { BookingRepository } from './booking.repository';
+import {
+  BookingRepository,
+  type CoachVenueWorkRecord,
+} from './booking.repository';
 import {
   AvailabilityQueryDTO,
   AvailabilitySlotDTO,
@@ -97,6 +104,7 @@ export class BookingService {
     private readonly paymongoCheckoutService: PaymongoCheckoutService,
     private readonly membershipCardService: MembershipCardService,
     private readonly subscriptionService: SubscriptionService,
+    private readonly commerceCheckoutService: CoachingCommerceService,
     private readonly coachService: CoachService,
     private readonly eventEmitter: EventEmitter2,
     @InjectRedis() private readonly redis: Redis,
@@ -127,10 +135,57 @@ export class BookingService {
     return this.bookingRepository.getAllBookings(dto);
   }
 
-  async confirmPendingBooking(
+  async getCoachVenueWork(coachUserId: string, dto: DateRangeDTO) {
+    const result = await this.bookingRepository.getCoachVenueWork(
+      coachUserId,
+      dto,
+    );
+
+    return {
+      data: result.data.map((booking) => this.toCoachVenueWorkItem(booking)),
+      meta: result.meta,
+    };
+  }
+
+  async completeCoachVenueWork(
+    bookingId: string,
+    coachUserId: string,
+  ): Promise<void> {
+    await this.assertPaidCoachVenueWork(bookingId, coachUserId);
+    await this.completeConfirmedBooking(bookingId, coachUserId);
+  }
+
+  async cancelCoachVenueWork(
+    bookingId: string,
+    coachUserId: string,
+    reason?: string,
+  ): Promise<void> {
+    await this.assertPaidCoachVenueWork(bookingId, coachUserId);
+    await this.cancelBookingAsStaff(bookingId, coachUserId, reason);
+  }
+
+  async markCoachVenueWorkNoShow(
+    bookingId: string,
+    coachUserId: string,
+  ): Promise<void> {
+    await this.assertPaidCoachVenueWork(bookingId, coachUserId);
+    await this.markBookingNoShowAsStaff(bookingId, coachUserId);
+  }
+
+  confirmPendingBooking(
     bookingId: string,
     actorUserId: string,
   ): Promise<{ booking: AmenityBooking; message: string }> {
+    void bookingId;
+    void actorUserId;
+    return Promise.reject(new GoneException({
+      type: 'GONE',
+      title: 'Pending Booking Confirmation Retired',
+      status: 410,
+      detail:
+        'Venue bookings are confirmed only by a successful full payment or an atomic staff cash registration.',
+    }));
+    /*
     const booking =
       await this.bookingRepository.findBookingWithAmenityByIdOrThrow(bookingId);
 
@@ -233,61 +288,24 @@ export class BookingService {
           ? 'Booking confirmed successfully'
           : 'Booking downpayment accepted. Balance remains pending.',
     };
+    */
   }
 
-  async rejectPendingBooking(
+  rejectPendingBooking(
     bookingId: string,
     actorUserId: string,
     reason?: string,
   ): Promise<{ booking: AmenityBooking; message: string }> {
-    const booking =
-      await this.bookingRepository.findBookingWithAmenityByIdOrThrow(bookingId);
-
-    if (booking.status !== BookingStatus.pending) {
-      throw new HttpException(
-        {
-          type: 'BUSINESS_RULE_VIOLATION',
-          title: 'Booking Cannot Be Rejected',
-          status: 422,
-          detail: 'Only pending bookings can be rejected.',
-        },
-        HttpStatus.UNPROCESSABLE_ENTITY,
-      );
-    }
-
-    const cancelledAt = new Date();
-    const cancelledBooking = await this.bookingRepository.cancelBooking(
-      bookingId,
-      cancelledAt,
-    );
-
-    this.emitAudit({
-      userId: actorUserId,
-      action: AuditAction.BOOKING_CANCELLED,
-      entity: 'AmenityBooking',
-      entityId: bookingId,
-      before: {
-        status: booking.status,
-        cancelled_at: booking.cancelled_at?.toISOString() ?? null,
-        reason: null,
-      } as Prisma.InputJsonValue,
-      after: {
-        status: BookingStatus.cancelled,
-        cancelled_at: cancelledAt.toISOString(),
-        reason: reason?.trim() || null,
-      } as Prisma.InputJsonValue,
-    });
-    this.emitBookingCancelled({
-      bookingId,
-      userId: booking.user_id,
-      amenityId: booking.amenity_id,
-      cancelledAt: cancelledAt.toISOString(),
-    });
-
-    return {
-      booking: cancelledBooking,
-      message: 'Booking rejected successfully',
-    };
+    void bookingId;
+    void actorUserId;
+    void reason;
+    return Promise.reject(new GoneException({
+      type: 'GONE',
+      title: 'Pending Booking Rejection Retired',
+      status: 410,
+      detail:
+        'Venue bookings are created as confirmed only after full payment or atomic staff cash registration. Pending booking rejection is retired.',
+    }));
   }
 
   async createBooking(
@@ -295,7 +313,7 @@ export class BookingService {
     dto: CreateBookingDTO,
     idempotencyKey: string | undefined,
     actorRole?: UserRole,
-  ): Promise<BookingCheckoutResponseDTO> {
+  ): Promise<BookingCheckoutResponseDTO | CoachingCheckoutResponse> {
     const normalizedIdempotencyKey =
       this.normalizeAndValidateIdempotencyKey(idempotencyKey);
     this.assertSelfServicePaymentPolicy(
@@ -303,25 +321,6 @@ export class BookingService {
       dto.payment_stage,
       actorRole,
     );
-    const existingPayment =
-      await this.paymentRepository.findPaymentByIdempotencyKey(
-        normalizedIdempotencyKey,
-      );
-    const paymentStage = this.resolveInitialProviderPaymentStage(
-      dto.provider,
-      resolveBookingPaymentStage(dto.payment_stage),
-      actorRole,
-    );
-
-    if (existingPayment) {
-      return this.resumeExistingCheckout(
-        existingPayment,
-        userId,
-        dto.provider,
-        paymentStage,
-      );
-    }
-
     const schedule = parseBookingSchedule(dto, actorRole !== undefined);
     const amenity = await this.amenityRepository.findActiveAmenityByIdOrThrow(
       dto.amenity_id,
@@ -356,7 +355,7 @@ export class BookingService {
     const amounts = calculateBookingAmounts(
       amenity,
       schedule.durationMinutes,
-      paymentStage,
+      PaymentStage.full,
       linkedCoach,
     );
 
@@ -398,59 +397,16 @@ export class BookingService {
         };
       }
 
-      try {
-        const initiation =
-          await this.bookingRepository.createPendingBookingWithPayment({
-            userId,
-            amenityId: dto.amenity_id,
-            coachId: dto.coach_id,
-            startsAt: schedule.startsAt,
-            endsAt: schedule.endsAt,
-            notes: dto.notes,
-            totalAmount: amounts.totalAmount,
-            downpaymentAmount: amounts.downpaymentAmount,
-            balanceAmount: amounts.balanceAmount,
-            idempotencyKey: normalizedIdempotencyKey,
-            paymentAmount: amounts.paymentAmount,
-            paymentStage: amounts.paymentStage,
-            paymentStatus:
-              dto.provider === PaymentProvider.cash
-                ? PaymentStatus.awaiting_verification
-                : PaymentStatus.pending,
-            provider: dto.provider,
-          });
-
-        if (dto.provider === PaymentProvider.cash) {
-          return {
-            booking_id: initiation.booking.id,
-            status: initiation.booking.status,
-            checkout_url: null,
-            payment_id: initiation.payment.id,
-          };
-        }
-
-        return this.startCheckoutForPayment(
-          initiation.payment,
-          initiation.booking.id,
-          amenity.name,
-        );
-      } catch (error) {
-        const resumedPayment =
-          await this.paymentRepository.findPaymentByIdempotencyKey(
-            normalizedIdempotencyKey,
-          );
-
-        if (resumedPayment) {
-          return this.resumeExistingCheckout(
-            resumedPayment,
-            userId,
-            dto.provider,
-            paymentStage,
-          );
-        }
-
-        throw error;
-      }
+      return this.commerceCheckoutService.createVenueCheckout({
+        amenityId: dto.amenity_id,
+        amount: amounts.totalAmount,
+        coachId: dto.coach_id,
+        endsAt: schedule.endsAt,
+        idempotencyKey: normalizedIdempotencyKey,
+        memberNotes: dto.notes,
+        startsAt: schedule.startsAt,
+        userId,
+      });
     } finally {
       await this.releaseSlotLocks(slotKeys);
     }
@@ -460,19 +416,25 @@ export class BookingService {
     userId: string,
     dto: CreateStaffVenueBookingDTO,
     actorUserId: string,
+    idempotencyKey?: string,
   ): Promise<BookingCheckoutResponseDTO> {
-    if (dto.payment_stage === CreateStaffInitialPaymentStage.downpayment) {
+    if (
+      dto.payment_stage !== undefined &&
+      dto.payment_stage !== CreateStaffInitialPaymentStage.full
+    ) {
       throw new HttpException(
         {
           type: 'BUSINESS_RULE_VIOLATION',
           title: 'Full Cash Payment Required',
           status: 422,
           detail:
-            'Cashier-created facility bookings must record full payment. Downpayment bookings are not available in the cashier flow.',
+            'Staff-created venue bookings must record full cash payment. Partial-payment bookings are not available in the staff flow.',
         },
         HttpStatus.UNPROCESSABLE_ENTITY,
       );
     }
+    const normalizedIdempotencyKey =
+      this.normalizeAndValidateIdempotencyKey(idempotencyKey);
 
     const schedule = parseBookingSchedule(dto, true);
     const amenity = await this.amenityRepository.findActiveAmenityByIdOrThrow(
@@ -498,38 +460,9 @@ export class BookingService {
       const amounts = calculateBookingAmounts(
         amenity,
         schedule.durationMinutes,
-        resolveStaffInitialPaymentStage(dto.payment_stage),
+        PaymentStage.full,
         linkedCoach,
       );
-      if (
-        !amounts.totalAmount.equals(0) &&
-        amounts.paymentStage !== PaymentStage.full
-      ) {
-        const initiation =
-          await this.bookingRepository.createPendingBookingWithPayment({
-            userId,
-            amenityId: dto.amenity_id,
-            coachId: dto.coach_id,
-            startsAt: schedule.startsAt,
-            endsAt: schedule.endsAt,
-            notes: dto.notes,
-            totalAmount: amounts.totalAmount,
-            downpaymentAmount: amounts.downpaymentAmount,
-            balanceAmount: amounts.balanceAmount,
-            idempotencyKey: randomUUID(),
-            paymentAmount: amounts.paymentAmount,
-            paymentStage: amounts.paymentStage,
-            paymentStatus: PaymentStatus.awaiting_verification,
-            provider: PaymentProvider.cash,
-          });
-
-        return {
-          booking_id: initiation.booking.id,
-          status: initiation.booking.status,
-          checkout_url: null,
-          payment_id: initiation.payment.id,
-        };
-      }
 
       const booking = await this.bookingRepository.createConfirmedManualBooking(
         {
@@ -540,14 +473,20 @@ export class BookingService {
           endsAt: schedule.endsAt,
           notes: dto.notes,
           totalAmount: amounts.totalAmount,
-          downpaymentAmount: amounts.downpaymentAmount,
-          balanceAmount: amounts.balanceAmount,
-          idempotencyKey: randomUUID(),
-          paymentAmount: amounts.paymentAmount,
-          paymentStage: amounts.paymentStage,
+          downpaymentAmount: new Prisma.Decimal(0),
+          balanceAmount: new Prisma.Decimal(0),
+          idempotencyKey: normalizedIdempotencyKey,
+          paymentAmount: amounts.totalAmount,
+          paymentStage: PaymentStage.full,
           verifiedBy: actorUserId,
         },
       );
+      const payment =
+        await this.paymentRepository.findLatestPaymentForPayableStage(
+          PayableType.booking,
+          booking.id,
+          PaymentStage.full,
+        );
 
       this.emitBookingConfirmed({
         bookingId: booking.id,
@@ -561,16 +500,27 @@ export class BookingService {
         booking_id: booking.id,
         status: booking.status,
         checkout_url: null,
+        payment_id: payment?.id ?? null,
       };
     } finally {
       await this.releaseSlotLocks(slotKeys);
     }
   }
 
-  async processBalance(
+  processBalance(
     bookingId: string,
     dto: ProcessBalanceDTO,
   ): Promise<BookingCheckoutResponseDTO> {
+    void bookingId;
+    void dto;
+    return Promise.reject(new GoneException({
+      type: 'GONE',
+      title: 'Balance Collection Retired',
+      status: 410,
+      detail:
+        'Venue bookings are full-payment-only. The balance collection endpoint is retained only as a legacy compatibility route and cannot create payment records.',
+    }));
+    /*
     const booking =
       await this.bookingRepository.findBookingWithAmenityByIdOrThrow(bookingId);
     this.assertBalanceCollectionAllowed(booking);
@@ -616,6 +566,7 @@ export class BookingService {
       initiation.booking.id,
       booking.amenity.name,
     );
+    */
   }
 
   @OnEvent(PAYMENT_COMPLETED_EVENT, { async: true })
@@ -1308,6 +1259,48 @@ export class BookingService {
     }
   }
 
+  private toCoachVenueWorkItem(booking: CoachVenueWorkRecord) {
+    const durationHours = new Prisma.Decimal(
+      booking.ends_at.getTime() - booking.starts_at.getTime(),
+    ).div(60 * 60 * 1000);
+    const venueAmount = new Prisma.Decimal(booking.amenity.hourly_rate)
+      .mul(durationHours)
+      .toDecimalPlaces(2);
+    const calculatedCoachAmount = new Prisma.Decimal(booking.total_amount)
+      .minus(venueAmount)
+      .toDecimalPlaces(2);
+    const coachAmount = calculatedCoachAmount.isNegative()
+      ? new Prisma.Decimal(0)
+      : calculatedCoachAmount;
+
+    return {
+      ...booking,
+      product_kind: 'venue_coach_addon' as const,
+      venue_amount: venueAmount.toString(),
+      coach_amount: coachAmount.toString(),
+    };
+  }
+
+  private async assertPaidCoachVenueWork(
+    bookingId: string,
+    coachUserId: string,
+  ): Promise<void> {
+    if (
+      !(await this.bookingRepository.isFullyPaidCoachVenueWork(
+        bookingId,
+        coachUserId,
+      ))
+    ) {
+      throw new ForbiddenException({
+        type: 'FORBIDDEN',
+        title: 'Assigned Venue Coaching Work Required',
+        status: 403,
+        detail:
+          'Only the assigned coach can update a fully paid venue coach add-on.',
+      });
+    }
+  }
+
   private emitAudit(event: AuditEvent): void {
     this.eventEmitter.emit('audit.log', event);
   }
@@ -1497,7 +1490,7 @@ function calculateBookingAmounts(
   if (paymentStage === PaymentStage.full) {
     return {
       totalAmount,
-      downpaymentAmount: totalAmount,
+      downpaymentAmount: new Prisma.Decimal('0.00'),
       balanceAmount: new Prisma.Decimal('0.00'),
       paymentAmount: totalAmount,
       paymentStage,
@@ -1515,22 +1508,6 @@ function calculateBookingAmounts(
     paymentAmount: downpaymentAmount,
     paymentStage,
   };
-}
-
-function resolveBookingPaymentStage(
-  paymentStage?: CreateBookingPaymentStage,
-): InitialBookingPaymentStage {
-  return paymentStage === CreateBookingPaymentStage.full
-    ? PaymentStage.full
-    : PaymentStage.downpayment;
-}
-
-function resolveStaffInitialPaymentStage(
-  paymentStage?: CreateStaffInitialPaymentStage,
-): InitialBookingPaymentStage {
-  return paymentStage === CreateStaffInitialPaymentStage.downpayment
-    ? PaymentStage.downpayment
-    : PaymentStage.full;
 }
 
 function buildSlotKeys(

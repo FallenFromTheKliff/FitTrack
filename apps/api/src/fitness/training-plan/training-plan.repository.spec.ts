@@ -246,4 +246,42 @@ describe('TrainingPlanRepository', () => {
       },
     });
   });
+
+  it('persists explicit rest-day state without creating exercises', async () => {
+    trainingPlan.create.mockResolvedValue({ id: 'plan-rest' });
+
+    await repo.createPlan({
+      userId: 'user-1',
+      coachUserId: 'coach-user-1',
+      source: PlanSource.coach_assigned,
+      title: 'PPL with recovery',
+      goal: FitnessGoal.maintenance,
+      durationWeeks: 1,
+      daysPerWeek: 1,
+      schedule: [
+        {
+          weekNumber: 1,
+          dayOfWeek: 3,
+          focusLabel: 'Rest',
+          isRestDay: true,
+          exercises: [],
+        },
+      ],
+    });
+
+    expect(trainingPlan.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          schedule_days: {
+            create: [
+              expect.objectContaining({
+                is_rest_day: true,
+                exercises: { create: [] },
+              }),
+            ],
+          },
+        }),
+      }),
+    );
+  });
 });

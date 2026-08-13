@@ -482,8 +482,11 @@ function buildQuarterSeason(now: Date) {
   };
 }
 
-async function ensureDefaultGamificationBackbone(prisma: PrismaClient) {
-  const now = new Date();
+async function ensureDefaultGamificationBackbone(
+  prisma: PrismaClient,
+  referenceDate = new Date(),
+) {
+  const now = referenceDate;
   const currentSeason = buildQuarterSeason(now);
 
   await prisma.seasonDefinition.updateMany({
@@ -850,6 +853,7 @@ async function ensureDefaultGamificationProfiles(prisma: PrismaClient) {
 
 type BootstrapDefaultsOptions = {
   includeUsers?: boolean;
+  referenceDate?: Date;
 };
 
 export async function bootstrapDefaults(
@@ -863,7 +867,7 @@ export async function bootstrapDefaults(
 
   const amenitySummary = await ensureDefaultAmenities(prisma);
   const muscleSummary = await ensureDefaultMuscleDefinitions(prisma);
-  await ensureDefaultGamificationBackbone(prisma);
+  await ensureDefaultGamificationBackbone(prisma, options.referenceDate);
   await ensureDefaultGamificationProfiles(prisma);
 
   return {

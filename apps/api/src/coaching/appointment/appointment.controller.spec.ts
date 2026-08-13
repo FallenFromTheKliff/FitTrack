@@ -17,7 +17,8 @@ function getGuardMetadata(
     | 'initiateDownpayment'
     | 'processBalance'
     | 'completeAppointment'
-    | 'submitCoachFeedback',
+    | 'submitCoachFeedback'
+    | 'rescheduleAppointment',
 ): unknown[] | undefined {
   return Reflect.getMetadata(
     GUARDS_METADATA,
@@ -32,7 +33,8 @@ function getRolesMetadata(
     | 'respondToAppointment'
     | 'processBalance'
     | 'completeAppointment'
-    | 'submitCoachFeedback',
+    | 'submitCoachFeedback'
+    | 'rescheduleAppointment',
 ): UserRole[] | undefined {
   return Reflect.getMetadata(
     ROLES_KEY,
@@ -54,6 +56,7 @@ describe('AppointmentController', () => {
     submitCoachFeedback: jest.fn(),
     completeAppointment: jest.fn(),
     completeAppointmentAsStaff: jest.fn(),
+    rescheduleAppointment: jest.fn(),
   };
 
   let controller: AppointmentController;
@@ -87,11 +90,15 @@ describe('AppointmentController', () => {
   it('creates appointment requests through the service for authenticated users', async () => {
     appointmentService.createAppointment.mockResolvedValue({ id: 'appt-1' });
 
-    await controller.createAppointment({ sub: 'member-1' } as never, {
-      coach_id: 'coach-1',
-      scheduled_at: '2026-04-01T08:00:00.000Z',
-      duration_minutes: 60,
-    });
+    await controller.createAppointment(
+      { sub: 'member-1' } as never,
+      undefined,
+      {
+        coach_id: 'coach-1',
+        scheduled_at: '2026-04-01T08:00:00.000Z',
+        duration_minutes: 60,
+      },
+    );
 
     expect(appointmentService.createAppointment).toHaveBeenCalledWith(
       'member-1',
@@ -100,6 +107,7 @@ describe('AppointmentController', () => {
         scheduled_at: '2026-04-01T08:00:00.000Z',
         duration_minutes: 60,
       },
+      undefined,
     );
     expect(getGuardMetadata('createAppointment')).toEqual([JwtAuthGuard]);
   });
@@ -282,5 +290,40 @@ describe('AppointmentController', () => {
       RolesGuard,
     ]);
     expect(getRolesMetadata('submitCoachFeedback')).toEqual([UserRole.coach]);
+  });
+
+  it('forwards one-session reschedules with coach/admin/staff authorization metadata', async () => {
+    const dto = {
+      scheduled_at: '2099-04-08T08:00:00.000Z',
+      duration_minutes: 90,
+    };
+    const idempotencyKey = '4d36dc38-74c9-4f7e-a7d0-fd4102a4e8b0';
+    appointmentService.rescheduleAppointment.mockResolvedValue({
+      id: 'appt-1',
+    });
+
+    await controller.rescheduleAppointment(
+      'appt-1',
+      { sub: 'coach-user-1', role: UserRole.coach } as never,
+      idempotencyKey,
+      dto,
+    );
+
+    expect(appointmentService.rescheduleAppointment).toHaveBeenCalledWith(
+      'coach-user-1',
+      UserRole.coach,
+      'appt-1',
+      dto,
+      idempotencyKey,
+    );
+    expect(getGuardMetadata('rescheduleAppointment')).toEqual([
+      JwtAuthGuard,
+      RolesGuard,
+    ]);
+    expect(getRolesMetadata('rescheduleAppointment')).toEqual([
+      UserRole.admin,
+      UserRole.staff,
+      UserRole.coach,
+    ]);
   });
 });

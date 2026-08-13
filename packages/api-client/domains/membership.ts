@@ -24,6 +24,11 @@ import type {
 import { ApiClientError } from "../errors/api-client-error";
 import { unwrapPaginatedResponse, unwrapResponse, unwrapVoidResponse } from "../request";
 import type { ApiTransport } from "../transport/createAxiosTransport";
+import {
+  mapCommerceCheckoutAttempt,
+  type CommerceCheckoutApiRecord,
+  type CommerceCheckoutAttempt,
+} from "./commerce-checkout";
 
 export type {
   CancelMembershipInput,
@@ -288,34 +293,29 @@ export function createMembershipApi(transport: ApiTransport) {
         throw error;
       }
     },
-    subscribe(payload: SubscribeToMembershipInput) {
-      return unwrapResponse<MembershipCheckoutRecord>(
+    subscribe(payload: SubscribeToMembershipInput): Promise<CommerceCheckoutAttempt> {
+      return unwrapResponse<CommerceCheckoutApiRecord>(
         transport.post("/membership/subscribe", toSubscribeRequest(payload), {
           headers: {
-            "Idempotency-Key": createIdempotencyKey()
+            "Idempotency-Key": payload.idempotencyKey ?? createIdempotencyKey()
           }
         }),
         "Unable to start membership checkout."
-      );
+      ).then(mapCommerceCheckoutAttempt);
     },
-    purchaseMembershipCard(payload: PurchaseMembershipCardInput) {
-      return unwrapResponse<{
-        checkout_url?: string | null;
-        membership_card: RawMembershipCardRecord;
-        message: string;
-        payment: MembershipPaymentRecord;
-      }>(
+    purchaseMembershipCard(payload: PurchaseMembershipCardInput): Promise<CommerceCheckoutAttempt> {
+      return unwrapResponse<CommerceCheckoutApiRecord>(
         transport.post(
           "/membership/card/purchase",
           toPurchaseMembershipCardRequest(payload),
           {
             headers: {
-              "Idempotency-Key": createIdempotencyKey()
+              "Idempotency-Key": payload.idempotencyKey ?? createIdempotencyKey()
             }
           }
         ),
         "Unable to start membership-card purchase."
-      ).then(normalizeMembershipCardPurchaseResponse);
+      ).then(mapCommerceCheckoutAttempt);
     },
     cancelSubscription(payload?: CancelMembershipInput) {
       return unwrapVoidResponse(

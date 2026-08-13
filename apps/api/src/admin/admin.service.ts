@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  GoneException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -626,51 +627,26 @@ export class AdminService {
     });
   }
 
-  async confirmBooking(bookingId: string) {
-    const booking = await this.prisma.venueBooking.findUnique({
-      where: { id: bookingId },
+  confirmBooking(bookingId: string) {
+    void bookingId;
+    throw new GoneException({
+      type: 'GONE',
+      title: 'Pending Booking Confirmation Retired',
+      status: 410,
+      detail:
+        'Venue bookings are confirmed only by successful full payment or atomic staff cash registration.',
     });
-
-    if (!booking) {
-      throw new NotFoundException('Booking not found');
-    }
-
-    if (booking.status !== 'pending') {
-      throw new BadRequestException('Booking is not pending');
-    }
-
-    const updated = await this.prisma.venueBooking.update({
-      where: { id: bookingId },
-      data: { status: 'confirmed' },
-    });
-
-    return {
-      message: 'Booking confirmed successfully',
-      booking: updated,
-    };
   }
 
-  async rejectBooking(bookingId: string, reason?: string) {
-    const booking = await this.prisma.venueBooking.findUnique({
-      where: { id: bookingId },
+  rejectBooking(bookingId: string, reason?: string) {
+    void bookingId;
+    void reason;
+    throw new GoneException({
+      type: 'GONE',
+      title: 'Pending Booking Rejection Retired',
+      status: 410,
+      detail:
+        'Venue bookings are created as confirmed only after full payment or atomic staff cash registration. Pending commercial rejection is retired.',
     });
-
-    if (!booking) {
-      throw new NotFoundException('Booking not found');
-    }
-
-    if (booking.status !== 'pending') {
-      throw new BadRequestException('Booking is not pending');
-    }
-
-    const updated = await this.prisma.venueBooking.update({
-      where: { id: bookingId },
-      data: { status: 'cancelled' },
-    });
-
-    return {
-      message: 'Booking rejected successfully',
-      booking: updated,
-    };
   }
 }

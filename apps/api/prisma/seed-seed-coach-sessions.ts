@@ -13,6 +13,11 @@ import {
 import { PrismaPg } from '@prisma/adapter-pg';
 
 import { TEST_ACCOUNTS, seedId } from './test-data/constants';
+import {
+  COACH_SESSION_FIXTURE_SCENARIOS,
+  coachSessionFixtureDate,
+  coachSessionRelationshipId,
+} from './coach-session-fixture';
 
 if (!process.env.DATABASE_URL) {
   throw new Error('DATABASE_URL is required.');
@@ -26,10 +31,6 @@ function money(value: number | string) {
   return new Prisma.Decimal(value);
 }
 
-function phtDate(value: string) {
-  return new Date(`${value}+08:00`);
-}
-
 function addMinutes(date: Date, minutes: number) {
   return new Date(date.getTime() + minutes * 60_000);
 }
@@ -41,7 +42,15 @@ function fixedTime(value: string) {
 async function userByEmail(email: string, expectedRole: UserRole) {
   const identity = await prisma.authIdentity.findFirst({
     where: { identifier: email, provider: AuthProvider.email },
-    include: { user: { include: { profile: true, coach_profile: true } } },
+    include: {
+      user: {
+        include: {
+          coach_profile: true,
+          membership_card: true,
+          profile: true,
+        },
+      },
+    },
   });
 
   if (!identity) {
@@ -130,14 +139,20 @@ async function main() {
     userByEmail('seed.member.pending@fittrack.com', UserRole.member),
     userByEmail('seed.member.expired@fittrack.com', UserRole.member),
   ]);
+  if (members.some((member) => !member.profile || !member.membership_card)) {
+    throw new Error(
+      'Ridge coach fixture members must have seeded profiles and membership cards.',
+    );
+  }
   const verifier = await userByEmail('seed.staff@fittrack.com', UserRole.staff);
+  const fixtureAnchor = new Date();
+  const relationshipStartedAt = new Date(fixtureAnchor);
+  relationshipStartedAt.setUTCDate(relationshipStartedAt.getUTCDate() - 14);
 
   const seeds = [
     {
-      key: 'completed-reviewed',
+      ...COACH_SESSION_FIXTURE_SCENARIOS[0],
       member: members[0],
-      status: AppointmentStatus.completed,
-      scheduledAt: phtDate('2026-05-18T07:00:00'),
       notes: 'Completed demo session with member feedback visible.',
       coachFeedback: 'Great control today. Keep the same warm-up and progress the next conditioning block carefully.',
       assessmentReport: 'Assessment: better pacing, cleaner bracing, and improved movement confidence.',
@@ -145,46 +160,36 @@ async function main() {
       rating: 5,
     },
     {
-      key: 'completed-ready-feedback',
+      ...COACH_SESSION_FIXTURE_SCENARIOS[1],
       member: members[1],
-      status: AppointmentStatus.completed,
-      scheduledAt: phtDate('2026-05-17T09:00:00'),
       notes: 'Completed demo session waiting for member feedback.',
       coachFeedback: 'Strong effort throughout the session. Next target is cleaner control under fatigue.',
       assessmentReport: 'Assessment: endurance is improving; keep recovery walks after strength days.',
     },
     {
-      key: 'confirmed-upcoming',
+      ...COACH_SESSION_FIXTURE_SCENARIOS[2],
       member: members[2],
-      status: AppointmentStatus.confirmed,
-      scheduledAt: phtDate('2026-05-21T16:00:00'),
       notes: 'Upcoming confirmed session for coach schedule demo.',
       coachFeedback: null,
       assessmentReport: null,
     },
     {
-      key: 'pending-payment',
+      ...COACH_SESSION_FIXTURE_SCENARIOS[3],
       member: members[3],
-      status: AppointmentStatus.pending_payment,
-      scheduledAt: phtDate('2026-05-22T07:00:00'),
       notes: 'Coach accepted; waiting for member payment.',
       coachFeedback: null,
       assessmentReport: null,
     },
     {
-      key: 'pending-coach',
+      ...COACH_SESSION_FIXTURE_SCENARIOS[4],
       member: members[0],
-      status: AppointmentStatus.pending_coach,
-      scheduledAt: phtDate('2026-05-23T09:00:00'),
       notes: 'New request waiting for coach approval.',
       coachFeedback: null,
       assessmentReport: null,
     },
     {
-      key: 'no-show',
+      ...COACH_SESSION_FIXTURE_SCENARIOS[5],
       member: members[1],
-      status: AppointmentStatus.no_show,
-      scheduledAt: phtDate('2026-05-16T07:00:00'),
       notes: 'No-show session for status display.',
       coachFeedback: null,
       assessmentReport: 'No-show recorded for demo scheduling analytics.',
@@ -198,6 +203,21 @@ async function main() {
 
   for (const seed of seeds) {
     const appointmentId = seedId(`seed-coach-sessions:appointment:${seed.key}`);
+    const scheduledAt = coachSessionFixtureDate(fixtureAnchor, seed);
+    const existingActiveRelationship =
+      await prisma.coachClientRelationship.findFirst({
+        where: {
+          coach_id: coachProfile.id,
+          member_id: seed.member.id,
+          status: RelationshipStatus.active,
+        },
+        orderBy: { created_at: 'asc' },
+        select: { id: true },
+      });
+    const relationshipId = coachSessionRelationshipId(
+      existingActiveRelationship?.id,
+      seed.member.id,
+    );
     const completed = seed.status === AppointmentStatus.completed;
     const paidEnough =
       seed.status === AppointmentStatus.completed ||
@@ -210,19 +230,19 @@ async function main() {
         user_id: seed.member.id,
         coach_id: coachProfile.id,
         status: seed.status,
-        scheduled_at: seed.scheduledAt,
+        scheduled_at: scheduledAt,
         duration_minutes: 60,
         total_amount: totalAmount,
         downpayment_amount: downpaymentAmount,
         balance_amount: completed ? money(0) : downpaymentAmount,
         gym_revenue: completed ? gymRevenue : money(0),
         coach_earnings: completed ? coachEarnings : money(0),
-        downpayment_paid_at: paidEnough ? seed.scheduledAt : null,
-        balance_paid_at: completed ? addMinutes(seed.scheduledAt, 60) : null,
-        completed_at: completed ? addMinutes(seed.scheduledAt, 60) : null,
+        downpayment_paid_at: paidEnough ? scheduledAt : null,
+        balance_paid_at: completed ? addMinutes(scheduledAt, 60) : null,
+        completed_at: completed ? addMinutes(scheduledAt, 60) : null,
         no_show_at:
           seed.status === AppointmentStatus.no_show
-            ? addMinutes(seed.scheduledAt, 20)
+            ? addMinutes(scheduledAt, 20)
             : null,
         member_notes: seed.notes,
         coach_feedback: seed.coachFeedback,
@@ -236,19 +256,19 @@ async function main() {
         user_id: seed.member.id,
         coach_id: coachProfile.id,
         status: seed.status,
-        scheduled_at: seed.scheduledAt,
+        scheduled_at: scheduledAt,
         duration_minutes: 60,
         total_amount: totalAmount,
         downpayment_amount: downpaymentAmount,
         balance_amount: completed ? money(0) : downpaymentAmount,
         gym_revenue: completed ? gymRevenue : money(0),
         coach_earnings: completed ? coachEarnings : money(0),
-        downpayment_paid_at: paidEnough ? seed.scheduledAt : null,
-        balance_paid_at: completed ? addMinutes(seed.scheduledAt, 60) : null,
-        completed_at: completed ? addMinutes(seed.scheduledAt, 60) : null,
+        downpayment_paid_at: paidEnough ? scheduledAt : null,
+        balance_paid_at: completed ? addMinutes(scheduledAt, 60) : null,
+        completed_at: completed ? addMinutes(scheduledAt, 60) : null,
         no_show_at:
           seed.status === AppointmentStatus.no_show
-            ? addMinutes(seed.scheduledAt, 20)
+            ? addMinutes(scheduledAt, 20)
             : null,
         member_notes: seed.notes,
         coach_feedback: seed.coachFeedback,
@@ -259,7 +279,7 @@ async function main() {
 
     await prisma.coachClientRelationship.upsert({
       where: {
-        id: seedId(`seed-coach-sessions:relationship:${seed.member.id}`),
+        id: relationshipId,
       },
       update: {
         coach_id: coachProfile.id,
@@ -268,11 +288,11 @@ async function main() {
         notes: 'Seeded relationship for coach session demo.',
       },
       create: {
-        id: seedId(`seed-coach-sessions:relationship:${seed.member.id}`),
+        id: relationshipId,
         coach_id: coachProfile.id,
         member_id: seed.member.id,
         status: RelationshipStatus.active,
-        started_at: seed.scheduledAt,
+        started_at: relationshipStartedAt,
         notes: 'Seeded relationship for coach session demo.',
       },
     });
@@ -299,7 +319,7 @@ async function main() {
           verified_at:
             seed.status === AppointmentStatus.pending_payment
               ? null
-              : addMinutes(seed.scheduledAt, 5),
+              : addMinutes(scheduledAt, 5),
         },
         create: {
           id: seedId(`seed-coach-sessions:payment:${seed.key}`),
@@ -321,7 +341,7 @@ async function main() {
           verified_at:
             seed.status === AppointmentStatus.pending_payment
               ? null
-              : addMinutes(seed.scheduledAt, 5),
+              : addMinutes(scheduledAt, 5),
         },
       });
     }

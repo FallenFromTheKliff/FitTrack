@@ -3,6 +3,8 @@ import {
   AppointmentStatus,
   BookingStatus,
   CoachScheduleType,
+  CommerceCheckoutHoldKind,
+  CommerceCheckoutHoldStatus,
   PaymentProvider,
   PaymentStage,
   PaymentStatus,
@@ -15,8 +17,16 @@ import {
   RelationshipStatus,
 } from '@prisma/client';
 import { seedExternalId, seedId } from '../ids';
-import { dateInsideRange, daysFrom, fixedTime } from '../time';
+import { daysFrom, fixedTime } from '../time';
 import type { DynamicSeedContext } from '../types';
+import {
+  activityDateFor,
+  futureDateFor,
+  KeyedIntervalAllocator,
+  memberAccessWindow,
+  memberVolumeCount,
+  isMonthlyCoachingMember,
+} from '../volumes';
 
 const AMENITY_SEEDS = [
   {
@@ -71,39 +81,6 @@ const COACH_SPECIALIZATIONS = [
 
 function coachProfileIdFor(coachKey: string) {
   return seedId(`coach-profile:${coachKey}`);
-}
-
-function densityCount(
-  density: DynamicSeedContext['config']['sessionDensity'],
-  low: number,
-  normal: number,
-  high: number,
-) {
-  if (density === 'low') {
-    return low;
-  }
-  if (density === 'high') {
-    return high;
-  }
-  return normal;
-}
-
-function relationshipStatusFor(ctx: DynamicSeedContext, ratio: number) {
-  if (ratio < ctx.config.coachFormerRate) {
-    return RelationshipStatus.terminated;
-  }
-  if (ratio < ctx.config.coachFormerRate + ctx.config.coachPausedRate) {
-    return RelationshipStatus.paused;
-  }
-  if (
-    ratio <
-    ctx.config.coachFormerRate +
-      ctx.config.coachPausedRate +
-      ctx.config.coachActiveRate
-  ) {
-    return RelationshipStatus.active;
-  }
-  return RelationshipStatus.pending;
 }
 
 async function seedAmenities(ctx: DynamicSeedContext) {
@@ -251,16 +228,40 @@ async function seedCoachProfiles(ctx: DynamicSeedContext) {
     });
   }
 
-  const availabilityRows = ctx.state.coachAccountKeys.flatMap(
-    (coachKey, coachIndex) =>
-      [1, 2, 3, 4, 6].map((dayOfWeek, slotIndex) => ({
-        id: seedId(`coach-availability:${coachKey}:${dayOfWeek}`),
-        coach_id: ctx.state.coachProfileIds[coachKey],
-        day_of_week: dayOfWeek,
-        end_time: fixedTime(slotIndex % 2 === 0 ? '18:00:00' : '20:00:00'),
-        is_active: true,
-        start_time: fixedTime(slotIndex % 2 === 0 ? '14:00:00' : '17:00:00'),
-      })),
+  const specialtyRows = COACH_SPECIALIZATIONS.map((label, index) => ({
+    id: seedId(`coach-specialty:${index}`),
+    normalized_label: label.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+    display_label: label,
+  }));
+  for (const specialty of specialtyRows) {
+    await ctx.prisma.coachSpecialty.upsert({
+      where: { normalized_label: specialty.normalized_label },
+      update: { display_label: specialty.display_label },
+      create: specialty,
+    });
+  }
+  await ctx.prisma.coachProfileSpecialty.createMany({
+    data: ctx.state.coachAccountKeys.flatMap((coachKey, coachIndex) => {
+      const firstSpecialty = specialtyRows[coachIndex % specialtyRows.length];
+      const secondSpecialty =
+        specialtyRows[(coachIndex + 1) % specialtyRows.length];
+      return [firstSpecialty, secondSpecialty].map((specialty) => ({
+        coach_profile_id: ctx.state.coachProfileIds[coachKey],
+        specialty_id: specialty.id,
+      }));
+    }),
+    skipDuplicates: true,
+  });
+
+  const availabilityRows = ctx.state.coachAccountKeys.flatMap((coachKey) =>
+    [1, 2, 3, 4, 6].map((dayOfWeek, slotIndex) => ({
+      id: seedId(`coach-availability:${coachKey}:${dayOfWeek}`),
+      coach_id: ctx.state.coachProfileIds[coachKey],
+      day_of_week: dayOfWeek,
+      end_time: fixedTime(slotIndex % 2 === 0 ? '18:00:00' : '20:00:00'),
+      is_active: true,
+      start_time: fixedTime(slotIndex % 2 === 0 ? '14:00:00' : '17:00:00'),
+    })),
   );
 
   await ctx.prisma.coachAvailabilitySlot.createMany({
@@ -271,119 +272,117 @@ async function seedCoachProfiles(ctx: DynamicSeedContext) {
 
 async function seedRelationshipsPlansAndAppointments(ctx: DynamicSeedContext) {
   const coachKeys = ctx.state.coachAccountKeys;
-  const memberKeys = ctx.state.premiumMemberKeys.slice(
-    0,
-    Math.max(8, Math.round(ctx.state.premiumMemberKeys.length * 0.72)),
-  );
+  const memberKeys = [
+    ...ctx.state.activeMemberKeys,
+    ...ctx.state.historicalMemberKeys,
+  ];
   const paymentRows: Prisma.PaymentCreateManyInput[] = [];
   const recurringPlanRows: Prisma.RecurringCoachingPlanCreateManyInput[] = [];
   const billingRows: Prisma.RecurringCoachingBillingCycleCreateManyInput[] = [];
   const appointmentRows: Prisma.CoachAppointmentCreateManyInput[] = [];
   const relationshipRows: Prisma.CoachClientRelationshipCreateManyInput[] = [];
+  const coachIntervals = new KeyedIntervalAllocator();
   const adminId = ctx.state.userIds[ctx.state.adminKeys[0]];
-  const appointmentsPerMember = densityCount(
-    ctx.config.sessionDensity,
-    2,
-    5,
-    9,
-  );
-
+  const availableDays = new Set([1, 2, 3, 4, 6]);
+  const coachHasAvailability = (candidate: Date) => {
+    const day = candidate.getUTCDay();
+    if (!availableDays.has(day)) {
+      return false;
+    }
+    const startHour = day === 2 || day === 4 ? 17 : 14;
+    const endHour = day === 2 || day === 4 ? 20 : 18;
+    return (
+      candidate.getUTCHours() >= startHour &&
+      candidate.getUTCHours() + 1 <= endHour
+    );
+  };
   memberKeys.forEach((memberKey, index) => {
     // Keep Luca's member portal demo connected to the same Seed Coach that owns
     // her active workout plan. This is intentionally explicit: the UI must not
     // present a coach plan without a matching active coaching relationship.
     const isLucaDemoMember = memberKey === 'member-premium';
-    const coachKey = isLucaDemoMember
+    const isQaOneTimeMember = memberKey === 'member-active';
+    const coachKey = isLucaDemoMember || isQaOneTimeMember
       ? 'coach'
       : coachKeys[index % coachKeys.length];
     const coachId = ctx.state.coachProfileIds[coachKey];
     const memberId = ctx.state.userIds[memberKey];
     const recurringPlanId = seedId(`recurring-plan:${memberKey}`);
     const amount = new Prisma.Decimal(index % 3 === 0 ? '2400' : '1800');
-    const ratio = (index % 100) / 100;
+    const accessWindow = memberAccessWindow(ctx, memberKey);
+    const monthlyCoachingMember =
+      !isQaOneTimeMember && isMonthlyCoachingMember(ctx, memberKey);
     // Workout presets use the same even-index cohort for coach-managed plans.
     // Keep those members actively related to their assigned coach so demo data
     // never advertises a plan that the coach is forbidden to manage.
-    const relationshipStatus =
-      isLucaDemoMember || index % 2 === 0
-        ? RelationshipStatus.active
-        : relationshipStatusFor(ctx, ratio);
-    const relationshipStart = dateInsideRange(
-      ctx.config.historyStartDate,
-      ctx.config.historyEndDate,
-      (index + 1) / (memberKeys.length + 2),
-      9,
-    );
+    const relationshipStatus: RelationshipStatus | null = monthlyCoachingMember
+      ? accessWindow.historicalOnly
+        ? RelationshipStatus.terminated
+        : RelationshipStatus.active
+      : null;
+    const relationshipStart =
+      accessWindow.startsAt ?? daysFrom(ctx.config.anchorDate, -14, 9);
     const relationshipEnd =
-      relationshipStatus === RelationshipStatus.terminated
-        ? daysFrom(relationshipStart, 60 + (index % 45), 17)
+      relationshipStatus === RelationshipStatus.terminated ||
+      accessWindow.historicalOnly
+        ? (accessWindow.expiresAt ?? daysFrom(ctx.config.anchorDate, -7, 17))
         : null;
+    const appointmentsPerMember = isQaOneTimeMember
+      ? 1
+      : memberVolumeCount(ctx, memberKey, 'appointments', ctx.config.sessionDensity);
 
-    relationshipRows.push({
-      id: seedId(`coach-relationship:${coachKey}:${memberKey}`),
-      coach_id: coachId,
-      created_at: relationshipStart,
-      ended_at: relationshipEnd,
-      member_id: memberId,
-      notes:
-        relationshipStatus === RelationshipStatus.active
-          ? 'Active coaching relationship with measurable goals.'
-          : relationshipStatus === RelationshipStatus.paused
-            ? 'Paused relationship retained for coach filters.'
-            : relationshipStatus === RelationshipStatus.terminated
-              ? 'Former coaching relationship retained for history filters.'
-              : 'Pending coaching relationship awaiting payment or confirmation.',
-      started_at:
-        relationshipStatus === RelationshipStatus.pending
-          ? null
-          : relationshipStart,
-      status: relationshipStatus,
-    });
+    if (relationshipStatus !== null) {
+      relationshipRows.push({
+        id: seedId(`coach-relationship:${coachKey}:${memberKey}`),
+        coach_id: coachId,
+        created_at: relationshipStart,
+        ended_at: relationshipEnd,
+        member_id: memberId,
+        notes:
+          relationshipStatus === RelationshipStatus.active
+            ? 'Active coaching relationship with paid recurring coaching entitlement.'
+            : 'Former paid coaching relationship retained for history filters.',
+        started_at: relationshipStart,
+        status: relationshipStatus,
+      });
+    }
 
-    recurringPlanRows.push({
+    if (monthlyCoachingMember) {
+      recurringPlanRows.push({
       id: recurringPlanId,
       coach_id: coachId,
-      completed_sessions:
-        relationshipStatus === RelationshipStatus.pending
-          ? 0
-          : Math.min(
-              appointmentsPerMember,
-              1 + (index % appointmentsPerMember),
-            ),
+      completed_sessions: 0,
       created_by: adminId,
       duration_minutes: index % 2 === 0 ? 60 : 45,
       end_date:
-        relationshipStatus === RelationshipStatus.terminated
-          ? (relationshipEnd ?? daysFrom(ctx.config.anchorDate, -7))
-          : daysFrom(ctx.config.anchorDate, 45 + (index % 20)),
+        relationshipEnd ??
+        memberAccessWindow(ctx, memberKey).expiresAt ??
+        daysFrom(ctx.config.anchorDate, 45 + (index % 20)),
       frequency:
-        index % 4 === 0
-          ? RecurringCoachingFrequency.biweekly
-          : RecurringCoachingFrequency.weekly,
+        isLucaDemoMember
+          ? RecurringCoachingFrequency.monthly
+          : index % 4 === 0
+            ? RecurringCoachingFrequency.biweekly
+            : RecurringCoachingFrequency.weekly,
       member_id: memberId,
       preferred_days: [1 + (index % 5), 3 + (index % 2)],
       preferred_time: fixedTime(index % 2 === 0 ? '16:00:00' : '18:00:00'),
+      quoted_amount: amount,
       start_date: relationshipStart,
       status:
         relationshipStatus === RelationshipStatus.terminated
           ? RecurringCoachingPlanStatus.completed
-          : relationshipStatus === RelationshipStatus.paused
-            ? RecurringCoachingPlanStatus.paused
-            : relationshipStatus === RelationshipStatus.pending
-              ? RecurringCoachingPlanStatus.paused
-              : RecurringCoachingPlanStatus.active,
-      total_sessions: 8,
-    });
+          : RecurringCoachingPlanStatus.active,
+      total_sessions: appointmentsPerMember,
+      });
+    }
 
-    for (let cycleIndex = 0; cycleIndex < 2; cycleIndex += 1) {
+    for (let cycleIndex = 0; monthlyCoachingMember && cycleIndex < 2; cycleIndex += 1) {
       const cycleStart = daysFrom(relationshipStart, cycleIndex * 28, 0);
       const billingPaymentId = seedId(
         `payment:recurring-coaching:${memberKey}:${cycleIndex}`,
       );
-      const isPendingPayment =
-        relationshipStatus === RelationshipStatus.pending ||
-        (cycleIndex === 1 && ratio < ctx.config.pendingPaymentRate);
-      const isPaid = !isPendingPayment && cycleIndex === 0;
+      const isPaid = true;
       billingRows.push({
         id: seedId(`recurring-cycle:${memberKey}:${cycleIndex}`),
         amount,
@@ -394,11 +393,7 @@ async function seedRelationshipsPlansAndAppointments(ctx: DynamicSeedContext) {
         paid_at: isPaid ? daysFrom(cycleStart, 2, 13) : null,
         payment_id: billingPaymentId,
         recurring_plan_id: recurringPlanId,
-        status: isPaid
-          ? RecurringCoachingBillingCycleStatus.paid
-          : isPendingPayment
-            ? RecurringCoachingBillingCycleStatus.awaiting_verification
-            : RecurringCoachingBillingCycleStatus.due,
+        status: RecurringCoachingBillingCycleStatus.paid,
       });
       paymentRows.push({
         id: billingPaymentId,
@@ -414,9 +409,7 @@ async function seedRelationshipsPlansAndAppointments(ctx: DynamicSeedContext) {
         payment_stage: PaymentStage.full,
         provider: PaymentProvider.cash,
         provider_ref: null,
-        status: isPaid
-          ? PaymentStatus.completed
-          : PaymentStatus.awaiting_verification,
+        status: PaymentStatus.completed,
         user_id: memberId,
         verified_at: isPaid ? daysFrom(cycleStart, 2, 14) : null,
         verified_by: isPaid ? adminId : null,
@@ -424,31 +417,76 @@ async function seedRelationshipsPlansAndAppointments(ctx: DynamicSeedContext) {
     }
 
     for (let apptIndex = 0; apptIndex < appointmentsPerMember; apptIndex += 1) {
-      const position =
-        appointmentsPerMember === 1
-          ? 1
-          : apptIndex / Math.max(1, appointmentsPerMember - 1);
-      const scheduledAt =
-        apptIndex < Math.max(1, Math.floor(appointmentsPerMember * 0.65))
-          ? dateInsideRange(
-              relationshipStart,
-              ctx.config.historyEndDate,
-              Math.min(0.95, position),
-              8 + ((index + apptIndex) % 10),
-            )
-          : daysFrom(ctx.config.anchorDate, 3 + index + apptIndex * 3, 15);
-      const status =
-        relationshipStatus === RelationshipStatus.pending
-          ? AppointmentStatus.pending_payment
-          : scheduledAt < ctx.config.anchorDate && apptIndex % 8 !== 0
-            ? AppointmentStatus.completed
-            : scheduledAt >= ctx.config.anchorDate
-              ? AppointmentStatus.confirmed
-              : AppointmentStatus.no_show;
+      const historicalAppointment =
+        !isQaOneTimeMember &&
+        (accessWindow.historicalOnly ||
+          apptIndex < Math.max(1, Math.floor(appointmentsPerMember * 0.65)));
+      let scheduledAt = historicalAppointment
+        ? activityDateFor(
+            ctx,
+            memberKey,
+            apptIndex,
+            appointmentsPerMember,
+            index % 2 === 0 ? 15 : 18,
+          )
+        : futureDateFor(ctx, memberKey, apptIndex, index % 2 === 0 ? 15 : 18);
+      if (!scheduledAt) {
+        continue;
+      }
+      const appointmentEnd = (candidate: Date) =>
+        daysFrom(candidate, 0, candidate.getUTCHours() + 1);
+      let allocated = false;
+      for (let shift = 0; shift < 45; shift += 1) {
+        const candidate = daysFrom(scheduledAt, shift, scheduledAt.getUTCHours());
+        const candidateEnd = appointmentEnd(candidate);
+        const latestAllowed = historicalAppointment
+          ? (accessWindow.activityEnd ??
+            daysFrom(ctx.config.anchorDate, -1, 20))
+          : (accessWindow.expiresAt ??
+            daysFrom(ctx.config.anchorDate, 45, 23, 59));
+        if (candidateEnd > latestAllowed) {
+          break;
+        }
+        if (!coachHasAvailability(candidate)) {
+          continue;
+        }
+        const reservationKeys = historicalAppointment
+          ? [coachId]
+          : [coachId, `member:${memberId}`];
+        if (
+          coachIntervals.tryAllocateMany(
+            reservationKeys,
+            candidate,
+            candidateEnd,
+          )
+        ) {
+          scheduledAt = candidate;
+          allocated = true;
+          break;
+        }
+      }
+      if (!allocated) {
+        continue;
+      }
+      const qaFeedbackAppointment =
+        isLucaDemoMember && apptIndex === 1;
+      const status = qaFeedbackAppointment
+        ? AppointmentStatus.completed
+        : historicalAppointment
+          ? apptIndex % 8 === 0
+            ? AppointmentStatus.no_show
+            : apptIndex % 5 === 0
+              ? AppointmentStatus.cancelled
+              : AppointmentStatus.completed
+          : AppointmentStatus.confirmed;
       const appointmentId = seedId(
         `coach-appointment:${memberKey}:${apptIndex}`,
       );
       const totalAmount = new Prisma.Decimal(900 + (index % 4) * 100);
+      const paymentAt =
+        scheduledAt > ctx.config.anchorDate
+          ? daysFrom(ctx.config.anchorDate, -2, 10)
+          : daysFrom(scheduledAt, -2, 10);
 
       appointmentRows.push({
         id: appointmentId,
@@ -457,25 +495,23 @@ async function seedRelationshipsPlansAndAppointments(ctx: DynamicSeedContext) {
             ? 'Assessment: improved hinge pattern and session adherence.'
             : null,
         balance_amount: new Prisma.Decimal(0),
-        balance_paid_at:
-          status === AppointmentStatus.completed
-            ? daysFrom(scheduledAt, 0, scheduledAt.getHours() + 1)
-            : null,
+        balance_paid_at: daysFrom(paymentAt, 0, 13),
         coach_earnings: totalAmount.mul(new Prisma.Decimal('0.80')),
         coach_feedback:
           status === AppointmentStatus.completed
             ? 'Member completed the prescribed block with strong pacing.'
             : null,
         coach_id: coachId,
+        cancelled_at:
+          status === AppointmentStatus.cancelled
+            ? daysFrom(scheduledAt, -1, scheduledAt.getUTCHours())
+            : null,
         completed_at:
           status === AppointmentStatus.completed
-            ? daysFrom(scheduledAt, 0, scheduledAt.getHours() + 1, 5)
+            ? daysFrom(scheduledAt, 0, scheduledAt.getUTCHours() + 1, 5)
             : null,
         downpayment_amount: new Prisma.Decimal(0),
-        downpayment_paid_at:
-          status === AppointmentStatus.pending_payment
-            ? null
-            : daysFrom(scheduledAt, -2, 10),
+        downpayment_paid_at: null,
         duration_minutes: 60,
         gym_revenue: totalAmount.mul(new Prisma.Decimal('0.20')),
         is_free_session: false,
@@ -485,13 +521,17 @@ async function seedRelationshipsPlansAndAppointments(ctx: DynamicSeedContext) {
             : 'Member note for coach detail review.',
         no_show_at:
           status === AppointmentStatus.no_show
-            ? daysFrom(scheduledAt, 0, scheduledAt.getHours() + 1)
+            ? daysFrom(scheduledAt, 0, scheduledAt.getUTCHours() + 1)
             : null,
-        recurring_plan_id: recurringPlanId,
-        recurring_state:
-          status === AppointmentStatus.completed
+        recurring_plan_id: monthlyCoachingMember ? recurringPlanId : null,
+        recurring_state: monthlyCoachingMember
+          ? status === AppointmentStatus.completed
             ? RecurringCoachingSessionState.completed
-            : RecurringCoachingSessionState.generated,
+            : status === AppointmentStatus.cancelled ||
+                status === AppointmentStatus.no_show
+              ? RecurringCoachingSessionState.skipped
+              : RecurringCoachingSessionState.generated
+          : null,
         scheduled_at: scheduledAt,
         session_notes:
           status === AppointmentStatus.completed
@@ -500,29 +540,28 @@ async function seedRelationshipsPlansAndAppointments(ctx: DynamicSeedContext) {
         status,
         total_amount: totalAmount,
         user_id: memberId,
+        created_at: daysFrom(paymentAt, -1, 12),
       });
 
-      if (status !== AppointmentStatus.pending_payment) {
-        paymentRows.push({
-          id: seedId(`payment:coach-appointment:${memberKey}:${apptIndex}`),
-          amount: totalAmount,
-          created_at: daysFrom(scheduledAt, -2, 10),
-          gateway_event_id: null,
-          gateway_metadata: { appointmentId, memberKey },
-          idempotency_key: seedExternalId(
-            `payment:coach-appointment:${memberKey}:${apptIndex}`,
-          ),
-          payable_id: appointmentId,
-          payable_type: PayableType.coaching,
-          payment_stage: PaymentStage.full,
-          provider: PaymentProvider.cash,
-          provider_ref: null,
-          status: PaymentStatus.completed,
-          user_id: memberId,
-          verified_at: daysFrom(scheduledAt, -2, 11),
-          verified_by: adminId,
-        });
-      }
+      paymentRows.push({
+        id: seedId(`payment:coach-appointment:${memberKey}:${apptIndex}`),
+        amount: totalAmount,
+        created_at: paymentAt,
+        gateway_event_id: null,
+        gateway_metadata: { appointmentId, memberKey },
+        idempotency_key: seedExternalId(
+          `payment:coach-appointment:${memberKey}:${apptIndex}`,
+        ),
+        payable_id: appointmentId,
+        payable_type: PayableType.coaching,
+        payment_stage: PaymentStage.full,
+        provider: PaymentProvider.cash,
+        provider_ref: null,
+        status: PaymentStatus.completed,
+        user_id: memberId,
+        verified_at: daysFrom(paymentAt, 0, 11),
+        verified_by: adminId,
+      });
     }
   });
 
@@ -543,11 +582,68 @@ async function seedRelationshipsPlansAndAppointments(ctx: DynamicSeedContext) {
     skipDuplicates: true,
   });
 
+  const appointmentsByPlan = new Map<string, number>();
+  const completedByPlan = new Map<string, number>();
+  for (const appointment of appointmentRows) {
+    const planId = appointment.recurring_plan_id as string;
+    appointmentsByPlan.set(planId, (appointmentsByPlan.get(planId) ?? 0) + 1);
+    if (appointment.status === AppointmentStatus.completed) {
+      completedByPlan.set(planId, (completedByPlan.get(planId) ?? 0) + 1);
+    }
+  }
+  await Promise.all(
+    recurringPlanRows.map((plan) =>
+      ctx.prisma.recurringCoachingPlan.update({
+        where: { id: plan.id as string },
+        data: {
+          completed_sessions: completedByPlan.get(plan.id as string) ?? 0,
+          total_sessions: appointmentsByPlan.get(plan.id as string) ?? 0,
+        },
+      }),
+    ),
+  );
+
   const completedAppointments = appointmentRows.filter(
     (appointment) => appointment.status === AppointmentStatus.completed,
   );
+  const activeMemberId = ctx.state.userIds['member-active'];
+  const premiumMemberId = ctx.state.userIds['member-premium'];
+  const qaOneTimeAppointment = appointmentRows.find(
+    (appointment) =>
+      appointment.user_id === activeMemberId &&
+      appointment.recurring_plan_id === null,
+  );
+  if (qaOneTimeAppointment) {
+    ctx.notableIds.qaRidgeOneTimeAppointmentId = String(qaOneTimeAppointment.id);
+  }
+  const qaMonthlyFutureSession = appointmentRows.find(
+    (appointment) =>
+      appointment.user_id === premiumMemberId &&
+      appointment.recurring_plan_id === seedId('recurring-plan:member-premium') &&
+      appointment.status === AppointmentStatus.confirmed &&
+      (appointment.scheduled_at as Date) >= ctx.config.anchorDate,
+  );
+  if (qaMonthlyFutureSession) {
+    ctx.notableIds.qaRidgeMonthlyFutureSessionId = String(
+      qaMonthlyFutureSession.id,
+    );
+  }
+  const qaFeedbackAppointment = completedAppointments.find(
+    (appointment) => appointment.user_id === premiumMemberId,
+  );
+  if (qaFeedbackAppointment) {
+    ctx.notableIds.qaRidgeFeedbackSessionId = String(qaFeedbackAppointment.id);
+  }
+  const reviewAppointments = qaFeedbackAppointment
+    ? [
+        qaFeedbackAppointment,
+        ...completedAppointments.filter(
+          (appointment) => appointment.id !== qaFeedbackAppointment.id,
+        ),
+      ].slice(0, 30)
+    : completedAppointments.slice(0, 30);
   await ctx.prisma.coachReview.createMany({
-    data: completedAppointments.slice(0, 30).map((appointment, index) => ({
+    data: reviewAppointments.map((appointment, index) => ({
       id: seedId(`coach-review:${appointment.id as string}`),
       appointment_id: appointment.id as string,
       coach_id: appointment.coach_id,
@@ -555,7 +651,12 @@ async function seedRelationshipsPlansAndAppointments(ctx: DynamicSeedContext) {
         index % 2 === 0
           ? 'Coach gave clear cues and adjusted the session to my energy.'
           : 'Great accountability and realistic next steps.',
-      created_at: daysFrom(ctx.config.anchorDate, -10 + (index % 5), 18),
+      created_at: daysFrom(
+        appointment.scheduled_at as Date,
+        0,
+        (appointment.scheduled_at as Date).getUTCHours() + 1,
+        10,
+      ),
       rating: 4 + (index % 2),
       reviewer_id: appointment.user_id,
     })),
@@ -570,64 +671,121 @@ async function seedRelationshipsPlansAndAppointments(ctx: DynamicSeedContext) {
 
 async function seedAmenityBookings(ctx: DynamicSeedContext) {
   const amenityKeys = AMENITY_SEEDS.map((amenity) => amenity.key);
-  const memberKeys = ctx.state.premiumMemberKeys.slice(0, 54);
+  const memberKeys = [
+    ...ctx.state.activeMemberKeys,
+    ...ctx.state.historicalMemberKeys,
+  ];
   const staffId = ctx.state.userIds[ctx.state.staffKeys[0]];
   const bookingRows: Prisma.AmenityBookingCreateManyInput[] = [];
   const feedbackRows: Prisma.AmenityFeedbackCreateManyInput[] = [];
   const paymentRows: Prisma.PaymentCreateManyInput[] = [];
+  const amenityIntervals = new KeyedIntervalAllocator();
+
+  const confirmedCoachingAppointments =
+    await ctx.prisma.coachAppointment.findMany({
+      where: {
+        scheduled_at: { gte: ctx.config.anchorDate },
+        status: AppointmentStatus.confirmed,
+      },
+      select: {
+        duration_minutes: true,
+        scheduled_at: true,
+        user_id: true,
+      },
+    });
+  for (const appointment of confirmedCoachingAppointments) {
+    amenityIntervals.tryAllocate(
+      `member:${appointment.user_id}`,
+      appointment.scheduled_at,
+      new Date(
+        appointment.scheduled_at.getTime() +
+          appointment.duration_minutes * 60_000,
+      ),
+    );
+  }
 
   memberKeys.forEach((memberKey, index) => {
-    const amenityKey = amenityKeys[index % amenityKeys.length];
-    const amenity = AMENITY_SEEDS[index % AMENITY_SEEDS.length];
-    const startsAt = daysFrom(
-      ctx.config.anchorDate,
-      index % 4 === 0 ? -10 + (index % 7) : 1 + (index % 18),
-      8 + (index % 10),
+    const bookingCount = memberVolumeCount(
+      ctx,
+      memberKey,
+      'bookings',
+      ctx.config.bookingDensity,
     );
-    const status =
-      index % 11 === 0
-        ? BookingStatus.pending
-        : index % 9 === 0
-          ? BookingStatus.no_show
-          : index % 7 === 0
-            ? BookingStatus.cancelled
-            : index % 4 === 0
-              ? BookingStatus.completed
-              : index % 3 === 0
-                ? BookingStatus.balance_pending
-                : BookingStatus.confirmed;
-    const bookingId = seedId(`amenity-booking:${memberKey}:${index}`);
+    for (let bookingIndex = 0; bookingIndex < bookingCount; bookingIndex += 1) {
+    const rowIndex = index + bookingIndex;
+    const amenityKey = amenityKeys[rowIndex % amenityKeys.length];
+    const amenity = AMENITY_SEEDS[rowIndex % AMENITY_SEEDS.length];
+    const amenityId = seedId(`amenity:${amenityKey}`);
+    const memberId = ctx.state.userIds[memberKey];
+    const accessWindow = memberAccessWindow(ctx, memberKey);
+    const historicalBooking =
+      accessWindow.historicalOnly || bookingIndex < Math.floor(bookingCount * 0.55);
+    let startsAt = historicalBooking
+      ? activityDateFor(
+          ctx,
+          memberKey,
+          bookingIndex,
+          bookingCount,
+          8 + (rowIndex % 6),
+        )
+      : futureDateFor(ctx, memberKey, bookingIndex, 8 + (rowIndex % 6));
+    if (!startsAt) {
+      continue;
+    }
+    let allocated = false;
+    for (let shift = 0; shift < 40; shift += 1) {
+      const candidate = daysFrom(startsAt, shift, startsAt.getUTCHours());
+      const candidateEnd = daysFrom(candidate, 0, candidate.getUTCHours() + 2);
+      const latestAllowed = historicalBooking
+        ? (accessWindow.activityEnd ?? daysFrom(ctx.config.anchorDate, -1, 20))
+        : (accessWindow.expiresAt ?? daysFrom(ctx.config.anchorDate, 30, 23, 59));
+      if (candidateEnd > latestAllowed) {
+        break;
+      }
+      if (
+        amenityIntervals.tryAllocateMany(
+          historicalBooking
+            ? [`amenity:${amenityId}`]
+            : [`amenity:${amenityId}`, `member:${memberId}`],
+          candidate,
+          candidateEnd,
+        )
+      ) {
+        startsAt = candidate;
+        allocated = true;
+        break;
+      }
+    }
+    if (!allocated) {
+      continue;
+    }
+    const status = historicalBooking
+      ? rowIndex % 9 === 0
+        ? BookingStatus.no_show
+        : rowIndex % 7 === 0
+          ? BookingStatus.cancelled
+          : BookingStatus.completed
+      : BookingStatus.confirmed;
+    const bookingId = seedId(`amenity-booking:${memberKey}:${bookingIndex}`);
     const totalAmount = new Prisma.Decimal(amenity.hourlyRate).mul(2);
+    const endsAt = daysFrom(startsAt, 0, startsAt.getUTCHours() + 2);
+    const paymentAt =
+      startsAt > ctx.config.anchorDate
+        ? daysFrom(ctx.config.anchorDate, -1, 12)
+        : daysFrom(startsAt, -2, 12);
 
     bookingRows.push({
       id: bookingId,
-      amenity_id: seedId(`amenity:${amenityKey}`),
-      balance_amount:
-        status === BookingStatus.balance_pending
-          ? totalAmount.div(2)
-          : new Prisma.Decimal(0),
-      balance_paid_at:
-        status === BookingStatus.completed
-          ? daysFrom(startsAt, 0, startsAt.getHours() + 2)
-          : null,
+      amenity_id: amenityId,
+      balance_amount: new Prisma.Decimal(0),
+      balance_paid_at: daysFrom(paymentAt, 0, 13),
       cancelled_at:
         status === BookingStatus.cancelled ? daysFrom(startsAt, -1, 17) : null,
-      coach_id:
-        amenityKey === 'boxing-ring'
-          ? ctx.state.coachProfileIds[
-              ctx.state.coachAccountKeys[
-                index % ctx.state.coachAccountKeys.length
-              ]
-            ]
-          : null,
-      completed_at:
-        status === BookingStatus.completed
-          ? daysFrom(startsAt, 0, startsAt.getHours() + 2)
-          : null,
-      downpayment_amount: totalAmount.div(2),
-      downpayment_paid_at:
-        status === BookingStatus.pending ? null : daysFrom(startsAt, -2, 12),
-      ends_at: daysFrom(startsAt, 0, startsAt.getHours() + 2),
+      coach_id: null,
+      completed_at: status === BookingStatus.completed ? endsAt : null,
+      downpayment_amount: new Prisma.Decimal(0),
+      downpayment_paid_at: null,
+      ends_at: endsAt,
       notes:
         status === BookingStatus.no_show
           ? 'No-show booking retained for admin filters.'
@@ -635,55 +793,48 @@ async function seedAmenityBookings(ctx: DynamicSeedContext) {
       starts_at: startsAt,
       status,
       total_amount: totalAmount,
-      user_id: ctx.state.userIds[memberKey],
+      user_id: memberId,
+      created_at: daysFrom(paymentAt, -1, 11),
     });
 
-    if (
-      status === BookingStatus.completed ||
-      status === BookingStatus.confirmed
-    ) {
+    if (status === BookingStatus.completed) {
       feedbackRows.push({
         id: seedId(`amenity-feedback:${bookingId}`),
-        amenity_id: seedId(`amenity:${amenityKey}`),
+        amenity_id: amenityId,
         comment:
           index % 2 === 0
             ? 'Facility was clean and staff helped us start on time.'
             : 'Smooth booking flow and helpful reminders.',
-        created_at: daysFrom(startsAt, 1, 10),
-        rating: 4 + (index % 2),
-        user_id: ctx.state.userIds[memberKey],
+        created_at: daysFrom(startsAt, 0, startsAt.getUTCHours() + 1, 10),
+        rating: 4 + (rowIndex % 2),
+        user_id: memberId,
       });
     }
 
     paymentRows.push({
-      id: seedId(`payment:amenity-booking:${memberKey}:${index}`),
-      amount: totalAmount.div(2),
-      created_at: daysFrom(startsAt, -2, 12),
+      id: seedId(`payment:amenity-booking:${memberKey}:${bookingIndex}`),
+      amount: totalAmount,
+      created_at: paymentAt,
       gateway_event_id: null,
       gateway_metadata: { bookingId, source: 'amenity-booking' },
       idempotency_key: seedExternalId(
-        `payment:amenity-booking:${memberKey}:${index}`,
+        `payment:amenity-booking:${memberKey}:${bookingIndex}`,
       ),
       payable_id: bookingId,
       payable_type: PayableType.booking,
-      payment_stage: PaymentStage.downpayment,
+      payment_stage: PaymentStage.full,
       provider:
-        index % 5 === 0 ? PaymentProvider.paymongo : PaymentProvider.cash,
+        rowIndex % 5 === 0 ? PaymentProvider.paymongo : PaymentProvider.cash,
       provider_ref:
-        index % 5 === 0
-          ? seedExternalId(`paymongo:amenity-booking:${memberKey}:${index}`)
+        rowIndex % 5 === 0
+          ? seedExternalId(`paymongo:amenity-booking:${memberKey}:${bookingIndex}`)
           : null,
-      status:
-        status === BookingStatus.cancelled || status === BookingStatus.no_show
-          ? PaymentStatus.completed
-          : status === BookingStatus.pending
-            ? PaymentStatus.awaiting_verification
-            : PaymentStatus.completed,
-      user_id: ctx.state.userIds[memberKey],
-      verified_at:
-        status === BookingStatus.pending ? null : daysFrom(startsAt, -2, 13),
-      verified_by: status === BookingStatus.pending ? null : staffId,
+      status: PaymentStatus.completed,
+      user_id: memberId,
+      verified_at: daysFrom(paymentAt, 0, 13),
+      verified_by: staffId,
     });
+    }
   });
 
   await ctx.prisma.amenityBooking.createMany({
@@ -700,11 +851,180 @@ async function seedAmenityBookings(ctx: DynamicSeedContext) {
   });
 }
 
+async function seedCheckoutHolds(ctx: DynamicSeedContext) {
+  const holdPaymentRows: Prisma.PaymentCreateManyInput[] = [];
+  const holdRows: Prisma.CommerceCheckoutHoldCreateManyInput[] = [];
+  const fixedScenarios = [
+    {
+      accountKey: 'member-pending',
+      amenityId: null,
+      amount: new Prisma.Decimal('799'),
+      expiresAt: daysFrom(ctx.config.anchorDate, -1, 12),
+      failureReason: 'PayMongo checkout expired before membership confirmation.',
+      kind: CommerceCheckoutHoldKind.monthly,
+      paymentStatus: PaymentStatus.failed,
+      scheduledAt: null,
+      status: CommerceCheckoutHoldStatus.expired,
+    },
+    {
+      accountKey: 'member-unverified',
+      amenityId: null,
+      amount: new Prisma.Decimal('1999'),
+      expiresAt: daysFrom(ctx.config.anchorDate, -2, 12),
+      failureReason: 'Checkout expired before PayMongo confirmation.',
+      kind: CommerceCheckoutHoldKind.monthly,
+      paymentStatus: PaymentStatus.failed,
+      scheduledAt: null,
+      status: CommerceCheckoutHoldStatus.expired,
+    },
+    {
+      accountKey: 'member-suspended',
+      amenityId: null,
+      amount: new Prisma.Decimal('900'),
+      expiresAt: daysFrom(ctx.config.anchorDate, -4, 12),
+      failureReason: 'PayMongo authorization failed; no product was created.',
+      kind: CommerceCheckoutHoldKind.one_time,
+      paymentStatus: PaymentStatus.failed,
+      scheduledAt: null,
+      status: CommerceCheckoutHoldStatus.failed,
+    },
+    {
+      accountKey: 'member-checkout-abandoned',
+      amenityId: null,
+      amount: new Prisma.Decimal('1999'),
+      expiresAt: daysFrom(ctx.config.anchorDate, -3, 12),
+      failureReason: 'PayMongo authorization failed; no membership product was created.',
+      kind: CommerceCheckoutHoldKind.subscription,
+      paymentStatus: PaymentStatus.failed,
+      scheduledAt: null,
+      status: CommerceCheckoutHoldStatus.failed,
+    },
+  ];
+  const fixedScenarioKeys = new Set(
+    fixedScenarios.map((scenario) => scenario.accountKey),
+  );
+  const generatedScenarios = ctx.state.restrictedMemberKeys
+    .filter((accountKey) => !fixedScenarioKeys.has(accountKey))
+    .map((accountKey, index) => {
+      const terminalStatus =
+        index % 2 === 0
+          ? CommerceCheckoutHoldStatus.expired
+          : CommerceCheckoutHoldStatus.failed;
+      return {
+        accountKey,
+        amenityId: null,
+        amount: new Prisma.Decimal(index % 2 === 0 ? '799' : '900'),
+        expiresAt: daysFrom(ctx.config.anchorDate, -2 - index, 12),
+        failureReason:
+          terminalStatus === CommerceCheckoutHoldStatus.expired
+            ? 'Checkout expired before product confirmation.'
+            : 'PayMongo authorization failed; no product was created.',
+        kind:
+          index % 2 === 0
+            ? CommerceCheckoutHoldKind.monthly
+            : CommerceCheckoutHoldKind.one_time,
+        paymentStatus: PaymentStatus.failed,
+        scheduledAt: null,
+        status: terminalStatus,
+      };
+    });
+  const scenarios = [...fixedScenarios, ...generatedScenarios];
+
+  for (const scenario of scenarios) {
+    const userId = ctx.state.userIds[scenario.accountKey];
+    if (!userId) {
+      continue;
+    }
+    const holdId = seedId(`commerce-hold:${scenario.accountKey}`);
+    const paymentId = seedId(`payment:commerce-hold:${scenario.accountKey}`);
+    const createdAt = daysFrom(scenario.expiresAt, -3, 9);
+    holdPaymentRows.push({
+      id: paymentId,
+      amount: scenario.amount,
+      created_at: createdAt,
+      gateway_event_id: null,
+      gateway_metadata: {
+        accountKey: scenario.accountKey,
+        source: 'checkout-hold',
+      },
+      idempotency_key: seedExternalId(
+        `payment:commerce-hold:${scenario.accountKey}`,
+      ),
+      payable_id: holdId,
+      payable_type: PayableType.commerce_checkout_hold,
+      payment_stage: PaymentStage.full,
+      provider: PaymentProvider.paymongo,
+      provider_ref: seedExternalId(
+        `paymongo:commerce-hold:${scenario.accountKey}`,
+      ),
+      rejection_reason: scenario.failureReason,
+      screenshot_url: null,
+      status: scenario.paymentStatus,
+      user_id: userId,
+      verified_at: null,
+      verified_by: null,
+    });
+    holdRows.push({
+      id: holdId,
+      user_id: userId,
+      coach_id: null,
+      amenity_id: scenario.amenityId,
+      kind: scenario.kind,
+      status: scenario.status,
+      idempotency_key: seedExternalId(`commerce-hold:${scenario.accountKey}`),
+      payment_id: paymentId,
+      scheduled_at: scenario.scheduledAt,
+      ends_at: null,
+      duration_minutes: null,
+      amount: scenario.amount,
+      currency: 'PHP',
+      session_count: scenario.kind === CommerceCheckoutHoldKind.monthly ? 4 : null,
+      start_date: scenario.kind === CommerceCheckoutHoldKind.monthly
+        ? daysFrom(ctx.config.anchorDate, 7)
+        : null,
+      end_date: scenario.kind === CommerceCheckoutHoldKind.monthly
+        ? daysFrom(ctx.config.anchorDate, 37)
+        : null,
+      preferred_days: scenario.kind === CommerceCheckoutHoldKind.monthly ? [1, 3] : [],
+      preferred_time: scenario.kind === CommerceCheckoutHoldKind.monthly
+        ? fixedTime('18:00:00')
+        : null,
+      member_notes: 'Seeded checkout intent used to exercise terminal and active hold reconciliation.',
+      expires_at: scenario.expiresAt,
+      consumed_at: null,
+      released_at: null,
+      failure_reason: scenario.failureReason,
+      appointment_id: null,
+      booking_id: null,
+      subscription_id: null,
+      membership_card_id: null,
+      recurring_plan_id: null,
+      membership_plan_id: null,
+      created_at: createdAt,
+    });
+  }
+
+  await ctx.prisma.payment.createMany({
+    data: holdPaymentRows,
+    skipDuplicates: true,
+  });
+  await ctx.prisma.commerceCheckoutHold.createMany({
+    data: holdRows,
+    skipDuplicates: true,
+  });
+  ctx.notableIds.demoPendingPaymentId = seedId(
+    'payment:commerce-hold:member-pending',
+  );
+  ctx.notableIds.qaCheckoutAbandonedMemberId =
+    ctx.state.userIds['member-checkout-abandoned'];
+}
+
 export async function seedFacilitiesCoaching(ctx: DynamicSeedContext) {
   await seedAmenities(ctx);
   await seedCoachProfiles(ctx);
   await seedRelationshipsPlansAndAppointments(ctx);
   await seedAmenityBookings(ctx);
+  await seedCheckoutHolds(ctx);
 
   ctx.notableIds.demoCoachProfileId = ctx.state.coachProfileIds.coach;
   ctx.notableIds.boxingRingAmenityId = seedId('amenity:boxing-ring');

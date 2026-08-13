@@ -122,15 +122,8 @@ function getAlertLaneLabel(kind: string) {
 function hasPaidCoachEarningsEvidence(
   appointment: CoachAppointmentScheduleRecord,
 ) {
-  if (appointment.coachPayoutPaidAt || appointment.balancePaidAt) return true;
-  if (appointment.activePaymentStatus !== "completed") return false;
-
-  if (appointment.activePaymentStage === "downpayment") {
-    const remainingBalance = Number(appointment.remainingBalance ?? 0);
-    return Number.isFinite(remainingBalance) && remainingBalance <= 0;
-  }
-
-  return true;
+  return Boolean(appointment.coachPayoutPaidAt) ||
+    appointment.activePaymentStatus === "completed";
 }
 
 function isPaidCompletedCoachAppointment(
@@ -241,11 +234,6 @@ function CoachEarningsPage() {
   const appointments = appointmentsQuery.data ?? [];
   const paidCompletedAppointments = appointments.filter(
     isPaidCompletedCoachAppointment,
-  );
-  const completedAppointmentsAwaitingPayment = appointments.filter(
-    (appointment) =>
-      appointment.status === "completed" &&
-      !hasPaidCoachEarningsEvidence(appointment),
   );
   const resolvedAppointments = paidCompletedAppointments;
   const earningsPageCount = Math.max(
@@ -379,7 +367,7 @@ function CoachEarningsPage() {
             {
               label: "Paid Sessions This Month",
               value: String(paidCompletedAppointmentsThisMonth.length),
-              helper: `${completedAppointmentsAwaitingPayment.length} completed session${completedAppointmentsAwaitingPayment.length === 1 ? "" : "s"} awaiting payment confirmation.`,
+              helper: "Completed sessions with captured payment.",
             },
             {
               label: "Past 3 Months Earnings",
@@ -461,7 +449,7 @@ function CoachEarningsPage() {
                   marginTop: 4,
                 }}
               >
-                Only paid, completed sessions are shown here; pending payments stay with staff.
+                Only paid, completed sessions are shown here.
               </FitText>
             </div>
             <FitButton

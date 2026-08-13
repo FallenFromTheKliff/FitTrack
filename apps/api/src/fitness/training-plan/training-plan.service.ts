@@ -64,7 +64,7 @@ export class TrainingPlanService {
     memberId: string,
     dto: PaginationDTO,
   ): Promise<PaginatedResult<TrainingPlanSummaryResponseDTO>> {
-    await this.relationshipService.assertActiveClientRelationship(
+    await this.relationshipService.assertCoachClientAccess(
       coachUserId,
       memberId,
     );
@@ -80,7 +80,20 @@ export class TrainingPlanService {
     planId: string,
   ): Promise<TrainingPlanDetailResponseDTO> {
     const plan = await this.repo.findPlanByIdOrThrow(planId);
-    this.assertPlanOwner(plan, userId);
+
+    const isOwner = plan.user_id === userId;
+    const isManagingCoach = plan.coach_id === userId;
+    if (!isOwner && !isManagingCoach) {
+      this.assertPlanOwner(plan, userId);
+    }
+
+    if (!isOwner && isManagingCoach) {
+      await this.relationshipService.assertCoachClientAccess(
+        userId,
+        plan.user_id,
+      );
+    }
+
     return this.toDetailResponse(plan);
   }
 
@@ -109,13 +122,27 @@ export class TrainingPlanService {
 
   async updatePlan(
     userId: string,
-    _userRole: UserRole,
+    userRole: UserRole,
     planId: string,
     dto: CreateTrainingPlanDTO,
   ): Promise<TrainingPlanDetailResponseDTO> {
     const plan = await this.repo.findPlanByIdOrThrow(planId);
-    this.assertPlanOwner(plan, userId);
-    this.assertPlanIsOwnerMutable(plan);
+    const isOwner = plan.user_id === userId;
+    const isManagingCoach =
+      !isOwner &&
+      userRole === UserRole.coach &&
+      plan.source === PlanSource.coach_assigned &&
+      plan.coach_id === userId;
+
+    if (isManagingCoach) {
+      await this.relationshipService.assertCoachClientAccess(
+        userId,
+        plan.user_id,
+      );
+    } else {
+      this.assertPlanOwner(plan, userId);
+      this.assertPlanIsOwnerMutable(plan);
+    }
 
     this.assertScheduleConsistency(dto);
     await this.assertExercisesExist(dto);
@@ -370,7 +397,7 @@ export class TrainingPlanService {
     const sourcePlan = await this.repo.findPlanByIdOrThrow(planId);
     this.assertCoachOwnsSourcePlan(sourcePlan, coachUserId);
 
-    await this.relationshipService.assertActiveClientRelationship(
+    await this.relationshipService.assertCoachClientAccess(
       coachUserId,
       memberId,
     );
@@ -389,6 +416,9 @@ export class TrainingPlanService {
         dayOfWeek: day.day_of_week,
         focusLabel: day.focus_label,
         notes: day.notes,
+        ...(day.is_rest_day === undefined
+          ? {}
+          : { isRestDay: day.is_rest_day }),
         exercises: day.exercises.map((exercise) => ({
           exerciseId: exercise.exercise_id,
           sets: exercise.sets,
@@ -502,6 +532,20 @@ export class TrainingPlanService {
         );
       }
 
+      if (day.isRestDay === true && day.exercises.length > 0) {
+        throw this.buildValidationException(
+          'Rest Day Contains Exercises',
+          'rest days cannot contain exercises.',
+        );
+      }
+
+      if (day.isRestDay !== true && day.exercises.length === 0) {
+        throw this.buildValidationException(
+          'Empty Workout Day',
+          'workout days must contain at least one exercise.',
+        );
+      }
+
       for (const exercise of day.exercises) {
         if (
           exercise.restSecondsBySet &&
@@ -562,6 +606,9 @@ export class TrainingPlanService {
       weekNumber: day.week_number,
       dayOfWeek: day.day_of_week,
       focusLabel: day.focus_label ?? null,
+      ...(day.is_rest_day === undefined
+        ? {}
+        : { isRestDay: day.is_rest_day }),
       exercises: day.exercises.map((exercise, index) => ({
         exerciseId: exercise.exercise_id,
         sets: exercise.sets,
@@ -614,6 +661,7 @@ export class TrainingPlanService {
       day_of_week: day.day_of_week,
       focus_label: day.focus_label ?? null,
       notes: day.notes ?? null,
+      is_rest_day: day.is_rest_day ?? null,
       exercises: day.exercises.map((exercise) =>
         this.toExerciseResponse(exercise),
       ),

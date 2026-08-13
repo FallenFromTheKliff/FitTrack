@@ -1,6 +1,10 @@
-import type { CoachProfileRecord } from "@fittrack/types";
+import type { CoachProfileRecord, PaginatedResult } from "@fittrack/types";
 import type { ApiTransport } from "../transport/createAxiosTransport";
-import { unwrapResponse, unwrapVoidResponse } from "../request";
+import {
+  unwrapPaginatedResponse,
+  unwrapResponse,
+  unwrapVoidResponse,
+} from "../request";
 
 export type UpdateCoachProfilePayload = {
   bio?: string;
@@ -84,7 +88,6 @@ export type CoachAvailabilityResponse = {
 export type CoachAppointmentScheduleRecord = {
   activePaymentId?: string | null;
   activePaymentProvider?: "cash" | "paymongo" | null;
-  activePaymentStage?: "balance" | "downpayment" | "full" | null;
   activePaymentStatus?:
     | "awaiting_verification"
     | "completed"
@@ -92,9 +95,7 @@ export type CoachAppointmentScheduleRecord = {
     | "pending"
     | "processing"
     | null;
-  amountDueNow?: null;
   assessmentReport?: string | null;
-  balancePaidAt?: string | null;
   coach?: {
     contactEmail?: string | null;
     displayName?: string | null;
@@ -111,14 +112,12 @@ export type CoachAppointmentScheduleRecord = {
   cancelledAt?: string | null;
   completedAt?: string | null;
   createdAt: string;
-  downpaymentPaidAt?: string | null;
   duration: number;
   gymRevenue?: number | null;
   id: string;
   notes?: string | null;
   recurringPlanId?: string | null;
   recurringState?: string | null;
-  remainingBalance?: number | null;
   review?: {
     comment?: string | null;
     createdAt: string;
@@ -208,10 +207,54 @@ export type CoachListFilters = {
   specialization?: string;
 };
 
+export type CoachClientListParams = {
+  limit?: number;
+  page?: number;
+};
+
+export type CoachClientRelationshipRecord = {
+  coach_id: string;
+  created_at: string;
+  ended_at?: string | null;
+  id: string;
+  member?: {
+    email?: string | null;
+    email_verified?: boolean | null;
+    id: string;
+    last_check_in_at?: string | null;
+    membership_card?: { status: string } | null;
+    phone_no?: string | null;
+    phone_verified?: boolean | null;
+    profile?: {
+      activity_level?: string | null;
+      avatar_url?: string | null;
+      date_of_birth?: string | null;
+      first_name?: string | null;
+      fitness_goal?: string | null;
+      gender?: string | null;
+      height_cm?: number | null;
+      last_name?: string | null;
+      membership_type?: string | null;
+      weight_kg?: number | null;
+    } | null;
+    status?: string | null;
+    upcoming_sessions?: Array<{
+      duration_minutes: number;
+      id: string;
+      scheduled_at: string;
+      status: string;
+    }>;
+  } | null;
+  member_id: string;
+  notes?: string | null;
+  started_at?: string | null;
+  status?: string;
+  updated_at: string;
+};
+
 type CoachScheduleApiRecord = {
   active_payment_id?: string | null;
   active_payment_provider?: "cash" | "paymongo" | null;
-  active_payment_stage?: "balance" | "downpayment" | "full" | null;
   active_payment_status?:
     | "awaiting_verification"
     | "completed"
@@ -219,14 +262,10 @@ type CoachScheduleApiRecord = {
     | "pending"
     | "processing"
     | null;
-  balance_amount?: number | string | null;
-  balance_paid_at?: string | null;
   coach_earnings?: number | string | null;
   coach_id?: string;
   completed_at?: string | null;
   created_at?: string;
-  downpayment_amount?: number | string | null;
-  downpayment_paid_at?: string | null;
   duration_minutes?: number;
   gym_revenue?: number | string | null;
   id: string;
@@ -272,20 +311,36 @@ function splitMultiValue(value?: string | null) {
     .filter(Boolean);
 }
 
+function normalizeCoachSpecialtyLabels(labels: string[]) {
+  const seen = new Set<string>();
+  const normalizedLabels: string[] = [];
+
+  labels.forEach((label) => {
+    const trimmed = label.trim();
+    if (!trimmed) return;
+
+    const identity = trimmed.toLowerCase();
+    if (seen.has(identity)) return;
+
+    seen.add(identity);
+    normalizedLabels.push(trimmed);
+  });
+
+  return normalizedLabels;
+}
+
 function mapCoachSpecialties(
   specialties?: Array<CoachSpecialtyApiRecord> | string[] | null,
   specialization?: string | null,
 ) {
-  if (Array.isArray(specialties)) {
-    return specialties
+  const labels = Array.isArray(specialties)
+    ? specialties
       .map((specialty) =>
         typeof specialty === "string" ? specialty : specialty.label,
       )
-      .map((label) => label.trim())
-      .filter(Boolean);
-  }
+    : splitMultiValue(specialization);
 
-  return splitMultiValue(specialization);
+  return normalizeCoachSpecialtyLabels(labels);
 }
 
 function toNullableNumber(value?: number | string | null) {
@@ -431,17 +486,12 @@ function mapCoachAvailability(
 
 function mapCoachScheduleRecord(record: CoachScheduleApiRecord) {
   const totalAmount = toNullableNumber(record.total_amount);
-  const downpaymentAmount = toNullableNumber(record.downpayment_amount);
-  const remainingBalance = toNullableNumber(record.balance_amount);
 
   return {
     activePaymentId: record.active_payment_id ?? null,
     activePaymentProvider: record.active_payment_provider ?? null,
-    activePaymentStage: record.active_payment_stage ?? null,
     activePaymentStatus: record.active_payment_status ?? null,
-    amountDueNow: null,
     assessmentReport: record.assessment_report ?? null,
-    balancePaidAt: record.balance_paid_at ?? null,
     coach: {
       contactEmail: null,
       displayName: null,
@@ -463,7 +513,6 @@ function mapCoachScheduleRecord(record: CoachScheduleApiRecord) {
     notes: record.member_notes ?? null,
     recurringPlanId: record.recurring_plan_id ?? null,
     recurringState: record.recurring_state ?? null,
-    remainingBalance,
     review: record.review
       ? {
           comment: record.review.comment ?? null,
@@ -477,7 +526,6 @@ function mapCoachScheduleRecord(record: CoachScheduleApiRecord) {
     sessionNotes: record.session_notes ?? null,
     status: record.status,
     totalAmount,
-    downpaymentPaidAt: record.downpayment_paid_at ?? null,
     completedAt: record.completed_at ?? null,
     updatedAt: record.updated_at ?? "",
     user: record.user
@@ -548,6 +596,14 @@ export function createCoachesApi(transport: ApiTransport) {
         "Unable to load coaches.",
       ).then(
         (records) => records.map((record) => mapCoachRecord(record)) as T[],
+      );
+    },
+    listClients(
+      params?: CoachClientListParams,
+    ): Promise<PaginatedResult<CoachClientRelationshipRecord>> {
+      return unwrapPaginatedResponse<CoachClientRelationshipRecord>(
+        transport.get("/coaching/clients", { params }),
+        "Unable to load coach clients.",
       );
     },
     getMine<T>() {

@@ -11,6 +11,8 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
 import {
   canAccessWebPage,
+  COACH_CLIENTS_PAGE_KEY,
+  COACH_CLIENTS_ROUTE,
   getWebPortalFallbackPath,
   isWebPortalRole,
 } from "@/lib/portal-access";
@@ -35,7 +37,7 @@ function getPageKey(pathname: string, role: Role | null | undefined): PageKey {
 
   if (role === "COACH") {
     if (pathname.startsWith("/dashboard")) return "coach-dashboard";
-    if (pathname.startsWith("/accounts")) return "coach-clients";
+    if (pathname.startsWith(COACH_CLIENTS_ROUTE)) return COACH_CLIENTS_PAGE_KEY;
     if (pathname.startsWith("/schedule")) return "coach-sessions";
     if (pathname.startsWith("/analytics")) return "coach-earnings";
     if (pathname.startsWith("/gamification")) return "coach-gamification";

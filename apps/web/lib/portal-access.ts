@@ -17,6 +17,9 @@ const WEB_MANAGEMENT_ROLES = [
 const WEB_COACH_ROLES = ["COACH"] as const satisfies readonly WebPortalRole[];
 const WEB_MEMBER_ROLES = ["USER"] as const satisfies readonly WebPortalRole[];
 
+export const COACH_CLIENTS_ROUTE = "/accounts" as const;
+export const COACH_CLIENTS_PAGE_KEY = "coach-clients" as const;
+
 export const WEB_ROLE_GATE = {
   allowedRoles: WEB_PORTAL_ALLOWED_ROLES,
   deniedMessage: "This account can't access the FitTrack portal.",
@@ -39,7 +42,7 @@ export const WEB_PAGE_ALLOWED_ROLES: Record<PageKey, readonly WebPortalRole[]> =
     settings: WEB_PORTAL_ALLOWED_ROLES,
     profile: ["ADMIN", "STAFF", "COACH"],
     "coach-dashboard": WEB_COACH_ROLES,
-    "coach-clients": [],
+    [COACH_CLIENTS_PAGE_KEY]: WEB_COACH_ROLES,
     "coach-sessions": WEB_COACH_ROLES,
     "coach-earnings": WEB_COACH_ROLES,
     "coach-gamification": [],

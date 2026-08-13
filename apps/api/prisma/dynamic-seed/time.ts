@@ -1,20 +1,20 @@
 export function daysFrom(anchor: Date, days: number, hour = 9, minute = 0) {
   const target = new Date(anchor);
-  target.setDate(target.getDate() + days);
-  target.setHours(hour, minute, 0, 0);
+  target.setUTCDate(target.getUTCDate() + days);
+  target.setUTCHours(hour, minute, 0, 0);
   return target;
 }
 
 export function dateOnly(anchor: Date, days: number) {
   const target = daysFrom(anchor, days, 0, 0);
-  target.setHours(0, 0, 0, 0);
+  target.setUTCHours(0, 0, 0, 0);
   return target;
 }
 
 export function yearsAgo(anchor: Date, years: number) {
   const target = new Date(anchor);
-  target.setFullYear(target.getFullYear() - years);
-  target.setHours(0, 0, 0, 0);
+  target.setUTCFullYear(target.getUTCFullYear() - years);
+  target.setUTCHours(0, 0, 0, 0);
   return target;
 }
 
@@ -35,8 +35,9 @@ export function dateInsideRange(
   minute = 0,
 ) {
   const clampedFraction = Math.min(1, Math.max(0, fraction));
-  const timestamp = start.getTime() + (end.getTime() - start.getTime()) * clampedFraction;
+  const timestamp =
+    start.getTime() + (end.getTime() - start.getTime()) * clampedFraction;
   const target = new Date(timestamp);
-  target.setHours(hour, minute, 0, 0);
+  target.setUTCHours(hour, minute, 0, 0);
   return target;
 }

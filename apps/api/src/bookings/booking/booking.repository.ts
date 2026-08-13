@@ -2,7 +2,9 @@ import { ConflictException, Injectable } from '@nestjs/common';
 import {
   AmenityBooking,
   BookingStatus,
+  CommerceCheckoutHoldStatus,
   Payment,
+  PayableType,
   PaymentProvider,
   PaymentStage,
   PaymentStatus,
@@ -10,6 +12,8 @@ import {
 } from '@prisma/client';
 
 import { BaseRepository } from '../../common/base-repository/base-repository';
+import type { PaginatedResult } from '../../common/base-repository/base-repository';
+import { lockAndAssertVenueCoachWindow } from '../../coaching/commerce/venue-coach-scheduling';
 import { PrismaService } from '../../prisma/prisma.service';
 import { DateRangeDTO } from '../../user/dto/user-dto';
 
@@ -92,6 +96,8 @@ type AdminBookingListItem = Prisma.AmenityBookingGetPayload<{
     };
   };
 }>;
+
+export type CoachVenueWorkRecord = AdminBookingListItem;
 
 type BookingPaymentInitiationRecord = {
   booking: AmenityBooking;
@@ -256,6 +262,140 @@ export class BookingRepository extends BaseRepository {
     );
   }
 
+  async getCoachVenueWork(
+    coachUserId: string,
+    dto: DateRangeDTO,
+  ): Promise<PaginatedResult<CoachVenueWorkRecord>> {
+    const startsAt: Prisma.DateTimeFilter = {};
+    if (dto.start_date) {
+      startsAt.gte = normalizeGymDateBoundary(dto.start_date, 'start');
+    }
+    if (dto.end_date) {
+      startsAt.lte = normalizeGymDateBoundary(dto.end_date, 'end');
+    }
+
+    const candidates = await this.prisma.amenityBooking.findMany({
+      where: {
+        coach: { is: { user_id: coachUserId } },
+        status: {
+          in: [
+            BookingStatus.confirmed,
+            BookingStatus.completed,
+            BookingStatus.cancelled,
+            BookingStatus.no_show,
+          ],
+        },
+        total_amount: { gt: 0 },
+        ...(Object.keys(startsAt).length ? { starts_at: startsAt } : {}),
+      },
+      include: this.adminBookingInclude,
+      orderBy: [{ starts_at: 'desc' }, { created_at: 'desc' }],
+    });
+    const candidateIds = candidates.map((booking) => booking.id);
+    if (candidateIds.length === 0) {
+      return {
+        data: [],
+        meta: {
+          page: Math.max(1, dto.page ?? 1),
+          limit: Math.min(100, Math.max(1, dto.limit ?? 20)),
+          total: 0,
+          total_pages: 0,
+        },
+      };
+    }
+
+    const [directPayments, checkoutHolds] = await Promise.all([
+      this.prisma.payment.findMany({
+        where: {
+          payable_id: { in: candidateIds },
+          payable_type: PayableType.booking,
+          payment_stage: PaymentStage.full,
+          status: PaymentStatus.completed,
+        },
+        select: { payable_id: true },
+      }),
+      this.prisma.commerceCheckoutHold.findMany({
+        where: {
+          booking_id: { in: candidateIds },
+          kind: 'venue',
+          status: CommerceCheckoutHoldStatus.consumed,
+          payment: {
+            is: {
+              payable_type: PayableType.commerce_checkout_hold,
+              payment_stage: PaymentStage.full,
+              status: PaymentStatus.completed,
+            },
+          },
+        },
+        select: { booking_id: true },
+      }),
+    ]);
+    const paidIds = new Set([
+      ...directPayments.map((payment) => payment.payable_id),
+      ...checkoutHolds.flatMap((hold) =>
+        hold.booking_id ? [hold.booking_id] : [],
+      ),
+    ]);
+    const records = candidates.filter((booking) => paidIds.has(booking.id));
+    const page = Math.max(1, dto.page ?? 1);
+    const limit = Math.min(100, Math.max(1, dto.limit ?? 20));
+    const skip = (page - 1) * limit;
+
+    return {
+      data: records.slice(skip, skip + limit),
+      meta: {
+        page,
+        limit,
+        total: records.length,
+        total_pages: Math.ceil(records.length / limit),
+      },
+    };
+  }
+
+  async isFullyPaidCoachVenueWork(
+    bookingId: string,
+    coachUserId: string,
+  ): Promise<boolean> {
+    const booking = await this.prisma.amenityBooking.findFirst({
+      where: {
+        id: bookingId,
+        coach: { is: { user_id: coachUserId } },
+        total_amount: { gt: 0 },
+      },
+      select: { id: true },
+    });
+    if (!booking) {
+      return false;
+    }
+
+    const [directPaymentCount, checkoutHoldCount] = await Promise.all([
+      this.prisma.payment.count({
+        where: {
+          payable_id: bookingId,
+          payable_type: PayableType.booking,
+          payment_stage: PaymentStage.full,
+          status: PaymentStatus.completed,
+        },
+      }),
+      this.prisma.commerceCheckoutHold.count({
+        where: {
+          booking_id: bookingId,
+          kind: 'venue',
+          status: CommerceCheckoutHoldStatus.consumed,
+          payment: {
+            is: {
+              payable_type: PayableType.commerce_checkout_hold,
+              payment_stage: PaymentStage.full,
+              status: PaymentStatus.completed,
+            },
+          },
+        },
+      }),
+    ]);
+
+    return directPaymentCount + checkoutHoldCount > 0;
+  }
+
   async createConfirmedFreeBooking(input: {
     userId: string;
     amenityId: string;
@@ -268,6 +408,13 @@ export class BookingRepository extends BaseRepository {
     balanceAmount: Prisma.Decimal;
   }): Promise<AmenityBooking> {
     return this.transaction(async (tx) => {
+      if (input.coachId) {
+        await lockAndAssertVenueCoachWindow(tx, {
+          coachId: input.coachId,
+          endsAt: input.endsAt,
+          startsAt: input.startsAt,
+        });
+      }
       await this.assertCapacityAvailable(
         tx,
         input.amenityId,
@@ -311,6 +458,39 @@ export class BookingRepository extends BaseRepository {
     verifiedBy: string;
   }): Promise<AmenityBooking> {
     return this.transaction(async (tx) => {
+      const existingPayment = await tx.payment.findUnique({
+        where: { idempotency_key: input.idempotencyKey },
+        select: { payable_id: true, payable_type: true },
+      });
+      if (existingPayment) {
+        if (existingPayment.payable_type !== 'booking') {
+          throw new ConflictException({
+            type: 'CONFLICT',
+            title: 'Idempotency Key Already Used',
+            status: 409,
+            detail: 'The idempotency key is already associated with another payment.',
+          });
+        }
+        return tx.amenityBooking.findUniqueOrThrow({
+          where: { id: existingPayment.payable_id },
+        });
+      }
+
+      if (input.paymentStage !== PaymentStage.full) {
+        throw new ConflictException({
+          type: 'CONFLICT',
+          title: 'Full Payment Required',
+          status: 409,
+          detail: 'Manual venue bookings must be recorded as fully paid.',
+        });
+      }
+      if (input.coachId) {
+        await lockAndAssertVenueCoachWindow(tx, {
+          coachId: input.coachId,
+          endsAt: input.endsAt,
+          startsAt: input.startsAt,
+        });
+      }
       await this.assertCapacityAvailable(
         tx,
         input.amenityId,
@@ -319,8 +499,6 @@ export class BookingRepository extends BaseRepository {
       );
 
       const paidAt = new Date();
-      const isFullPayment = input.paymentStage === PaymentStage.full;
-
       const booking = await tx.amenityBooking.create({
         data: {
           user: { connect: { id: input.userId } },
@@ -332,10 +510,10 @@ export class BookingRepository extends BaseRepository {
           starts_at: input.startsAt,
           ends_at: input.endsAt,
           total_amount: input.totalAmount,
-          downpayment_amount: input.downpaymentAmount,
-          balance_amount: input.balanceAmount,
+          downpayment_amount: new Prisma.Decimal(0),
+          balance_amount: new Prisma.Decimal(0),
           downpayment_paid_at: paidAt,
-          balance_paid_at: isFullPayment ? paidAt : null,
+          balance_paid_at: paidAt,
           notes: input.notes ?? null,
         },
       });
@@ -346,8 +524,8 @@ export class BookingRepository extends BaseRepository {
           verifier: { connect: { id: input.verifiedBy } },
           payable_type: 'booking',
           payable_id: booking.id,
-          payment_stage: input.paymentStage,
-          amount: input.paymentAmount,
+          payment_stage: PaymentStage.full,
+          amount: input.totalAmount,
           provider: PaymentProvider.cash,
           idempotency_key: input.idempotencyKey,
           status: PaymentStatus.completed,
@@ -376,6 +554,13 @@ export class BookingRepository extends BaseRepository {
     provider: PaymentProvider;
   }): Promise<BookingPaymentInitiationRecord> {
     return this.transaction(async (tx) => {
+      if (input.coachId) {
+        await lockAndAssertVenueCoachWindow(tx, {
+          coachId: input.coachId,
+          endsAt: input.endsAt,
+          startsAt: input.startsAt,
+        });
+      }
       await this.assertCapacityAvailable(
         tx,
         input.amenityId,
@@ -632,6 +817,16 @@ export class BookingRepository extends BaseRepository {
       },
     });
 
+    const overlappingHolds = await tx.commerceCheckoutHold.count({
+      where: {
+        amenity_id: amenityId,
+        ends_at: { gt: startsAt },
+        expires_at: { gt: new Date() },
+        scheduled_at: { lt: endsAt },
+        status: CommerceCheckoutHoldStatus.held,
+      },
+    });
+
     const amenity = await tx.amenity.findUnique({
       where: { id: amenityId },
       select: { capacity: true, is_active: true },
@@ -641,7 +836,7 @@ export class BookingRepository extends BaseRepository {
       throw this.buildBookingConflict();
     }
 
-    if (overlappingCount >= amenity.capacity) {
+    if (overlappingCount + overlappingHolds >= amenity.capacity) {
       throw this.buildBookingConflict();
     }
   }

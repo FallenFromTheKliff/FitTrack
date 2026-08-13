@@ -6,6 +6,7 @@ import AccountsModalLayer from "@/components/accounts/AccountsModalLayer";
 import { AccountsPageProvider } from "@/components/accounts/AccountsPageContext";
 import AccountsPageFrame from "@/components/accounts/AccountsPageFrame";
 import AccountsResponsiveStyles from "@/components/accounts/AccountsResponsiveStyles";
+import { CoachClientActionProvider } from "@/components/accounts/coach-client/coachClientActionContext";
 
 export const dynamic = "force-dynamic";
 
@@ -22,12 +23,14 @@ export const metadata: Metadata = {
 export default function AccountsPage() {
   return (
     <AccountsPageProvider>
-      <AccountsPageFrame>
-        <AccountsCreateSurface />
-        <AccountsDirectorySurface />
-        <AccountsModalLayer />
-        <AccountsResponsiveStyles />
-      </AccountsPageFrame>
+      <CoachClientActionProvider>
+        <AccountsPageFrame>
+          <AccountsCreateSurface />
+          <AccountsDirectorySurface />
+          <AccountsModalLayer />
+          <AccountsResponsiveStyles />
+        </AccountsPageFrame>
+      </CoachClientActionProvider>
     </AccountsPageProvider>
   );
 }

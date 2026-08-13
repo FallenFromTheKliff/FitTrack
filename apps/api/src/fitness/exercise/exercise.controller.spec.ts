@@ -13,6 +13,7 @@ function getGuardMetadata(
     | 'createExercise'
     | 'updateExercise'
     | 'listMuscleDefinitions'
+    | 'listMemberMuscleDefinitions'
     | 'createMuscleDefinition'
     | 'updateMuscleDefinition'
     | 'archiveMuscleDefinition'
@@ -30,6 +31,7 @@ function getRolesMetadata(
     | 'createExercise'
     | 'updateExercise'
     | 'listMuscleDefinitions'
+    | 'listMemberMuscleDefinitions'
     | 'createMuscleDefinition'
     | 'updateMuscleDefinition'
     | 'archiveMuscleDefinition'
@@ -46,6 +48,7 @@ describe('ExerciseController', () => {
   const exerciseService = {
     listExercises: jest.fn(),
     listMuscleDefinitions: jest.fn(),
+    listMemberMuscleDefinitions: jest.fn(),
     listReviewSubmissions: jest.fn(),
     getExerciseById: jest.fn(),
     createExercise: jest.fn(),
@@ -110,6 +113,25 @@ describe('ExerciseController', () => {
       muscle_group: 'legs',
       category: ExerciseCategory.strength,
     });
+  });
+
+  it('allows members to read active muscle definitions without admin controls', async () => {
+    exerciseService.listMemberMuscleDefinitions.mockResolvedValue({ data: [] });
+
+    await controller.listMemberMuscleDefinitions();
+
+    expect(getGuardMetadata('listMemberMuscleDefinitions')).toEqual([
+      JwtAuthGuard,
+      RolesGuard,
+    ]);
+    expect(getRolesMetadata('listMemberMuscleDefinitions')).toEqual([
+      UserRole.member,
+    ]);
+    expect(getRolesMetadata('listMuscleDefinitions')).toEqual([
+      UserRole.admin,
+      UserRole.staff,
+    ]);
+    expect(exerciseService.listMemberMuscleDefinitions).toHaveBeenCalledWith();
   });
 
   it('manages muscle definitions through the service', async () => {

@@ -397,23 +397,19 @@ const HELP_BY_TAB: Record<TabKey, MobileHelpContent> = {
         subtitle: "What can happen after you tap a booking card.",
         details: [
           "Tapping a card opens the details for that reservation or appointment.",
-          "Reservations may allow Cancel Reservation. Appointments may allow PayMongo Downpayment, PayMongo Full Payment, Cash Downpayment, Cash Full Payment, Cancel Appointment, or Leave Feedback when the coaching session is completed and unreviewed.",
-          "PayMongo starts an online checkout when that option is available, while Cash submits a payment request for staff handling.",
+          "Reservations may allow Cancel Reservation. Appointments may allow full PayMongo checkout, Cancel Appointment, or Leave Feedback when the coaching session is completed and unreviewed.",
+          "PayMongo starts the online checkout for the booking when that option is available.",
           "Completed, unreviewed coaching appointments can show Leave Feedback. That modal asks for a star rating and optional comment before submitting the coach review.",
           "The UI submits these actions through confirmation and request flows, so follow the on-screen result after tapping.",
         ],
         terms: [
           {
-            label: "Payment stage",
-            value: "Whether the booking is asking for a downpayment, full payment, or a remaining balance step.",
+            label: "Checkout",
+            value: "The booking uses full PayMongo checkout before it becomes active.",
           },
           {
             label: "PayMongo",
             value: "The online checkout path shown when FitTrack can start digital payment for that booking.",
-          },
-          {
-            label: "Cash payment request",
-            value: "A submitted cash payment action that staff still needs to handle or verify.",
           },
           {
             label: "Coach feedback",

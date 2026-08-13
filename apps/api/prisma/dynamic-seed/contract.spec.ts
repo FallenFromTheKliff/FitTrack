@@ -4,6 +4,7 @@ import {
   buildSeedAccounts,
   DEMO_ACCOUNTS,
   DYNAMIC_SEED_PASSWORD,
+  DYNAMIC_SEED_PASSWORDS,
 } from './accounts';
 import {
   BRODIGY_QUESTION_POOL,
@@ -13,7 +14,7 @@ import {
 import { parseDynamicSeedConfig } from './config';
 import { SeedRandom } from './random';
 
-test('dynamic seed preserves local and railway CLI options', () => {
+void test('dynamic seed preserves local and railway CLI options', () => {
   const local = parseDynamicSeedConfig([
     'node',
     'seed-dynamic.ts',
@@ -45,7 +46,7 @@ test('dynamic seed preserves local and railway CLI options', () => {
   assert.equal(railway.confirmRemoteReset, 'RESET_REMOTE_DYNAMIC_SEED');
 });
 
-test('all realistic seed accounts share the documented password and stable keys', () => {
+void test('realistic seed accounts use role-scoped credentials and stable keys', () => {
   const config = parseDynamicSeedConfig([
     'node',
     'seed-dynamic.ts',
@@ -56,7 +57,29 @@ test('all realistic seed accounts share the documented password and stable keys'
 
   assert.equal(accounts.length, 40);
   assert.ok(
-    accounts.every((account) => account.password === DYNAMIC_SEED_PASSWORD),
+    accounts.every(
+      (account) =>
+        account.password ===
+        DYNAMIC_SEED_PASSWORDS[
+          account.role as keyof typeof DYNAMIC_SEED_PASSWORDS
+        ],
+    ),
+  );
+  assert.equal(
+    DEMO_ACCOUNTS.find((account) => account.key === 'admin')?.password,
+    DYNAMIC_SEED_PASSWORDS.admin,
+  );
+  assert.equal(
+    DEMO_ACCOUNTS.find((account) => account.key === 'staff')?.password,
+    DYNAMIC_SEED_PASSWORDS.staff,
+  );
+  assert.equal(
+    DEMO_ACCOUNTS.find((account) => account.key === 'coach')?.password,
+    DYNAMIC_SEED_PASSWORDS.coach,
+  );
+  assert.equal(
+    DEMO_ACCOUNTS.find((account) => account.key === 'member-active')?.password,
+    DYNAMIC_SEED_PASSWORD,
   );
   assert.equal(new Set(accountKeys).size, accountKeys.length);
   assert.deepEqual(
@@ -65,16 +88,13 @@ test('all realistic seed accounts share the documented password and stable keys'
   );
   assert.deepEqual(
     new Set(
-      buildBrodigyHistoryKeys(accountKeys, [
-        'member-active',
-        'member-premium',
-      ]),
+      buildBrodigyHistoryKeys(accountKeys, ['member-active', 'member-premium']),
     ),
     new Set(accountKeys),
   );
 });
 
-test('Brodigy question selection is curated and deterministic', () => {
+void test('Brodigy question selection is curated and deterministic', () => {
   assert.ok(BRODIGY_QUESTION_POOL.length >= 15);
   assert.deepEqual(
     new Set(BRODIGY_QUESTION_POOL.map((question) => question.category)),
@@ -83,11 +103,13 @@ test('Brodigy question selection is curated and deterministic', () => {
 
   const first = new SeedRandom(2026);
   const second = new SeedRandom(2026);
-  const firstSelection = Array.from({ length: 40 }, () =>
-    pickBrodigyQuestion(first).prompt,
+  const firstSelection = Array.from(
+    { length: 40 },
+    () => pickBrodigyQuestion(first).prompt,
   );
-  const secondSelection = Array.from({ length: 40 }, () =>
-    pickBrodigyQuestion(second).prompt,
+  const secondSelection = Array.from(
+    { length: 40 },
+    () => pickBrodigyQuestion(second).prompt,
   );
 
   assert.deepEqual(firstSelection, secondSelection);

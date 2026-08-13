@@ -326,6 +326,9 @@ export function CoachDirectory({
 const VENUE_BOOKING_GRID =
   "minmax(220px, 1.2fr) minmax(180px, 0.95fr) minmax(210px, 1fr) minmax(100px, 0.42fr)";
 const VENUE_BOOKING_MIN_WIDTH = 740;
+const COACH_VENUE_WORK_GRID =
+  "minmax(190px, 1fr) minmax(180px, 0.9fr) minmax(210px, 1fr) minmax(170px, 0.75fr) minmax(110px, 0.5fr)";
+const COACH_VENUE_WORK_MIN_WIDTH = 900;
 
 export function CoachAppointmentsTable({
   appointments,
@@ -581,7 +584,7 @@ export function CoachAppointmentsTable({
                 />
               ) : (
                 <FitButton
-                  variant={appointment.status === "pending_coach" ? "primary" : "ghost"}
+                  variant="ghost"
                   data-ui="gym-operations-review-appointment"
                   label={appointmentActionLabel.toUpperCase()}
                   aria-label={`${appointmentActionLabel} appointment for ${memberName} with ${coachName} on ${dateLabel} at ${timeLabel}`}
@@ -630,6 +633,156 @@ export function CoachAppointmentsTable({
           />
         </div>
       </div>
+    </div>
+  );
+}
+
+export function CoachVenueWorkTable({
+  bookings,
+  colors,
+  onOpenReview,
+}: {
+  bookings: VenueBookingRecord[];
+  colors: ThemeColors;
+  onOpenReview: (booking: VenueBookingRecord) => void;
+}) {
+  if (bookings.length === 0) {
+    return (
+      <div
+        style={{
+          alignItems: "center",
+          backgroundColor: colors.surfaceRaised,
+          border: `1px dashed ${colors.border}`,
+          borderRadius: 8,
+          display: "flex",
+          minHeight: 110,
+          padding: "16px 18px",
+        }}
+      >
+        <FitText excludeGlobalScale style={{ color: colors.textMuted, fontSize: 13 }}>
+          No paid venue coach add-ons match this week and filter.
+        </FitText>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      data-ui="coach-venue-work-table"
+      style={{
+        borderBottom: `1px solid ${colors.border}`,
+        borderTop: `1px solid ${colors.border}`,
+        maxHeight: 360,
+        overflow: "auto",
+      }}
+    >
+      <div
+        style={{
+          backgroundColor: colors.surface,
+          display: "grid",
+          gap: 10,
+          gridTemplateColumns: COACH_VENUE_WORK_GRID,
+          minHeight: 34,
+          minWidth: COACH_VENUE_WORK_MIN_WIDTH,
+          padding: "0 4px",
+          position: "sticky",
+          top: 0,
+          zIndex: 1,
+        }}
+      >
+        {["MEMBER", "PRODUCT", "SCHEDULE", "PRICING", "ACTION"].map((label) => (
+          <FitText
+            excludeGlobalScale
+            key={label}
+            style={{
+              alignSelf: "center",
+              color: colors.textMuted,
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: "0.08em",
+            }}
+          >
+            {label}
+          </FitText>
+        ))}
+      </div>
+      {bookings.map((booking) => {
+        const memberName = getPersonDisplayName(
+          booking.user?.profile,
+          booking.user?.email,
+          "Member",
+        );
+        const start = new Date(booking.startTime);
+        const end = new Date(booking.endTime);
+        return (
+          <div
+            key={booking.id}
+            style={{
+              alignItems: "center",
+              borderTop: `1px solid ${colors.border}80`,
+              display: "grid",
+              gap: 10,
+              gridTemplateColumns: COACH_VENUE_WORK_GRID,
+              minHeight: 72,
+              minWidth: COACH_VENUE_WORK_MIN_WIDTH,
+              padding: "9px 4px",
+            }}
+          >
+            <div style={{ display: "grid", gap: 3, minWidth: 0 }}>
+              <FitText excludeGlobalScale style={{ color: colors.textPrimary, fontSize: 12, fontWeight: 700 }}>
+                {memberName}
+              </FitText>
+              <FitText excludeGlobalScale style={{ color: colors.textMuted, fontSize: 10.5 }}>
+                {booking.user?.email ?? "No email recorded"}
+              </FitText>
+            </div>
+            <div style={{ display: "grid", gap: 3, minWidth: 0 }}>
+              <FitText excludeGlobalScale style={{ color: colors.textPrimary, fontSize: 12, fontWeight: 700 }}>
+                Venue + coach add-on
+              </FitText>
+              <FitText excludeGlobalScale style={{ color: colors.textMuted, fontSize: 10.5 }}>
+                {booking.venue?.name ?? "Venue"}
+              </FitText>
+            </div>
+            <div style={{ display: "grid", gap: 3 }}>
+              <FitText excludeGlobalScale style={{ color: colors.textPrimary, fontSize: 12, fontWeight: 700 }}>
+                {start.toLocaleDateString("en-PH", { day: "numeric", month: "short", weekday: "short" })}
+              </FitText>
+              <FitText excludeGlobalScale style={{ color: colors.textMuted, fontSize: 10.5 }}>
+                {start.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} - {end.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+              </FitText>
+            </div>
+            <div style={{ display: "grid", gap: 3 }}>
+              <FitText excludeGlobalScale style={{ color: colors.textPrimary, fontSize: 12, fontWeight: 700 }}>
+                Coach PHP {(booking.coachAmount ?? 0).toLocaleString("en-PH")}
+              </FitText>
+              <FitText excludeGlobalScale style={{ color: colors.textMuted, fontSize: 10.5 }}>
+                Venue PHP {(booking.venueAmount ?? 0).toLocaleString("en-PH")}
+              </FitText>
+            </div>
+            <div style={{ alignItems: "flex-start", display: "grid", gap: 6 }}>
+              <FitPill
+                bgOpacity="14"
+                borderOpacity="35"
+                color={getAppointmentStatusColor(booking.status, colors)}
+                fontSize={9}
+                fontWeight={700}
+                label={getReadableStatus(booking.status ?? "confirmed").toUpperCase()}
+                mode="status"
+                style={{ borderRadius: 6 }}
+              />
+              <FitButton
+                aria-label={`Open venue coach add-on for ${memberName}`}
+                label={booking.status === "confirmed" ? "MANAGE" : "VIEW"}
+                onClick={() => onOpenReview(booking)}
+                style={{ borderRadius: 7, minHeight: 28, padding: "5px 10px" }}
+                textStyle={{ fontSize: 10, fontWeight: 700 }}
+                variant="ghost"
+              />
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -814,11 +967,7 @@ export function VenueBookingsTable({
                 </FitText>
               ) : (
                 <FitButton
-                  variant={
-                    venueActionLabel === "Review"
-                      ? "primary"
-                      : "ghost"
-                  }
+                  variant={venueActionLabel === "Open" ? "primary" : "ghost"}
                   data-ui="gym-operations-review-venue-booking"
                   label={venueActionLabel.toUpperCase()}
                   aria-label={`${venueActionLabel} venue booking for ${memberName} at ${venueName} on ${venueDateLabel}, ${venueTimeLabel}`}

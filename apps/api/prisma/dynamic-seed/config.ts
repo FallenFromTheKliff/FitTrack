@@ -95,8 +95,13 @@ export function parseDynamicSeedConfig(
     getFlag(argv, 'history-months'),
     DEFAULT_HISTORY_MONTHS,
   );
+  const configuredAnchorDate =
+    getFlag(argv, 'anchor-date') ??
+    getFlag(argv, 'to') ??
+    process.env.SEED_NOW ??
+    process.env.SEED_BASE_DATE;
   const anchorDate = parseDateFlag(
-    getFlag(argv, 'anchor-date') ?? getFlag(argv, 'to'),
+    configuredAnchorDate,
     startOfUtcToday(),
     'anchor-date',
   );

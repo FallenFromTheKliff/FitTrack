@@ -766,21 +766,6 @@ export function createAdminApi(transport: ApiTransport) {
         mapAmenityBookingToVenueBookingRecord(record as never),
       ) as T[];
     },
-    confirmBooking(bookingId: string) {
-      return unwrapVoidResponse(
-        transport.patch(`/admin/bookings/${bookingId}/confirm`, {}),
-        "Unable to confirm booking.",
-      );
-    },
-    rejectBooking(bookingId: string, reason?: string) {
-      return unwrapVoidResponse(
-        transport.patch(
-          `/admin/bookings/${bookingId}/reject`,
-          reason ? { reason } : {},
-        ),
-        "Unable to reject booking.",
-      );
-    },
     completeBooking(bookingId: string) {
       return unwrapVoidResponse(
         transport.patch(`/admin/bookings/${bookingId}/complete`, {}),

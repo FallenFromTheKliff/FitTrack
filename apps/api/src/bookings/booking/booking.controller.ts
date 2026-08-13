@@ -107,6 +107,57 @@ export class BookingController {
     return this.bookingService.getAllBookings(dto);
   }
 
+  @Get('coach-work')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.coach)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Get fully paid venue bookings assigned to the authenticated coach.',
+  })
+  getCoachVenueWork(
+    @CurrentUser() user: JwtPayload,
+    @Query() dto: DateRangeDTO,
+  ) {
+    return this.bookingService.getCoachVenueWork(user.sub, dto);
+  }
+
+  @Patch('coach-work/:id/complete')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.coach)
+  @ApiBearerAuth('access-token')
+  async completeCoachVenueWork(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    await this.bookingService.completeCoachVenueWork(id, user.sub);
+    return null;
+  }
+
+  @Patch('coach-work/:id/cancel')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.coach)
+  @ApiBearerAuth('access-token')
+  async cancelCoachVenueWork(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+    @Body('reason') reason?: string,
+  ) {
+    await this.bookingService.cancelCoachVenueWork(id, user.sub, reason);
+    return null;
+  }
+
+  @Patch('coach-work/:id/no-show')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.coach)
+  @ApiBearerAuth('access-token')
+  async markCoachVenueWorkNoShow(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    await this.bookingService.markCoachVenueWorkNoShow(id, user.sub);
+    return null;
+  }
+
   @Patch('amenity/:id/cancel')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
@@ -126,14 +177,11 @@ export class BookingController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.admin, UserRole.staff)
   @ApiBearerAuth('access-token')
+  /** @deprecated Retained only as a 410 full-payment compatibility route. */
   @ApiOperation({
-    summary: 'Start or resume balance collection for a confirmed booking.',
+    summary: 'Deprecated venue-booking balance collection compatibility route.',
   })
-  @ApiResponse({
-    status: 201,
-    description: 'Balance payment created or resumed.',
-    type: BookingCheckoutResponseDTO,
-  })
+  @ApiResponse({ status: 410, description: 'Balance collection is retired.' })
   processBalance(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ProcessBalanceDTO,

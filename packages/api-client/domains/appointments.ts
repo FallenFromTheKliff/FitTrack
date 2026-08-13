@@ -1,5 +1,10 @@
 import type { ApiTransport } from "../transport/createAxiosTransport";
 import { unwrapResponse, unwrapVoidResponse } from "../request";
+import {
+  mapCommerceCheckoutAttempt,
+  type CommerceCheckoutApiRecord,
+  type CommerceCheckoutAttempt,
+} from "./commerce-checkout";
 
 export type AppointmentCoachSummary = {
   contactEmail?: string | null;
@@ -25,24 +30,17 @@ export type AppointmentReviewSummary = {
 export type AppointmentRecord = {
   activePaymentId?: string | null;
   activePaymentProvider?: "cash" | "paymongo" | null;
-  activePaymentStage?: "balance" | "downpayment" | "full" | null;
   activePaymentStatus?: "awaiting_verification" | "completed" | "failed" | "pending" | "processing" | null;
-  amountDueNow?: number | null;
   assessmentReport?: string | null;
-  balancePaidAt?: string | null;
   coach?: AppointmentCoachSummary | null;
   coachId?: string;
   coachEarnings?: number | null;
   coachFeedback?: string | null;
   coachPayoutPaidAt?: string | null;
-  downpaymentPaidAt?: string | null;
   duration: number;
   gymRevenue?: number | null;
   id: string;
-  nextPaymentDate?: string | null;
   notes?: string | null;
-  paymentPlan?: "downpayment" | "free" | "full";
-  remainingBalance?: number | null;
   review?: AppointmentReviewSummary | null;
   recurringPlanId?: string | null;
   scheduledAt: string;
@@ -79,36 +77,36 @@ export type CreateAppointmentPayload = {
   bookingMode?: "pack" | "recurring" | "single";
   coachId: string;
   duration: number;
+  idempotencyKey?: string;
   notes?: string;
   scheduledAt: string;
   sessionCount?: number;
 };
 
-export type AppointmentCheckoutResponse = {
-  appointmentId: string;
-  checkoutUrl: string | null;
-  paymentId?: string | null;
-  status: string;
+export type RescheduleAppointmentPayload = {
+  duration: number;
+  idempotencyKey?: string;
+  scheduledAt: string;
 };
 
-export type AppointmentPaymentProvider = "cash" | "paymongo";
-export type AppointmentPaymentStage = "downpayment" | "full";
+export type AppointmentAvailabilitySlot = {
+  available: boolean;
+  conflictReasons: string[];
+  durationMinutes: number;
+  endAt: string;
+  startAt: string;
+};
 
-type AppointmentApiRecord = {
+export type AppointmentApiRecord = {
   active_payment_id?: string | null;
   active_payment_provider?: "cash" | "paymongo" | null;
-  active_payment_stage?: "balance" | "downpayment" | "full" | null;
   active_payment_status?: "awaiting_verification" | "completed" | "failed" | "pending" | "processing" | null;
-  balance_amount?: number | string | null;
-  balance_paid_at?: string | null;
   coach?: AppointmentCoachSummary | null;
   coach_earnings?: number | string | null;
   coach_feedback?: string | null;
   coach_payout_paid_at?: string | null;
   assessment_report?: string | null;
   coach_id?: string;
-  downpayment_amount?: number | string | null;
-  downpayment_paid_at?: string | null;
   duration_minutes?: number;
   gym_revenue?: number | string | null;
   id: string;
@@ -128,13 +126,6 @@ type AppointmentApiRecord = {
   sessionType?: string | null;
   status?: string;
   total_amount?: number | string | null;
-};
-
-type AppointmentCheckoutApiRecord = {
-  appointment_id: string;
-  checkout_url?: string | null;
-  payment_id?: string | null;
-  status: string;
 };
 
 function createIdempotencyKey() {
@@ -217,60 +208,25 @@ function mapAppointmentReview(
   };
 }
 
-function mapAppointmentRecord(record: AppointmentApiRecord): AppointmentRecord {
+export function mapAppointmentRecord(record: AppointmentApiRecord): AppointmentRecord {
   const totalAmount = toAmountNumber(record.total_amount);
-  const downpaymentAmount = toAmountNumber(record.downpayment_amount);
-  const remainingBalance = toAmountNumber(record.balance_amount);
   const status = record.status;
   const scheduledAt = record.scheduled_at ?? record.scheduledAt ?? "";
-  const activePaymentStage = record.active_payment_stage ?? null;
-  const isPaidInFull = Boolean(record.downpayment_paid_at && record.balance_paid_at);
-  const isFullPaymentFlow =
-    activePaymentStage === "full" || isPaidInFull;
-  const hasSplitPayment = totalAmount > 0 && remainingBalance > 0 && !isPaidInFull;
-  const hasPaymentSummary = totalAmount > 0 && downpaymentAmount > 0;
 
   return {
     activePaymentId: record.active_payment_id ?? null,
     activePaymentProvider: record.active_payment_provider ?? null,
-    activePaymentStage,
     activePaymentStatus: record.active_payment_status ?? null,
-    amountDueNow: hasPaymentSummary
-      ? isFullPaymentFlow
-        ? totalAmount
-        : status === "pending_payment"
-        ? downpaymentAmount
-        : remainingBalance > 0 && !record.balance_paid_at
-          ? remainingBalance
-          : downpaymentAmount
-      : undefined,
-    balancePaidAt: record.balance_paid_at ?? null,
     coach: mapAppointmentCoach(record.coach),
     coachEarnings: toAmountNumber(record.coach_earnings),
     coachFeedback: record.coach_feedback ?? null,
     coachPayoutPaidAt: record.coach_payout_paid_at ?? null,
     coachId: record.coach_id,
-    downpaymentPaidAt: record.downpayment_paid_at ?? null,
     duration: record.duration_minutes ?? 0,
     gymRevenue: toAmountNumber(record.gym_revenue),
     id: record.id,
     assessmentReport: record.assessment_report ?? null,
-    nextPaymentDate:
-      hasSplitPayment && !record.balance_paid_at ? scheduledAt : undefined,
     notes: record.member_notes ?? record.notes ?? null,
-    paymentPlan:
-      totalAmount <= 0
-        ? "free"
-        : isFullPaymentFlow || remainingBalance <= 0
-          ? "full"
-          : hasSplitPayment
-          ? "downpayment"
-          : undefined,
-    remainingBalance: hasPaymentSummary
-      ? isFullPaymentFlow
-        ? 0
-        : remainingBalance
-      : undefined,
     review: mapAppointmentReview(record.review),
     recurringPlanId: record.recurring_plan_id ?? null,
     scheduledAt,
@@ -278,17 +234,6 @@ function mapAppointmentRecord(record: AppointmentApiRecord): AppointmentRecord {
     sessionType: record.sessionType ?? null,
     status,
     totalAmount: totalAmount > 0 ? totalAmount : undefined,
-  };
-}
-
-function mapAppointmentCheckoutResponse(
-  record: AppointmentCheckoutApiRecord,
-): AppointmentCheckoutResponse {
-  return {
-    appointmentId: record.appointment_id,
-    checkoutUrl: record.checkout_url ?? null,
-    paymentId: record.payment_id ?? null,
-    status: record.status,
   };
 }
 
@@ -303,9 +248,11 @@ export function createAppointmentsApi(transport: ApiTransport) {
           records.map((record) => mapAppointmentRecord(record)) as T[],
       );
     },
-    create<T = AppointmentRecord>(payload: CreateAppointmentPayload) {
-      return unwrapResponse<AppointmentApiRecord>(
-        transport.post("/coaching/appointments", {
+    create(payload: CreateAppointmentPayload): Promise<CommerceCheckoutAttempt> {
+      return unwrapResponse<CommerceCheckoutApiRecord>(
+        transport.post(
+          "/coaching/appointments",
+          {
           coach_id: payload.coachId,
           duration_minutes: payload.duration,
           ...(payload.bookingMode
@@ -316,9 +263,65 @@ export function createAppointmentsApi(transport: ApiTransport) {
             ? { session_count: payload.sessionCount }
             : {}),
           scheduled_at: payload.scheduledAt,
-        }),
+          },
+          {
+            headers: {
+              "Idempotency-Key": payload.idempotencyKey ?? createIdempotencyKey(),
+            },
+          },
+        ),
         "Unable to create appointment.",
-      ).then((record) => mapAppointmentRecord(record) as T);
+      ).then(mapCommerceCheckoutAttempt);
+    },
+    reschedule(
+      appointmentId: string,
+      payload: RescheduleAppointmentPayload,
+    ): Promise<AppointmentRecord> {
+      return unwrapResponse<AppointmentApiRecord>(
+        transport.patch(
+          `/coaching/appointments/${appointmentId}/reschedule`,
+          {
+            duration_minutes: payload.duration,
+            scheduled_at: payload.scheduledAt,
+          },
+          {
+            headers: {
+              "Idempotency-Key": payload.idempotencyKey ?? createIdempotencyKey(),
+            },
+          },
+        ),
+        "Unable to reschedule appointment.",
+      ).then(mapAppointmentRecord);
+    },
+    getAvailability(
+      coachId: string,
+      input: { date: string; durationMinutes: number },
+    ): Promise<AppointmentAvailabilitySlot[]> {
+      return unwrapResponse<
+        Array<{
+          available: boolean;
+          conflict_reasons: string[];
+          duration_minutes: number;
+          end_at: string;
+          start_at: string;
+        }>
+      >(
+        transport.get(`/coaching/coaches/${coachId}/availability`, {
+          params: {
+            date: input.date,
+            duration_minutes: input.durationMinutes,
+          },
+        }),
+        "Unable to load coach availability.",
+      ).then((records) =>
+        records.map((record) => ({
+          available: record.available,
+          conflictReasons: record.conflict_reasons,
+          durationMinutes: record.duration_minutes,
+          endAt: record.end_at,
+          startAt: record.start_at,
+        })),
+      );
     },
     cancel(appointmentId: string, cancelReason: string) {
       return unwrapVoidResponse(
@@ -326,60 +329,6 @@ export function createAppointmentsApi(transport: ApiTransport) {
           reason: cancelReason,
         }),
         "Unable to cancel appointment.",
-      );
-    },
-    initiateDownpayment(
-      appointmentId: string,
-      provider: AppointmentPaymentProvider = "paymongo",
-      paymentStage: AppointmentPaymentStage = "full",
-    ) {
-      return unwrapResponse<AppointmentCheckoutApiRecord>(
-        transport.post(
-          `/coaching/appointments/${appointmentId}/pay`,
-          { provider, payment_stage: paymentStage },
-          {
-            headers: {
-              "Idempotency-Key": createIdempotencyKey(),
-            },
-          },
-        ),
-        "Unable to start appointment payment.",
-      ).then((record) => mapAppointmentCheckoutResponse(record));
-    },
-    processBalance(
-      appointmentId: string,
-      payload: {
-        provider: AppointmentPaymentProvider;
-        referenceNo?: string;
-        screenshotUrl?: string;
-      },
-    ) {
-      return unwrapResponse<AppointmentCheckoutApiRecord>(
-        transport.post(`/coaching/appointments/${appointmentId}/balance`, {
-          provider: payload.provider,
-          ...(payload.referenceNo ? { reference_no: payload.referenceNo } : {}),
-          ...(payload.screenshotUrl
-            ? { screenshot_url: payload.screenshotUrl }
-            : {}),
-        }),
-        "Unable to collect appointment balance.",
-      ).then((record) => mapAppointmentCheckoutResponse(record));
-    },
-    confirmAsCoach(appointmentId: string) {
-      return unwrapVoidResponse(
-        transport.patch(`/coaching/appointments/${appointmentId}/respond`, {
-          accepted: true,
-        }),
-        "Unable to confirm appointment.",
-      );
-    },
-    declineAsCoach(appointmentId: string, reason: string) {
-      return unwrapVoidResponse(
-        transport.patch(`/coaching/appointments/${appointmentId}/respond`, {
-          accepted: false,
-          rejection_reason: reason,
-        }),
-        "Unable to decline appointment.",
       );
     },
     completeAsCoach(

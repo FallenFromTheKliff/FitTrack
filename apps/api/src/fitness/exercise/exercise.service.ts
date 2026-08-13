@@ -270,6 +270,17 @@ export class ExerciseService {
     };
   }
 
+  async listMemberMuscleDefinitions(): Promise<{
+    data: MuscleDefinitionResponseDTO[];
+  }> {
+    const definitions = await this.repo.listActiveMuscleDefinitions();
+    return {
+      data: definitions
+        .filter((definition) => definition.is_active)
+        .map((definition) => this.toMuscleDefinitionResponse(definition)),
+    };
+  }
+
   async createMuscleDefinition(
     dto: CreateMuscleDefinitionDTO,
   ): Promise<MuscleDefinitionResponseDTO> {

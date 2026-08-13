@@ -1,0 +1,71 @@
+- generic [ref=e19]:
+  - generic [ref=e20]:
+    - img [ref=e22] [cursor=pointer]
+    - generic [ref=e159]: P
+    - generic [ref=e23]:
+      - button "Open page help" [ref=e24] [cursor=pointer]:
+        - img [ref=e25]
+      - button "Open notifications" [ref=e28] [cursor=pointer]:
+        - img [ref=e29]
+  - generic [ref=e38]:
+    - generic [ref=e39]:
+      - generic [ref=e41]: AR
+      - generic [ref=e42]:
+        - generic [ref=e43]: Ava Rivera
+        - generic [ref=e44]: seed.member.active@fittrack.com
+        - generic [ref=e45]: Member since Jan 2026
+    - generic [ref=e48]:
+      - generic [ref=e49]:
+        - generic [ref=e50]: Fitness Summary
+        - generic [ref=e52]: Loading your live mastery summary...
+      - generic [ref=e53]:
+        - generic [ref=e54]: Ranking Privacy
+        - generic [ref=e55]:
+          - generic [ref=e56]:
+            - generic:
+              - img [ref=e60]
+              - generic [ref=e63]:
+                - generic [ref=e64]:
+                  - generic [ref=e65]: Public
+                  - generic [ref=e68]: Active
+                - generic [ref=e69]: Show your profile name on ranked member surfaces.
+          - button "Anonymous, Stay ranked while masking your member identity." [ref=e71] [cursor=pointer]:
+            - img [ref=e74]
+            - generic [ref=e77]:
+              - generic [ref=e79]: Anonymous
+              - generic [ref=e80]: Stay ranked while masking your member identity.
+            - img [ref=e81]
+          - button "Private, Hide your visible ranking while keeping progression history." [ref=e84] [cursor=pointer]:
+            - img [ref=e87]
+            - generic [ref=e92]:
+              - generic [ref=e94]: Private
+              - generic [ref=e95]: Hide your visible ranking while keeping progression history.
+            - img [ref=e96]
+      - generic [ref=e98]:
+        - generic [ref=e99]: ACCOUNT
+        - generic [ref=e100]:
+          - button "Edit Profile, Update your name, phone, and avatar" [ref=e102] [cursor=pointer]:
+            - img [ref=e105]
+            - generic [ref=e117]:
+              - generic [ref=e119]: Edit Profile
+              - generic [ref=e120]: Update your name, phone, and avatar
+            - img [ref=e121]
+          - generic [ref=e123]:
+            - generic:
+              - img [ref=e125]
+              - generic [ref=e127]:
+                - generic [ref=e128]:
+                  - generic [ref=e129]: Member Access
+                  - generic [ref=e132]: Member
+                - generic [ref=e133]: Your membership card is active. Member-only app features are unlocked on this account.
+          - button "Attendance QR, Open your rotating attendance QR for front-desk check-ins., Ready" [ref=e135] [cursor=pointer]:
+            - img [ref=e137]
+            - generic [ref=e142]:
+              - generic [ref=e143]:
+                - generic [ref=e144]: Attendance QR
+                - generic [ref=e147]: Ready
+              - generic [ref=e148]: Open your rotating attendance QR for front-desk check-ins.
+            - img [ref=e149]
+      - button "REQUEST ACCOUNT TERMINATION" [ref=e151] [cursor=pointer]:
+        - img [ref=e152]
+        - generic [ref=e157]: REQUEST ACCOUNT TERMINATION

@@ -1693,7 +1693,7 @@ export class MuscleLeaderboardFilterDTO extends PaginationDTO {
 
   @ApiPropertyOptional({ example: '33333333-3333-4333-8333-333333333333' })
   @IsOptional()
-  @IsUUID('4', { message: 'season_id must be a valid UUID' })
+  @IsUUID('all', { message: 'season_id must be a valid UUID' })
   season_id?: string;
 
   @ApiPropertyOptional({ description: 'Opaque stable paging cursor.' })

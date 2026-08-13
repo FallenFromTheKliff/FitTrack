@@ -94,15 +94,8 @@ function compareAppointmentStartTime(
 }
 
 function hasPaidCoachEarningsEvidence(appointment: StaffAppointmentRecord) {
-  if (appointment.coachPayoutPaidAt || appointment.balancePaidAt) return true;
-  if (appointment.activePaymentStatus !== "completed") return false;
-
-  if (appointment.activePaymentStage === "downpayment") {
-    const remainingBalance = Number(appointment.remainingBalance ?? 0);
-    return Number.isFinite(remainingBalance) && remainingBalance <= 0;
-  }
-
-  return true;
+  return Boolean(appointment.coachPayoutPaidAt) ||
+    appointment.activePaymentStatus === "completed";
 }
 
 function isPaidCompletedCoachAppointment(appointment: StaffAppointmentRecord) {

@@ -1,7 +1,7 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import type { PrismaClient } from '@prisma/client';
-import type { DynamicSeedConfig, SeedCredential } from './types';
+import type { DynamicSeedConfig, MemberCohort, SeedCredential } from './types';
 
 export const DYNAMIC_SEED_MANIFEST_PATH = resolve(
   process.cwd(),
@@ -11,7 +11,7 @@ export const DYNAMIC_SEED_MANIFEST_PATH = resolve(
   'dynamic-seed-manifest.json',
 );
 
-const MODEL_DELEGATES = [
+export const MODEL_DELEGATES = [
   'user',
   'accountDeletionRequest',
   'authIdentity',
@@ -27,13 +27,17 @@ const MODEL_DELEGATES = [
   'subscription',
   'membershipCard',
   'payment',
+  'commerceCheckoutHold',
   'amenity',
   'facilityFloorPlanMedia',
   'amenityBooking',
   'amenityFeedback',
   'coachProfile',
+  'coachSpecialty',
+  'coachProfileSpecialty',
   'coachAppointment',
   'recurringCoachingPlan',
+  'recurringCoachingScheduleItem',
   'recurringCoachingBillingCycle',
   'coachReview',
   'coachAvailabilitySlot',
@@ -45,6 +49,7 @@ const MODEL_DELEGATES = [
   'trainingScheduleDay',
   'planExercise',
   'workoutSession',
+  'coachWorkoutAssignment',
   'exerciseLog',
   'poseExerciseProfile',
   'poseSession',
@@ -54,6 +59,7 @@ const MODEL_DELEGATES = [
   'userProgressionProfile',
   'seasonDefinition',
   'seasonalStanding',
+  'seasonalMuscleStanding',
   'milestoneDefinition',
   'userMilestoneProgress',
   'milestoneEvidenceSubmission',
@@ -87,6 +93,46 @@ const MODEL_DELEGATES = [
   'businessInsightRun',
 ] as const;
 
+export type ModelCoverageStatus =
+  | 'seeded'
+  | 'intentionally-empty'
+  | 'derived'
+  | 'external-only';
+
+export type DynamicSeedIntegrityStatus = 'passed' | 'failed';
+
+export type DynamicSeedIntegrityViolation = {
+  category: string;
+  detail: string;
+};
+
+export const MODEL_COVERAGE: Record<
+  (typeof MODEL_DELEGATES)[number],
+  ModelCoverageStatus
+> = Object.fromEntries(
+  MODEL_DELEGATES.map((delegate) => [delegate, 'seeded']),
+) as Record<(typeof MODEL_DELEGATES)[number], ModelCoverageStatus>;
+
+export type DynamicSeedIntegritySummary = {
+  actuals: Record<string, number>;
+  caps: Record<string, number>;
+  checks: number;
+  cohorts: Record<
+    MemberCohort,
+    {
+      actual: number;
+      target: number;
+      actuals: Record<string, number>;
+      caps: Record<string, number>;
+    }
+  >;
+  scenarioMatrix: Record<string, string>;
+  status: DynamicSeedIntegrityStatus;
+  summary: Record<string, number>;
+  targets: Record<string, number>;
+  violations: DynamicSeedIntegrityViolation[];
+};
+
 export type DynamicSeedManifest = {
   config: {
     anchorDate: string;
@@ -109,10 +155,74 @@ export type DynamicSeedManifest = {
   };
   counts: Record<string, number>;
   credentials: SeedCredential[];
+  integrity: DynamicSeedIntegritySummary;
+  modelCoverage: typeof MODEL_COVERAGE;
   manifestPath: string;
   notableIds: Record<string, string>;
   runAt: string;
 };
+
+function isCurrentDynamicSeedManifest(
+  value: unknown,
+): value is DynamicSeedManifest {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const manifest = value as Partial<DynamicSeedManifest>;
+  const integrityStatus = manifest.integrity?.status;
+  return (
+    typeof manifest.runAt === 'string' &&
+    (integrityStatus === 'passed' || integrityStatus === 'failed') &&
+    Boolean(manifest.config) &&
+    Boolean(manifest.counts) &&
+    Boolean(manifest.modelCoverage)
+  );
+}
+
+const noSuccessfulManifestError = (reason: string) =>
+  new Error(
+    `[dynamic-seed][report] FAILED: no successful current manifest is available (${reason}). ` +
+      'Run the realistic local seed successfully before requesting an integrity report.',
+  );
+
+export async function invalidateDynamicSeedManifest(
+  manifestPath = DYNAMIC_SEED_MANIFEST_PATH,
+) {
+  try {
+    await unlink(manifestPath);
+  } catch (error) {
+    if ((error as { code?: string }).code !== 'ENOENT') {
+      throw error;
+    }
+  }
+}
+
+export async function readCurrentDynamicSeedManifest(
+  manifestPath = DYNAMIC_SEED_MANIFEST_PATH,
+): Promise<DynamicSeedManifest> {
+  let raw: string;
+  try {
+    raw = await readFile(manifestPath, 'utf8');
+  } catch (error) {
+    if ((error as { code?: string }).code === 'ENOENT') {
+      throw noSuccessfulManifestError('the manifest is missing or was invalidated');
+    }
+    throw error;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw noSuccessfulManifestError('the manifest is not valid JSON');
+  }
+  if (!isCurrentDynamicSeedManifest(parsed)) {
+    throw noSuccessfulManifestError(
+      'the manifest does not record a current passed or failed seed',
+    );
+  }
+  return parsed;
+}
 
 export async function buildModelCounts(prisma: PrismaClient) {
   const counts: Record<string, number> = {};
@@ -121,10 +231,15 @@ export async function buildModelCounts(prisma: PrismaClient) {
     { count: () => Promise<number> } | undefined
   >;
 
-  for (const delegateName of MODEL_DELEGATES) {
-    const delegate = delegateSource[delegateName];
-    if (delegate) {
-      counts[delegateName] = await delegate.count();
+  const rows = await Promise.all(
+    MODEL_DELEGATES.map(async (delegateName) => {
+      const delegate = delegateSource[delegateName];
+      return delegate ? ([delegateName, await delegate.count()] as const) : null;
+    }),
+  );
+  for (const row of rows) {
+    if (row) {
+      counts[row[0]] = row[1];
     }
   }
 
@@ -135,6 +250,7 @@ export async function writeDynamicSeedManifest(args: {
   config: DynamicSeedConfig;
   counts: Record<string, number>;
   credentials: SeedCredential[];
+  integrity: DynamicSeedIntegritySummary;
   notableIds: Record<string, string>;
 }) {
   await mkdir(dirname(DYNAMIC_SEED_MANIFEST_PATH), { recursive: true });
@@ -161,7 +277,9 @@ export async function writeDynamicSeedManifest(args: {
     },
     counts: args.counts,
     credentials: args.credentials,
+    integrity: args.integrity,
     manifestPath: DYNAMIC_SEED_MANIFEST_PATH,
+    modelCoverage: MODEL_COVERAGE,
     notableIds: args.notableIds,
     runAt: new Date().toISOString(),
   };

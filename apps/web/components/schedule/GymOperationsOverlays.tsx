@@ -43,13 +43,11 @@ import {
   formatSlotLabel,
   getCurrentGymMinutes,
   getDefaultDateInput,
-  getInitialPaymentAmount,
   hasVenueWindowConflict,
   matchesDay,
   modalFieldStyle,
   modalTextAreaStyle,
   overlaySurfaceStyle,
-  roundCurrency,
   splitListInput,
   toIsoString,
   toMinutes,
@@ -657,13 +655,6 @@ export function GymOperationsCreateVenueBookingModal({
     ? (coachHourlyRate * durationMinutes) / 60
     : 0;
   const estimatedBookingTotal = estimatedVenueTotal + estimatedCoachTotal;
-  const amountDueNow = getInitialPaymentAmount(
-    estimatedBookingTotal,
-    paymentStage,
-  );
-  const remainingBalance = roundCurrency(
-    Math.max(estimatedBookingTotal - amountDueNow, 0),
-  );
   const isVenueWindowInFuture =
     Boolean(startTime) &&
     (date !== getDefaultDateInput() || toMinutes(startTime) > currentMinutes);
@@ -718,7 +709,7 @@ export function GymOperationsCreateVenueBookingModal({
 
     setCreateConfirm({
       confirmLabel: "CREATE BOOKING",
-      message: `Create this manual venue booking and record ${formatPeso(amountDueNow)} as full cash payment?`,
+      message: `Create this manual venue booking and record ${formatPeso(estimatedBookingTotal)} as full cash payment?`,
       onConfirm: submitVenueBooking,
       title: "Confirm venue booking",
     });
@@ -969,16 +960,9 @@ export function GymOperationsCreateVenueBookingModal({
                   value: `${durationMinutes} min`,
                 },
                 {
-                  helper: "Due now from selected payment option",
+                  helper: "Full cash amount recorded",
                   label: "Revenue recorded",
-                  value: formatPeso(
-                    coachId
-                      ? amountDueNow
-                      : getInitialPaymentAmount(
-                          estimatedVenueTotal,
-                          paymentStage,
-                        ),
-                  ),
+                  value: formatPeso(estimatedBookingTotal),
                   valueColor: colors.brand,
                 },
               ]}
@@ -989,15 +973,7 @@ export function GymOperationsCreateVenueBookingModal({
                 columns="minmax(0, 1fr)"
                 items={[
                   {
-                    helper: (
-                      <>
-                        Includes {formatPeso(estimatedCoachTotal)} coach add-on
-                        /{" "}
-                        {remainingBalance > 0
-                          ? `${formatPeso(remainingBalance)} remaining`
-                          : "fully paid"}
-                      </>
-                    ),
+                    helper: `Includes ${formatPeso(estimatedCoachTotal)} coach add-on`,
                     label: "Booking total",
                     value: formatPeso(estimatedBookingTotal),
                     valueColor: colors.brand,
@@ -1010,8 +986,8 @@ export function GymOperationsCreateVenueBookingModal({
               excludeGlobalScale
               style={{ fontSize: 12, color: colors.textMuted }}
             >
-              Cashier bookings record the full amount immediately. Member
-              self-service cash and downpayment options are not available here.
+              Cashier bookings record the full amount immediately. This creates
+              a confirmed product booking with no deferred collection step.
             </FitText>
 
             {hasConflict || errorText || venueAvailabilityMessage ? (
@@ -1230,10 +1206,6 @@ export function GymOperationsCreateCoachBookingModal({
   const coachHourlyRate = selectedCoachOption?.hourlyRate ?? 0;
   const estimatedCoachTotal =
     (coachHourlyRate * (selectedSlot?.durationMinutes ?? 0)) / 60;
-  const amountDueNow = getInitialPaymentAmount(
-    estimatedCoachTotal,
-    paymentStage,
-  );
   const canSubmit =
     Boolean(memberId) &&
     Boolean(coachId) &&
@@ -1278,7 +1250,7 @@ export function GymOperationsCreateCoachBookingModal({
 
     setCreateConfirm({
       confirmLabel: "CREATE COACH BOOKING",
-      message: `Create this manual coach booking and record ${formatPeso(amountDueNow)} as full cash payment?`,
+      message: `Create this manual coach booking and record ${formatPeso(estimatedCoachTotal)} as full cash payment?`,
       onConfirm: submitCoachBooking,
       title: "Confirm coach booking",
     });
@@ -1291,7 +1263,7 @@ export function GymOperationsCreateCoachBookingModal({
         onClose={onClose}
         closeDisabled={isSubmitting}
         title="Create coach booking"
-        subtitle="Create a front-desk coaching session and record the initial cash payment from the shared schedule."
+        subtitle="Create a front-desk coaching session and record the full cash payment from the shared schedule."
         footer={
           <FitButton
             variant="primary"
@@ -1557,9 +1529,9 @@ export function GymOperationsCreateCoachBookingModal({
                   value: `${selectedSlot?.durationMinutes ?? 0} min`,
                 },
                 {
-                  helper: "Due now from selected payment option",
+                  helper: "Full cash amount recorded",
                   label: "Revenue recorded",
-                  value: formatPeso(amountDueNow),
+                  value: formatPeso(estimatedCoachTotal),
                   valueColor: colors.brand,
                 },
               ]}
@@ -1569,8 +1541,8 @@ export function GymOperationsCreateCoachBookingModal({
               excludeGlobalScale
               style={{ fontSize: 12, color: colors.textMuted }}
             >
-              Cashier bookings record the full amount immediately. Member
-              self-service cash and downpayment options are not available here.
+              Cashier bookings record the full amount immediately. This creates
+              a confirmed product booking with no deferred collection step.
             </FitText>
 
             {errorText ? (

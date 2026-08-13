@@ -64,31 +64,6 @@ export function staffAppointmentsQueryOptions<T>(
   });
 }
 
-export function confirmStaffBookingMutationOptions(client: Pick<ApiClient, "staff">, queryClient: QueryClient) {
-  return mutationOptions({
-    mutationFn: (bookingId: string) => client.staff.confirmBooking(bookingId),
-    onSuccess: async () => {
-      await Promise.all([
-        invalidateStaffBookingQueries(queryClient),
-        invalidateAnalyticsQueries(queryClient),
-      ]);
-    }
-  });
-}
-
-export function rejectStaffBookingMutationOptions(client: Pick<ApiClient, "staff">, queryClient: QueryClient) {
-  return mutationOptions({
-    mutationFn: ({ bookingId, reason }: { bookingId: string; reason?: string }) =>
-      client.staff.rejectBooking(bookingId, reason),
-    onSuccess: async () => {
-      await Promise.all([
-        invalidateStaffBookingQueries(queryClient),
-        invalidateAnalyticsQueries(queryClient),
-      ]);
-    }
-  });
-}
-
 export function completeStaffBookingMutationOptions(client: Pick<ApiClient, "staff">, queryClient: QueryClient) {
   return mutationOptions({
     mutationFn: (bookingId: string) => client.staff.completeBooking(bookingId),
@@ -187,30 +162,6 @@ export function createStaffCoachMutationOptions(
       client.staff.createCoach(payload),
     onSuccess: async () => {
       await invalidateStaffCoachManagementQueries(queryClient);
-    }
-  });
-}
-
-export function respondToStaffAppointmentMutationOptions(
-  client: Pick<ApiClient, "staff">,
-  queryClient: QueryClient
-) {
-  return mutationOptions({
-    mutationFn: ({
-      accepted,
-      appointmentId,
-      reason
-    }: {
-      accepted: boolean;
-      appointmentId: string;
-      coachId?: string;
-      reason?: string;
-    }) => client.staff.respondToAppointment(appointmentId, accepted, reason),
-    onSuccess: async (_data, variables) => {
-      await Promise.all([
-        invalidateStaffCoachManagementQueries(queryClient, variables.coachId),
-        invalidateAnalyticsQueries(queryClient),
-      ]);
     }
   });
 }

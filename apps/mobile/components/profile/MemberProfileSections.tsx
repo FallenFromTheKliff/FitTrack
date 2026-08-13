@@ -190,14 +190,14 @@ export default function MemberProfileSections({ colors, controller, styles }: Me
                   disabled={controller.isMembershipCardPurchasePending}
                 />
                 <FitText style={{ fontSize: 12, lineHeight: 18, opacity: 0.78 }}>
-                  Prefer cash? Pay at the lobby. Staff or admin will grant membership access after payment; no in-app request is needed.
+                  Complete the secure PayMongo checkout to activate your card.
                 </FitText>
               </View>
             ) : (
               <FitText style={{ fontSize: 12, lineHeight: 18, opacity: 0.78, marginTop: 12 }}>
                 {controller.memberAccessLabel === "Revoked"
-                  ? "This card was already purchased. Staff can restore membership access from the Account Module; no new payment is required."
-                  : "Membership-card checkout is unavailable for this account right now. Pay at the lobby if you prefer cash; staff or admin will grant access after payment."}
+                  ? "This card was already purchased. Staff can restore membership access from the Account Module; no new checkout is required."
+                  : "Membership-card checkout is unavailable for this account right now. Try again later."}
               </FitText>
             )}
           </>

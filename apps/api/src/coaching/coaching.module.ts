@@ -11,6 +11,7 @@ import { AppointmentLifecycleService } from './appointment/appointment-lifecycle
 import { COACHING_LIFECYCLE_QUEUE } from './appointment/appointment.constants';
 import { AppointmentRepository } from './appointment/appointment.repository';
 import { AppointmentService } from './appointment/appointment.service';
+import { CoachAvailabilityService } from './availability/coach-availability.service';
 import { CoachController } from './coach/coach.controller';
 import { CoachRepository } from './coach/coach.repository';
 import { CoachService } from './coach/coach.service';
@@ -41,6 +42,7 @@ import { RelationshipService } from './relationship/relationship.service';
     CoachRepository,
     AppointmentService,
     AppointmentRepository,
+    CoachAvailabilityService,
     RecurringCoachingPlanService,
     RecurringCoachingPlanRepository,
     AppointmentLifecycleService,
@@ -49,6 +51,11 @@ import { RelationshipService } from './relationship/relationship.service';
     RelationshipRepository,
     RelationshipLifecycleService,
   ],
-  exports: [CoachService, AppointmentService, RelationshipService],
+  exports: [
+    CoachService,
+    AppointmentService,
+    RelationshipService,
+    RecurringCoachingPlanService,
+  ],
 })
 export class CoachingModule {}

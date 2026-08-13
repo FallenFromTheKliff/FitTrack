@@ -21,8 +21,9 @@ export {
 export {
   bulkUpdateRecurringCoachingSessionsMutationOptions,
   cancelRecurringCoachingPlanMutationOptions,
+  createRecurringCoachingCashEnrollmentMutationOptions,
   createRecurringCoachingPlanMutationOptions,
-  payRecurringCoachingBillingCycleMutationOptions,
+  enrollRecurringCoachingPlanMutationOptions,
   previewRecurringCoachingPlanMutationOptions,
   recurringCoachingPlansQueryOptions,
   recurringCoachingPlanSessionsQueryOptions,
@@ -74,14 +75,12 @@ export {
   verifyEmailMutationOptions,
 } from "./auth";
 export {
+  appointmentAvailabilityQueryOptions,
   appointmentsQueryOptions,
   cancelAppointmentMutationOptions,
   completeCoachAppointmentMutationOptions,
-  confirmCoachAppointmentMutationOptions,
   createAppointmentMutationOptions,
-  declineCoachAppointmentMutationOptions,
-  payAppointmentDownpaymentMutationOptions,
-  processAppointmentBalanceMutationOptions,
+  rescheduleAppointmentMutationOptions,
 } from "./appointments";
 export {
   adminBookingsQueryOptions,
@@ -97,12 +96,10 @@ export {
   completeAdminBookingMutationOptions,
   createAdminGamificationSeasonMutationOptions,
   createAdminManualExpGrantMutationOptions,
-  confirmAdminBookingMutationOptions,
   createUserMutationOptions,
   deleteUserMutationOptions,
   manualAttendanceCheckInMutationOptions,
   noShowAdminBookingMutationOptions,
-  rejectAdminBookingMutationOptions,
   rejectDeletionRequestMutationOptions,
   resolveAdminGamificationIntegrityCaseMutationOptions,
   restoreUserMutationOptions,
@@ -118,9 +115,12 @@ export {
 } from "./admin";
 export {
   bookingsQueryOptions,
+  cancelCoachVenueWorkMutationOptions,
   cancelBookingMutationOptions,
+  coachVenueWorkQueryOptions,
+  completeCoachVenueWorkMutationOptions,
   createBookingMutationOptions,
-  processBookingBalanceMutationOptions,
+  noShowCoachVenueWorkMutationOptions,
 } from "./bookings";
 export {
   adminMilestoneEvidenceQueryOptions,
@@ -162,6 +162,7 @@ export {
   restoreAdminMilestoneMutationOptions,
   reviewFitnessMilestoneEvidenceMutationOptions,
   fitnessIntegritySummaryQueryOptions,
+  fitnessMemberMuscleDefinitionsQueryOptions,
   fitnessMuscleDefinitionsQueryOptions,
   startPoseSessionMutationOptions,
   startWorkoutSessionMutationOptions,
@@ -210,7 +211,6 @@ export {
   subscribeMembershipMutationOptions,
   updateMembershipCatalogSettingsMutationOptions,
   updateMembershipPlanMutationOptions,
-  verifyMembershipPaymentMutationOptions,
 } from "./membership";
 export {
   createGymPromotionMutationOptions,
@@ -232,6 +232,7 @@ export {
 } from "./nutrition";
 export {
   activeCoachesQueryOptions,
+  coachClientsQueryOptions,
   coachSpecialtiesQueryOptions,
   coachAvailabilityQueryOptions,
   coachScheduleQueryOptions,
@@ -284,12 +285,9 @@ export {
   createStaffAppointmentMutationOptions,
   createStaffBookingMutationOptions,
   createStaffCoachMutationOptions,
-  confirmStaffBookingMutationOptions,
   markCoachPayoutPaidMutationOptions,
   noShowStaffBookingMutationOptions,
   replaceStaffCoachAvailabilityMutationOptions,
-  respondToStaffAppointmentMutationOptions,
-  rejectStaffBookingMutationOptions,
   staffAppointmentsQueryOptions,
   staffBookingsQueryOptions,
   staffCoachesQueryOptions,

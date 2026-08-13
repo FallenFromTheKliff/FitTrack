@@ -14,6 +14,7 @@ import {
 import { seedExternalId, seedId } from '../ids';
 import { daysFrom } from '../time';
 import type { DynamicSeedContext } from '../types';
+import { activityDateFor, memberVolumeCount } from '../volumes';
 
 const FOOD_ITEMS = [
   ['Breakfast', 'Garlic rice, eggs, and chicken tocino', 620, 38, 72, 18],
@@ -103,8 +104,35 @@ function activityMultiplier(activity: ActivityLevel) {
   }
 }
 
+function ageAt(anchor: Date, dateOfBirth: Date) {
+  let age = anchor.getUTCFullYear() - dateOfBirth.getUTCFullYear();
+  const birthdayNotReached =
+    anchor.getUTCMonth() < dateOfBirth.getUTCMonth() ||
+    (anchor.getUTCMonth() === dateOfBirth.getUTCMonth() &&
+      anchor.getUTCDate() < dateOfBirth.getUTCDate());
+  if (birthdayNotReached) {
+    age -= 1;
+  }
+  return Math.max(13, age);
+}
+
+export function openingStockFor(ctx: DynamicSeedContext, stockQuantity: number) {
+  return stockQuantity + 120 + Math.min(80, ctx.state.activeMemberKeys.length);
+}
+
+export function expectedOpeningStock(
+  ctx: DynamicSeedContext,
+  productKey: string,
+) {
+  const product = PRODUCT_SEEDS.find((candidate) => candidate[0] === productKey);
+  return product ? openingStockFor(ctx, product[5]) : null;
+}
+
 async function seedNutrition(ctx: DynamicSeedContext) {
-  const memberKeys = ctx.state.premiumMemberKeys.slice(0, 50);
+  const memberKeys = [
+    ...ctx.state.activeMemberKeys,
+    ...ctx.state.historicalMemberKeys,
+  ];
   const nutritionRows: Prisma.NutritionLogCreateManyInput[] = [];
 
   for (const [index, memberKey] of memberKeys.entries()) {
@@ -115,18 +143,40 @@ async function seedNutrition(ctx: DynamicSeedContext) {
       continue;
     }
 
-    const age = 21 + (index % 24);
+    const profile = await ctx.prisma.userProfile.findUnique({
+      where: { user_id: ctx.state.userIds[memberKey] },
+      select: {
+        activity_level: true,
+        date_of_birth: true,
+        fitness_goal: true,
+        gender: true,
+        height_cm: true,
+        weight_kg: true,
+      },
+    });
+    const age = profile?.date_of_birth
+      ? ageAt(ctx.config.anchorDate, profile.date_of_birth)
+      : 21 + (index % 24);
     const gender =
-      account.gender ?? (index % 2 === 0 ? Gender.female : Gender.male);
-    const weightKg = account.weightKg ?? 57 + (index % 26);
-    const heightCm = account.heightCm ?? 156 + (index % 28);
-    const activity = account.activityLevel ?? ActivityLevel.active;
+      profile?.gender ??
+      account.gender ??
+      (index % 2 === 0 ? Gender.female : Gender.male);
+    const weightKg = Number(
+      profile?.weight_kg ?? account.weightKg ?? 57 + (index % 26),
+    );
+    const heightCm = Number(
+      profile?.height_cm ?? account.heightCm ?? 156 + (index % 28),
+    );
+    const activity =
+      profile?.activity_level ?? account.activityLevel ?? ActivityLevel.active;
+    const fitnessGoal =
+      profile?.fitness_goal ?? account.fitnessGoal ?? 'maintenance';
     const bmr = calculateBmr({ age, gender, heightCm, weightKg });
     const tdee = bmr * activityMultiplier(activity);
     const targetCalories =
-      account.fitnessGoal === 'cutting'
+      fitnessGoal === 'cutting'
         ? tdee - 250
-        : account.fitnessGoal === 'bulking'
+        : fitnessGoal === 'bulking'
           ? tdee + 250
           : tdee;
     const tdeeId = seedId(`tdee:${memberKey}`);
@@ -142,7 +192,7 @@ async function seedNutrition(ctx: DynamicSeedContext) {
         age,
         bmr_calories: new Prisma.Decimal(bmr.toFixed(2)),
         calculated_at: daysFrom(ctx.config.anchorDate, -8 + (index % 4), 8),
-        fitness_goal: account.fitnessGoal ?? 'maintenance',
+        fitness_goal: fitnessGoal,
         gender,
         height_cm: new Prisma.Decimal(heightCm),
         is_active: true,
@@ -155,7 +205,7 @@ async function seedNutrition(ctx: DynamicSeedContext) {
         age,
         bmr_calories: new Prisma.Decimal(bmr.toFixed(2)),
         calculated_at: daysFrom(ctx.config.anchorDate, -8 + (index % 4), 8),
-        fitness_goal: account.fitnessGoal ?? 'maintenance',
+        fitness_goal: fitnessGoal,
         gender,
         height_cm: new Prisma.Decimal(heightCm),
         is_active: true,
@@ -187,24 +237,39 @@ async function seedNutrition(ctx: DynamicSeedContext) {
       },
     });
 
-    for (let dayIndex = 0; dayIndex < 5; dayIndex += 1) {
-      for (const [mealIndex, food] of FOOD_ITEMS.entries()) {
-        const [mealName, foodItem, calories, protein, carbs, fat] = food;
-        nutritionRows.push({
-          id: seedId(`nutrition-log:${memberKey}:${dayIndex}:${mealIndex}`),
-          calories: new Prisma.Decimal(calories + ((index + dayIndex) % 40)),
-          carbs_g: new Prisma.Decimal(carbs),
-          fat_g: new Prisma.Decimal(fat),
-          food_item: foodItem,
-          log_date: daysFrom(ctx.config.anchorDate, -dayIndex, 0),
-          macro_target_id: macroId,
-          meal_name: mealName,
-          protein_g: new Prisma.Decimal(protein),
-          quantity: new Prisma.Decimal(mealIndex === 4 ? '1' : '1.25'),
-          unit: mealIndex === 4 ? NutritionUnit.serving : NutritionUnit.cup,
-          user_id: ctx.state.userIds[memberKey],
-        });
+    const nutritionCount = memberVolumeCount(
+      ctx,
+      memberKey,
+      'nutrition',
+      ctx.config.workoutDensity,
+    );
+    for (let logIndex = 0; logIndex < nutritionCount; logIndex += 1) {
+      const food = FOOD_ITEMS[logIndex % FOOD_ITEMS.length];
+      const [mealName, foodItem, calories, protein, carbs, fat] = food;
+      const loggedAt = activityDateFor(
+        ctx,
+        memberKey,
+        logIndex,
+        nutritionCount,
+        7 + (logIndex % 12),
+      );
+      if (!loggedAt) {
+        continue;
       }
+      nutritionRows.push({
+        id: seedId(`nutrition-log:${memberKey}:${logIndex}`),
+        calories: new Prisma.Decimal(calories + ((index + logIndex) % 40)),
+        carbs_g: new Prisma.Decimal(carbs),
+        fat_g: new Prisma.Decimal(fat),
+        food_item: foodItem,
+        log_date: loggedAt,
+        macro_target_id: macroId,
+        meal_name: mealName,
+        protein_g: new Prisma.Decimal(protein),
+        quantity: new Prisma.Decimal(logIndex % 5 === 4 ? '1' : '1.25'),
+        unit: logIndex % 5 === 4 ? NutritionUnit.serving : NutritionUnit.cup,
+        user_id: ctx.state.userIds[memberKey],
+      });
     }
   }
 
@@ -232,7 +297,7 @@ async function seedInventory(ctx: DynamicSeedContext) {
         name,
         price: new Prisma.Decimal(price),
         reorder_threshold: index % 3 === 0 ? 20 : 10,
-        stock_quantity: stockQuantity,
+        stock_quantity: openingStockFor(ctx, stockQuantity),
       },
       create: {
         id: productId,
@@ -246,12 +311,12 @@ async function seedInventory(ctx: DynamicSeedContext) {
         name,
         price: new Prisma.Decimal(price),
         reorder_threshold: index % 3 === 0 ? 20 : 10,
-        stock_quantity: stockQuantity,
+        stock_quantity: openingStockFor(ctx, stockQuantity),
       },
     });
   }
 
-  for (const [index, item] of EQUIPMENT_ITEMS.entries()) {
+  for (const item of EQUIPMENT_ITEMS) {
     const [key, name, description, quantityTotal, quantityCurrent, unit] = item;
     await ctx.prisma.gymEquipmentItem.upsert({
       where: { id: seedId(`equipment-item:${key}`) },
@@ -301,35 +366,56 @@ async function seedInventory(ctx: DynamicSeedContext) {
 
 async function seedSales(ctx: DynamicSeedContext) {
   const staffKeys = ctx.state.staffKeys;
-  const customerKeys = ctx.state.premiumMemberKeys.slice(0, 44);
+  const customerKeys = [
+    ...ctx.state.activeMemberKeys,
+    ...ctx.state.historicalMemberKeys,
+  ];
   const productKeys = PRODUCT_SEEDS.map((product) => product[0]);
   const saleRows: Prisma.SaleTransactionCreateManyInput[] = [];
   const itemRows: Prisma.SaleTransactionItemCreateManyInput[] = [];
   const paymentRows: Prisma.PaymentCreateManyInput[] = [];
+  const remainingStock = new Map(
+    PRODUCT_SEEDS.map(([key, , , , , stockQuantity]) => [
+      key,
+      openingStockFor(ctx, stockQuantity),
+    ]),
+  );
 
   customerKeys.forEach((memberKey, index) => {
-    const saleId = seedId(`sale:${memberKey}:${index}`);
-    const paymentId = seedId(`payment:product:${memberKey}:${index}`);
-    const itemCount = 1 + (index % 3);
+    const saleCount = memberVolumeCount(ctx, memberKey, 'sales');
+    for (let saleIndex = 0; saleIndex < saleCount; saleIndex += 1) {
+    const rowIndex = index + saleIndex;
+    const saleId = seedId(`sale:${memberKey}:${saleIndex}`);
+    const paymentId = seedId(`payment:product:${memberKey}:${saleIndex}`);
+    const itemCount = 1 + (rowIndex % 3);
     let total = new Prisma.Decimal(0);
-    const createdAt = daysFrom(
-      ctx.config.anchorDate,
-      -25 + (index % 22),
-      10 + (index % 9),
+    const createdAt = activityDateFor(
+      ctx,
+      memberKey,
+      saleIndex,
+      saleCount,
+      10 + (rowIndex % 9),
     );
-
+    if (!createdAt) {
+      continue;
+    }
     for (let itemIndex = 0; itemIndex < itemCount; itemIndex += 1) {
-      const productKey = productKeys[(index + itemIndex) % productKeys.length];
+      const productKey = productKeys[(rowIndex + itemIndex) % productKeys.length];
       const product = PRODUCT_SEEDS.find(
         (candidate) => candidate[0] === productKey,
       )!;
       const unitPrice = new Prisma.Decimal(product[3]);
-      const quantity = 1 + ((index + itemIndex) % 3);
+      const available = remainingStock.get(productKey) ?? 0;
+      const quantity = Math.min(1 + ((rowIndex + itemIndex) % 3), available);
+      if (quantity <= 0) {
+        continue;
+      }
       const subtotal = unitPrice.mul(quantity);
       total = total.plus(subtotal);
+      remainingStock.set(productKey, available - quantity);
 
       itemRows.push({
-        id: seedId(`sale-item:${memberKey}:${index}:${itemIndex}`),
+        id: seedId(`sale-item:${memberKey}:${saleIndex}:${itemIndex}`),
         created_at: createdAt,
         product_id: ctx.state.productIds[productKey],
         quantity,
@@ -339,21 +425,25 @@ async function seedSales(ctx: DynamicSeedContext) {
       });
     }
 
+    if (total.lessThanOrEqualTo(0)) {
+      continue;
+    }
+
     saleRows.push({
       id: saleId,
       created_at: createdAt,
       customer_name: null,
       customer_user_id: ctx.state.userIds[memberKey],
       notes:
-        index % 5 === 0
+        rowIndex % 5 === 0
           ? 'Premium member supplement bundle.'
           : 'Retail sale for revenue analytics.',
       payment_id: paymentId,
       payment_method:
-        index % 4 === 0 ? SalePaymentMethod.paymongo : SalePaymentMethod.cash,
-      processed_by: ctx.state.userIds[staffKeys[index % staffKeys.length]],
-      source: index % 3 === 0 ? SaleSource.mobile : SaleSource.manual,
-      status: index % 13 === 0 ? SaleStatus.cancelled : SaleStatus.completed,
+        rowIndex % 4 === 0 ? SalePaymentMethod.paymongo : SalePaymentMethod.cash,
+      processed_by: ctx.state.userIds[staffKeys[rowIndex % staffKeys.length]],
+      source: rowIndex % 3 === 0 ? SaleSource.mobile : SaleSource.manual,
+      status: SaleStatus.completed,
       total_amount: total,
     });
 
@@ -363,28 +453,31 @@ async function seedSales(ctx: DynamicSeedContext) {
       created_at: createdAt,
       gateway_event_id: null,
       gateway_metadata: { memberKey, saleId, source: 'product-sale' },
-      idempotency_key: seedExternalId(`payment:product:${memberKey}:${index}`),
+      idempotency_key: seedExternalId(`payment:product:${memberKey}:${saleIndex}`),
       payable_id: saleId,
       payable_type: PayableType.product,
       payment_stage: PaymentStage.full,
       provider:
-        index % 4 === 0 ? PaymentProvider.paymongo : PaymentProvider.cash,
+        rowIndex % 4 === 0 ? PaymentProvider.paymongo : PaymentProvider.cash,
       provider_ref:
-        index % 4 === 0
-          ? seedExternalId(`paymongo:product:${memberKey}:${index}`)
+        rowIndex % 4 === 0
+          ? seedExternalId(`paymongo:product:${memberKey}:${saleIndex}`)
           : null,
-      status: index % 13 === 0 ? PaymentStatus.failed : PaymentStatus.completed,
+      rejection_reason: null,
+      status: PaymentStatus.completed,
       user_id: ctx.state.userIds[memberKey],
-      verified_at:
-        index % 13 === 0
-          ? null
-          : daysFrom(createdAt, 0, createdAt.getHours() + 1),
-      verified_by:
-        index % 13 === 0
-          ? null
-          : ctx.state.userIds[staffKeys[index % staffKeys.length]],
+      verified_at: daysFrom(createdAt, 0, createdAt.getUTCHours() + 1),
+      verified_by: ctx.state.userIds[staffKeys[rowIndex % staffKeys.length]],
     });
+    }
   });
+
+  for (const [productKey, stockQuantity] of remainingStock.entries()) {
+    await ctx.prisma.retailProduct.update({
+      where: { id: ctx.state.productIds[productKey] },
+      data: { stock_quantity: stockQuantity },
+    });
+  }
 
   await ctx.prisma.saleTransaction.createMany({
     data: saleRows,
@@ -411,7 +504,10 @@ export async function seedNutritionInventory(ctx: DynamicSeedContext) {
   return {
     counts: {
       products: PRODUCT_SEEDS.length,
-      nutritionMembers: ctx.state.premiumMemberKeys.slice(0, 50).length,
+      nutritionMembers: [
+        ...ctx.state.activeMemberKeys,
+        ...ctx.state.historicalMemberKeys,
+      ].length,
     },
   };
 }

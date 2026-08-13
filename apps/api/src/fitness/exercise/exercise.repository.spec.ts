@@ -180,6 +180,17 @@ describe('ExerciseRepository', () => {
     });
   });
 
+  it('lists only active muscle definitions for the member catalog', async () => {
+    muscleDefinition.findMany.mockResolvedValue([{ id: 'muscle-1' }]);
+
+    await repo.listActiveMuscleDefinitions();
+
+    expect(muscleDefinition.findMany).toHaveBeenCalledWith({
+      where: { is_active: true },
+      orderBy: [{ sort_order: 'asc' }, { name: 'asc' }],
+    });
+  });
+
   it('searches muscle definitions across key, name, and body region', async () => {
     muscleDefinition.findMany.mockResolvedValue([{ id: 'muscle-1' }]);
 

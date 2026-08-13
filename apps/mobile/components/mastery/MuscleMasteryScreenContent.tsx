@@ -624,9 +624,33 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
       width: 36,
     },
     modalControlRow: {
+      alignItems: "center",
       flexDirection: "row",
       flexWrap: "wrap",
       gap: 8,
+    },
+    modalMuscleFilterRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 8,
+      position: "relative",
+      zIndex: 30,
+      elevation: 16,
+    },
+    modalFilterButton: {
+      alignItems: "center",
+      borderRadius: R.md,
+      borderWidth: 1,
+      height: 40,
+      justifyContent: "center",
+      width: 40,
+    },
+    modalFilterDropdown: {
+      left: 0,
+      right: 0,
+      top: 48,
+      zIndex: 220,
+      elevation: 16,
     },
     modalChip: {
       alignItems: "center",
@@ -1412,6 +1436,45 @@ export default function MuscleMasteryScreenContent({
       controller.leaderboardMode === "muscle"
         ? controller.muscleLeaderboardHasMore
         : controller.leaderboardHasMore;
+    const muscleDefinitionsBlocked =
+      controller.leaderboardMode === "muscle" &&
+      (controller.muscleDefinitionsLoading ||
+        !!controller.muscleDefinitionsError ||
+        controller.leaderboardMuscleOptions.length === 0);
+    const renderMuscleDefinitionsState = () => {
+      if (controller.muscleDefinitionsLoading) {
+        return (
+          <View style={{ alignItems: "center", paddingVertical: 8 }}>
+            <ActivityIndicator color={colors.brand} />
+            <FitText style={styles.sectionMessage}>
+              Loading active muscle filters...
+            </FitText>
+          </View>
+        );
+      }
+      if (controller.muscleDefinitionsError) {
+        return (
+          <View style={{ alignItems: "center", paddingVertical: 8 }}>
+            <FitText style={styles.sectionMessage}>
+              Unable to load active muscle filters. {controller.muscleDefinitionsError}
+            </FitText>
+            <FitButton
+              label="Retry"
+              icon={RefreshCw}
+              onPress={() => void controller.onRefresh()}
+              variant="ghost"
+            />
+          </View>
+        );
+      }
+      return (
+        <View style={{ alignItems: "center", paddingVertical: 8 }}>
+          <FitText style={styles.sectionMessage}>
+            No active muscle definitions are available yet.
+          </FitText>
+        </View>
+      );
+    };
 
     return (
       <>
@@ -1464,10 +1527,10 @@ export default function MuscleMasteryScreenContent({
                   onChangeText={controller.setLeaderboardSearch}
                 />
               </View>
-              {controller.leaderboardMode === "muscle" ? (
+              {controller.leaderboardMode === "muscle" && !muscleDefinitionsBlocked ? (
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={`Filter By Muscle: ${formatTitle(controller.selectedLeaderboardMuscle)}`}
+                  accessibilityLabel={`Filter By Muscle: ${formatTitle(controller.selectedLeaderboardMuscle)} (${controller.leaderboardMuscleOptions.length} active muscles)`}
                   accessibilityState={{ expanded: isLeaderboardMuscleFilterOpen }}
                   onPress={() => setIsLeaderboardMuscleFilterOpen((open) => !open)}
                   style={[
@@ -1490,7 +1553,7 @@ export default function MuscleMasteryScreenContent({
                 </Pressable>
               ) : null}
             </View>
-            {controller.leaderboardMode === "muscle" ? (
+            {controller.leaderboardMode === "muscle" && !muscleDefinitionsBlocked ? (
               <>
                 <FitFilter
                   isOpen={isLeaderboardMuscleFilterOpen}
@@ -1538,6 +1601,8 @@ export default function MuscleMasteryScreenContent({
                   })}
                 </View>
               </>
+            ) : muscleDefinitionsBlocked ? (
+              renderMuscleDefinitionsState()
             ) : null}
           </View>
 
@@ -1554,7 +1619,7 @@ export default function MuscleMasteryScreenContent({
                 Your progression still counts in history, but no member rows are shown while ranking visibility is private.
               </FitText>
             </View>
-          ) : leaderboardEntries.length > 0 ? (
+          ) : muscleDefinitionsBlocked ? null : leaderboardEntries.length > 0 ? (
             <View>
               {leaderboardEntries.map((entry, index) => {
                 const xp = "xpPoints" in entry ? entry.xpPoints : entry.totalXp;
@@ -1753,6 +1818,8 @@ function SeasonHistoryModal({
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { height, width } = useWindowDimensions();
   const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const [isSeasonHistoryMuscleFilterOpen, setIsSeasonHistoryMuscleFilterOpen] =
+    useState(false);
   const [seasonSearch, setSeasonSearch] = useState("");
   const modalWidth = Math.min(Math.max(width - 24, 300), 680);
   const listHeight = Math.min(Math.max(height * 0.48, 260), 430);
@@ -1765,6 +1832,45 @@ function SeasonHistoryModal({
     return !search || season.title.toLowerCase().includes(search);
   });
   const muscleRows = controller.seasonHistoryMuscleLeaderboard;
+  const muscleDefinitionsBlocked =
+    controller.seasonHistoryScope === "muscle" &&
+    (controller.muscleDefinitionsLoading ||
+      !!controller.muscleDefinitionsError ||
+      controller.seasonHistoryMuscleOptions.length === 0);
+  const renderMuscleDefinitionsState = () => {
+    if (controller.muscleDefinitionsLoading) {
+      return (
+        <View style={{ alignItems: "center", paddingVertical: 8 }}>
+          <ActivityIndicator color={colors.brand} />
+          <FitText style={styles.sectionMessage}>
+            Loading active muscle filters...
+          </FitText>
+        </View>
+      );
+    }
+    if (controller.muscleDefinitionsError) {
+      return (
+        <View style={{ alignItems: "center", paddingVertical: 8 }}>
+          <FitText style={styles.sectionMessage}>
+            Unable to load active muscle filters. {controller.muscleDefinitionsError}
+          </FitText>
+          <FitButton
+            label="Retry"
+            icon={RefreshCw}
+            onPress={() => void controller.onRefresh()}
+            variant="ghost"
+          />
+        </View>
+      );
+    }
+    return (
+      <View style={{ alignItems: "center", paddingVertical: 8 }}>
+        <FitText style={styles.sectionMessage}>
+          No active muscle definitions are available yet.
+        </FitText>
+      </View>
+    );
+  };
 
   const renderOverallRow = ({
     item,
@@ -1908,7 +2014,12 @@ function SeasonHistoryModal({
                     key={option.value}
                     accessibilityRole="button"
                     accessibilityState={{ selected: active }}
-                    onPress={() => controller.setSeasonHistoryScope(option.value)}
+                    onPress={() => {
+                      controller.setSeasonHistoryScope(option.value);
+                      if (option.value !== "muscle") {
+                        setIsSeasonHistoryMuscleFilterOpen(false);
+                      }
+                    }}
                     style={[
                       styles.modalChip,
                       {
@@ -1923,44 +2034,82 @@ function SeasonHistoryModal({
                   </Pressable>
                 );
               })}
-              <FitButton
-                label={selectedSeason?.title ?? "Choose season"}
-                icon={History}
-                onPress={() => setIsPickerOpen(true)}
-                variant="ghost"
-                style={{ flexGrow: 1, minHeight: 36 }}
-                textStyle={{ fontSize: 11 }}
-              />
+              {controller.seasonHistoryScope !== "muscle" ? (
+                <FitButton
+                  label={selectedSeason?.title ?? "Choose season"}
+                  icon={History}
+                  onPress={() => setIsPickerOpen(true)}
+                  variant="ghost"
+                  style={{ flexGrow: 1, minHeight: 36 }}
+                  textStyle={{ fontSize: 11 }}
+                />
+              ) : null}
             </View>
 
             {controller.seasonHistoryScope === "muscle" ? (
-              <View style={styles.modalControlRow}>
-                {controller.leaderboardMuscleOptions.map((muscle) => {
-                  const active = controller.seasonHistoryMuscleKey === muscle;
-                  return (
-                    <Pressable
-                      key={muscle}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: active }}
-                      onPress={() => controller.setSeasonHistoryMuscleKey(muscle)}
-                      style={[
-                        styles.modalChip,
-                        {
-                          backgroundColor: active ? colors.brand + "16" : colors.surfaceRaised,
-                          borderColor: active ? colors.brand : colors.border,
-                        },
-                      ]}
-                    >
-                      <FitText style={[styles.modalChipText, { color: active ? colors.brand : colors.textSecondary }]}>
-                        {formatTitle(muscle)}
-                      </FitText>
-                    </Pressable>
-                  );
-                })}
+              <View style={styles.modalMuscleFilterRow}>
+                <FitButton
+                  label={selectedSeason?.title ?? "Choose season"}
+                  icon={History}
+                  onPress={() => setIsPickerOpen(true)}
+                  variant="ghost"
+                  style={{ flex: 1, minHeight: 36 }}
+                  textStyle={{ fontSize: 11 }}
+                />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Filter season history muscles: ${formatTitle(controller.seasonHistoryMuscleKey)} (${controller.seasonHistoryMuscleOptions.length} active muscles)`}
+                  accessibilityState={{
+                    expanded: isSeasonHistoryMuscleFilterOpen,
+                  }}
+                  onPress={() =>
+                    setIsSeasonHistoryMuscleFilterOpen((open) => !open)
+                  }
+                  disabled={muscleDefinitionsBlocked}
+                  style={[
+                    styles.modalFilterButton,
+                    {
+                      backgroundColor: isSeasonHistoryMuscleFilterOpen
+                        ? colors.brand + "16"
+                        : colors.surfaceRaised,
+                      borderColor: isSeasonHistoryMuscleFilterOpen
+                        ? colors.brand
+                        : colors.border,
+                    },
+                  ]}
+                >
+                  <SlidersHorizontal
+                    size={18}
+                    color={
+                      isSeasonHistoryMuscleFilterOpen
+                        ? colors.brand
+                        : colors.textMuted
+                    }
+                    strokeWidth={2}
+                  />
+                </Pressable>
+                <FitFilter
+                  isOpen={isSeasonHistoryMuscleFilterOpen && !muscleDefinitionsBlocked}
+                  topChipLabel="Muscle"
+                  topChipOptions={controller.seasonHistoryMuscleOptions.map(
+                    (muscle) => ({
+                      label: formatTitle(muscle),
+                      value: muscle,
+                    }),
+                  )}
+                  dropdownStyle={styles.modalFilterDropdown}
+                  activeTopChip={controller.seasonHistoryMuscleKey}
+                  onTopChipChange={(value) => {
+                    controller.setSeasonHistoryMuscleKey(value);
+                    setIsSeasonHistoryMuscleFilterOpen(false);
+                  }}
+                />
               </View>
             ) : null}
 
-            {controller.seasonHistoryLoading ? (
+            {muscleDefinitionsBlocked ? (
+              renderMuscleDefinitionsState()
+            ) : controller.seasonHistoryLoading ? (
               <View style={styles.modalEmpty}>
                 <ActivityIndicator color={colors.brand} />
                 <FitText style={styles.sectionMessage}>Loading completed seasons...</FitText>

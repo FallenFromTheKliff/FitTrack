@@ -1,6 +1,7 @@
 "use client";
 
 import { DndContext, DragOverlay } from "@dnd-kit/core";
+import { useState } from "react";
 import {
   CalendarDays,
   CalendarPlus,
@@ -11,6 +12,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  Search,
 } from "lucide-react";
 import type { MotionStyle } from "framer-motion";
 import { formatWeekRange, toYmd } from "@fittrack/utils";
@@ -25,7 +27,6 @@ import {
 import {
   BlockDetailModal,
   CalendarModal,
-  ConfirmModal,
   DetailsModal,
   FitModal,
   StaffDetailsModal,
@@ -43,6 +44,7 @@ import {
   CoachAppointmentsTable,
   CoachDirectory,
   CoachIconRail,
+  CoachVenueWorkTable,
   VenueBookingsTable,
 } from "@/components/schedule/OperationsTables";
 import {
@@ -66,8 +68,8 @@ import {
   formatScheduleDay,
 } from "@/components/schedule/SchedulePageShared";
 import { getWeekStart } from "./helpers";
-import { RecurringPlanCreateModal } from "@/components/schedule/RecurringPlanCreateModal";
 import { RecurringPlanActionModal } from "@/components/schedule/RecurringPlanActionModal";
+import StaffRecurringCashEnrollmentModal from "@/components/schedule/StaffRecurringCashEnrollmentModal";
 import {
   GymOperationsPageProvider,
   useGymOperationsPage,
@@ -136,6 +138,7 @@ function GymOperationsPageBody() {
     appointmentReviewReadiness,
     appointmentReviewTarget,
     appointmentsLoading,
+    appointmentMemberSearch,
     appointmentStatusFilter,
     appointmentSummary,
     availabilityEditorCoach,
@@ -147,7 +150,6 @@ function GymOperationsPageBody() {
     canAnimate,
     cancelAppointmentPending,
     cancelRecurringPlanMutation,
-    canManageCoaching,
     canManageGymOperations,
     canViewVenueBookings,
     coachAppointments,
@@ -159,13 +161,14 @@ function GymOperationsPageBody() {
     coachRailAsRow,
     coachRoster,
     coachVisibilityScope,
+    coachVenueWork,
+    coachVenueWorkLoading,
     colors,
     completeAppointmentPending,
     createCoachBookingMutation,
     createCoachBookingOpen,
     createCoachMutation,
     createCoachOpen,
-    createRecurringPlanMutation,
     createVenueBookingMutation,
     createVenueBookingOpen,
     draggingBooking,
@@ -178,7 +181,6 @@ function GymOperationsPageBody() {
     focusedCoachScheduleBookings,
     isAdmin,
     isCoach,
-    handleApproveVenueBooking,
     handleBlockClick,
     handleBlockDelete,
     handleBlockSave,
@@ -187,24 +189,16 @@ function GymOperationsPageBody() {
     handleCoachFocus,
     handleCompleteAppointment,
     handleCompleteVenueBooking,
-    handleConfirmAppointment,
-    handleConfirmPaymentAction,
-    handleConfirmRecurringPlan,
     handleCreateCoach,
     handleCreateCoachBooking,
     handleCreateVenueBooking,
     handleDragEnd,
     handleDragStart,
     handleNoShowVenueBooking,
-    handlePreviewRecurringPlan,
     handleRecurringFutureUpdate,
     handleRecurringPlanCancel,
-    handleRepeatLastRecurringSchedule,
     handleRecurringSessionReschedule,
     handleRecurringSessionSkip,
-    handleRejectAppointment,
-    handleRejectVenueBooking,
-    handleSaveAppointmentFeedback,
     handleSaveAvailability,
     handleVenueEndDateSelect,
     handleVenueStartDateSelect,
@@ -216,13 +210,7 @@ function GymOperationsPageBody() {
     markCoachPayoutPaidMutation,
     memberOptions,
     nextWeek,
-    payAppointmentInitialMutation,
-    paymentConfirm,
-    paymentConfirmLoading,
-    payRecurringCycleMutation,
     prevWeek,
-    processAppointmentBalanceMutation,
-    processBookingBalanceMutation,
     profileEditorCoach,
     recurringActionBusy,
     recurringActionCoachId,
@@ -231,32 +219,11 @@ function GymOperationsPageBody() {
     recurringActionReason,
     recurringActionTime,
     recurringCompletedCount,
-    recurringCreateBusy,
-    recurringCoachOffer,
-    recurringMonthlyDuration,
-    recurringMonthlyOfferConfigured,
-    recurringMonthlyRate,
-    recurringMonthlySessionCount,
-    recurringPlansLoading,
     recurringPlanAction,
-    recurringPlanForm,
-    recurringPlanInputInvalid,
-    recurringPlanOpen,
-    recurringPlanPreview,
-    recurringPlanSessions,
-    recurringScheduleIssue,
-    recurringTrainingPlanOptions,
-    repeatableRecurringPlan,
     recurringRemainingCount,
     refetchVenues,
     refreshGymOperationsData,
     replaceAvailabilityMutation,
-    requestApproveAppointmentPayment,
-    requestCollectAppointmentBalance,
-    requestCollectAppointmentInitialPayment,
-    requestCollectVenueBalance,
-    requestRecurringCyclePayment,
-    respondAppointmentPending,
     rightScrollRef,
     rosterBookings,
     scheduleLoading,
@@ -272,6 +239,7 @@ function GymOperationsPageBody() {
     setActiveOperationsTab,
     setActiveScheduleSurfaceTab,
     setAppointmentReviewTarget,
+    setAppointmentMemberSearch,
     setAppointmentStatusFilter,
     setAvailabilityEditorCoachId,
     setBlockDetailOpen,
@@ -283,16 +251,12 @@ function GymOperationsPageBody() {
     setCreateCoachOpen,
     setCreateVenueBookingOpen,
     setFeedbackModal,
-    setPaymentConfirm,
     setProfileEditorCoachId,
     setRecurringActionCoachId,
     setRecurringActionDate,
     setRecurringActionReason,
     setRecurringActionTime,
     setRecurringPlanAction,
-    setRecurringPlanForm,
-    setRecurringPlanOpen,
-    setRecurringPlanPreview,
     setScheduleRangeMode,
     setSlideKey,
     setVenueFilterId,
@@ -316,12 +280,12 @@ function GymOperationsPageBody() {
     venueReviewTarget,
     venueStartCalendarOpen,
     venueStatusFilter,
-    verifyPaymentMutation,
     visibleTimelineDays,
     visibleTimelineHours,
     weekStart,
     clearVenueBookingDateRange,
   } = useGymOperationsPage();
+  const [cashEnrollmentOpen, setCashEnrollmentOpen] = useState(false);
 
   const selectedCoachCompletedAppointments = coachAppointments.filter(
     (appointment) =>
@@ -414,30 +378,6 @@ function GymOperationsPageBody() {
                     color: colors.onBrand,
                   }}
                 />
-                {activeScheduleSurfaceTab === "coach-schedule" && isCoach ? (
-                  <FitButton
-                    variant="primary"
-                    data-ui="gym-operations-create-recurring-plan"
-                    label="RECURRING PLAN"
-                    icon={Plus}
-                    iconSize={14}
-                    onClick={() => {
-                      setRecurringPlanPreview(null);
-                      setRecurringPlanOpen(true);
-                    }}
-                    disabled={
-                      memberOptions.length === 0 || coachOptions.length === 0
-                    }
-                    style={{
-                      minHeight: 38,
-                      borderRadius: 8,
-                      padding: "8px 14px",
-                      backgroundColor: colors.brand,
-                      color: colors.onBrand,
-                    }}
-                    textStyle={{ fontSize: 11, fontWeight: 800 }}
-                  />
-                ) : null}
                 {canViewVenueBookings ? (
                   <FitButton
                     variant="primary"
@@ -491,7 +431,7 @@ function GymOperationsPageBody() {
                     color: colors.onBrand,
                   }}
                 />
-                {canManageCoaching ? (
+                {canManageGymOperations ? (
                   <FitButton
                     variant="primary"
                     data-ui="gym-operations-create-coach-booking"
@@ -507,6 +447,21 @@ function GymOperationsPageBody() {
                       color: colors.onBrand,
                     }}
                     textStyle={{ fontSize: 12, fontWeight: 800 }}
+                  />
+                ) : null}
+                {canManageGymOperations ? (
+                  <FitButton
+                    variant="ghost"
+                    data-ui="gym-operations-recurring-cash-enrollment"
+                    label="CASH ENROLLMENT"
+                    onClick={() => setCashEnrollmentOpen(true)}
+                    disabled={memberOptions.length === 0 || coachOptions.length === 0}
+                    style={{
+                      minHeight: 38,
+                      borderRadius: 8,
+                      padding: "8px 14px",
+                    }}
+                    textStyle={{ fontSize: 11, fontWeight: 800 }}
                   />
                 ) : null}
               </>
@@ -587,17 +542,18 @@ function GymOperationsPageBody() {
               {activeScheduleSurfaceTab === "month-calendar" ? (
                 <GymOperationsMonthCalendar />
               ) : activeScheduleSurfaceTab === "coach-schedule" ? (
-                <div
-                  className="gym-operations-schedule-grid"
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: coachRailAsRow
-                      ? "minmax(0, 1fr)"
-                      : "94px minmax(0, 1fr)",
-                    gap: 10,
-                    alignItems: "stretch",
-                  }}
-                >
+                <>
+                  <div
+                    className="gym-operations-schedule-grid"
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: coachRailAsRow
+                        ? "minmax(0, 1fr)"
+                        : "94px minmax(0, 1fr)",
+                      gap: 10,
+                      alignItems: "stretch",
+                    }}
+                  >
                   <CoachIconRail
                     draggable={canManageGymOperations}
                     railRef={leftRailRef}
@@ -738,6 +694,42 @@ function GymOperationsPageBody() {
                           }
                         />
                         {isCoach ? (
+                          <OperationsControlField label="Client" minWidth={190}>
+                            <label
+                              style={{
+                                alignItems: "center",
+                                border: `1px solid ${colors.border}`,
+                                borderRadius: 7,
+                                display: "flex",
+                                gap: 7,
+                                minHeight: 34,
+                                padding: "0 9px",
+                              }}
+                            >
+                              <Search aria-hidden color={colors.textMuted} size={13} />
+                              <input
+                                aria-label="Search coach clients"
+                                onChange={(event) =>
+                                  setAppointmentMemberSearch(event.target.value)
+                                }
+                                placeholder="Name or email"
+                                type="search"
+                                value={appointmentMemberSearch}
+                                style={{
+                                  background: "transparent",
+                                  border: 0,
+                                  color: colors.textPrimary,
+                                  font: "inherit",
+                                  fontSize: 11,
+                                  minWidth: 0,
+                                  outline: "none",
+                                  width: "100%",
+                                }}
+                              />
+                            </label>
+                          </OperationsControlField>
+                        ) : null}
+                        {isCoach ? (
                           <OperationsControlField label="Status" minWidth={154}>
                             <FitSelect
                               compact
@@ -817,7 +809,64 @@ function GymOperationsPageBody() {
                       />
                     </div>
                   </div>
-                </div>
+                  </div>
+                  {isCoach ? (
+                    <section
+                      data-ui="coach-assigned-venue-work"
+                      style={{
+                        backgroundColor: colors.surface,
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 8,
+                        display: "grid",
+                        gap: 10,
+                        padding: 14,
+                      }}
+                    >
+                      <div style={{ display: "grid", gap: 4 }}>
+                        <FitText
+                          excludeGlobalScale
+                          style={{
+                            color: colors.brand,
+                            fontSize: 10,
+                            fontWeight: 800,
+                            letterSpacing: "0.08em",
+                          }}
+                        >
+                          ASSIGNED VENUE COACHING
+                        </FitText>
+                        <FitText
+                          excludeGlobalScale
+                          style={{
+                            color: colors.textPrimary,
+                            fontSize: 16,
+                            fontWeight: 750,
+                          }}
+                        >
+                          Paid venue bookings with your coach add-on
+                        </FitText>
+                        <FitText
+                          excludeGlobalScale
+                          style={{ color: colors.textMuted, fontSize: 11.5 }}
+                        >
+                          Venue and coach fees stay separate. Only confirmed paid work appears here.
+                        </FitText>
+                      </div>
+                      {coachVenueWorkLoading ? (
+                        <OperationsLoadingBlock
+                          colors={colors}
+                          maxHeight={130}
+                          message="Loading assigned venue work..."
+                        />
+                      ) : (
+                        <CoachVenueWorkTable
+                          bookings={coachVenueWork}
+                          colors={colors}
+                          onOpenReview={setVenueReviewTarget}
+                        />
+                      )}
+                    </section>
+                  ) : null}
+                </>
               ) : (
                 <div
                   data-ui="gym-operations-venue-panel"
@@ -969,13 +1018,7 @@ function GymOperationsPageBody() {
                     />
                     <OperationsMetricCard
                       colors={colors}
-                      label="Pending Venue Bookings"
-                      value={venueBookingSummary.pending}
-                      tone={colors.warning}
-                    />
-                    <OperationsMetricCard
-                      colors={colors}
-                      label="Confirmed Venue Sessions"
+                      label="Confirmed Venue Bookings"
                       value={venueBookingSummary.confirmed}
                       tone={colors.success}
                     />
@@ -1089,6 +1132,40 @@ function GymOperationsPageBody() {
                       flexWrap: "wrap",
                     }}
                   >
+                    <OperationsControlField label="Member Search" minWidth={210}>
+                      <label
+                        style={{
+                          alignItems: "center",
+                          border: `1px solid ${colors.border}`,
+                          borderRadius: 7,
+                          display: "flex",
+                          gap: 7,
+                          minHeight: 34,
+                          padding: "0 9px",
+                        }}
+                      >
+                        <Search aria-hidden color={colors.textMuted} size={13} />
+                        <input
+                          aria-label="Search appointment members"
+                          onChange={(event) =>
+                            setAppointmentMemberSearch(event.target.value)
+                          }
+                          placeholder="Name or email"
+                          type="search"
+                          value={appointmentMemberSearch}
+                          style={{
+                            background: "transparent",
+                            border: 0,
+                            color: colors.textPrimary,
+                            font: "inherit",
+                            fontSize: 11,
+                            minWidth: 0,
+                            outline: "none",
+                            width: "100%",
+                          }}
+                        />
+                      </label>
+                    </OperationsControlField>
                     <OperationsControlField label="Coach Filter" minWidth={220}>
                       <FitSelect
                         value={coachFilterId ?? ""}
@@ -1132,12 +1209,6 @@ function GymOperationsPageBody() {
                   />
                   <OperationsMetricCard
                     colors={colors}
-                    label="Pending Coach Decisions"
-                    value={appointmentSummary.pendingCoach}
-                    tone={colors.warning}
-                  />
-                  <OperationsMetricCard
-                    colors={colors}
                     label="Confirmed Sessions"
                     value={appointmentSummary.confirmed}
                     tone={colors.success}
@@ -1167,7 +1238,7 @@ function GymOperationsPageBody() {
                     appointments={coachAppointments}
                     colors={colors}
                     onOpenReview={setAppointmentReviewTarget}
-                    resetKey={`${coachFilterId ?? "all"}:${appointmentStatusFilter}`}
+                    resetKey={`${coachFilterId ?? "all"}:${appointmentStatusFilter}:${appointmentMemberSearch}`}
                   />
                 )}
               </div>
@@ -1757,121 +1828,30 @@ function GymOperationsPageBody() {
           onSelect={handleVenueEndDateSelect}
           onClose={() => setVenueEndCalendarOpen(false)}
         />
-        <RecurringPlanCreateModal
+        <StaffRecurringCashEnrollmentModal
           coachOptions={coachOptions}
-          form={recurringPlanForm}
-          inputInvalid={recurringPlanInputInvalid}
-          isBusy={recurringCreateBusy}
-          isCreatePending={createRecurringPlanMutation.isPending}
-          isOpen={isCoach && recurringPlanOpen}
+          isOpen={canManageGymOperations && cashEnrollmentOpen}
           memberOptions={memberOptions}
-          monthlyOffer={{
-            description: recurringCoachOffer?.monthlyOfferDescription ?? null,
-            durationMinutes: recurringMonthlyDuration,
-            isConfigured: recurringMonthlyOfferConfigured,
-            rate: recurringMonthlyRate,
-            sessionCount: recurringMonthlySessionCount,
-          }}
-          onClose={() => setRecurringPlanOpen(false)}
-          onConfirm={(skipConflicts) =>
-            void handleConfirmRecurringPlan(skipConflicts)
-          }
-          onPreview={() => void handlePreviewRecurringPlan()}
-          onRepeatLastSchedule={handleRepeatLastRecurringSchedule}
-          onResetPreview={() => setRecurringPlanPreview(null)}
-          preview={recurringPlanPreview}
-          repeatablePlan={repeatableRecurringPlan}
-          scheduleIssue={recurringScheduleIssue}
-          setForm={setRecurringPlanForm}
-          trainingPlanOptions={recurringTrainingPlanOptions}
-          trainingPlansLoading={recurringPlansLoading}
+          onClose={() => setCashEnrollmentOpen(false)}
         />
         <GymOperationsCoachAppointmentModal
           appointment={appointmentReviewTarget}
-          billingCycles={recurringPlanSessions?.plan.billingCycles ?? []}
           coachReadiness={appointmentReviewReadiness}
           isOpen={!!appointmentReviewTarget}
           isSubmitting={
-            respondAppointmentPending ||
             completeAppointmentPending ||
-            cancelAppointmentPending ||
-            payAppointmentInitialMutation.isPending ||
-            processAppointmentBalanceMutation.isPending ||
-            payRecurringCycleMutation.isPending ||
-            verifyPaymentMutation.isPending
+            cancelAppointmentPending
           }
           onClose={() => setAppointmentReviewTarget(null)}
-          onConfirm={() => void handleConfirmAppointment()}
-          onReject={(note) => {
-            if (!appointmentReviewTarget) return;
-            void handleRejectAppointment(appointmentReviewTarget, note);
-          }}
           onComplete={(payload) => {
             if (!appointmentReviewTarget) return;
             void handleCompleteAppointment(appointmentReviewTarget, payload);
           }}
           isCoachView={isCoach}
-          onSaveFeedback={(payload) => {
-            if (!appointmentReviewTarget) return;
-            void handleSaveAppointmentFeedback(
-              appointmentReviewTarget,
-              payload,
-            );
-          }}
           onCancelAppointment={(note) => {
             if (!appointmentReviewTarget) return;
             void handleCancelAppointment(appointmentReviewTarget, note);
           }}
-          onEditRecurringSession={() => {
-            if (!appointmentReviewTarget?.recurringPlanId) return;
-            const currentAppointment = appointmentReviewTarget;
-            setAppointmentReviewTarget(null);
-            setRecurringPlanAction({
-              appointment: currentAppointment,
-              mode: "single",
-            });
-          }}
-          onEditRecurringFuture={() => {
-            if (!appointmentReviewTarget?.recurringPlanId) return;
-            const currentAppointment = appointmentReviewTarget;
-            setAppointmentReviewTarget(null);
-            setRecurringPlanAction({
-              appointment: currentAppointment,
-              mode: "future",
-            });
-          }}
-          onCancelRecurringPlan={() => {
-            if (!appointmentReviewTarget?.recurringPlanId) return;
-            const currentAppointment = appointmentReviewTarget;
-            setAppointmentReviewTarget(null);
-            setRecurringPlanAction({
-              appointment: currentAppointment,
-              mode: "cancel",
-            });
-          }}
-          onCollectBalance={(provider) => {
-            if (!appointmentReviewTarget) return;
-            requestCollectAppointmentBalance(appointmentReviewTarget, provider);
-          }}
-          onCollectInitialPayment={(provider, paymentStage) => {
-            if (!appointmentReviewTarget) return;
-            requestCollectAppointmentInitialPayment(
-              appointmentReviewTarget,
-              provider,
-              paymentStage,
-            );
-          }}
-          onApprovePayment={(paymentId) => {
-            if (!appointmentReviewTarget) return;
-            requestApproveAppointmentPayment(
-              appointmentReviewTarget,
-              paymentId,
-            );
-          }}
-          onPayRecurringCycle={(cycle, provider) =>
-            requestRecurringCyclePayment(cycle, provider)
-          }
-          canManageRecurringPlan={isAdmin}
         />
         <RecurringPlanActionModal
           action={isAdmin ? recurringPlanAction : null}
@@ -1957,39 +1937,15 @@ function GymOperationsPageBody() {
         <GymOperationsVenueBookingModal
           booking={venueReviewTarget}
           isOpen={!!venueReviewTarget}
-          isSubmitting={
-            scheduleLoading ||
-            processBookingBalanceMutation.isPending ||
-            verifyPaymentMutation.isPending
-          }
+          isCoachView={isCoach}
+          isSubmitting={scheduleLoading}
           onClose={() => setVenueReviewTarget(null)}
-          onApprove={(note) => void handleApproveVenueBooking(note)}
           onCancel={(note) => void handleCancelVenueBooking(note)}
-          onCollectBalance={(provider) => {
-            if (!venueReviewTarget) return;
-            requestCollectVenueBalance(venueReviewTarget, provider);
-          }}
           onComplete={() => void handleCompleteVenueBooking()}
           onNoShow={() => void handleNoShowVenueBooking()}
-          onReject={(note) => void handleRejectVenueBooking(note)}
           onVenueDetails={() => {
             window.location.assign("/facilities");
           }}
-        />
-        <ConfirmModal
-          isOpen={!!paymentConfirm}
-          title={paymentConfirm?.title ?? "Confirm payment action"}
-          message={
-            paymentConfirm?.message ??
-            "Review this payment action before continuing."
-          }
-          confirmLabel={paymentConfirm?.confirmLabel ?? "CONFIRM"}
-          loadingLabel={paymentConfirm?.confirmLabel ?? "CONFIRM"}
-          isLoading={paymentConfirmLoading}
-          onConfirm={() => {
-            void handleConfirmPaymentAction();
-          }}
-          onCancel={() => setPaymentConfirm(null)}
         />
         <FitModal
           isOpen={feedbackModal !== null}

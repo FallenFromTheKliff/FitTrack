@@ -42,6 +42,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { mobileApiClient } from "@/lib/api-client";
 import type { TimeSlot } from "@/components/modals";
+import {
+  createCommerceAttemptIdempotencyKey,
+  useCommerceCheckoutReturn,
+} from "@/hooks/commerce/useCommerceCheckoutReturn";
 
 export type AvailabilityDraft = {
   id?: string;
@@ -256,6 +260,7 @@ export function useProfileScreen() {
   const [membershipPaymentConfirmation, setMembershipPaymentConfirmation] =
     useState<MembershipPaymentConfirmation | null>(null);
   const [membershipCardPurchaseProvider, setMembershipCardPurchaseProvider] = useState<"paymongo" | null>(null);
+  const membershipAttemptIdempotencyKeyRef = useRef<string | null>(null);
   const [rankingPrivacyTarget, setRankingPrivacyTarget] = useState<FitnessRankingVisibility | null>(null);
 
   useEffect(() => {
@@ -454,6 +459,28 @@ export function useProfileScreen() {
     }
   }, [isMember, updateUser, user?.id, user?.status]);
 
+  const membershipCheckoutReturn = useCommerceCheckoutReturn({
+    onSucceeded: async () => {
+      membershipAttemptIdempotencyKeyRef.current = null;
+      setMembershipCardPurchaseProvider(null);
+      await refreshAuthUserFromProfile();
+      showMessage("Membership card activated.");
+      setMembershipPaymentConfirmation({
+        title: "Membership active",
+        message: "Your PayMongo payment was confirmed and your membership card is now active.",
+      });
+    },
+    onTerminal: async (_, state) => {
+      membershipAttemptIdempotencyKeyRef.current = null;
+      setMembershipCardPurchaseProvider(null);
+      showMessage(
+        state === "expired"
+          ? "Checkout expired. No membership access was granted."
+          : "Checkout was not completed. No membership access was granted.",
+      );
+    },
+  });
+
   useEffect(() => {
     if (!isFocused || !isMember || !user?.id) return;
     void refreshAuthUserFromProfile();
@@ -614,10 +641,18 @@ export function useProfileScreen() {
     if (!user?.id || !isMember || purchaseMembershipCardMutation.isPending) return;
 
     setMembershipCardPurchaseProvider("paymongo");
+    const idempotencyKey =
+      membershipAttemptIdempotencyKeyRef.current ??
+      createCommerceAttemptIdempotencyKey();
+    membershipAttemptIdempotencyKeyRef.current = idempotencyKey;
 
+    let checkoutStarted = false;
     try {
       const result = await purchaseMembershipCardMutation.mutateAsync({
-        payload: { provider: "paymongo" },
+        payload: {
+          provider: "paymongo",
+          idempotencyKey,
+        },
         userId: user.id
       });
       const checkoutUrl = result.checkoutUrl?.trim();
@@ -626,27 +661,31 @@ export function useProfileScreen() {
       }
 
       await Linking.openURL(checkoutUrl);
-      await refreshAuthUserFromProfile();
+      checkoutStarted = true;
+      membershipCheckoutReturn.start(result);
       showMessage("PayMongo checkout opened.");
 
       setMembershipPaymentConfirmation({
         title: "Checkout opened",
-        message: `Complete the ${membershipCardPriceLabel} payment in PayMongo. FitTrack grants membership access only after the backend confirms a successful payment; a failed or abandoned checkout keeps this account non-member.`,
+        message: `Complete the ${membershipCardPriceLabel} PayMongo checkout. Return to Profile after payment; access activates only after confirmation.`,
       });
     } catch (error: unknown) {
+      membershipAttemptIdempotencyKeyRef.current = null;
       showMessage(
         error instanceof Error
           ? error.message
           : "Unable to open PayMongo checkout. No membership access was granted."
       );
     } finally {
-      if (isMounted.current) {
+      if (isMounted.current && !checkoutStarted) {
         setMembershipCardPurchaseProvider(null);
       }
     }
   }, [
     isMember,
     membershipCardPriceLabel,
+    membershipCheckoutReturn,
+    membershipAttemptIdempotencyKeyRef,
     purchaseMembershipCardMutation,
     refreshAuthUserFromProfile,
     showMessage,

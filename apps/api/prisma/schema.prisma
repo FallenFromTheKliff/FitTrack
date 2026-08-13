@@ -55,6 +55,7 @@ model User {
   membership_card                MembershipCard?
   payments                       Payment[]
   payments_verified              Payment[]                     @relation("payment_verifier")
+  commerce_checkout_holds        CommerceCheckoutHold[]
   // S5
   amenity_bookings               AmenityBooking[]
   // S6
@@ -383,6 +384,7 @@ model MembershipPlan {
   updated_at        DateTime @updatedAt @db.Timestamptz(6)
 
   subscriptions Subscription[]
+  commerce_checkout_holds CommerceCheckoutHold[]
 
   @@index([is_active, sort_order])
   @@map("membership_plans")
@@ -494,6 +496,7 @@ model Payment {
 
   user     User  @relation(fields: [user_id], references: [id])
   verifier User? @relation("payment_verifier", fields: [verified_by], references: [id])
+  commerce_checkout_hold CommerceCheckoutHold? @relation("commerce_checkout_payment")
 
   @@index([payable_type, payable_id])
   @@index([user_id, status])
@@ -505,6 +508,7 @@ enum PayableType {
   subscription
   booking
   coaching
+  commerce_checkout_hold
   recurring_coaching
   product
   membership_card
@@ -526,6 +530,71 @@ enum PaymentStatus {
   processing
   awaiting_verification
   completed
+  failed
+}
+
+// Internal commerce state. Holds are never appointments, enrollments, or
+// coach-client relationships; they only reserve a checkout intent until it
+// expires or PayMongo success consumes it.
+model CommerceCheckoutHold {
+  id              String                       @id @default(uuid()) @db.Uuid
+  user_id         String                       @db.Uuid
+  coach_id        String?                      @db.Uuid
+  amenity_id      String?                      @db.Uuid
+  kind            CommerceCheckoutHoldKind
+  status          CommerceCheckoutHoldStatus   @default(held)
+  idempotency_key String                       @unique @db.VarChar(128)
+  payment_id      String?                      @unique @db.Uuid
+  scheduled_at    DateTime?                    @db.Timestamptz(6)
+  ends_at         DateTime?                    @db.Timestamptz(6)
+  duration_minutes Int?                        @db.SmallInt
+  amount          Decimal                      @db.Decimal(10, 2)
+  currency        String                       @default("PHP") @db.VarChar(3)
+  session_count   Int?                         @db.SmallInt
+  start_date      DateTime?                    @db.Date
+  end_date        DateTime?                    @db.Date
+  preferred_days  Int[]                        @default([])
+  preferred_time  DateTime?                    @db.Time(0)
+  member_notes    String?
+  expires_at      DateTime                     @db.Timestamptz(6)
+  consumed_at     DateTime?                    @db.Timestamptz(6)
+  released_at     DateTime?                    @db.Timestamptz(6)
+  failure_reason  String?
+  appointment_id  String?                      @db.Uuid
+  booking_id      String?                      @db.Uuid
+  subscription_id String?                      @db.Uuid
+  membership_card_id String?                   @db.Uuid
+  recurring_plan_id String?                    @db.Uuid
+  membership_plan_id String?                   @db.Uuid
+  created_at      DateTime                     @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime                     @updatedAt @db.Timestamptz(6)
+
+  user    User          @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  coach   CoachProfile? @relation(fields: [coach_id], references: [id])
+  amenity Amenity?      @relation(fields: [amenity_id], references: [id])
+  membership_plan MembershipPlan? @relation(fields: [membership_plan_id], references: [id])
+  payment Payment?      @relation("commerce_checkout_payment", fields: [payment_id], references: [id], onDelete: SetNull)
+
+  @@index([coach_id, status, expires_at])
+  @@index([amenity_id, status, expires_at])
+  @@index([user_id, status])
+  @@index([expires_at, status])
+  @@map("commerce_checkout_holds")
+}
+
+enum CommerceCheckoutHoldKind {
+  one_time
+  monthly
+  venue
+  subscription
+  membership_card
+}
+
+enum CommerceCheckoutHoldStatus {
+  held
+  consumed
+  released
+  expired
   failed
 }
 
@@ -562,6 +631,7 @@ model Amenity {
   updated_at            DateTime    @updatedAt @db.Timestamptz(6)
 
   bookings AmenityBooking[]
+  commerce_checkout_holds CommerceCheckoutHold[]
   feedback AmenityFeedback[]
   layout_equipment GymEquipment[]
 
@@ -676,6 +746,7 @@ model CoachProfile {
   reviews              CoachReview[]
   availability_slots   CoachAvailabilitySlot[]
   client_relationships CoachClientRelationship[] @relation("coach_rel")
+  commerce_checkout_holds CommerceCheckoutHold[]
   specialties          CoachProfileSpecialty[]
 
   @@index([is_available_for_booking, average_rating(sort: Desc)])
@@ -806,6 +877,7 @@ model RecurringCoachingPlan {
 model RecurringCoachingScheduleItem {
   id                String                              @id @default(uuid()) @db.Uuid
   recurring_plan_id String                              @db.Uuid
+  training_schedule_day_id String?                      @db.Uuid
   sequence_index    Int                                 @db.SmallInt
   scheduled_at      DateTime                            @db.Timestamptz(6)
   duration_minutes  Int                                 @default(60)
@@ -815,10 +887,12 @@ model RecurringCoachingScheduleItem {
   updated_at        DateTime                            @updatedAt @db.Timestamptz(6)
 
   recurring_plan RecurringCoachingPlan @relation(fields: [recurring_plan_id], references: [id], onDelete: Cascade)
+  training_schedule_day TrainingScheduleDay? @relation(fields: [training_schedule_day_id], references: [id], onDelete: SetNull)
   appointment    CoachAppointment?     @relation("recurring_schedule_item_appointment")
 
   @@unique([recurring_plan_id, sequence_index])
   @@unique([recurring_plan_id, scheduled_at])
+  @@index([training_schedule_day_id])
   @@index([recurring_plan_id, status, scheduled_at])
   @@map("recurring_coaching_schedule_items")
 }
@@ -1092,12 +1166,14 @@ model TrainingScheduleDay {
   day_of_week Int      @db.SmallInt
   focus_label String?  @db.VarChar(100)
   notes       String?
+  is_rest_day Boolean?
   created_at  DateTime @default(now()) @db.Timestamptz(6)
   updated_at  DateTime @updatedAt @db.Timestamptz(6)
 
   plan                TrainingPlan             @relation(fields: [plan_id], references: [id], onDelete: Cascade)
   exercises           PlanExercise[]
   workout_assignments CoachWorkoutAssignment[]
+  recurring_schedule_items RecurringCoachingScheduleItem[]
 
   @@index([plan_id, week_number, day_of_week])
   @@map("training_schedule_days")

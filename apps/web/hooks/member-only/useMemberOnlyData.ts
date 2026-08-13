@@ -33,7 +33,6 @@ import {
   nutritionDailySummaryQueryOptions,
   nutritionHistoryQueryOptions,
   nutritionLogsQueryOptions,
-  payAppointmentDownpaymentMutationOptions,
   startWorkoutSessionMutationOptions,
   submitCoachReviewMutationOptions,
   venuesQueryOptions,
@@ -124,7 +123,6 @@ export function useMemberOnlyBookingsData(userId?: string) {
     cancelBookingMutation: useMutation(cancelBookingMutationOptions(webApiClient, queryClient)),
     createAppointmentMutation: useMutation(createAppointmentMutationOptions(webApiClient, queryClient)),
     createBookingMutation: useMutation(createBookingMutationOptions(webApiClient, queryClient)),
-    payAppointmentMutation: useMutation(payAppointmentDownpaymentMutationOptions(webApiClient, queryClient)),
     submitCoachReviewMutation: useMutation(submitCoachReviewMutationOptions(webApiClient, queryClient)),
     venuesQuery: useQuery({ ...venuesQueryOptions(webApiClient, userId), enabled: !!userId }),
   };

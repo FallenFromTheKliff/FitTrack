@@ -1,14 +1,9 @@
-import {
-  ConflictException,
-  ForbiddenException,
-  HttpException,
-} from '@nestjs/common';
+import { ForbiddenException, HttpException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma, RelationshipStatus } from '@prisma/client';
 
 import { RelationshipRepository } from './relationship.repository';
-import { RELATIONSHIP_REQUESTED_EVENT } from './events/relationship-requested.event';
 import { RELATIONSHIP_STATUS_CHANGED_EVENT } from './events/relationship-status-changed.event';
 import { RelationshipService } from './relationship.service';
 
@@ -20,6 +15,8 @@ describe('RelationshipService', () => {
     findCoachByUserIdOrThrow: jest.fn(),
     findOpenRelationshipPair: jest.fn(),
     findActiveRelationshipPair: jest.fn(),
+    findValidPaidOneTimeAppointment: jest.fn().mockResolvedValue(null),
+    findActivePaidMonthlyPlan: jest.fn().mockResolvedValue(null),
     createRelationship: jest.fn(),
     getMyRelationships: jest.fn(),
     getCoachClients: jest.fn(),
@@ -57,10 +54,22 @@ describe('RelationshipService', () => {
     },
     member: {
       id: 'member-1',
+      auth_identities: [
+        {
+          identifier: 'juan@example.com',
+          is_primary: true,
+          provider: 'email',
+          verified_at: new Date('2026-03-25T10:00:00.000Z'),
+        },
+      ],
+      email_verified_at: new Date('2026-03-25T10:00:00.000Z'),
+      phone_verified_at: null,
+      attendance_logs: [],
       profile: {
         first_name: 'Juan',
         last_name: 'Dela Cruz',
         avatar_url: 'https://cdn.fittrack.test/avatars/juan.png',
+        phone: '+639171234567',
       },
     },
     ...overrides,
@@ -76,48 +85,30 @@ describe('RelationshipService', () => {
     }).compile();
 
     service = module.get<RelationshipService>(RelationshipService);
-    jest.clearAllMocks();
+    Object.values(repo).forEach((mock) => mock.mockReset());
+    eventEmitter.emit.mockReset();
+    repo.findValidPaidOneTimeAppointment.mockResolvedValue(null);
+    repo.findActivePaidMonthlyPlan.mockResolvedValue(null);
   });
 
-  it('creates pending relationship requests for new coach-member pairs', async () => {
-    repo.findCoachByIdOrThrow.mockResolvedValue({
-      id: 'coach-1',
-      user_id: 'coach-user-1',
-    });
-    repo.findOpenRelationshipPair.mockResolvedValue(null);
-    repo.createRelationship.mockResolvedValue(makeRelationship());
-
-    const result = await service.requestRelationship('member-1', {
-      coach_id: 'coach-1',
-      notes: 'Looking for weekly coaching.',
-    });
-
-    expect(result.id).toBe('rel-1');
-    expect(result.status).toBe(RelationshipStatus.pending);
-    expect(result.coach.id).toBe('coach-1');
-    expect(eventEmitter.emit).toHaveBeenCalledWith(
-      RELATIONSHIP_REQUESTED_EVENT,
-      expect.objectContaining({
-        relationshipId: 'rel-1',
+  it('retires relationship requests because clients are created only by full payment or staff cash', async () => {
+    await expect(
+      service.requestRelationship('member-1', {
+        coach_id: 'coach-1',
+        notes: 'Looking for weekly coaching.',
       }),
-    );
+    ).rejects.toMatchObject({ status: 410 });
+    expect(repo.findCoachByIdOrThrow).not.toHaveBeenCalled();
+    expect(repo.createRelationship).not.toHaveBeenCalled();
   });
 
-  it('rejects duplicate pending or active relationship requests', async () => {
-    repo.findCoachByIdOrThrow.mockResolvedValue({
-      id: 'coach-1',
-      user_id: 'coach-user-1',
-    });
-    repo.findOpenRelationshipPair.mockResolvedValue({
-      id: 'rel-existing',
-      status: RelationshipStatus.active,
-    });
-
+  it('does not consult or mutate legacy relationship rows when request route is called', async () => {
     await expect(
       service.requestRelationship('member-1', {
         coach_id: 'coach-1',
       }),
-    ).rejects.toBeInstanceOf(ConflictException);
+    ).rejects.toMatchObject({ status: 410 });
+    expect(repo.findOpenRelationshipPair).not.toHaveBeenCalled();
     expect(repo.createRelationship).not.toHaveBeenCalled();
   });
 
@@ -173,6 +164,103 @@ describe('RelationshipService', () => {
     await expect(
       service.assertActiveClientRelationship('coach-user-1', 'member-1'),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('allows current paid one-time appointment access without creating a relationship', async () => {
+    repo.findCoachByUserIdOrThrow.mockResolvedValue({
+      id: 'coach-1',
+      user_id: 'coach-user-1',
+    });
+    repo.findActiveRelationshipPair.mockResolvedValue(null);
+    repo.findValidPaidOneTimeAppointment.mockResolvedValue({
+      scheduled_at: new Date('2026-08-13T10:00:00.000Z'),
+      duration_minutes: 60,
+    });
+
+    await expect(
+      service.assertCoachClientAccess('coach-user-1', 'member-1'),
+    ).resolves.toBeUndefined();
+    expect(repo.findValidPaidOneTimeAppointment).toHaveBeenCalledWith(
+      'coach-1',
+      'member-1',
+    );
+    expect(repo.createRelationship).not.toHaveBeenCalled();
+  });
+
+  it('allows an active paid monthly plan without requiring a duplicate relationship row', async () => {
+    repo.findCoachByUserIdOrThrow.mockResolvedValue({
+      id: 'coach-1',
+      user_id: 'coach-user-1',
+    });
+    repo.findActiveRelationshipPair.mockResolvedValue(null);
+    repo.findValidPaidOneTimeAppointment.mockResolvedValue(null);
+    repo.findActivePaidMonthlyPlan.mockResolvedValue({ id: 'plan-1' });
+
+    await expect(
+      service.assertCoachClientAccess('coach-user-1', 'member-1'),
+    ).resolves.toBeUndefined();
+    expect(repo.findActivePaidMonthlyPlan).toHaveBeenCalledWith(
+      'coach-1',
+      'member-1',
+    );
+  });
+
+  it.each(['cancelled', 'unpaid', 'expired'])(
+    'denies %s one-time appointment access', async () => {
+      repo.findCoachByUserIdOrThrow.mockResolvedValue({
+        id: 'coach-1',
+        user_id: 'coach-user-1',
+      });
+      repo.findActiveRelationshipPair.mockResolvedValue(null);
+      repo.findValidPaidOneTimeAppointment.mockResolvedValue(null);
+
+      await expect(
+        service.assertCoachClientAccess('coach-user-1', 'member-1'),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    },
+  );
+
+  it('does not grant one-time access to another coach', async () => {
+    repo.findCoachByUserIdOrThrow.mockResolvedValue({
+      id: 'other-coach-1',
+      user_id: 'other-coach-user-1',
+    });
+    repo.findActiveRelationshipPair.mockResolvedValue(null);
+    repo.findValidPaidOneTimeAppointment.mockResolvedValue(null);
+
+    await expect(
+      service.assertCoachClientAccess('other-coach-user-1', 'member-1'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(repo.findValidPaidOneTimeAppointment).toHaveBeenCalledWith(
+      'other-coach-1',
+      'member-1',
+    );
+  });
+
+  it('requires paid monthly provenance even when an active relationship row exists', async () => {
+    repo.findCoachByUserIdOrThrow.mockResolvedValue({
+      id: 'coach-1',
+      user_id: 'coach-user-1',
+    });
+    repo.findActiveRelationshipPair.mockResolvedValue({
+      id: 'rel-1',
+      coach_id: 'coach-1',
+      member_id: 'member-1',
+      status: RelationshipStatus.active,
+    });
+    repo.findActivePaidMonthlyPlan.mockResolvedValue({ id: 'plan-1' });
+
+    await expect(
+      service.assertCoachClientAccess('coach-user-1', 'member-1'),
+    ).resolves.toBeUndefined();
+    expect(repo.findValidPaidOneTimeAppointment).toHaveBeenCalledWith(
+      'coach-1',
+      'member-1',
+    );
+    expect(repo.findActivePaidMonthlyPlan).toHaveBeenCalledWith(
+      'coach-1',
+      'member-1',
+    );
   });
 
   it('activates pending relationships for the owning coach', async () => {

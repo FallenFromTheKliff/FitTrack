@@ -3,9 +3,11 @@ import { createContext, useContext, useMemo, useCallback, useState, type ReactNo
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   adminMembersQueryOptions,
+  coachClientsQueryOptions,
   createUserMutationOptions,
   deleteUserMutationOptions,
   invalidateAdminMembersQuery,
+  queryKeys,
   restoreUserMutationOptions,
   updateAdminMemberMutationOptions
 } from "@fittrack/query";
@@ -18,6 +20,7 @@ import type {
 } from "@fittrack/types";
 import { webApiClient } from "@/lib/api-client";
 import { useAuth } from "@/contexts/AuthContext";
+import { mapCoachClientsToMembers } from "@/components/accounts/coachClientDirectory";
 
 const MemberContext = createContext<IMemberContext | null>(null);
 
@@ -31,22 +34,37 @@ export function MemberProvider({ children }: { children: ReactNode }) {
   const controller = useMemo(() => createMemberController(), []);
   const [directoryFilters, setDirectoryFilters] = useState<MemberDirectoryFilters>({});
 
-  const {
-    data: members = [],
-    isLoading,
-    error: queryError
-  } = useQuery({
+  const adminMembersQuery = useQuery({
     ...adminMembersQueryOptions(webApiClient, directoryFilters),
-    enabled: canInspectAccounts
+    enabled: canInspectAccounts && !isCoach
   });
+  const coachClientsQuery = useQuery({
+    ...coachClientsQueryOptions(webApiClient, { limit: 100, page: 1 }),
+    enabled: canInspectAccounts && isCoach,
+  });
+  const members = useMemo(
+    () =>
+      isCoach
+        ? mapCoachClientsToMembers(coachClientsQuery.data?.data ?? [])
+        : (adminMembersQuery.data ?? []),
+    [adminMembersQuery.data, coachClientsQuery.data?.data, isCoach],
+  );
+  const isLoading = isCoach
+    ? coachClientsQuery.isLoading
+    : adminMembersQuery.isLoading;
+  const queryError = isCoach ? coachClientsQuery.error : adminMembersQuery.error;
 
   const error = canInspectAccounts && queryError
     ? controller.toMessage(queryError, "Failed to fetch members.")
     : null;
 
   const fetchMembers = useCallback(async () => {
+    if (isCoach) {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.coachClients() });
+      return;
+    }
     await invalidateAdminMembersQuery(queryClient);
-  }, [queryClient]);
+  }, [isCoach, queryClient]);
 
   const createUserMutation = useMutation(createUserMutationOptions(webApiClient, queryClient));
 

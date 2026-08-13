@@ -1,13 +1,12 @@
 import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
 import type {
   ApiClient,
-  AppointmentPaymentProvider,
-  AppointmentPaymentStage,
+  AppointmentAvailabilitySlot,
   CreateAppointmentPayload,
+  RescheduleAppointmentPayload,
 } from "@fittrack/api-client";
 import {
   invalidateAnalyticsQueries,
-  invalidateAdminMembershipPaymentQueries,
   invalidateAppointmentQueries,
   invalidateCoachScheduleQueries,
   invalidateStaffCoachManagementQueries,
@@ -35,67 +34,53 @@ export function createAppointmentMutationOptions(client: Pick<ApiClient, "appoin
   });
 }
 
-export function payAppointmentDownpaymentMutationOptions(
+export function appointmentAvailabilityQueryOptions(
   client: Pick<ApiClient, "appointments">,
-  queryClient: QueryClient,
+  coachId?: string,
+  date?: string,
+  durationMinutes?: number,
 ) {
-  return mutationOptions({
-    mutationFn: ({
-      appointmentId,
-      provider = "paymongo",
-      paymentStage = "full",
-      userId,
-    }: {
-      appointmentId: string;
-      provider?: AppointmentPaymentProvider;
-      paymentStage?: AppointmentPaymentStage;
-      userId?: string;
-    }) =>
-      client.appointments.initiateDownpayment(
-        appointmentId,
-        provider,
-        paymentStage,
-      ),
-    onSuccess: async (_data, variables) => {
-      await Promise.all([
-        invalidateAppointmentQueries(queryClient, variables.userId),
-        invalidateCoachScheduleQueries(queryClient),
-        invalidateAnalyticsQueries(queryClient),
-        invalidateAdminMembershipPaymentQueries(queryClient),
-      ]);
-    },
+  return queryOptions<AppointmentAvailabilitySlot[]>({
+    queryKey: queryKeys.appointmentAvailability(
+      coachId,
+      date,
+      durationMinutes,
+    ),
+    queryFn: () =>
+      client.appointments.getAvailability(coachId!, {
+        date: date!,
+        durationMinutes: durationMinutes!,
+      }),
+    enabled: Boolean(
+      coachId && date && durationMinutes && durationMinutes > 0,
+    ),
+    staleTime: 15_000,
   });
 }
 
-export function processAppointmentBalanceMutationOptions(
+export function rescheduleAppointmentMutationOptions(
   client: Pick<ApiClient, "appointments">,
   queryClient: QueryClient,
 ) {
   return mutationOptions({
     mutationFn: ({
       appointmentId,
-      provider = "cash",
-      referenceNo,
-      screenshotUrl,
+      payload,
       userId,
     }: {
       appointmentId: string;
-      provider?: AppointmentPaymentProvider;
-      referenceNo?: string;
-      screenshotUrl?: string;
+      payload: RescheduleAppointmentPayload;
       userId?: string;
-    }) =>
-      client.appointments.processBalance(appointmentId, {
-        provider,
-        referenceNo,
-        screenshotUrl,
-      }),
+    }) => client.appointments.reschedule(appointmentId, payload),
     onSuccess: async (_data, variables) => {
       await Promise.all([
         invalidateAppointmentQueries(queryClient, variables.userId),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.appointmentDetail(variables.appointmentId),
+        }),
         invalidateCoachScheduleQueries(queryClient),
+        invalidateStaffCoachManagementQueries(queryClient),
         invalidateAnalyticsQueries(queryClient),
-        invalidateAdminMembershipPaymentQueries(queryClient),
       ]);
     },
   });
@@ -109,36 +94,6 @@ export function cancelAppointmentMutationOptions(client: Pick<ApiClient, "appoin
       await Promise.all([
         invalidateAppointmentQueries(queryClient, variables.userId),
         invalidateCoachScheduleQueries(queryClient),
-        invalidateStaffCoachManagementQueries(queryClient),
-        invalidateAnalyticsQueries(queryClient),
-      ]);
-    }
-  });
-}
-
-export function confirmCoachAppointmentMutationOptions(client: Pick<ApiClient, "appointments">, queryClient: QueryClient) {
-  return mutationOptions({
-    mutationFn: ({ appointmentId }: { appointmentId: string; userId?: string }) =>
-      client.appointments.confirmAsCoach(appointmentId),
-    onSuccess: async (_data, variables) => {
-      await Promise.all([
-        invalidateCoachScheduleQueries(queryClient, variables.userId),
-        invalidateAppointmentQueries(queryClient),
-        invalidateStaffCoachManagementQueries(queryClient),
-        invalidateAnalyticsQueries(queryClient),
-      ]);
-    }
-  });
-}
-
-export function declineCoachAppointmentMutationOptions(client: Pick<ApiClient, "appointments">, queryClient: QueryClient) {
-  return mutationOptions({
-    mutationFn: ({ appointmentId, reason }: { appointmentId: string; reason: string; userId?: string }) =>
-      client.appointments.declineAsCoach(appointmentId, reason),
-    onSuccess: async (_data, variables) => {
-      await Promise.all([
-        invalidateCoachScheduleQueries(queryClient, variables.userId),
-        invalidateAppointmentQueries(queryClient),
         invalidateStaffCoachManagementQueries(queryClient),
         invalidateAnalyticsQueries(queryClient),
       ]);

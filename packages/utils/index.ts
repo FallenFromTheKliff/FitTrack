@@ -10,3 +10,4 @@ export * from "./number";
 export * from "./password";
 export * from "./pose";
 export * from "./profile";
+export * from "./coach-session";

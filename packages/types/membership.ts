@@ -182,11 +182,13 @@ export type UpdateMembershipCatalogSettingsInput = {
 };
 
 export type SubscribeToMembershipInput = {
+  idempotencyKey?: string;
   planId: string;
-  provider: MembershipPaymentProvider;
+  provider: "paymongo";
 };
 
 export type PurchaseMembershipCardInput = {
+  idempotencyKey?: string;
   provider: "paymongo";
 };
 
@@ -205,7 +207,8 @@ export type ManualMembershipPaymentInput = {
   amount: number;
   payableId: string;
   payableType: MembershipPayableType;
-  paymentStage: MembershipPaymentStage;
+  /** @deprecated The backend returns 410 for product-visible manual payment flows. */
+  paymentStage: "full";
   referenceNo: string;
   screenshotUrl: string;
 };

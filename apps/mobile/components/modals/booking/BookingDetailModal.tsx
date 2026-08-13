@@ -18,18 +18,17 @@ import { FitButton, FitText } from "@/components/fit";
 import FitModalScrollView from "@/components/modals/shared/FitModalScrollView";
 
 export type DetailBooking = {
-  activePaymentStage?: "balance" | "downpayment" | "full" | null;
-  amountDueNow?: number;
   assessmentReport?: string | null;
-  bookingType?: "recurring" | "single";
+  bookingType?: "recurring" | "single" | "venue_coach";
   coachFeedback?: string | null;
+  coachEarnings?: number;
   coachId?: string;
   coachReviewComment?: string | null;
   coachReviewRating?: number | null;
   id: string;
-  nextPaymentDate?: string;
-  paymentPlan?: "downpayment" | "free" | "full";
-  remainingBalance?: number;
+  memberId?: string;
+  durationMinutes?: number;
+  paymentProvider?: "cash" | "paymongo" | null;
   recurringPlanId?: string | null;
   sessionNotes?: string | null;
   timelineItems?: DetailTimelineItem[];
@@ -48,6 +47,7 @@ export type DetailBooking = {
   detailTitle?: string;
   detailSubtitle?: string;
   totalAmount?: number;
+  venueId?: string;
 };
 
 export type DetailTimelineItem = {
@@ -100,21 +100,17 @@ function parseTimeToMinutes(value: string): number | null {
 
 function formatStatusLabel(status: string) {
   const explicitLabels: Record<string, string> = {
-    pending_downpayment: "Pending Downpayment",
-    pending_payment: "Pending Payment",
-    pending_full_payment: "Pending Full Payment",
-    balance_pending: "Pending Full Payment",
+    cancelled: "Cancelled",
+    completed: "Completed",
+    confirmed: "Confirmed",
+    no_show: "No show",
   };
 
   if (explicitLabels[status]) {
     return explicitLabels[status];
   }
 
-  return status
-    .split("_")
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
+  return "Unavailable";
 }
 
 function formatCurrency(value: number) {
@@ -210,35 +206,23 @@ export default function BookingDetailModal({
   })();
 
   const totalPrice = booking.totalAmount ?? pricing.finalPrice;
-  const remainingBalance = booking.remainingBalance ?? 0;
-  const isLegacySplitPayment =
-    booking.paymentPlan === "downpayment" ||
-    booking.activePaymentStage === "downpayment" ||
-    booking.activePaymentStage === "balance" ||
-    remainingBalance > 0;
-  const showPaymentPlan =
-    booking.paymentPlan === "full" || isLegacySplitPayment;
-  const isBalanceCollection =
-    isLegacySplitPayment &&
-    booking.status === "pending_full_payment" &&
-    remainingBalance > 0;
-  const amountDueNow = isBalanceCollection
-    ? remainingBalance
-    : (booking.amountDueNow ?? totalPrice);
+  const showPayment = booking.totalAmount != null;
   const bookingTypeLabel =
     booking.bookingType === "recurring"
-      ? "Recurring booking"
-      : "Single booking";
+      ? "Monthly coaching session"
+      : booking.bookingType === "venue_coach"
+        ? "Venue coaching add-on"
+        : booking.bookingType === "single"
+          ? "One-time coaching session"
+          : "One-time booking";
   const bookingSummaryLabel =
     booking.bookingType === "recurring"
-      ? "Part of a recurring coach plan."
-      : "One-time booking only.";
-  const paymentPlanLabel =
-    isLegacySplitPayment && isBalanceCollection
-      ? "Balance payment"
-      : isLegacySplitPayment
-        ? "Legacy split payment"
-        : "PayMongo full payment";
+      ? "Allocated from a paid monthly coaching plan."
+      : booking.bookingType === "venue_coach"
+        ? "Coach work attached to a paid venue reservation."
+        : booking.bookingType === "single"
+          ? "Paid one-time coaching session."
+          : "Paid one-time reservation.";
 
   return (
     <Modal
@@ -434,27 +418,17 @@ export default function BookingDetailModal({
               </View>
             ) : null}
 
-            {showPaymentPlan ? (
+            {showPayment ? (
               <View style={s.priceCard}>
                 <FitText style={s.detailLabel}>PAYMENT</FitText>
-                <FitText style={s.detailValue}>{paymentPlanLabel}</FitText>
+                <FitText style={s.detailValue}>Full payment confirmed</FitText>
                 <FitText style={s.priceSub}>
-                  Due now: {formatCurrency(amountDueNow)}
+                  {booking.paymentProvider === "cash"
+                    ? "Cash payment was registered by staff before this work became active."
+                    : booking.paymentProvider === "paymongo"
+                      ? "PayMongo full payment was confirmed before this work became active."
+                      : "Full payment was confirmed before this booking became active."}
                 </FitText>
-                {isLegacySplitPayment ? (
-                  <FitText style={s.priceSub}>
-                    {remainingBalance > 0
-                      ? `Remaining balance: ${formatCurrency(remainingBalance)} on or after ${formatBookingDate(
-                          booking.nextPaymentDate ?? booking.date,
-                        )}`
-                      : "Legacy payment history: no remaining balance recorded."}
-                  </FitText>
-                ) : (
-                  <FitText style={s.priceSub}>
-                    One full PayMongo payment is required before this session is
-                    confirmed.
-                  </FitText>
-                )}
               </View>
             ) : null}
 

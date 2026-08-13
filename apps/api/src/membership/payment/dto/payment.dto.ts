@@ -37,9 +37,9 @@ export class ManualPaymentDTO {
   @IsUUID('4', { message: 'payable_id must be a valid UUID' })
   payable_id: string;
 
-  @ApiProperty({ enum: PaymentStage, example: PaymentStage.full })
-  @IsEnum(PaymentStage, {
-    message: `payment_stage must be one of: ${Object.values(PaymentStage).join(', ')}`,
+  @ApiProperty({ enum: [PaymentStage.full], example: PaymentStage.full })
+  @IsIn([PaymentStage.full], {
+    message: 'payment_stage must be full for all new payment records',
   })
   payment_stage: PaymentStage;
 

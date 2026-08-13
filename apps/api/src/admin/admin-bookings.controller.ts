@@ -8,7 +8,12 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiGoneResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
@@ -35,7 +40,11 @@ export class AdminBookingsController {
 
   @Patch(':id/confirm')
   @ApiOperation({
-    summary: 'Confirm a pending booking from the admin schedule surface.',
+    summary: 'Legacy compatibility route; pending booking confirmation is retired.',
+  })
+  @ApiGoneResponse({
+    description:
+      'Venue bookings are confirmed by full payment or atomic staff cash registration.',
   })
   confirmBooking(
     @Param('id', ParseUUIDPipe) id: string,
@@ -46,7 +55,11 @@ export class AdminBookingsController {
 
   @Patch(':id/reject')
   @ApiOperation({
-    summary: 'Reject a pending booking from the admin schedule surface.',
+    summary: 'Legacy compatibility route; pending booking rejection is retired.',
+  })
+  @ApiGoneResponse({
+    description:
+      'Pending commercial booking rejection is no longer an active workflow.',
   })
   rejectBooking(
     @Param('id', ParseUUIDPipe) id: string,

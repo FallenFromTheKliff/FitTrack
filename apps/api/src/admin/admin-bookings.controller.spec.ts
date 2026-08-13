@@ -51,26 +51,24 @@ describe('AdminBookingsController', () => {
     });
   });
 
-  it('confirms a pending booking through the live booking service', async () => {
-    bookingService.confirmPendingBooking.mockResolvedValue({
-      message: 'Booking confirmed successfully',
-    });
+  it('preserves pending confirmation only as a 410 compatibility boundary', async () => {
+    bookingService.confirmPendingBooking.mockRejectedValue(
+      Object.assign(new Error('retired'), { status: 410 }),
+    );
 
     await expect(
       controller.confirmBooking('booking-1', { sub: 'admin-1' } as never),
-    ).resolves.toEqual({
-      message: 'Booking confirmed successfully',
-    });
+    ).rejects.toMatchObject({ status: 410 });
     expect(bookingService.confirmPendingBooking).toHaveBeenCalledWith(
       'booking-1',
       'admin-1',
     );
   });
 
-  it('rejects a pending booking through the live booking service', async () => {
-    bookingService.rejectPendingBooking.mockResolvedValue({
-      message: 'Booking rejected successfully',
-    });
+  it('preserves pending rejection only as a 410 compatibility boundary', async () => {
+    bookingService.rejectPendingBooking.mockRejectedValue(
+      Object.assign(new Error('retired'), { status: 410 }),
+    );
 
     await expect(
       controller.rejectBooking(
@@ -78,9 +76,7 @@ describe('AdminBookingsController', () => {
         { sub: 'admin-1' } as never,
         'Duplicate request',
       ),
-    ).resolves.toEqual({
-      message: 'Booking rejected successfully',
-    });
+    ).rejects.toMatchObject({ status: 410 });
     expect(bookingService.rejectPendingBooking).toHaveBeenCalledWith(
       'booking-1',
       'admin-1',

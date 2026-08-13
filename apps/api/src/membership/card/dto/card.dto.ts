@@ -1,17 +1,19 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  CommerceCheckoutHoldKind,
+  CommerceCheckoutHoldStatus,
   MembershipCardSource,
   MembershipCardStatus,
   PaymentProvider,
 } from '@prisma/client';
-import { IsEnum } from 'class-validator';
+import { IsEnum, IsIn } from 'class-validator';
 
 import { PaymentResponseDTO } from '../../payment/dto/payment.dto';
 
 export class StartMembershipCardPurchaseDTO {
-  @ApiProperty({ enum: PaymentProvider, example: PaymentProvider.paymongo })
-  @IsEnum(PaymentProvider, {
-    message: `provider must be one of: ${Object.values(PaymentProvider).join(', ')}`,
+  @ApiProperty({ enum: [PaymentProvider.paymongo], example: PaymentProvider.paymongo })
+  @IsIn([PaymentProvider.paymongo], {
+    message: 'provider must be paymongo for membership-card checkout',
   })
   provider: PaymentProvider;
 }
@@ -68,8 +70,8 @@ export class MembershipCardResponseDTO {
 }
 
 export class MembershipCardPurchaseResponseDTO {
-  @ApiProperty({ example: 'Membership card checkout started.' })
-  message: string;
+  @ApiPropertyOptional({ example: 'Membership card checkout started.' })
+  message?: string;
 
   @ApiPropertyOptional({
     example: 'https://checkout.paymongo.com/...',
@@ -77,9 +79,27 @@ export class MembershipCardPurchaseResponseDTO {
   })
   checkout_url?: string | null;
 
-  @ApiProperty({ type: MembershipCardResponseDTO })
-  membership_card: MembershipCardResponseDTO;
+  @ApiPropertyOptional({ type: MembershipCardResponseDTO, nullable: true })
+  membership_card?: MembershipCardResponseDTO | null;
 
-  @ApiProperty({ type: PaymentResponseDTO })
-  payment: PaymentResponseDTO;
+  @ApiPropertyOptional({ type: PaymentResponseDTO, nullable: true })
+  payment?: PaymentResponseDTO | null;
+
+  @ApiProperty({ example: '11111111-1111-4111-8111-111111111111' })
+  hold_id: string;
+
+  @ApiProperty({ enum: CommerceCheckoutHoldKind })
+  kind: CommerceCheckoutHoldKind;
+
+  @ApiProperty({ enum: CommerceCheckoutHoldStatus })
+  status: CommerceCheckoutHoldStatus;
+
+  @ApiProperty({ example: '2026-08-13T09:15:00.000Z' })
+  expires_at: string;
+
+  @ApiPropertyOptional({ nullable: true })
+  payment_id: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  membership_card_id?: string | null;
 }

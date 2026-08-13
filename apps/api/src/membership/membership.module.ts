@@ -9,6 +9,7 @@ import { QueueModule } from '../queue/queue.module';
 import { MembershipCardController } from './card/card.controller';
 import { MembershipCardRepository } from './card/card.repository';
 import { MembershipCardService } from './card/card.service';
+import { CoachingCommerceService } from '../coaching/commerce/coaching-commerce.service';
 import { PaymentController } from './payment/payment.controller';
 import { PaymongoCheckoutService } from './payment/paymongo-checkout.service';
 import { PaymongoWebhookService } from './payment/paymongo-webhook.service';
@@ -48,6 +49,7 @@ import { SubscriptionService } from './subscription/subscription.service';
     PaymentRepository,
     PaymongoCheckoutService,
     PaymongoWebhookService,
+    CoachingCommerceService,
   ],
   exports: [
     ActiveMemberCardGuard,
@@ -57,6 +59,7 @@ import { SubscriptionService } from './subscription/subscription.service';
     PaymentService,
     PaymentRepository,
     PaymongoCheckoutService,
+    CoachingCommerceService,
   ],
 })
 export class MembershipModule {}

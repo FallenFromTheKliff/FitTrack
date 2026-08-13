@@ -1,5 +1,22 @@
 import type { ApiTransport } from "../transport/createAxiosTransport";
 import { unwrapResponse } from "../request";
+import {
+  mapCommerceCheckoutAttempt,
+  type CommerceCheckoutApiRecord,
+  type CommerceCheckoutAttempt,
+} from "./commerce-checkout";
+
+function createIdempotencyKey() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (char) => {
+    const rand = Math.floor(Math.random() * 16);
+    const value = char === "x" ? rand : (rand & 0x3) | 0x8;
+    return value.toString(16);
+  });
+}
 
 export type RecurringCoachingFrequency = "weekly" | "biweekly" | "monthly";
 export type RecurringCoachingPlanStatus =
@@ -28,13 +45,14 @@ export type RecurringCoachingPlanInput = {
   durationMinutes?: number;
   durationMonths?: number;
   endDate?: string;
-  frequency: RecurringCoachingFrequency;
+  frequency?: RecurringCoachingFrequency;
   memberId: string;
   memberNotes?: string;
-  preferredDays: number[];
-  preferredTime: string;
+  preferredDays?: number[];
+  preferredTime?: string;
   quotedAmount?: number;
   scheduleItems?: RecurringCoachingScheduleItemInput[];
+  selectedCandidateIndexes?: number[];
   sessionOverrides?: RecurringCoachingSessionOverrideInput[];
   startDate: string;
   trainingPlanId?: string;
@@ -42,6 +60,15 @@ export type RecurringCoachingPlanInput = {
 
 export type RecurringCoachingEnrollmentInput = {
   coachId: string;
+  idempotencyKey?: string;
+  startDate?: string;
+};
+
+export type StaffRecurringCashEnrollmentInput = {
+  coachId: string;
+  idempotencyKey?: string;
+  memberId: string;
+  referenceNo?: string;
   startDate?: string;
 };
 
@@ -95,15 +122,29 @@ export type RecurringCoachingBillingCycleRecord = {
 };
 
 export type RecurringCoachingPreviewSession = {
+  candidateIndex: number;
   coachId: string;
   conflict: boolean;
   conflictReasons: string[];
+  date: string;
   durationMinutes: number;
   endsAt: string;
   originalScheduledAt: string | null;
   recurringState: RecurringCoachingSessionState;
+  selected: boolean;
   scheduledAt: string;
   status: string;
+  time: string;
+  workout: RecurringCoachingWorkoutCandidate | null;
+};
+
+export type RecurringCoachingWorkoutCandidate = {
+  dayOfWeek: number;
+  exerciseCount: number;
+  exerciseNames: string[];
+  id: string;
+  label: string | null;
+  weekNumber: number;
 };
 
 export type RecurringCoachingPlanRecord = {
@@ -133,11 +174,13 @@ export type RecurringCoachingScheduleItemRecord = {
   scheduledAt: string;
   sequenceIndex: number;
   status: string;
+  trainingScheduleDayId: string | null;
 };
 
 export type RecurringCoachingPlanSessionRecord = {
   coachId: string;
   conflict: boolean;
+  date: string;
   durationMinutes: number;
   exceptionOverride: boolean;
   id: string;
@@ -145,18 +188,24 @@ export type RecurringCoachingPlanSessionRecord = {
   recurringState: RecurringCoachingSessionState | null;
   scheduledAt: string;
   status: string;
+  time: string;
   workoutAssignment: {
     sequenceIndex: number;
     trainingScheduleDayId: string;
     source: string;
     state: string;
   } | null;
+  workout: RecurringCoachingWorkoutCandidate | null;
 };
 
 export type RecurringCoachingPlanPreviewResult = {
+  candidateCount: number;
   canConfirm: boolean;
   conflictCount: number;
+  eligibleSessionCount: number;
+  purchasedSessionCount: number;
   sessions: RecurringCoachingPreviewSession[];
+  selectedSessionCount: number;
   totalSessions: number;
   venueConflictsChecked: boolean;
   venueConflictsNote: string;
@@ -174,21 +223,39 @@ export type RecurringCoachingBillingCyclePaymentResult = {
 };
 
 type PreviewSessionApiRecord = {
+  candidate_index: number;
   coach_id: string;
   conflict: boolean;
   conflict_reasons: string[];
+  date: string;
   duration_minutes: number;
   ends_at: string;
   original_scheduled_at: string | null;
   recurring_state: RecurringCoachingSessionState;
+  selected: boolean;
   scheduled_at: string;
   status: string;
+  time: string;
+  workout: WorkoutCandidateApiRecord | null;
+};
+
+type WorkoutCandidateApiRecord = {
+  day_of_week: number;
+  exercise_count: number;
+  exercise_names: string[];
+  id: string;
+  label: string | null;
+  week_number: number;
 };
 
 type PreviewApiRecord = {
+  candidate_count: number;
   can_confirm: boolean;
   conflict_count: number;
+  eligible_session_count: number;
+  purchased_session_count: number;
   sessions: PreviewSessionApiRecord[];
+  selected_session_count: number;
   total_sessions: number;
   venue_conflicts_checked: boolean;
   venue_conflicts_note: string;
@@ -221,6 +288,7 @@ type ScheduleItemApiRecord = {
   scheduled_at: string;
   sequence_index: number;
   status: string;
+  training_schedule_day_id: string | null;
 };
 
 type BillingCycleApiRecord = {
@@ -239,6 +307,7 @@ type BillingCycleApiRecord = {
 type PlanSessionApiRecord = {
   coach_id: string;
   conflict: boolean;
+  date: string;
   duration_minutes: number;
   exception_override: boolean;
   id: string;
@@ -246,12 +315,14 @@ type PlanSessionApiRecord = {
   recurring_state: RecurringCoachingSessionState | null;
   scheduled_at: string;
   status: string;
+  time: string;
   workout_assignment: {
     sequence_index: number;
     training_schedule_day_id: string;
     source: string;
     state: string;
   } | null;
+  workout: WorkoutCandidateApiRecord | null;
 };
 
 type PlanMutationApiRecord = {
@@ -275,11 +346,11 @@ function toPlanPayload(input: RecurringCoachingPlanInput) {
       ? { duration_months: input.durationMonths }
       : {}),
     ...(input.endDate ? { end_date: input.endDate } : {}),
-    frequency: input.frequency,
+    ...(input.frequency ? { frequency: input.frequency } : {}),
     member_id: input.memberId,
     ...(input.memberNotes ? { member_notes: input.memberNotes } : {}),
-    preferred_days: input.preferredDays,
-    preferred_time: input.preferredTime,
+    ...(input.preferredDays ? { preferred_days: input.preferredDays } : {}),
+    ...(input.preferredTime ? { preferred_time: input.preferredTime } : {}),
     ...(input.quotedAmount !== undefined
       ? { quoted_amount: input.quotedAmount }
       : {}),
@@ -294,6 +365,9 @@ function toPlanPayload(input: RecurringCoachingPlanInput) {
             sequence_index: item.sequenceIndex,
           })),
         }
+      : {}),
+    ...(input.selectedCandidateIndexes?.length
+      ? { selected_candidate_indexes: input.selectedCandidateIndexes }
       : {}),
     ...(input.sessionOverrides?.length
       ? {
@@ -327,15 +401,29 @@ function mapPreviewSession(
   record: PreviewSessionApiRecord,
 ): RecurringCoachingPreviewSession {
   return {
+    candidateIndex: record.candidate_index,
     coachId: record.coach_id,
     conflict: record.conflict,
     conflictReasons: record.conflict_reasons,
+    date: record.date,
     durationMinutes: record.duration_minutes,
     endsAt: record.ends_at,
     originalScheduledAt: record.original_scheduled_at,
     recurringState: record.recurring_state,
+    selected: record.selected,
     scheduledAt: record.scheduled_at,
     status: record.status,
+    time: record.time,
+    workout: record.workout
+      ? {
+          dayOfWeek: record.workout.day_of_week,
+          exerciseCount: record.workout.exercise_count,
+          exerciseNames: record.workout.exercise_names,
+          id: record.workout.id,
+          label: record.workout.label,
+          weekNumber: record.workout.week_number,
+        }
+      : null,
   };
 }
 
@@ -343,9 +431,13 @@ function mapPreview(
   record: PreviewApiRecord,
 ): RecurringCoachingPlanPreviewResult {
   return {
+    candidateCount: record.candidate_count,
     canConfirm: record.can_confirm,
     conflictCount: record.conflict_count,
+    eligibleSessionCount: record.eligible_session_count,
+    purchasedSessionCount: record.purchased_session_count,
     sessions: record.sessions.map(mapPreviewSession),
+    selectedSessionCount: record.selected_session_count,
     totalSessions: record.total_sessions,
     venueConflictsChecked: record.venue_conflicts_checked,
     venueConflictsNote: record.venue_conflicts_note,
@@ -384,6 +476,7 @@ function mapScheduleItem(
     scheduledAt: record.scheduled_at,
     sequenceIndex: record.sequence_index,
     status: record.status,
+    trainingScheduleDayId: record.training_schedule_day_id,
   };
 }
 
@@ -410,6 +503,7 @@ function mapSession(
   return {
     coachId: record.coach_id,
     conflict: record.conflict,
+    date: record.date,
     durationMinutes: record.duration_minutes,
     exceptionOverride: record.exception_override,
     id: record.id,
@@ -417,6 +511,7 @@ function mapSession(
     recurringState: record.recurring_state,
     scheduledAt: record.scheduled_at,
     status: record.status,
+    time: record.time,
     workoutAssignment: record.workout_assignment
       ? {
           sequenceIndex: record.workout_assignment.sequence_index,
@@ -424,6 +519,16 @@ function mapSession(
             record.workout_assignment.training_schedule_day_id,
           source: record.workout_assignment.source,
           state: record.workout_assignment.state,
+      }
+      : null,
+    workout: record.workout
+      ? {
+          dayOfWeek: record.workout.day_of_week,
+          exerciseCount: record.workout.exercise_count,
+          exerciseNames: record.workout.exercise_names,
+          id: record.workout.id,
+          label: record.workout.label,
+          weekNumber: record.workout.week_number,
         }
       : null,
   };
@@ -450,15 +555,45 @@ function mapBillingCyclePaymentResult(
 
 export function createRecurringCoachingPlansApi(transport: ApiTransport) {
   return {
-    async enroll(input: RecurringCoachingEnrollmentInput) {
-      const result = await unwrapResponse<PlanMutationApiRecord>(
-        transport.post("/bookings/recurring-coaching-plans/enroll", {
-          coach_id: input.coachId,
-          ...(input.startDate ? { start_date: input.startDate } : {}),
-        }),
+    async enroll(
+      input: RecurringCoachingEnrollmentInput,
+    ): Promise<CommerceCheckoutAttempt> {
+      const result = await unwrapResponse<CommerceCheckoutApiRecord>(
+        transport.post(
+          "/bookings/recurring-coaching-plans/enroll",
+          {
+            coach_id: input.coachId,
+            ...(input.startDate ? { start_date: input.startDate } : {}),
+          },
+          {
+            headers: {
+              "Idempotency-Key": input.idempotencyKey ?? createIdempotencyKey(),
+            },
+          },
+        ),
         "Unable to start monthly coaching enrollment.",
       );
-      return mapMutationResult(result);
+      return mapCommerceCheckoutAttempt(result);
+    },
+    async createCashEnrollment(input: StaffRecurringCashEnrollmentInput) {
+      const result = await unwrapResponse<PlanApiRecord>(
+        transport.post(
+          "/bookings/recurring-coaching-plans/cash",
+          {
+            coach_id: input.coachId,
+            member_id: input.memberId,
+            ...(input.referenceNo ? { reference_no: input.referenceNo } : {}),
+            ...(input.startDate ? { start_date: input.startDate } : {}),
+          },
+          {
+            headers: {
+              "Idempotency-Key": input.idempotencyKey ?? createIdempotencyKey(),
+            },
+          },
+        ),
+        "Unable to register cash monthly enrollment.",
+      );
+      return mapPlan(result);
     },
     async list() {
       const result = await unwrapResponse<PlanApiRecord[]>(

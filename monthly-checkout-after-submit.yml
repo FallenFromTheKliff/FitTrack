@@ -1,0 +1,359 @@
+- generic [ref=e1]:
+  - generic [ref=e19]:
+    - generic [ref=e20]:
+      - img [ref=e22] [cursor=pointer]
+      - generic [ref=e23]:
+        - generic [ref=e24]: Bookings
+        - generic [ref=e25]: Stay on top of your schedule!
+      - generic [ref=e26]:
+        - button "Open page help" [ref=e27] [cursor=pointer]:
+          - img [ref=e28]
+        - button "6 unread notifications" [ref=e31] [cursor=pointer]:
+          - img [ref=e32]
+          - generic [ref=e36]: "6"
+    - generic [ref=e43]:
+      - generic [ref=e46]:
+        - generic [ref=e48]:
+          - img [ref=e49]
+          - textbox "Search bookings" [ref=e52]:
+            - /placeholder: Search bookings...
+        - button "Open booking filters" [ref=e53] [cursor=pointer]:
+          - img [ref=e54]
+      - generic [ref=e57]:
+        - generic [ref=e58]:
+          - generic [ref=e59]: Coach-created monthly plan
+          - generic [ref=e60]: Your coach is preparing your program and session schedule for this active monthly relationship.
+          - generic [ref=e61]:
+            - generic:
+              - img [ref=e63]
+              - generic [ref=e66]:
+                - generic [ref=e67]:
+                  - generic [ref=e68]: Recurring coaching
+                  - generic [ref=e71]: Active
+                - generic [ref=e72]: Active · Your coach will prepare the next sessions.
+        - generic [ref=e73]:
+          - generic [ref=e74]: Feb 16, 2026 - 1 booking
+          - button "Boxing Ring, Mon, Feb 16, 2026 | 04:00 PM - 06:00 PM, No show" [ref=e79] [cursor=pointer]:
+            - img [ref=e81]
+            - generic [ref=e90]:
+              - generic [ref=e91]:
+                - generic [ref=e92]: Boxing Ring
+                - generic [ref=e95]: No show
+              - generic [ref=e96]: Mon, Feb 16, 2026 | 04:00 PM - 06:00 PM
+            - img [ref=e97]
+        - generic [ref=e99]:
+          - generic [ref=e100]: Mar 5, 2026 - 1 booking
+          - button "Basketball Court, Thu, Mar 5, 2026 | 05:00 PM - 07:00 PM, Completed" [ref=e105] [cursor=pointer]:
+            - img [ref=e107]
+            - generic [ref=e109]:
+              - generic [ref=e110]:
+                - generic [ref=e111]: Basketball Court
+                - generic [ref=e114]: Completed
+              - generic [ref=e115]: Thu, Mar 5, 2026 | 05:00 PM - 07:00 PM
+            - img [ref=e116]
+        - generic [ref=e118]:
+          - generic [ref=e119]: Mar 23, 2026 - 1 booking
+          - button "Mobility Studio, Mon, Mar 23, 2026 | 06:00 PM - 08:00 PM, Completed" [ref=e124] [cursor=pointer]:
+            - img [ref=e126]
+            - generic [ref=e132]:
+              - generic [ref=e133]:
+                - generic [ref=e134]: Mobility Studio
+                - generic [ref=e137]: Completed
+              - generic [ref=e138]: Mon, Mar 23, 2026 | 06:00 PM - 08:00 PM
+            - img [ref=e139]
+        - generic [ref=e141]:
+          - generic [ref=e142]: Apr 10, 2026 - 1 booking
+          - button "Boxing Ring, Fri, Apr 10, 2026 | 07:00 PM - 09:00 PM, Completed" [ref=e147] [cursor=pointer]:
+            - img [ref=e149]
+            - generic [ref=e158]:
+              - generic [ref=e159]:
+                - generic [ref=e160]: Boxing Ring
+                - generic [ref=e163]: Completed
+              - generic [ref=e164]: Fri, Apr 10, 2026 | 07:00 PM - 09:00 PM
+            - img [ref=e165]
+        - generic [ref=e167]:
+          - generic [ref=e168]: Apr 28, 2026 - 1 booking
+          - button "Basketball Court, Tue, Apr 28, 2026 | 08:00 PM - 10:00 PM, Completed" [ref=e173] [cursor=pointer]:
+            - img [ref=e175]
+            - generic [ref=e177]:
+              - generic [ref=e178]:
+                - generic [ref=e179]: Basketball Court
+                - generic [ref=e182]: Completed
+              - generic [ref=e183]: Tue, Apr 28, 2026 | 08:00 PM - 10:00 PM
+            - img [ref=e184]
+        - generic [ref=e186]:
+          - generic [ref=e187]: Aug 25, 2026 - 1 booking
+          - button "Mobility Studio, Tue, Aug 25, 2026 | 09:00 PM - 11:00 PM, Confirmed" [ref=e192] [cursor=pointer]:
+            - img [ref=e194]
+            - generic [ref=e200]:
+              - generic [ref=e201]:
+                - generic [ref=e202]: Mobility Studio
+                - generic [ref=e205]: Confirmed
+              - generic [ref=e206]: Tue, Aug 25, 2026 | 09:00 PM - 11:00 PM
+            - img [ref=e207]
+        - generic [ref=e209]:
+          - generic [ref=e210]: Aug 27, 2026 - 1 booking
+          - button "Boxing Ring, Thu, Aug 27, 2026 | 04:00 PM - 06:00 PM, Confirmed" [ref=e215] [cursor=pointer]:
+            - img [ref=e217]
+            - generic [ref=e226]:
+              - generic [ref=e227]:
+                - generic [ref=e228]: Boxing Ring
+                - generic [ref=e231]: Confirmed
+              - generic [ref=e232]: Thu, Aug 27, 2026 | 04:00 PM - 06:00 PM
+            - img [ref=e233]
+        - generic [ref=e235]:
+          - generic [ref=e236]: Aug 29, 2026 - 1 booking
+          - button "Basketball Court, Sat, Aug 29, 2026 | 05:00 PM - 07:00 PM, Confirmed" [ref=e241] [cursor=pointer]:
+            - img [ref=e243]
+            - generic [ref=e245]:
+              - generic [ref=e246]:
+                - generic [ref=e247]: Basketball Court
+                - generic [ref=e250]: Confirmed
+              - generic [ref=e251]: Sat, Aug 29, 2026 | 05:00 PM - 07:00 PM
+            - img [ref=e252]
+        - generic [ref=e254]:
+          - generic [ref=e255]: Aug 31, 2026 - 1 booking
+          - button "Mobility Studio, Mon, Aug 31, 2026 | 06:00 PM - 08:00 PM, Confirmed" [ref=e260] [cursor=pointer]:
+            - img [ref=e262]
+            - generic [ref=e268]:
+              - generic [ref=e269]:
+                - generic [ref=e270]: Mobility Studio
+                - generic [ref=e273]: Confirmed
+              - generic [ref=e274]: Mon, Aug 31, 2026 | 06:00 PM - 08:00 PM
+            - img [ref=e275]
+        - generic [ref=e277]:
+          - generic [ref=e278]: Sep 2, 2026 - 1 booking
+          - button "Boxing Ring, Wed, Sep 2, 2026 | 07:00 PM - 09:00 PM, Confirmed" [ref=e283] [cursor=pointer]:
+            - img [ref=e285]
+            - generic [ref=e294]:
+              - generic [ref=e295]:
+                - generic [ref=e296]: Boxing Ring
+                - generic [ref=e299]: Confirmed
+              - generic [ref=e300]: Wed, Sep 2, 2026 | 07:00 PM - 09:00 PM
+            - img [ref=e301]
+    - button "Open quick actions menu" [ref=e336] [cursor=pointer]:
+      - generic [ref=e305]:
+        - img [ref=e307]
+        - img [ref=e309]
+  - dialog [ref=e654]:
+    - generic [ref=e658]:
+      - generic [ref=e659]:
+        - img [ref=e661]
+        - generic [ref=e666]:
+          - generic [ref=e667]: Book a Trainer
+          - generic [ref=e668]: Choose a monthly offer
+      - generic [ref=e671]:
+        - generic [ref=e672]:
+          - generic [ref=e673]:
+            - 'button "Select booking mode: Single Session" [ref=e674] [cursor=pointer]':
+              - generic [ref=e675]: Single Session
+            - 'button "Select booking mode: Monthly" [ref=e676] [cursor=pointer]':
+              - generic [ref=e677]: Monthly
+          - generic [ref=e678]:
+            - generic [ref=e679]: AVAILABLE COACHES
+            - generic [ref=e681]:
+              - generic [ref=e683]:
+                - img [ref=e684]
+                - textbox "Search coaches" [ref=e687]
+              - button "Show coach filters" [ref=e688] [cursor=pointer]:
+                - img [ref=e689]
+            - generic [ref=e690]:
+              - button "Select coach Juan Carlos Valdez. Endurance Conditioning. PHP 670 / session. 4.9 stars (21)." [ref=e691] [cursor=pointer]:
+                - generic [ref=e693]: JC
+                - generic [ref=e694]:
+                  - generic [ref=e695]: Juan Carlos Valdez
+                  - generic [ref=e696]: PHP 800 | 10 sessions | 1 hour each
+                  - generic [ref=e697]: 4.9 stars (21)
+                  - generic [ref=e698]: Focuses on mobility, conditioning, and sustainable return-to-training progressions.
+                  - generic [ref=e699]:
+                    - generic [ref=e701]: Endurance Conditioning
+                    - generic [ref=e703]: Strength and Conditioning
+                    - generic [ref=e705]: ACE-CPT
+              - button "Select coach Juan Carlos Cruz. Endurance Conditioning. PHP 550 / session. 4.9 stars (15)." [ref=e706] [cursor=pointer]:
+                - generic [ref=e708]: JC
+                - generic [ref=e709]:
+                  - generic [ref=e710]: Juan Carlos Cruz
+                  - generic [ref=e711]: PHP 700 | 8 sessions | 1 hour each
+                  - generic [ref=e712]: 4.9 stars (15)
+                  - generic [ref=e713]: Focuses on mobility, conditioning, and sustainable return-to-training progressions.
+                  - generic [ref=e714]:
+                    - generic [ref=e716]: Endurance Conditioning
+                    - generic [ref=e718]: Strength and Conditioning
+                    - generic [ref=e720]: ACE-CPT
+              - button "Select coach Juan Carlos Domingo. Body Recomposition. PHP 650 / session. 4.8 stars (20)." [ref=e721] [cursor=pointer]:
+                - generic [ref=e723]: JC
+                - generic [ref=e724]:
+                  - generic [ref=e725]: Juan Carlos Domingo
+                  - generic [ref=e726]: PHP 700 | 16 sessions | 1 hour each
+                  - generic [ref=e727]: 4.8 stars (20)
+                  - generic [ref=e728]: Builds practical strength blocks, movement assessments, and member accountability systems.
+                  - generic [ref=e729]:
+                    - generic [ref=e731]: Body Recomposition
+                    - generic [ref=e733]: Endurance Conditioning
+                    - generic [ref=e735]: NASM-CPT
+              - button "Select coach Juan Carlos Castillo. Body Recomposition. PHP 530 / session. 4.8 stars (14)." [ref=e736] [cursor=pointer]:
+                - generic [ref=e738]: JC
+                - generic [ref=e739]:
+                  - generic [ref=e740]: Juan Carlos Castillo
+                  - generic [ref=e741]: PHP 1,100 | 12 sessions | 1 hour each
+                  - generic [ref=e742]: 4.8 stars (14)
+                  - generic [ref=e743]: Builds practical strength blocks, movement assessments, and member accountability systems.
+                  - generic [ref=e744]:
+                    - generic [ref=e746]: Body Recomposition
+                    - generic [ref=e748]: Endurance Conditioning
+                    - generic [ref=e750]: NASM-CPT
+              - button "Select coach Juan Carlos Aguilar. Body Recomposition. PHP 750 / session. 4.7 stars (25)." [ref=e751] [cursor=pointer]:
+                - generic [ref=e753]: JC
+                - generic [ref=e754]:
+                  - generic [ref=e755]: Juan Carlos Aguilar
+                  - generic [ref=e756]: PHP 700 | 10 sessions | 1 hour each
+                  - generic [ref=e757]: 4.7 stars (25)
+                  - generic [ref=e758]: Focuses on mobility, conditioning, and sustainable return-to-training progressions.
+                  - generic [ref=e759]:
+                    - generic [ref=e761]: Body Recomposition
+                    - generic [ref=e763]: Functional Fitness
+                    - generic [ref=e765]: ACE-CPT
+              - button "Select coach Juan Carlos Mercado. Body Recomposition. PHP 630 / session. 4.7 stars (19)." [ref=e766] [cursor=pointer]:
+                - generic [ref=e768]: JC
+                - generic [ref=e769]:
+                  - generic [ref=e770]: Juan Carlos Mercado
+                  - generic [ref=e771]: PHP 1,100 | 8 sessions | 1 hour each
+                  - generic [ref=e772]: 4.7 stars (19)
+                  - generic [ref=e773]: Focuses on mobility, conditioning, and sustainable return-to-training progressions.
+                  - generic [ref=e774]:
+                    - generic [ref=e776]: Body Recomposition
+                    - generic [ref=e778]: Functional Fitness
+                    - generic [ref=e780]: ACE-CPT
+              - button "Select coach Juan Carlos Aquino. Body Recomposition. PHP 510 / session. 4.7 stars (13)." [ref=e781] [cursor=pointer]:
+                - generic [ref=e783]: JC
+                - generic [ref=e784]:
+                  - generic [ref=e785]: Juan Carlos Aquino
+                  - generic [ref=e786]: PHP 1,000 | 10 sessions | 1 hour each
+                  - generic [ref=e787]: 4.7 stars (13)
+                  - generic [ref=e788]: Focuses on mobility, conditioning, and sustainable return-to-training progressions.
+                  - generic [ref=e789]:
+                    - generic [ref=e791]: Body Recomposition
+                    - generic [ref=e793]: Functional Fitness
+                    - generic [ref=e795]: ACE-CPT
+                  - generic [ref=e796]: Great accountability and realistic next steps.
+              - button "Select coach Juan Carlos Salazar. Functional Fitness. PHP 730 / session. 4.6 stars (24)." [ref=e797] [cursor=pointer]:
+                - generic [ref=e799]: JC
+                - generic [ref=e800]:
+                  - generic [ref=e801]: Juan Carlos Salazar
+                  - generic [ref=e802]: PHP 1,100 | 16 sessions | 1 hour each
+                  - generic [ref=e803]: 4.6 stars (24)
+                  - generic [ref=e804]: Builds practical strength blocks, movement assessments, and member accountability systems.
+                  - generic [ref=e805]:
+                    - generic [ref=e807]: Functional Fitness
+                    - generic [ref=e809]: Powerlifting Fundamentals
+                    - generic [ref=e811]: NASM-CPT
+              - button "Select coach Juan Carlos Navarro. Functional Fitness. PHP 610 / session. 4.6 stars (18)." [ref=e812] [cursor=pointer]:
+                - generic [ref=e814]: JC
+                - generic [ref=e815]:
+                  - generic [ref=e816]: Juan Carlos Navarro
+                  - generic [ref=e817]: PHP 1,000 | 12 sessions | 1 hour each
+                  - generic [ref=e818]: 4.6 stars (18)
+                  - generic [ref=e819]: Builds practical strength blocks, movement assessments, and member accountability systems.
+                  - generic [ref=e820]:
+                    - generic [ref=e822]: Functional Fitness
+                    - generic [ref=e824]: Powerlifting Fundamentals
+                    - generic [ref=e826]: NASM-CPT
+              - button "Select coach Juan Carlos Villanueva. Functional Fitness. PHP 490 / session. 4.6 stars (12)." [ref=e827] [cursor=pointer]:
+                - generic [ref=e829]: JC
+                - generic [ref=e830]:
+                  - generic [ref=e831]: Juan Carlos Villanueva
+                  - generic [ref=e832]: PHP 900 | 16 sessions | 1 hour each
+                  - generic [ref=e833]: 4.6 stars (12)
+                  - generic [ref=e834]: Builds practical strength blocks, movement assessments, and member accountability systems.
+                  - generic [ref=e835]:
+                    - generic [ref=e837]: Functional Fitness
+                    - generic [ref=e839]: Powerlifting Fundamentals
+                    - generic [ref=e841]: NASM-CPT
+                  - generic [ref=e842]: Coach gave clear cues and adjusted the session to my energy.
+              - button "Select coach Juan Carlos Morales. Mobility and Recovery. PHP 710 / session. 4.5 stars (23)." [ref=e843] [cursor=pointer]:
+                - generic [ref=e845]: JC
+                - generic [ref=e846]:
+                  - generic [ref=e847]: Juan Carlos Morales
+                  - generic [ref=e848]: PHP 1,000 | 8 sessions | 1 hour each
+                  - generic [ref=e849]: 4.5 stars (23)
+                  - generic [ref=e850]: Focuses on mobility, conditioning, and sustainable return-to-training progressions.
+                  - generic [ref=e851]:
+                    - generic [ref=e853]: Mobility and Recovery
+                    - generic [ref=e855]: Powerlifting Fundamentals
+                    - generic [ref=e857]: ACE-CPT
+              - button "Select coach Juan Carlos Tan. Mobility and Recovery. PHP 590 / session. 4.5 stars (17)." [ref=e858] [cursor=pointer]:
+                - generic [ref=e860]: JC
+                - generic [ref=e861]:
+                  - generic [ref=e862]: Juan Carlos Tan
+                  - generic [ref=e863]: PHP 900 | 10 sessions | 1 hour each
+                  - generic [ref=e864]: 4.5 stars (17)
+                  - generic [ref=e865]: Focuses on mobility, conditioning, and sustainable return-to-training progressions.
+                  - generic [ref=e866]:
+                    - generic [ref=e868]: Mobility and Recovery
+                    - generic [ref=e870]: Powerlifting Fundamentals
+                    - generic [ref=e872]: ACE-CPT
+              - button "Select coach Juan Carlos Bautista. Mobility and Recovery. PHP 470 / session. 4.5 stars (11)." [ref=e873] [cursor=pointer]:
+                - generic [ref=e875]: JC
+                - generic [ref=e876]:
+                  - generic [ref=e877]: Juan Carlos Bautista
+                  - generic [ref=e878]: PHP 800 | 8 sessions | 1 hour each
+                  - generic [ref=e879]: 4.5 stars (11)
+                  - generic [ref=e880]: Focuses on mobility, conditioning, and sustainable return-to-training progressions.
+                  - generic [ref=e881]:
+                    - generic [ref=e883]: Mobility and Recovery
+                    - generic [ref=e885]: Powerlifting Fundamentals
+                    - generic [ref=e887]: ACE-CPT
+              - button "Select coach Juan Carlos Rivera. Mobility and Recovery. PHP 690 / session. 4.4 stars (22)." [ref=e888] [cursor=pointer]:
+                - generic [ref=e890]: JC
+                - generic [ref=e891]:
+                  - generic [ref=e892]: Juan Carlos Rivera
+                  - generic [ref=e893]: PHP 900 | 12 sessions | 1 hour each
+                  - generic [ref=e894]: 4.4 stars (22)
+                  - generic [ref=e895]: Builds practical strength blocks, movement assessments, and member accountability systems.
+                  - generic [ref=e896]:
+                    - generic [ref=e898]: Mobility and Recovery
+                    - generic [ref=e900]: Strength and Conditioning
+                    - generic [ref=e902]: NASM-CPT
+              - button "Select coach Juan Carlos Lim. Mobility and Recovery. PHP 570 / session. 4.4 stars (16)." [ref=e903] [cursor=pointer]:
+                - generic [ref=e905]: JC
+                - generic [ref=e906]:
+                  - generic [ref=e907]: Juan Carlos Lim
+                  - generic [ref=e908]: PHP 800 | 16 sessions | 1 hour each
+                  - generic [ref=e909]: 4.4 stars (16)
+                  - generic [ref=e910]: Builds practical strength blocks, movement assessments, and member accountability systems.
+                  - generic [ref=e911]:
+                    - generic [ref=e913]: Mobility and Recovery
+                    - generic [ref=e915]: Strength and Conditioning
+                    - generic [ref=e917]: NASM-CPT
+              - button "Select coach Ridge Coach. Mobility and Recovery. PHP 450 / session. 4.4 stars (10)." [ref=e918] [cursor=pointer]:
+                - generic [ref=e920]: RC
+                - generic [ref=e921]:
+                  - generic [ref=e922]: Ridge Coach
+                  - generic [ref=e923]: PHP 700 | 12 sessions | 1 hour each
+                  - generic [ref=e924]: 4.4 stars (10)
+                  - generic [ref=e925]: Builds practical strength blocks, movement assessments, and member accountability systems.
+                  - generic [ref=e926]:
+                    - generic [ref=e928]: Mobility and Recovery
+                    - generic [ref=e930]: Strength and Conditioning
+                    - generic [ref=e932]: NASM-CPT
+                  - generic [ref=e933]: Coach gave clear cues and adjusted the session to my energy.
+                - img [ref=e934]
+          - generic [ref=e937]:
+            - generic [ref=e938]: "Coach review: Ridge Coach"
+            - generic [ref=e939]: Builds practical strength blocks, movement assessments, and member accountability systems.
+            - generic [ref=e940]:
+              - generic [ref=e941]: SPECIALTIES
+              - generic [ref=e942]: Mobility and Recovery, Strength and Conditioning
+            - generic [ref=e943]:
+              - generic [ref=e944]: CERTIFICATIONS
+              - generic [ref=e945]: NASM-CPT, S&C Foundations
+            - generic [ref=e946]:
+              - generic [ref=e947]: MONTHLY OFFER
+              - generic [ref=e948]: PHP 700 | 12 sessions | 1 hour each
+              - generic [ref=e949]: Pay first. Agree on dates with your coach afterward.
+        - generic [ref=e950]: This member already has an active or paused recurring coaching entitlement with the selected coach.
+      - generic [ref=e951]:
+        - button "Cancel" [ref=e953] [cursor=pointer]:
+          - generic [ref=e954]: Cancel
+        - button "Confirm & Pay" [ref=e955] [cursor=pointer]:
+          - generic [ref=e956]: Confirm & Pay

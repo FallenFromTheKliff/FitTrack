@@ -16,11 +16,10 @@ import {
   IsEnum,
   IsISO8601,
   IsInt,
-  IsNotEmpty,
+  IsIn,
   IsNumber,
   IsOptional,
   IsString,
-  IsUrl,
   IsUUID,
   Matches,
   Max,
@@ -77,16 +76,18 @@ export class RecurringCoachingPlanBaseDTO {
   @IsUUID('all', { message: 'coach_id must be a valid UUID' })
   coach_id: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     enum: RecurringCoachingFrequency,
     example: RecurringCoachingFrequency.weekly,
   })
+  @IsOptional()
   @IsEnum(RecurringCoachingFrequency, {
     message: `frequency must be one of: ${Object.values(RecurringCoachingFrequency).join(', ')}`,
   })
-  frequency: RecurringCoachingFrequency;
+  frequency?: RecurringCoachingFrequency;
 
-  @ApiProperty({ example: [2, 4] })
+  @ApiPropertyOptional({ example: [2, 4] })
+  @IsOptional()
   @IsArray({ message: 'preferred_days must be an array' })
   @ArrayMinSize(1, { message: 'preferred_days must include at least one day' })
   @ArrayMaxSize(7, { message: 'preferred_days must not exceed 7 entries' })
@@ -94,13 +95,14 @@ export class RecurringCoachingPlanBaseDTO {
   @IsInt({ each: true, message: 'preferred_days entries must be integers' })
   @Min(0, { each: true, message: 'preferred_days entries must be at least 0' })
   @Max(6, { each: true, message: 'preferred_days entries must not exceed 6' })
-  preferred_days: number[];
+  preferred_days?: number[];
 
-  @ApiProperty({ example: '09:00' })
+  @ApiPropertyOptional({ example: '09:00' })
+  @IsOptional()
   @Matches(TIME_PATTERN, {
     message: 'preferred_time must be a valid 24-hour time in HH:mm format',
   })
-  preferred_time: string;
+  preferred_time?: string;
 
   @ApiProperty({ example: '2026-05-01' })
   @IsISO8601(
@@ -160,6 +162,31 @@ export class RecurringCoachingPlanBaseDTO {
   training_plan_id?: string;
 
   @ApiPropertyOptional({
+    example: [0, 2],
+    description:
+      'Zero-based indexes of generated workout candidates to keep. If omitted, the earliest candidates up to the purchased session count are selected.',
+  })
+  @IsOptional()
+  @IsArray({ message: 'selected_candidate_indexes must be an array' })
+  @ArrayMaxSize(120, {
+    message: 'selected_candidate_indexes must not exceed 120 entries',
+  })
+  @Type(() => Number)
+  @IsInt({
+    each: true,
+    message: 'selected_candidate_indexes entries must be integers',
+  })
+  @Min(0, {
+    each: true,
+    message: 'selected_candidate_indexes entries must be at least 0',
+  })
+  @Max(119, {
+    each: true,
+    message: 'selected_candidate_indexes entries must not exceed 119',
+  })
+  selected_candidate_indexes?: number[];
+
+  @ApiPropertyOptional({
     type: RecurringCoachingScheduleItemDTO,
     isArray: true,
   })
@@ -189,6 +216,31 @@ export class EnrollRecurringCoachingPlanDTO {
     { message: 'start_date must be a valid ISO date string' },
   )
   start_date?: string;
+}
+
+export class CreateStaffRecurringCashEnrollmentDTO {
+  @ApiProperty({ example: '11111111-1111-4111-8111-111111111111' })
+  @IsUUID('all', { message: 'member_id must be a valid UUID' })
+  member_id: string;
+
+  @ApiProperty({ example: '22222222-2222-4222-8222-222222222222' })
+  @IsUUID('all', { message: 'coach_id must be a valid UUID' })
+  coach_id: string;
+
+  @ApiPropertyOptional({ example: '2026-08-01' })
+  @IsOptional()
+  @IsISO8601(
+    { strict: false },
+    { message: 'start_date must be a valid ISO date string' },
+  )
+  start_date?: string;
+
+  @ApiPropertyOptional({ example: 'OR-COACH-2026-001' })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'reference_no must be a string' })
+  @MaxLength(100, { message: 'reference_no must not exceed 100 characters' })
+  reference_no?: string;
 }
 
 export class PreviewRecurringCoachingPlanDTO extends RecurringCoachingPlanBaseDTO {}
@@ -330,33 +382,10 @@ export class InitiateRecurringBillingCyclePaymentDTO {
     enum: PaymentProvider,
     example: PaymentProvider.paymongo,
   })
-  @IsEnum(PaymentProvider, {
-    message: `provider must be one of: ${Object.values(PaymentProvider).join(', ')}`,
+  @IsIn([PaymentProvider.paymongo], {
+    message: 'provider must be paymongo for recurring billing checkout',
   })
   provider: PaymentProvider;
-
-  @ApiPropertyOptional({
-    example: 'https://cdn.fittrack.test/receipts/recurring-cycle.png',
-  })
-  @ValidateIf(
-    (dto: InitiateRecurringBillingCyclePaymentDTO) =>
-      dto.provider === PaymentProvider.cash &&
-      typeof dto.screenshot_url === 'string' &&
-      dto.screenshot_url.trim().length > 0,
-  )
-  @IsUrl({}, { message: 'screenshot_url must be a valid URL' })
-  screenshot_url?: string;
-
-  @ApiPropertyOptional({ example: 'OR-RCP-2026-001' })
-  @ValidateIf(
-    (dto: InitiateRecurringBillingCyclePaymentDTO) =>
-      dto.provider === PaymentProvider.cash,
-  )
-  @TrimString()
-  @IsString({ message: 'reference_no must be a string' })
-  @IsNotEmpty({ message: 'reference_no is required for cash payments' })
-  @MaxLength(100, { message: 'reference_no must not exceed 100 characters' })
-  reference_no?: string;
 }
 
 export class RecurringCoachingBillingCycleResponseDTO {
@@ -406,6 +435,93 @@ export class RecurringBillingCycleCheckoutResponseDTO {
   payment_id: string;
 }
 
+export class RecurringCoachingWorkoutCandidateDTO {
+  @ApiProperty({ example: '44444444-4444-4444-8444-444444444444' })
+  id: string;
+
+  @ApiPropertyOptional({ example: 'Lower strength' })
+  label: string | null;
+
+  @ApiProperty({ example: 2 })
+  week_number: number;
+
+  @ApiProperty({ example: 1 })
+  day_of_week: number;
+
+  @ApiProperty({ example: 3 })
+  exercise_count: number;
+
+  @ApiProperty({ example: ['Back Squat', 'Romanian Deadlift'] })
+  exercise_names: string[];
+}
+
+export class RecurringCoachingPlanPreviewSessionDTO {
+  @ApiProperty({ example: 0 })
+  candidate_index: number;
+
+  @ApiProperty({ example: '2026-05-06' })
+  date: string;
+
+  @ApiProperty({ example: '09:00' })
+  time: string;
+
+  @ApiProperty({ example: true })
+  selected: boolean;
+
+  @ApiProperty({ example: false })
+  conflict: boolean;
+
+  @ApiProperty({ example: '2026-05-06T01:00:00.000Z' })
+  scheduled_at: string;
+
+  @ApiProperty({ example: '2026-05-06T02:00:00.000Z' })
+  ends_at: string;
+
+  @ApiProperty({ example: 60 })
+  duration_minutes: number;
+
+  @ApiProperty({ type: RecurringCoachingWorkoutCandidateDTO, nullable: true })
+  workout: RecurringCoachingWorkoutCandidateDTO | null;
+
+  @ApiProperty({ example: [] })
+  conflict_reasons: string[];
+}
+
+export class RecurringCoachingPlanPreviewResponseDTO {
+  @ApiProperty({ example: true })
+  can_confirm: boolean;
+
+  @ApiProperty({ example: 12 })
+  candidate_count: number;
+
+  @ApiProperty({ example: 12 })
+  eligible_session_count: number;
+
+  @ApiProperty({ example: 4 })
+  selected_session_count: number;
+
+  @ApiProperty({ example: 4 })
+  purchased_session_count: number;
+
+  @ApiProperty({ example: 4 })
+  total_sessions: number;
+
+  @ApiProperty({ example: 0 })
+  conflict_count: number;
+
+  @ApiProperty({ example: false })
+  venue_conflicts_checked: boolean;
+
+  @ApiProperty({
+    example:
+      'Coach appointments do not currently reserve venues, so venue conflict checks are deferred.',
+  })
+  venue_conflicts_note: string;
+
+  @ApiProperty({ type: RecurringCoachingPlanPreviewSessionDTO, isArray: true })
+  sessions: RecurringCoachingPlanPreviewSessionDTO[];
+}
+
 export class RecurringCoachingPlanSessionResponseDTO {
   @ApiProperty({ example: '33333333-3333-4333-8333-333333333333' })
   id: string;
@@ -427,6 +543,12 @@ export class RecurringCoachingPlanSessionResponseDTO {
 
   @ApiProperty({ example: 'confirmed' })
   status: string;
+
+  @ApiProperty({ example: '2026-05-06' })
+  date: string;
+
+  @ApiProperty({ example: '09:00' })
+  time: string;
 
   @ApiPropertyOptional({ example: true })
   exception_override: boolean;
@@ -451,6 +573,20 @@ export class RecurringCoachingPlanSessionResponseDTO {
     source: CoachWorkoutAssignmentSource;
     state: CoachWorkoutAssignmentState;
   } | null;
+
+  @ApiPropertyOptional({
+    type: 'object',
+    additionalProperties: true,
+    nullable: true,
+  })
+  workout: {
+    id: string;
+    label: string | null;
+    week_number: number;
+    day_of_week: number;
+    exercise_count: number;
+    exercise_names: string[];
+  } | null;
 }
 
 export class RecurringCoachingScheduleItemResponseDTO {
@@ -474,6 +610,9 @@ export class RecurringCoachingScheduleItemResponseDTO {
 
   @ApiPropertyOptional({ example: null })
   appointment_id: string | null;
+
+  @ApiPropertyOptional({ example: '44444444-4444-4444-8444-444444444444' })
+  training_schedule_day_id: string | null;
 }
 
 export class RecurringCoachingPlanResponseDTO {

@@ -12,6 +12,10 @@ import FitButton from "@/components/fit/FitButton";
 import FitModal from "@/components/modals/FitModal";
 
 type Props = {
+  dateTones?: Record<
+    string,
+    "available" | "complete" | "conflict" | "limited" | "missing"
+  >;
   highlightedDates?: string[];
   isOpen: boolean;
   maxDate?: string | null;
@@ -24,11 +28,13 @@ type Props = {
   yearRangeStart?: number;
   noScroll?: boolean;
   selectedDate?: string;
+  selectableDates?: string[];
   onSelect: (dateYmd: string) => void;
   onClose: () => void;
 };
 
 export default function CalendarModal({
+  dateTones = {},
   highlightedDates = [],
   isOpen,
   maxDate,
@@ -41,6 +47,7 @@ export default function CalendarModal({
   yearRangeStart,
   noScroll = true,
   selectedDate,
+  selectableDates,
   onSelect,
   onClose,
 }: Props) {
@@ -77,6 +84,10 @@ export default function CalendarModal({
   const highlightedDateSet = useMemo(
     () => new Set(highlightedDates),
     [highlightedDates],
+  );
+  const selectableDateSet = useMemo(
+    () => (selectableDates ? new Set(selectableDates) : null),
+    [selectableDates],
   );
   const resolvedYearRangeStart = yearRangeStart ?? year - 7;
   const resolvedYearRangeEnd = yearRangeEnd ?? year + 8;
@@ -208,9 +219,19 @@ export default function CalendarModal({
                 const isToday = cell.ymd === todayYmd;
                 const isDisabled = Boolean(
                   (minDateYmd && cell.ymd < minDateYmd) ||
-                    (maxDateYmd && cell.ymd > maxDateYmd),
+                    (maxDateYmd && cell.ymd > maxDateYmd) ||
+                    (selectableDateSet && !selectableDateSet.has(cell.ymd)),
                 );
                 const isHighlighted = highlightedDateSet.has(cell.ymd);
+                const dateTone = dateTones[cell.ymd];
+                const toneColor =
+                  dateTone === "available" || dateTone === "complete"
+                    ? colors.success
+                    : dateTone === "conflict" || dateTone === "missing"
+                      ? "#ef4444"
+                      : dateTone === "limited"
+                        ? "#f59e0b"
+                        : null;
                 const canShowHighlight =
                   isHighlighted && !isSelected && !isDisabled && cell.ymd >= todayYmd;
                 return (
@@ -237,6 +258,13 @@ export default function CalendarModal({
                             color: colors.success,
                           }
                         : {}),
+                      ...(toneColor && !isSelected && !isDisabled
+                        ? {
+                            borderColor: toneColor,
+                            boxShadow: `inset 0 -3px 0 ${toneColor}`,
+                            color: toneColor,
+                          }
+                        : {}),
                       ...(isDisabled
                         ? {
                             backgroundColor: colors.surface,
@@ -248,7 +276,7 @@ export default function CalendarModal({
                     aria-label={
                       isDisabled
                         ? `${cell.ymd} is unavailable`
-                        : `Select ${cell.ymd}`
+                        : `Select ${cell.ymd}${dateTone ? `, ${dateTone}` : ""}`
                     }
                   />
                 );

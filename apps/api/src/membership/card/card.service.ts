@@ -12,15 +12,16 @@ import {
   NotificationType,
   Payment,
   PaymentProvider,
-  PaymentStage,
-  Prisma,
   UserRole,
 } from '@prisma/client';
 import { isUUID } from 'class-validator';
 
 import { NotificationsService } from '../../notifications/notifications.service';
 import { ACCOUNT_ACTIVITY_EVENT } from '../../user/events/account-activity.event';
-import { PaymentRepository } from '../payment/payment.repository';
+import {
+  CoachingCommerceService,
+  CoachingCheckoutResponse,
+} from '../../coaching/commerce/coaching-commerce.service';
 import {
   PAYMENT_COMPLETED_EVENT,
   type PaymentCompletedEvent,
@@ -29,26 +30,11 @@ import {
   PAYMENT_FAILED_EVENT,
   type PaymentFailedEvent,
 } from '../payment/events/payment-failed.event';
-import {
-  PaymongoCheckoutResult,
-  PaymongoCheckoutService,
-} from '../payment/paymongo-checkout.service';
 import { StartMembershipCardPurchaseDTO } from './dto/card.dto';
 import { MembershipCardRepository } from './card.repository';
 
-type MembershipCardPurchaseResult = {
-  checkout_url: string | null;
-  membership_card: MembershipCard;
-  message: string;
-  payment: Payment;
-};
 const MEMBERSHIP_CARD_PAYABLE_TYPE =
   'membership_card' as unknown as Payment['payable_type'];
-const MEMBERSHIP_CARD_RETURN_QUERY = {
-  flow: 'membership-card',
-  portal: 'member',
-  surface: 'profile',
-} as const;
 
 function getProfileDisplayName(
   profile?: {
@@ -66,8 +52,7 @@ function getProfileDisplayName(
 export class MembershipCardService {
   constructor(
     private readonly repo: MembershipCardRepository,
-    private readonly paymentRepo: PaymentRepository,
-    private readonly paymongoCheckoutService: PaymongoCheckoutService,
+    private readonly commerceCheckoutService: CoachingCommerceService,
     private readonly notificationsService: NotificationsService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
@@ -76,7 +61,7 @@ export class MembershipCardService {
     userId: string,
     dto: StartMembershipCardPurchaseDTO,
     idempotencyKey: string | undefined,
-  ): Promise<MembershipCardPurchaseResult> {
+  ): Promise<CoachingCheckoutResponse> {
     const normalizedIdempotencyKey =
       this.normalizeAndValidateIdempotencyKey(idempotencyKey);
     const owner = await this.repo.findMembershipOwnerByIdOrThrow(userId);
@@ -86,41 +71,14 @@ export class MembershipCardService {
       throw this.buildRetiredCashPurchaseException();
     }
 
-    const existingPayment = await this.paymentRepo.findPaymentByIdempotencyKey(
-      normalizedIdempotencyKey,
-    );
-
-    if (existingPayment) {
-      return this.resumeExistingPurchase(existingPayment, userId);
-    }
-
     const existingCard = await this.repo.findMembershipCardByUserId(userId);
     this.assertCanStartNewPurchase(existingCard);
-
-    if (existingCard) {
-      const latestPayment =
-        await this.paymentRepo.findLatestPaymentForPayableStage(
-          MEMBERSHIP_CARD_PAYABLE_TYPE,
-          existingCard.id,
-          PaymentStage.full,
-        );
-      this.assertNoBlockingPurchase(latestPayment);
-    }
-
-    const initiation = await this.repo.createOrRefreshPendingPurchase({
+    const price = await this.repo.getMembershipCardPrice();
+    return this.commerceCheckoutService.createMembershipCardCheckout({
+      amount: price,
       idempotencyKey: normalizedIdempotencyKey,
-      provider: dto.provider,
-      source: 'paymongo',
       userId,
     });
-
-    const checkoutUrl = await this.startCheckoutForPayment(initiation.payment);
-    return {
-      checkout_url: checkoutUrl,
-      membership_card: initiation.membershipCard,
-      message: 'Membership card checkout started.',
-      payment: initiation.payment,
-    };
   }
 
   @OnEvent(PAYMENT_COMPLETED_EVENT, { async: true })
@@ -240,119 +198,6 @@ export class MembershipCardService {
     }
   }
 
-  private assertNoBlockingPurchase(payment: Payment | null): void {
-    if (!payment) {
-      return;
-    }
-
-    // Cash member requests are retired. Keep legacy rows for reconciliation,
-    // but never let them block a new PayMongo attempt.
-    if (payment.provider === PaymentProvider.cash) {
-      return;
-    }
-
-    if (payment.status === 'awaiting_verification') {
-      throw new ConflictException({
-        type: 'CONFLICT',
-        title: 'Membership Card Verification Pending',
-        status: 409,
-        detail:
-          'A membership-card cash request is already awaiting staff verification for this account.',
-      });
-    }
-
-    if (payment.status === 'pending' || payment.status === 'processing') {
-      throw new ConflictException({
-        type: 'CONFLICT',
-        title: 'Membership Card Checkout Pending',
-        status: 409,
-        detail:
-          'A membership-card checkout is already in progress for this account. Resume it or let it finish before starting another attempt.',
-      });
-    }
-  }
-
-  private async resumeExistingPurchase(
-    payment: Payment,
-    userId: string,
-  ): Promise<MembershipCardPurchaseResult> {
-    if (
-      payment.user_id !== userId ||
-      payment.payable_type !== MEMBERSHIP_CARD_PAYABLE_TYPE
-    ) {
-      throw new ConflictException({
-        type: 'CONFLICT',
-        title: 'Idempotency Key Already Used',
-        status: 409,
-        detail:
-          'This Idempotency-Key is already associated with another payment request.',
-      });
-    }
-
-    const membershipCard = await this.repo.findMembershipCardByIdOrThrow(
-      payment.payable_id,
-    );
-
-    if (payment.provider === PaymentProvider.cash) {
-      throw this.buildRetiredCashPurchaseException();
-    }
-
-    if (payment.provider !== PaymentProvider.paymongo) {
-      throw new ConflictException({
-        type: 'CONFLICT',
-        title: 'Payment Provider Mismatch',
-        status: 409,
-        detail:
-          'This Idempotency-Key is already associated with a non-PayMongo payment.',
-      });
-    }
-
-    if (payment.status === 'failed') {
-      throw new ConflictException({
-        type: 'CONFLICT',
-        title: 'Payment Attempt Already Failed',
-        status: 409,
-        detail:
-          'This Idempotency-Key belongs to a failed membership-card payment attempt. Start a new attempt with a new key.',
-      });
-    }
-
-    const checkoutUrl = this.extractCheckoutUrl(payment.gateway_metadata);
-
-    return {
-      checkout_url:
-        checkoutUrl ??
-        (await this.startCheckoutForPayment(payment, membershipCard.id)),
-      membership_card: membershipCard,
-      message: 'Membership card checkout resumed.',
-      payment,
-    };
-  }
-
-  private async startCheckoutForPayment(
-    payment: Payment,
-    membershipCardId?: string,
-  ): Promise<string> {
-    const checkout = await this.paymongoCheckoutService.createCheckoutSession({
-      amount: this.toMinorAmount(payment.amount),
-      cancelQuery: MEMBERSHIP_CARD_RETURN_QUERY,
-      description: 'SertFit membership card',
-      idempotencyKey: payment.idempotency_key,
-      metadata: {
-        membership_card_id: membershipCardId ?? payment.payable_id,
-        payment_id: payment.id,
-      },
-      successQuery: MEMBERSHIP_CARD_RETURN_QUERY,
-    });
-
-    await this.paymentRepo.updatePayment(
-      payment.id,
-      this.toCheckoutUpdateInput(checkout),
-    );
-
-    return checkout.checkoutUrl;
-  }
-
   private normalizeAndValidateIdempotencyKey(
     idempotencyKey: string | undefined,
   ): string {
@@ -373,30 +218,6 @@ export class MembershipCardService {
     return normalized;
   }
 
-  private toCheckoutUpdateInput(
-    checkout: PaymongoCheckoutResult,
-  ): Prisma.PaymentUpdateInput {
-    return {
-      gateway_metadata: checkout.gatewayMetadata as Prisma.InputJsonValue,
-      provider_ref: checkout.providerRef,
-      status: 'processing',
-    };
-  }
-
-  private extractCheckoutUrl(gatewayMetadata: Prisma.JsonValue | null) {
-    if (
-      gatewayMetadata &&
-      typeof gatewayMetadata === 'object' &&
-      !Array.isArray(gatewayMetadata)
-    ) {
-      const checkoutUrl = gatewayMetadata['checkout_url'];
-      if (typeof checkoutUrl === 'string' && checkoutUrl.length > 0) {
-        return checkoutUrl;
-      }
-    }
-
-    return null;
-  }
 
   private buildPaymentConfirmedBody(amount: string): string {
     return `We confirmed your membership-card payment. Amount received: PHP ${amount}. Your gym access is now active.`;
@@ -413,10 +234,6 @@ export class MembershipCardService {
         <p style="color:#aaa;font-size:12px;text-align:center">FitTrack</p>
       </div>
     `;
-  }
-
-  private toMinorAmount(amount: Prisma.Decimal): number {
-    return Math.round(Number(amount) * 100);
   }
 
   private buildRetiredCashPurchaseException(): GoneException {

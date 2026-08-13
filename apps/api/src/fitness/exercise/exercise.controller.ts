@@ -112,6 +112,30 @@ export class ExerciseController {
     return this.exerciseService.listMuscleDefinitions(dto);
   }
 
+  @Get('member/muscle-definitions')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.member)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'List active muscle definitions for member mastery filters.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Active muscle definitions returned.',
+    schema: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'array',
+          items: { $ref: getSchemaPath(MuscleDefinitionResponseDTO) },
+        },
+      },
+    },
+  })
+  listMemberMuscleDefinitions() {
+    return this.exerciseService.listMemberMuscleDefinitions();
+  }
+
   @Post('muscle-definitions')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.admin, UserRole.staff)

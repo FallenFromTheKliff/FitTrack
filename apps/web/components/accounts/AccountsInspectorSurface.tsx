@@ -5,10 +5,16 @@ import { useEffect, useId, useMemo, useState, type CSSProperties } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   CoachAppointmentScheduleRecord,
-  CreateCoachManagedAppointmentPayload,
+  StaffAppointmentRecord,
   SubmitCoachAppointmentFeedbackPayload,
 } from "@fittrack/api-client";
-import { coachScheduleQueryOptions, coachSelfProfileQueryOptions, invalidateCoachScheduleQueries } from "@fittrack/query";
+import {
+  coachScheduleQueryOptions,
+  coachSelfProfileQueryOptions,
+  invalidateCoachScheduleQueries,
+  recurringCoachingPlansQueryOptions,
+  staffAppointmentsQueryOptions,
+} from "@fittrack/query";
 import type { CoachProfileRecord } from "@fittrack/types";
 import { fullName } from "@fittrack/utils";
 
@@ -25,10 +31,11 @@ import {
   getMemberAvatarUrl,
   getMemberInitials,
   getMembershipFieldValue,
-  getScanReadinessLabel,
 } from "@/components/accounts/accountComponentUtils";
 
 import { useAccountsPage } from "./AccountsPageContext";
+import { CoachClientWorkoutPrograms } from "./CoachClientWorkoutPrograms";
+import PaidSessionSchedule, { isPaidSession } from "./PaidSessionSchedule";
 
 function useAccountActionStyles() {
   const { colors, onBrandTextColor } = useTheme();
@@ -75,16 +82,6 @@ type CoachInspectorMessage = {
   tone: "error" | "success";
 } | null;
 
-const COACH_DURATION_OPTIONS = [30, 45, 60, 90];
-
-function createNextScheduleValue() {
-  const nextHour = new Date(Date.now() + 60 * 60 * 1000);
-  nextHour.setMinutes(0, 0, 0);
-
-  const timezoneOffsetMs = nextHour.getTimezoneOffset() * 60 * 1000;
-  return new Date(nextHour.getTime() - timezoneOffsetMs).toISOString().slice(0, 16);
-}
-
 function formatCoachDetailValue(value?: string | number | null, suffix?: string) {
   if (value === null || value === undefined || value === "") return "N/A";
   return suffix ? `${value}${suffix}` : String(value);
@@ -129,10 +126,6 @@ function CoachClientManagementPanel() {
     setCoachClientPanelMode,
   } = useAccountsPage();
   const queryClient = useQueryClient();
-  const [scheduledAt, setScheduledAt] = useState(createNextScheduleValue);
-  const [durationMinutes, setDurationMinutes] = useState("60");
-  const [memberNotes, setMemberNotes] = useState("");
-  const [scheduleMessage, setScheduleMessage] = useState<CoachInspectorMessage>(null);
   const [selectedAppointmentId, setSelectedAppointmentId] = useState("");
   const [historyAppointmentId, setHistoryAppointmentId] = useState("");
   const [coachFeedback, setCoachFeedback] = useState("");
@@ -144,6 +137,11 @@ function CoachClientManagementPanel() {
     ...coachSelfProfileQueryOptions<CoachProfileRecord>(webApiClient, user?.id),
     enabled: isCoachClient && Boolean(user?.id),
   });
+  const { data: recurringPlans = [] } = useQuery({
+    ...recurringCoachingPlansQueryOptions(webApiClient),
+    enabled: isCoachClient && Boolean(user?.id),
+    staleTime: 30_000,
+  });
   const { data: coachSchedule = [] } = useQuery({
     ...coachScheduleQueryOptions<CoachAppointmentScheduleRecord>(webApiClient, user?.id),
     enabled: isCoachClient && Boolean(user?.id),
@@ -152,12 +150,37 @@ function CoachClientManagementPanel() {
   const clientAppointments = useMemo(
     () =>
       coachSchedule
-        .filter((appointment) => appointment.userId === editTarget?.id)
+        .filter(
+          (appointment) =>
+            appointment.userId === editTarget?.id &&
+            (appointment.status === "confirmed" || appointment.status === "completed"),
+        )
         .sort(
           (left, right) =>
             new Date(right.scheduledAt).getTime() - new Date(left.scheduledAt).getTime(),
         ),
     [coachSchedule, editTarget?.id],
+  );
+  const activeMonthlyPlan = useMemo(
+    () =>
+      recurringPlans.find(
+        (plan) =>
+          plan.memberId === editTarget?.id &&
+          plan.coachId === coachProfile?.id &&
+          plan.frequency === "monthly" &&
+          plan.status === "active",
+      ) ?? null,
+    [coachProfile?.id, editTarget?.id, recurringPlans],
+  );
+  const hasActivePaidOneSession = useMemo(
+    () =>
+      clientAppointments.some(
+        (appointment) =>
+          appointment.status === "confirmed" &&
+          appointment.activePaymentStatus === "completed" &&
+          !appointment.recurringPlanId,
+      ),
+    [clientAppointments],
   );
   const completedAppointments = useMemo(
     () => clientAppointments.filter((appointment) => appointment.status === "completed"),
@@ -171,26 +194,6 @@ function CoachClientManagementPanel() {
     () => clientAppointments.find((appointment) => appointment.id === historyAppointmentId) ?? null,
     [clientAppointments, historyAppointmentId],
   );
-  const createManagedAppointmentMutation = useMutation({
-    mutationFn: (payload: CreateCoachManagedAppointmentPayload) =>
-      webApiClient.coaches.createManagedAppointment(payload),
-    onSuccess: async () => {
-      await invalidateCoachScheduleQueries(queryClient, user?.id);
-      setScheduleMessage({
-        text: "Client appointment scheduled from your coach roster.",
-        tone: "success",
-      });
-      setScheduledAt(createNextScheduleValue());
-      setDurationMinutes("60");
-      setMemberNotes("");
-    },
-    onError: (error: unknown) => {
-      setScheduleMessage({
-        text: getCoachMutationError(error, "Client appointment could not be scheduled right now."),
-        tone: "error",
-      });
-    },
-  });
   const submitAppointmentFeedbackMutation = useMutation({
     mutationFn: ({
       appointmentId,
@@ -257,48 +260,11 @@ function CoachClientManagementPanel() {
   if (!isCoachClient || !editTarget) return null;
 
   const latestSession = clientAppointments[0] ?? null;
-  const upcomingSessions = clientAppointments.filter((appointment) =>
-    appointment.status !== "completed" && appointment.status !== "cancelled",
+  const upcomingSessions = clientAppointments.filter(
+    (appointment) =>
+      appointment.status === "confirmed" &&
+      new Date(appointment.scheduledAt).getTime() >= Date.now(),
   );
-
-  const handleCreateManagedAppointment = async () => {
-    if (!editTarget.id) {
-      setScheduleMessage({
-        text: "Select a client before scheduling an appointment.",
-        tone: "error",
-      });
-      return;
-    }
-
-    if (!coachProfile?.id) {
-      setScheduleMessage({
-        text: "Your coach profile is still loading. Try again in a moment.",
-        tone: "error",
-      });
-      return;
-    }
-
-    const parsedScheduleAt = new Date(scheduledAt);
-    if (Number.isNaN(parsedScheduleAt.getTime())) {
-      setScheduleMessage({
-        text: "Choose a valid schedule date and time.",
-        tone: "error",
-      });
-      return;
-    }
-
-    setScheduleMessage(null);
-    try {
-      await createManagedAppointmentMutation.mutateAsync({
-        durationMinutes: Number(durationMinutes),
-        memberId: editTarget.id,
-        memberNotes: memberNotes.trim() || undefined,
-        scheduledAt: parsedScheduleAt.toISOString(),
-      });
-    } catch {
-      // onError owns the user-facing message; keep handled validation failures out of the console.
-    }
-  };
 
   const handleSubmitAppointmentFeedback = async () => {
     if (!selectedAppointmentId) {
@@ -501,6 +467,15 @@ function CoachClientManagementPanel() {
         </div>
       ) : null}
 
+      {coachClientPanelMode === "workout" ? (
+        <CoachClientWorkoutPrograms
+          canManage={Boolean(activeMonthlyPlan) || hasActivePaidOneSession}
+          coachUserId={user?.id ?? ""}
+          memberId={editTarget.id}
+          paidPeriodEndDate={activeMonthlyPlan?.endDate}
+        />
+      ) : null}
+
       {coachClientPanelMode === "schedule" ? (
         <div style={sectionCardStyle}>
           <FitText
@@ -512,82 +487,23 @@ function CoachClientManagementPanel() {
               textTransform: "uppercase",
             }}
           >
-            Schedule New Appointment
+            Paid session schedule
           </FitText>
           <FitText style={{ fontSize: 11, color: colors.textSecondary }}>
-            Creates a confirmed appointment for this client using your current coach availability.
+            Existing confirmed sessions remain tied to the client&apos;s active coaching enrollment.
           </FitText>
-          <label style={compactCoachFieldStyle}>
-            <FitText style={compactCoachFieldLabelStyle}>Date &amp; time</FitText>
-            <input
-              id="coach-client-scheduled-at"
-              name="coachClientScheduledAt"
-              type="datetime-local"
-              value={scheduledAt}
-              onChange={(event) => {
-                setScheduledAt(event.currentTarget.value);
-                if (scheduleMessage) setScheduleMessage(null);
-              }}
-              style={compactCoachInputStyle}
-            />
-          </label>
-          <label style={{ display: "grid", gap: 6 }}>
-            <FitText style={{ fontSize: 10, fontWeight: 800, color: colors.textMuted }}>Duration</FitText>
-            <FitSelect
-              id="coach-client-duration-minutes"
-              name="coachClientDurationMinutes"
-              fullWidth
-              value={durationMinutes}
-              onChange={(event) => {
-                setDurationMinutes(event.currentTarget.value);
-                if (scheduleMessage) setScheduleMessage(null);
-              }}
-              options={COACH_DURATION_OPTIONS.map((minutes) => ({
-                label: `${minutes} minutes`,
-                value: String(minutes),
-              }))}
-              style={sharedSelectStyle}
-            />
-          </label>
-          <label style={compactCoachFieldStyle}>
-            <FitText style={compactCoachFieldLabelStyle}>Session notes</FitText>
-            <textarea
-              id="coach-client-session-notes"
-              name="coachClientSessionNotes"
-              rows={2}
-              value={memberNotes}
-              onChange={(event) => {
-                setMemberNotes(event.currentTarget.value);
-                if (scheduleMessage) setScheduleMessage(null);
-              }}
-              placeholder="Add session focus, reminders, or prep notes."
-              style={compactCoachTextareaStyle}
-            />
-          </label>
-          {scheduleMessage ? (
-            <FitText
-              style={{
-                fontSize: 11,
-                color: scheduleMessage.tone === "success" ? colors.success : colors.danger,
-              }}
-            >
-              {scheduleMessage.text}
-            </FitText>
-          ) : null}
-          <FitButton
-            variant="primary"
-            label="SCHEDULE APPOINTMENT"
-            disabled={createManagedAppointmentMutation.isPending}
-            loading={createManagedAppointmentMutation.isPending}
-            onClick={() => void handleCreateManagedAppointment()}
-            style={{
-              minHeight: 42,
-              borderRadius: 8,
-              backgroundColor: colors.brand,
-              color: colors.surface,
-              border: `1px solid ${colors.brand}`,
-            }}
-            textStyle={{ fontSize: 10.75, fontWeight: 800, color: colors.surface }}
+          <FitPill
+            mode="status"
+            label={activeMonthlyPlan ? "Active monthly plan" : "No active monthly plan"}
+            color={activeMonthlyPlan ? colors.success : colors.textMuted}
+            fontSize={9}
+            style={{ justifySelf: "start", borderRadius: 6 }}
+          />
+          <PaidSessionSchedule
+            appointments={clientAppointments}
+            fallbackCoachId={coachProfile?.id}
+            memberId={editTarget.id}
+            requesterUserId={user?.id}
           />
         </div>
       ) : null}
@@ -1084,7 +1000,10 @@ export function AccountInspectorFooter() {
 
 export function AccountInspectorBody() {
   const { colors } = useTheme();
-  const { editTarget, isCoach, pendingRequestsByUserId } = useAccountsPage();
+  const { user } = useAuth();
+  const { canManageAccounts, editTarget, isCoach, pendingRequestsByUserId } = useAccountsPage();
+  const isManagedMember =
+    canManageAccounts && !isCoach && editTarget?.role?.name === "USER";
   const emptyAccountValue = "N/A";
   const accountDetailsAvatarUrl = editTarget ? getMemberAvatarUrl(editTarget) : null;
   const accountDetailsTitle = editTarget ? fullName(editTarget) || "Unnamed account" : emptyAccountValue;
@@ -1147,10 +1066,6 @@ export function AccountInspectorBody() {
               label: "Last Check-in",
               value: editTarget ? formatLastCheckIn(editTarget.lastCheckInAt) : emptyAccountValue,
             },
-            {
-              label: "Scan Status",
-              value: editTarget ? getScanReadinessLabel(editTarget) : emptyAccountValue,
-            },
           ],
         },
       ]
@@ -1172,10 +1087,6 @@ export function AccountInspectorBody() {
             {
               label: "Last Check-in",
               value: editTarget ? formatLastCheckIn(editTarget.lastCheckInAt) : emptyAccountValue,
-            },
-            {
-              label: "Scan Status",
-              value: editTarget ? getScanReadinessLabel(editTarget) : emptyAccountValue,
             },
           ],
         },

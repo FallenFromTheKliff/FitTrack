@@ -75,8 +75,23 @@ export class CreateReviewDTO {
 export class CoachClientFilterDTO extends PaginationDTO {}
 
 export class RelationshipUserProfileResponseDTO {
+  @ApiPropertyOptional({ nullable: true })
+  activity_level?: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  date_of_birth?: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  fitness_goal?: string | null;
+
   @ApiPropertyOptional({ example: 'Maria', nullable: true })
   first_name: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  gender?: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  height_cm?: number | null;
 
   @ApiPropertyOptional({ example: 'Santos', nullable: true })
   last_name: string | null;
@@ -86,6 +101,12 @@ export class RelationshipUserProfileResponseDTO {
     nullable: true,
   })
   avatar_url: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  membership_type?: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  weight_kg?: number | null;
 }
 
 export class RelationshipCoachSummaryResponseDTO {
@@ -106,8 +127,49 @@ export class RelationshipMemberSummaryResponseDTO {
   @ApiProperty({ example: '44444444-4444-4444-8444-444444444444' })
   id: string;
 
+  @ApiPropertyOptional({ nullable: true })
+  email?: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  email_verified?: boolean | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  last_check_in_at?: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  membership_card?: { status: string } | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  phone_no?: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  phone_verified?: boolean | null;
+
   @ApiProperty({ type: RelationshipUserProfileResponseDTO })
   profile: RelationshipUserProfileResponseDTO;
+
+  @ApiPropertyOptional({ nullable: true })
+  status?: string | null;
+
+  @ApiPropertyOptional({
+    type: () => RelationshipUpcomingSessionResponseDTO,
+    isArray: true,
+  })
+  upcoming_sessions?: RelationshipUpcomingSessionResponseDTO[];
+}
+
+export class RelationshipUpcomingSessionResponseDTO {
+  @ApiProperty({ example: '33333333-3333-4333-8333-333333333333' })
+  id: string;
+
+  @ApiProperty({ example: '2026-08-20T02:00:00.000Z' })
+  scheduled_at: string;
+
+  @ApiProperty({ example: 60 })
+  duration_minutes: number;
+
+  @ApiProperty({ example: 'confirmed' })
+  status: string;
 }
 
 export class RelationshipResponseDTO {

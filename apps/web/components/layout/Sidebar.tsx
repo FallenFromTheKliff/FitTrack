@@ -31,7 +31,12 @@ import { useTimedMessage } from "@fittrack/hooks";
 import { FEEDBACK_DURATION_MS } from "@/constants/feedback";
 import { WEB_API_BASE_URL } from "@/lib/api-client";
 import { buildRenderableAssetUrl } from "@fittrack/utils";
-import { canAccessWebPage, getWebPortalLabel } from "@/lib/portal-access";
+import {
+  canAccessWebPage,
+  COACH_CLIENTS_PAGE_KEY,
+  COACH_CLIENTS_ROUTE,
+  getWebPortalLabel,
+} from "@/lib/portal-access";
 import { sidebarStyles } from "@/styles/layoutStyles";
 import { CONFIRM_COPY } from "@/utils/confirmCopy";
 import { sleep } from "@/utils/sleep";
@@ -143,10 +148,10 @@ const COACH_NAV_SECTIONS: NavSection[] = [
         pageKey: "coach-dashboard",
       },
       {
-        href: "/accounts",
+        href: COACH_CLIENTS_ROUTE,
         label: "Clients",
         icon: Users,
-        pageKey: "coach-clients",
+        pageKey: COACH_CLIENTS_PAGE_KEY,
       },
       {
         href: "/schedule",

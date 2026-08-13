@@ -1,7 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import {
   Modal,
-  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -31,51 +30,42 @@ import {
   Star,
 } from "lucide-react-native";
 import type { LucideIcon } from "lucide-react-native";
-import {
-  FITTRACK_PAYMENT_ACCEPTANCE_LABEL,
-  FITTRACK_PAYMENT_POLICY_SUMMARY,
-} from "@fittrack/app-config";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useIsFocused } from "@react-navigation/native";
 import type {
   AppointmentRecord,
-  AppointmentPaymentStage,
+  AppointmentAvailabilitySlot,
   CoachAppointmentScheduleRecord,
-  CreateCoachManagedAppointmentPayload,
-  RecurringCoachingPlanInput,
   SubmitCoachAppointmentFeedbackPayload,
   VenueBookingRecord,
-  RecurringCoachingBillingCycleRecord,
   RecurringCoachingPlanRecord,
 } from "@fittrack/api-client";
-import type { CoachProfileRecord } from "@fittrack/types";
 
 import {
   appointmentsQueryOptions,
+  appointmentAvailabilityQueryOptions,
   bookingsQueryOptions,
   cancelAppointmentMutationOptions,
   cancelBookingMutationOptions,
+  cancelCoachVenueWorkMutationOptions,
+  coachClientsQueryOptions,
   coachScheduleQueryOptions,
+  coachVenueWorkQueryOptions,
   completeCoachAppointmentMutationOptions,
-  confirmCoachAppointmentMutationOptions,
-  declineCoachAppointmentMutationOptions,
-  coachSelfProfileQueryOptions,
-  fitnessClientPlansQueryOptions,
+  completeCoachVenueWorkMutationOptions,
   invalidateCoachScheduleQueries,
-  payAppointmentDownpaymentMutationOptions,
+  noShowCoachVenueWorkMutationOptions,
+  rescheduleAppointmentMutationOptions,
   submitCoachReviewMutationOptions,
   venuesQueryOptions,
   recurringCoachingPlansQueryOptions,
 } from "@fittrack/query";
-import {
-  normalizeBookingStatus,
-  repeatMonthlyScheduleDraft,
-  toDateTimeRange,
-} from "@fittrack/app-core";
+import { normalizeBookingStatus } from "@fittrack/app-core";
 import {
   formatBookingDate,
   formatGroupLabel,
   groupItemsByDate,
+  isUpcomingCoachSession,
   nextDate,
 } from "@fittrack/utils";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -95,7 +85,10 @@ import {
 } from "@/data/bookings";
 import { mobileApiClient } from "@/lib/api-client";
 import { toMobileBookings } from "@/utils/venueBookings";
-import { CoachClientWorkoutPlan } from "@/components/bookings/CoachClientWorkoutPlan";
+import { CoachClientPaidSchedule } from "@/components/bookings/CoachClientPaidSchedule";
+import { CoachClientWorkoutPrograms } from "@/components/bookings/CoachClientWorkoutPrograms";
+import type { CoachWorkoutPlanTransition } from "@/components/bookings/coachClientWorkoutPublish";
+import { hasPaidOneSessionProgramEntitlement } from "@/components/bookings/coachClientWorkoutPublish";
 
 import {
   FitButton,
@@ -111,7 +104,9 @@ import {
   CalendarModal,
   ConfirmModal,
   NoticeModal,
+  TimeSlotModal,
   type DetailBooking,
+  type TimeSlot,
 } from "@/components/modals";
 
 const AMENITY_ICONS: Record<string, LucideIcon> = {
@@ -139,16 +134,7 @@ const COACH_CLIENT_DETAIL_TABS = [
   { label: "Workout", value: "workout" },
   { label: "Feedback", value: "feedback" },
 ] as const;
-const COACH_CLIENT_DURATION_OPTIONS = [
-  { label: "30 minutes", value: 30 },
-  { label: "45 minutes", value: 45 },
-  { label: "60 minutes", value: 60 },
-  { label: "90 minutes", value: 90 },
-] as const;
 const BOOKINGS_PAGE_SIZE = 10;
-const MAX_MONTHLY_PLAN_SESSIONS = 60;
-const MAX_MONTHLY_SESSIONS_PER_WEEK = 5;
-const DEFAULT_MONTHLY_SESSION_TIME = "17:00";
 
 type BookingSection = "bookings" | "appointments" | "clients" | "earnings";
 type CoachSection = Extract<
@@ -157,13 +143,6 @@ type CoachSection = Extract<
 >;
 type CoachClientDetailTab = (typeof COACH_CLIENT_DETAIL_TABS)[number]["value"];
 type CoachClientFormMessage = { tone: "error" | "success"; text: string };
-type MonthlyPlanDraftRow = {
-  date: string;
-  durationMinutes: string;
-  time: string;
-};
-type ExtendedStatusFilter = StatusFilter | "pending" | "completed" | "declined";
-type AppointmentPaymentProvider = "paymongo";
 type CoachClientSummary = {
   completedCount: number;
   email: string;
@@ -171,16 +150,10 @@ type CoachClientSummary = {
   lastSession?: DetailBooking;
   name: string;
   nextSession?: DetailBooking;
-  pendingCount: number;
   readinessColor: string;
   readinessLabel: string;
   sessions: DetailBooking[];
   sessionCount: number;
-};
-type PendingAppointmentPayment = {
-  booking: DetailBooking;
-  provider: AppointmentPaymentProvider;
-  stage: AppointmentPaymentStage;
 };
 type PaymentConfirmationState = {
   message: string;
@@ -188,30 +161,27 @@ type PaymentConfirmationState = {
 };
 type PendingCancellation = {
   booking: DetailBooking;
-  type: "appointment" | "reservation";
+  type: "appointment" | "reservation" | "venue_work";
 };
 type PendingCoachAction = {
-  action: "complete" | "confirm" | "decline";
+  action: "complete" | "no_show";
   booking: DetailBooking;
+  workType: "appointment" | "venue_work";
 };
 
 function formatStatusLabel(status: string) {
   const explicitLabels: Record<string, string> = {
-    pending_downpayment: "Pending Downpayment",
-    pending_payment: "Pending Payment",
-    pending_full_payment: "Pending Full Payment",
-    balance_pending: "Pending Full Payment",
+    cancelled: "Cancelled",
+    completed: "Completed",
+    confirmed: "Confirmed",
+    no_show: "No show",
   };
 
   if (explicitLabels[status]) {
     return explicitLabels[status];
   }
 
-  return status
-    .split("_")
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
+  return "Unavailable";
 }
 
 function getAppointmentMemberName(
@@ -228,10 +198,44 @@ function getAppointmentMemberName(
   );
 }
 
-function getAppointmentMemberEmail(
-  appointment: Pick<CoachAppointmentScheduleRecord, "user">,
+function getVenueBookingMemberName(
+  booking: Pick<VenueBookingRecord, "user" | "userId">,
 ) {
-  return appointment.user?.email?.trim() ?? "";
+  const firstName = booking.user?.profile?.firstName?.trim() ?? "";
+  const lastName = booking.user?.profile?.lastName?.trim() ?? "";
+  const profileName = [firstName, lastName].filter(Boolean).join(" ").trim();
+  return (
+    profileName ||
+    booking.user?.email?.trim() ||
+    booking.userId ||
+    "Member"
+  );
+}
+
+function formatGymTime(isoValue: string) {
+  const gymDate = new Date(new Date(isoValue).getTime() + 8 * 60 * 60 * 1000);
+  const hour24 = gymDate.getUTCHours();
+  const minute = String(gymDate.getUTCMinutes()).padStart(2, "0");
+  const period = hour24 >= 12 ? "PM" : "AM";
+  const hour12 = hour24 % 12 || 12;
+  return `${hour12}:${minute} ${period}`;
+}
+
+function toGymDateTimeRange(
+  startIso: string,
+  durationMinutes: number,
+  explicitEnd?: string,
+) {
+  const start = new Date(startIso);
+  const endIso =
+    explicitEnd ??
+    new Date(start.getTime() + durationMinutes * 60_000).toISOString();
+  const gymDate = new Date(start.getTime() + 8 * 60 * 60 * 1000);
+  return {
+    date: `${gymDate.getUTCFullYear()}-${String(gymDate.getUTCMonth() + 1).padStart(2, "0")}-${String(gymDate.getUTCDate()).padStart(2, "0")}`,
+    endLabel: formatGymTime(endIso),
+    startLabel: formatGymTime(startIso),
+  };
 }
 
 function getSearchParamValue(value?: string | string[]) {
@@ -246,54 +250,26 @@ function getCoachSection(value?: string): CoachSection | null {
 }
 
 function getNormalizedCoachAppointmentStatus(
-  appointment: Pick<
-    CoachAppointmentScheduleRecord,
-    "activePaymentStage" | "balancePaidAt" | "remainingBalance" | "status"
-  >,
+  appointment: Pick<CoachAppointmentScheduleRecord, "status">,
 ) {
-  if (
-    appointment.status === "pending_payment" &&
-    appointment.activePaymentStage === "full"
-  ) {
-    return "pending_full_payment";
-  }
-  if (
-    appointment.status === "pending_payment" &&
-    appointment.activePaymentStage === "downpayment"
-  ) {
-    return "pending_downpayment";
-  }
-  if (
-    appointment.status === "confirmed" &&
-    Number(appointment.remainingBalance ?? 0) > 0 &&
-    !appointment.balancePaidAt
-  ) {
-    return "pending_full_payment";
-  }
-  return normalizeBookingStatus(appointment.status);
+  const validStatuses = new Set([
+    "cancelled",
+    "completed",
+    "confirmed",
+    "no_show",
+  ]);
+  return validStatuses.has(appointment.status ?? "")
+    ? normalizeBookingStatus(appointment.status ?? "")
+    : "unavailable";
 }
 
-function isPendingStatus(status: string) {
-  return (
-    status === "pending" ||
-    status === "pending_coach" ||
-    status === "pending_downpayment" ||
-    status === "pending_payment" ||
-    status === "pending_full_payment"
-  );
-}
-
-function canStartMemberAppointmentPayment(booking: DetailBooking) {
-  return (
-    (booking.status === "pending_full_payment" ||
-      booking.status === "pending_payment") &&
-    booking.activePaymentStage === "full" &&
-    Number(booking.totalAmount ?? booking.amountDueNow ?? 0) > 0
-  );
-}
-
-function getMemberAppointmentPaymentStage(): AppointmentPaymentStage {
-  return "full";
+function isMemberVisibleBooking(status: string) {
+  return new Set([
+    "cancelled",
+    "completed",
+    "confirmed",
+    "no_show",
+  ]).has(status);
 }
 
 function formatPeso(value: number) {
@@ -311,9 +287,7 @@ function getClientInitials(name: string) {
 function isFinalSessionStatus(status: string) {
   return (
     status === "cancelled" ||
-    status === "completed" ||
-    status === "declined" ||
-    status === "no_show"
+    status === "completed" || status === "no_show"
   );
 }
 
@@ -321,46 +295,6 @@ function getSessionTimeLabel(session: DetailBooking) {
   return session.startTime && session.endTime
     ? `${session.startTime} - ${session.endTime}`
     : session.time;
-}
-
-function toDateInputValue(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function toTimeInputValue(date: Date) {
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
-  return `${hours}:${minutes}`;
-}
-
-function getDefaultCoachScheduleInputs() {
-  const nextSlot = new Date();
-  nextSlot.setSeconds(0, 0);
-  nextSlot.setMinutes(0);
-  nextSlot.setHours(nextSlot.getHours() + 2);
-  return {
-    date: toDateInputValue(nextSlot),
-    time: toTimeInputValue(nextSlot),
-  };
-}
-
-function buildLocalScheduleDate(dateValue: string, timeValue: string) {
-  const timeMatch = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(timeValue.trim());
-  const [year, month, day] = dateValue.split("-").map(Number);
-  if (!timeMatch || !year || !month || !day) return null;
-
-  return new Date(
-    year,
-    month - 1,
-    day,
-    Number(timeMatch[1]),
-    Number(timeMatch[2]),
-    0,
-    0,
-  );
 }
 
 function getCoachFormErrorMessage(error: unknown, fallback: string) {
@@ -371,31 +305,19 @@ function getCoachFormErrorMessage(error: unknown, fallback: string) {
 function RecurringPlanMobilePanel({
   error,
   isLoading,
-  onPay,
-  payingCycleId,
   plans,
 }: {
   error: string | null;
   isLoading: boolean;
-  onPay: (
-    plan: RecurringCoachingPlanRecord,
-    cycle: RecurringCoachingBillingCycleRecord,
-  ) => void;
-  payingCycleId: string | null;
   plans: RecurringCoachingPlanRecord[];
 }) {
   const { colors } = useTheme();
-  const plan = plans.find((item) =>
-    ["awaiting_payment", "active"].includes(item.status),
+  const plan = plans.find(
+    (item) =>
+      item.status === "active" &&
+      item.billingCycles?.some((cycle) => cycle.status === "paid"),
   );
-  const cycle = plan?.billingCycles?.find((item) =>
-    ["due", "processing"].includes(item.status),
-  );
-  if (!isLoading && !error && (!plan || !cycle)) return null;
-
-  const pendingCount =
-    plan?.scheduleItems?.filter((item) => item.status === "pending_payment")
-      .length ?? 0;
+  if (!isLoading && !error && !plan) return null;
   return (
     <View
       style={{
@@ -411,17 +333,17 @@ function RecurringPlanMobilePanel({
       <FitText
         style={{ color: colors.textPrimary, fontSize: 15, fontWeight: "900" }}
       >
-        Coach-created monthly plan
+        Paid monthly coaching
       </FitText>
       <FitText
         style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}
       >
-        Your coach owns the dates. Full PayMongo payment activates the actual
-        sessions; skipping a session does not create a refund or credit.
+        Your paid plan is active. Your coach can allocate sessions and your
+        workout program from the coach workspace.
       </FitText>
       {isLoading ? (
         <FitText style={{ color: colors.textMuted, fontSize: 12 }}>
-          Loading payment requests…
+          Loading monthly coaching…
         </FitText>
       ) : null}
       {error ? (
@@ -429,7 +351,7 @@ function RecurringPlanMobilePanel({
           {error}
         </FitText>
       ) : null}
-      {plan && cycle ? (
+      {plan ? (
         <>
           <FitCard
             icon={CalendarCheck}
@@ -439,130 +361,15 @@ function RecurringPlanMobilePanel({
                 ? "Monthly coaching"
                 : "Recurring coaching"
             }
-            subtitle={`${pendingCount} session date${pendingCount === 1 ? "" : "s"} waiting for full payment.`}
-            trailingLabel={formatPeso(Number(cycle.amount))}
+            subtitle="Paid and active · Sessions are allocated by your coach."
+            trailingLabel="Active"
             trailingLabelColor={colors.brand}
             noChevron
-          />
-          <FitButton
-            label={
-              payingCycleId === cycle.id
-                ? "OPENING PAYMONGO…"
-                : "PAY IN FULL WITH PAYMONGO"
-            }
-            onPress={() => onPay(plan, cycle)}
-            disabled={payingCycleId !== null}
-            loading={payingCycleId === cycle.id}
-            style={{ minHeight: 42 }}
           />
         </>
       ) : null}
     </View>
   );
-}
-
-function getLatestMonthlyPlanTimestamp(
-  plan: RecurringCoachingPlanRecord | null,
-) {
-  return Math.max(
-    ...(plan?.scheduleItems ?? []).map((item) =>
-      new Date(item.scheduledAt).getTime(),
-    ),
-    0,
-  );
-}
-
-function getFreshMonthlyPeriodStart(plan: RecurringCoachingPlanRecord | null) {
-  const latestTimestamp = getLatestMonthlyPlanTimestamp(plan);
-  const sourceDate =
-    latestTimestamp > 0 ? new Date(latestTimestamp) : new Date();
-  return new Date(
-    sourceDate.getFullYear(),
-    sourceDate.getMonth() + 1,
-    1,
-    17,
-    0,
-    0,
-    0,
-  );
-}
-
-function getMonthlyOfferDefaults(coachProfile: CoachProfileRecord | null) {
-  const rate = Number(coachProfile?.monthlyRate);
-  const sessionCount = Number(coachProfile?.monthlySessionCount);
-  const durationMinutes = Number(coachProfile?.monthlySessionDurationMinutes);
-  const hasValidRate = Number.isFinite(rate) && rate > 0;
-  const hasValidSessionCount =
-    Number.isInteger(sessionCount) && sessionCount > 0;
-  const hasValidDuration = COACH_CLIENT_DURATION_OPTIONS.some(
-    (option) => option.value === durationMinutes,
-  );
-
-  return {
-    durationMinutes: hasValidDuration ? durationMinutes : 60,
-    isConfigured:
-      coachProfile?.monthlyOfferActive === true &&
-      hasValidRate &&
-      hasValidSessionCount &&
-      hasValidDuration,
-    quote: hasValidRate ? String(rate) : "",
-    sessionCount: hasValidSessionCount
-      ? Math.min(sessionCount, MAX_MONTHLY_PLAN_SESSIONS)
-      : 1,
-  };
-}
-
-function createFreshMonthlyPlanRows(
-  sessionCount: number,
-  durationMinutes: number,
-  previousPlan: RecurringCoachingPlanRecord | null,
-) {
-  const periodStart = getFreshMonthlyPeriodStart(previousPlan);
-  const daysInMonth = new Date(
-    periodStart.getFullYear(),
-    periodStart.getMonth() + 1,
-    0,
-  ).getDate();
-  const rowCount = Math.min(
-    Math.max(1, sessionCount),
-    MAX_MONTHLY_PLAN_SESSIONS,
-    daysInMonth,
-  );
-
-  const rows: MonthlyPlanDraftRow[] = [];
-  const sessionsPerWeek = new Map<string, number>();
-  for (let day = 1; day <= daysInMonth && rows.length < rowCount; day += 1) {
-    const date = new Date(
-      periodStart.getFullYear(),
-      periodStart.getMonth(),
-      day,
-      17,
-      0,
-      0,
-      0,
-    );
-    const dateValue = toDateInputValue(date);
-    const weekKey = getWeekKey(dateValue);
-    const weekCount = sessionsPerWeek.get(weekKey) ?? 0;
-    if (weekCount >= MAX_MONTHLY_SESSIONS_PER_WEEK) continue;
-    sessionsPerWeek.set(weekKey, weekCount + 1);
-    rows.push({
-      date: toDateInputValue(date),
-      time: DEFAULT_MONTHLY_SESSION_TIME,
-      durationMinutes: String(durationMinutes),
-    });
-  }
-  return rows;
-}
-
-function getMonthKey(dateValue: string) {
-  return dateValue.slice(0, 7);
-}
-
-function getWeekKey(dateValue: string) {
-  const date = new Date(`${dateValue}T12:00:00`);
-  date.setDate(date.getDate() - date.getDay());
-  return toDateInputValue(date);
 }
 
 export default function BookingsScreen() {
@@ -600,7 +407,7 @@ export default function BookingsScreen() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const debouncedSearchQuery = useDebounce(searchQuery, 250);
-  const [statusFilter, setStatusFilter] = useState<ExtendedStatusFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [activeSection, setActiveSection] =
     useState<BookingSection>("bookings");
   const [startDate, setStartDate] = useState("");
@@ -624,9 +431,10 @@ export default function BookingsScreen() {
       const candidates = (recurringPlansQuery.data ?? []).filter(
         (plan) =>
           plan.frequency === "monthly" &&
-          plan.status !== "cancelled" &&
+          plan.status === "active" &&
+          plan.billingCycles?.some((cycle) => cycle.status === "paid") &&
           plan.memberId === clientDetail.id &&
-          (plan.scheduleItems?.length ?? 0) > 0,
+          plan.coachId === user?.id,
       );
 
       return (
@@ -644,56 +452,28 @@ export default function BookingsScreen() {
           return rightDate - leftDate;
         })[0] ?? null
       );
-    }, [clientDetail?.id, recurringPlansQuery.data]);
-  const [pendingAppointmentPayment, setPendingAppointmentPayment] =
-    useState<PendingAppointmentPayment | null>(null);
-  const [paymentConfirmation, setPaymentConfirmation] =
-    useState<PaymentConfirmationState | null>(null);
-  const [payingRecurringCycleId, setPayingRecurringCycleId] = useState<
-    string | null
-  >(null);
-  const [recurringPlanPaymentError, setRecurringPlanPaymentError] = useState<
-    string | null
-  >(null);
-  const [isMonthlyPlanOpen, setIsMonthlyPlanOpen] = useState(false);
-  const [monthlyPlanQuote, setMonthlyPlanQuote] = useState("");
-  const [monthlyPlanRows, setMonthlyPlanRows] = useState<MonthlyPlanDraftRow[]>(
-    [],
-  );
-  const [monthlyPlanTrainingPlanId, setMonthlyPlanTrainingPlanId] =
-    useState("");
-  const [monthlyPlanMessage, setMonthlyPlanMessage] =
-    useState<CoachClientFormMessage | null>(null);
-  const [monthlyPlanCalendarRowIndex, setMonthlyPlanCalendarRowIndex] =
-    useState<number | null>(null);
-  const [isCreatingMonthlyPlan, setIsCreatingMonthlyPlan] = useState(false);
+    }, [clientDetail?.id, recurringPlansQuery.data, user?.id]);
   const [pendingCancellation, setPendingCancellation] =
     useState<PendingCancellation | null>(null);
   const [cancellationFailure, setCancellationFailure] =
     useState<PaymentConfirmationState | null>(null);
   const [pendingCoachAction, setPendingCoachAction] =
     useState<PendingCoachAction | null>(null);
+  const [coachActionFailure, setCoachActionFailure] =
+    useState<PaymentConfirmationState | null>(null);
+  const [rescheduleBooking, setRescheduleBooking] =
+    useState<DetailBooking | null>(null);
+  const [rescheduleDate, setRescheduleDate] = useState("");
+  const [isRescheduleCalendarOpen, setIsRescheduleCalendarOpen] =
+    useState(false);
+  const [isRescheduleTimeOpen, setIsRescheduleTimeOpen] = useState(false);
+  const [rescheduleFailure, setRescheduleFailure] =
+    useState<PaymentConfirmationState | null>(null);
   const [reviewTarget, setReviewTarget] = useState<DetailBooking | null>(null);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState("");
   const [isCancelling, setIsCancelling] = useState(false);
   const [isAppointmentOpen, setIsAppointmentOpen] = useState(false);
-  const defaultCoachScheduleInputs = useMemo(
-    () => getDefaultCoachScheduleInputs(),
-    [],
-  );
-  const [clientScheduleDate, setClientScheduleDate] = useState(
-    defaultCoachScheduleInputs.date,
-  );
-  const [clientScheduleTime, setClientScheduleTime] = useState(
-    defaultCoachScheduleInputs.time,
-  );
-  const [clientScheduleDuration, setClientScheduleDuration] = useState("60");
-  const [clientScheduleNotes, setClientScheduleNotes] = useState("");
-  const [clientScheduleMessage, setClientScheduleMessage] =
-    useState<CoachClientFormMessage | null>(null);
-  const [isClientScheduleCalendarOpen, setIsClientScheduleCalendarOpen] =
-    useState(false);
   const [
     selectedClientFeedbackAppointmentId,
     setSelectedClientFeedbackAppointmentId,
@@ -702,58 +482,6 @@ export default function BookingsScreen() {
   const [clientAssessmentReport, setClientAssessmentReport] = useState("");
   const [clientFeedbackMessage, setClientFeedbackMessage] =
     useState<CoachClientFormMessage | null>(null);
-  const coachProfileQuery = useQuery({
-    ...coachSelfProfileQueryOptions<CoachProfileRecord>(
-      mobileApiClient,
-      user?.id,
-    ),
-    enabled: isFocused && isCoachRole && !!user?.id,
-    staleTime: 60_000,
-    gcTime: 300_000,
-  });
-  const clientWorkoutPlansQuery = useQuery({
-    ...fitnessClientPlansQueryOptions(
-      mobileApiClient,
-      user?.id,
-      clientDetail?.id,
-      { limit: 50, page: 1 },
-    ),
-    enabled:
-      isFocused &&
-      isCoachRole &&
-      isMonthlyPlanOpen &&
-      !!user?.id &&
-      !!clientDetail?.id,
-    staleTime: 30_000,
-    gcTime: 300_000,
-  });
-  const clientCoachWorkoutPlans = useMemo(
-    () =>
-      (clientWorkoutPlansQuery.data?.data ?? []).filter(
-        (plan) => plan.coachId === user?.id && plan.source === "coach_assigned",
-      ),
-    [clientWorkoutPlansQuery.data?.data, user?.id],
-  );
-  const selectedClientWorkoutPlan = useMemo(
-    () =>
-      clientCoachWorkoutPlans.find(
-        (plan) => plan.id === monthlyPlanTrainingPlanId,
-      ) ?? null,
-    [clientCoachWorkoutPlans, monthlyPlanTrainingPlanId],
-  );
-  const monthlyOfferDefaults = useMemo(
-    () => getMonthlyOfferDefaults(coachProfileQuery.data ?? null),
-    [coachProfileQuery.data],
-  );
-
-  useEffect(() => {
-    if (!isMonthlyPlanOpen || monthlyPlanTrainingPlanId) return;
-    const defaultPlan =
-      clientCoachWorkoutPlans.find((plan) => plan.isActive) ??
-      clientCoachWorkoutPlans[0];
-    if (defaultPlan) setMonthlyPlanTrainingPlanId(defaultPlan.id);
-  }, [clientCoachWorkoutPlans, isMonthlyPlanOpen, monthlyPlanTrainingPlanId]);
-
   const {
     data: venues = [],
     isLoading: venuesLoading,
@@ -802,25 +530,99 @@ export default function BookingsScreen() {
     staleTime: 30_000,
     gcTime: 300_000,
   });
+  const {
+    data: coachVenueWorkResponse,
+    isLoading: coachVenueWorkLoading,
+    error: coachVenueWorkError,
+    refetch: refetchCoachVenueWork,
+  } = useQuery({
+    ...coachVenueWorkQueryOptions(mobileApiClient, user?.id, {
+      limit: 100,
+      page: 1,
+    }),
+    enabled: isFocused && !!user?.id && isCoachRole,
+    staleTime: 30_000,
+    gcTime: 300_000,
+  });
+  const coachVenueWorkRaw = useMemo(
+    () => coachVenueWorkResponse?.data ?? [],
+    [coachVenueWorkResponse?.data],
+  );
+  const appointmentAvailabilityQuery = useQuery({
+    ...appointmentAvailabilityQueryOptions(
+      mobileApiClient,
+      rescheduleBooking?.coachId,
+      rescheduleDate,
+      rescheduleBooking?.durationMinutes,
+    ),
+    enabled: Boolean(
+      isFocused &&
+        isCoachRole &&
+        rescheduleBooking?.bookingType === "single" &&
+        rescheduleBooking.coachId &&
+        rescheduleDate &&
+        rescheduleBooking.durationMinutes,
+    ),
+  });
+  const hasActivePaidOneSession = useMemo(
+    () =>
+      Boolean(
+        clientDetail?.id &&
+          user?.id &&
+          (hasPaidOneSessionProgramEntitlement(
+            coachScheduleRaw,
+            clientDetail.id,
+            user.id,
+          ) ||
+            coachVenueWorkRaw.some(
+              (booking) =>
+                (booking.userId ?? booking.user?.id) === clientDetail.id &&
+                booking.coachId === user.id &&
+                normalizeBookingStatus(booking.status) === "confirmed",
+            )),
+      ),
+    [clientDetail?.id, coachScheduleRaw, coachVenueWorkRaw, user?.id],
+  );
+  const {
+    data: coachClientsResponse,
+    isLoading: coachClientsLoading,
+    error: coachClientsError,
+    refetch: refetchCoachClients,
+  } = useQuery({
+    ...coachClientsQueryOptions(mobileApiClient, { limit: 100, page: 1 }),
+    enabled: isFocused && !!user?.id && isCoachRole,
+    staleTime: 30_000,
+    gcTime: 300_000,
+  });
+  const coachClientsRaw = useMemo(
+    () => coachClientsResponse?.data ?? [],
+    [coachClientsResponse?.data],
+  );
 
   const reservations = useMemo<DetailBooking[]>(
     () =>
-      toMobileBookings(apiBookings, venues).map((booking) => ({
-        ...booking,
-        participantLabel: booking.trainerName ? "Coach" : undefined,
-        participantName: booking.trainerName,
-        detailTitle: "Reservation Details",
-        detailSubtitle: booking.trainerName
-          ? `${booking.resourceName} / ${booking.trainerName}`
-          : booking.resourceName,
-      })),
+      toMobileBookings(apiBookings, venues)
+        .filter((booking) => isMemberVisibleBooking(booking.status))
+        .map((booking) => ({
+          ...booking,
+          participantLabel: booking.trainerName ? "Coach" : undefined,
+          participantName: booking.trainerName,
+          detailTitle: "Reservation Details",
+          detailSubtitle: booking.trainerName
+            ? `${booking.resourceName} / ${booking.trainerName}`
+            : booking.resourceName,
+        })),
     [apiBookings, venues],
   );
 
   const appointments = useMemo<DetailBooking[]>(
     () =>
-      appointmentsRaw.map((appointment) => {
-        const { startLabel, endLabel, date } = toDateTimeRange(
+      appointmentsRaw
+        .filter((appointment) =>
+          isMemberVisibleBooking(appointment.status ?? ""),
+        )
+        .map((appointment) => {
+        const { startLabel, endLabel, date } = toGymDateTimeRange(
           appointment.scheduledAt,
           appointment.duration,
         );
@@ -829,21 +631,8 @@ export default function BookingsScreen() {
           standaloneName && !standaloneName.includes("@")
             ? standaloneName
             : "Coach Session";
-        const normalizedStatus =
-          appointment.status === "pending_payment" &&
-          appointment.activePaymentStage === "full"
-            ? "pending_full_payment"
-            : appointment.status === "pending_payment" &&
-                appointment.activePaymentStage === "downpayment"
-              ? "pending_downpayment"
-              : appointment.status === "confirmed" &&
-                  Number(appointment.remainingBalance ?? 0) > 0 &&
-                  !appointment.balancePaidAt
-                ? "pending_full_payment"
-                : normalizeBookingStatus(appointment.status);
+          const normalizedStatus = normalizeBookingStatus(appointment.status);
         return {
-          activePaymentStage: appointment.activePaymentStage ?? null,
-          amountDueNow: appointment.amountDueNow ?? undefined,
           assessmentReport: appointment.assessmentReport,
           bookingType: appointment.recurringPlanId ? "recurring" : "single",
           coachFeedback: appointment.coachFeedback,
@@ -851,10 +640,9 @@ export default function BookingsScreen() {
           coachReviewComment: appointment.review?.comment ?? null,
           coachReviewRating: appointment.review?.rating ?? null,
           id: appointment.id,
-          nextPaymentDate: appointment.nextPaymentDate ?? undefined,
-          paymentPlan: appointment.paymentPlan ?? undefined,
+          durationMinutes: appointment.duration,
+          paymentProvider: appointment.activePaymentProvider,
           recurringPlanId: appointment.recurringPlanId ?? null,
-          remainingBalance: appointment.remainingBalance ?? undefined,
           sessionNotes: appointment.sessionNotes,
           resourceId: appointment.coachId ?? "coach",
           resourceName: coachName,
@@ -874,56 +662,127 @@ export default function BookingsScreen() {
             : coachName,
           totalAmount: appointment.totalAmount ?? undefined,
         };
-      }),
+        }),
     [appointmentsRaw],
+  );
+  const paidRecurringPlanIds = useMemo(
+    () =>
+      new Set(
+        (recurringPlansQuery.data ?? [])
+          .filter((plan) =>
+            plan.billingCycles?.some((cycle) => cycle.status === "paid"),
+          )
+          .map((plan) => plan.id),
+      ),
+    [recurringPlansQuery.data],
   );
   const coachAppointments = useMemo<DetailBooking[]>(
     () =>
-      coachScheduleRaw.map((appointment) => {
-        const { startLabel, endLabel, date } = toDateTimeRange(
-          appointment.scheduledAt,
-          appointment.duration,
-        );
-        const memberName = getAppointmentMemberName(appointment);
-        const normalizedStatus =
-          getNormalizedCoachAppointmentStatus(appointment);
+      coachScheduleRaw
+        .filter((appointment) => {
+          const normalizedStatus = getNormalizedCoachAppointmentStatus(appointment);
+          const isPaid =
+            appointment.activePaymentStatus === "completed" ||
+            Boolean(
+              appointment.recurringPlanId &&
+                paidRecurringPlanIds.has(appointment.recurringPlanId),
+            );
+          return normalizedStatus !== "unavailable" && isPaid;
+        })
+        .map((appointment) => {
+          const { startLabel, endLabel, date } = toGymDateTimeRange(
+            appointment.scheduledAt,
+            appointment.duration,
+          );
+          const memberName = getAppointmentMemberName(appointment);
+          const normalizedStatus =
+            getNormalizedCoachAppointmentStatus(appointment);
 
-        return {
-          amountDueNow: appointment.amountDueNow ?? undefined,
-          assessmentReport: appointment.assessmentReport,
-          bookingType: appointment.recurringPlanId ? "recurring" : "single",
-          coachFeedback: appointment.coachFeedback,
-          coachId: appointment.coachId,
-          coachReviewComment: appointment.review?.comment ?? null,
-          coachReviewRating: appointment.review?.rating ?? null,
-          description: appointment.notes ?? undefined,
-          id: appointment.id,
-          paymentPlan: appointment.totalAmount ? "full" : "free",
-          recurringPlanId: appointment.recurringPlanId ?? null,
-          remainingBalance: appointment.remainingBalance ?? undefined,
-          resourceId: appointment.userId,
-          resourceName: memberName,
-          sessionNotes: appointment.sessionNotes,
-          time: `${startLabel} - ${endLabel}`,
-          startTime: startLabel,
-          endTime: endLabel,
-          date,
-          status: normalizedStatus,
-          price: Number(
-            appointment.totalAmount ?? appointment.coachEarnings ?? 0,
-          ),
-          participantLabel: "Member",
-          participantName: memberName,
-          detailTitle: "Coach Session Details",
-          detailSubtitle: appointment.recurringPlanId
-            ? `${memberName} / Recurring`
-            : memberName,
-          totalAmount: appointment.totalAmount ?? undefined,
-        };
-      }),
-    [coachScheduleRaw],
+          return {
+            assessmentReport: appointment.assessmentReport,
+            bookingType: appointment.recurringPlanId ? "recurring" : "single",
+            coachEarnings: Number(appointment.coachEarnings ?? 0),
+            coachFeedback: appointment.coachFeedback,
+            coachId: appointment.coachId ?? user?.id,
+            coachReviewComment: appointment.review?.comment ?? null,
+            coachReviewRating: appointment.review?.rating ?? null,
+            description: appointment.notes ?? undefined,
+            durationMinutes: appointment.duration,
+            id: appointment.id,
+            memberId: appointment.userId,
+            paymentProvider: appointment.activePaymentProvider,
+            recurringPlanId: appointment.recurringPlanId ?? null,
+            resourceId: appointment.userId,
+            resourceName: memberName,
+            sessionNotes: appointment.sessionNotes,
+            time: `${startLabel} - ${endLabel}`,
+            startTime: startLabel,
+            endTime: endLabel,
+            date,
+            status: normalizedStatus,
+            price: Number(
+              appointment.totalAmount ?? appointment.coachEarnings ?? 0,
+            ),
+            participantLabel: "Member",
+            participantName: memberName,
+            detailTitle: "Coach Session Details",
+            detailSubtitle: appointment.recurringPlanId
+              ? `${memberName} / Monthly coaching`
+              : memberName,
+            totalAmount: appointment.totalAmount ?? undefined,
+          };
+        }),
+    [coachScheduleRaw, paidRecurringPlanIds, user?.id],
   );
-  const displayAppointments = isCoachRole ? coachAppointments : appointments;
+  const coachVenueWork = useMemo<DetailBooking[]>(
+    () =>
+      coachVenueWorkRaw
+        .filter((booking) =>
+          new Set(["confirmed", "completed", "no_show", "cancelled"]).has(
+            normalizeBookingStatus(booking.status),
+          ),
+        )
+        .map((booking) => {
+          const { startLabel, endLabel, date } = toGymDateTimeRange(
+            booking.startTime,
+            booking.durationHours * 60,
+            booking.endTime,
+          );
+          const memberName = getVenueBookingMemberName(booking);
+          const memberId = booking.userId ?? booking.user?.id;
+          const venueName = booking.venue?.name?.trim() || "Venue coaching";
+          const normalizedStatus = normalizeBookingStatus(booking.status);
+          return {
+            bookingType: "venue_coach",
+            coachEarnings: Number(booking.coachAmount ?? 0),
+            coachId: booking.coachId ?? user?.id,
+            description: booking.purpose ?? undefined,
+            detailSubtitle: `${venueName} / ${memberName}`,
+            detailTitle: "Venue Coaching Work",
+            durationMinutes: booking.durationHours * 60,
+            endTime: endLabel,
+            id: booking.id,
+            memberId,
+            participantLabel: "Member",
+            participantName: memberName,
+            price: Number(booking.totalAmount ?? booking.coachAmount ?? 0),
+            resourceId: memberId,
+            resourceName: memberName,
+            startTime: startLabel,
+            status: normalizedStatus,
+            time: `${startLabel} - ${endLabel}`,
+            date,
+            totalAmount: booking.totalAmount ?? undefined,
+            venueId: String(booking.venueId),
+          };
+        }),
+    [coachVenueWorkRaw, user?.id],
+  );
+  const displayAppointments = useMemo(
+    () =>
+      isCoachRole ? [...coachAppointments, ...coachVenueWork] : appointments,
+    [appointments, coachAppointments, coachVenueWork, isCoachRole],
+  );
 
   const appointmentTimelines = useMemo(() => {
     const byPlan = new Map<string, DetailBooking[]>();
@@ -968,11 +827,16 @@ export default function BookingsScreen() {
           ? appointmentTimelines.get(appointment.recurringPlanId)
           : [
               {
-                id: `${appointment.id}:requested`,
-                label: "Booking requested",
-                meta: `${formatBookingDate(appointment.date)} | ${appointment.time}`,
-                status: "pending",
-                tone: colors.textMuted,
+                id: `${appointment.id}:checkout`,
+                label:
+                  appointment.paymentProvider === "cash"
+                    ? "Cash payment registered"
+                    : appointment.paymentProvider === "paymongo"
+                      ? "PayMongo payment confirmed"
+                      : "Full payment confirmed",
+                meta: "This booking became active only after full payment.",
+                status: "confirmed",
+                tone: STATUS_COLORS.confirmed,
               },
               {
                 id: `${appointment.id}:status`,
@@ -1011,17 +875,11 @@ export default function BookingsScreen() {
     coachScheduleRaw.forEach((appointment) => {
       earningsById.set(appointment.id, Number(appointment.coachEarnings ?? 0));
     });
-    return earningsById;
-  }, [coachScheduleRaw]);
-
-  const coachMemberEmailById = useMemo(() => {
-    const emailById = new Map<string, string>();
-    coachScheduleRaw.forEach((appointment) => {
-      if (!appointment.userId) return;
-      emailById.set(appointment.userId, getAppointmentMemberEmail(appointment));
+    coachVenueWorkRaw.forEach((booking) => {
+      earningsById.set(booking.id, Number(booking.coachAmount ?? 0));
     });
-    return emailById;
-  }, [coachScheduleRaw]);
+    return earningsById;
+  }, [coachScheduleRaw, coachVenueWorkRaw]);
 
   const coachEarningsItems = useMemo(
     () =>
@@ -1037,7 +895,10 @@ export default function BookingsScreen() {
     activeSection === "bookings"
       ? venuesLoading || bookingsLoading
       : isCoachRole
-        ? coachScheduleLoading
+        ? coachScheduleLoading ||
+          coachVenueWorkLoading ||
+          coachClientsLoading ||
+          recurringPlansQuery.isPending
         : appointmentsLoading;
   const errorText = useMemo(() => {
     if (activeSection === "bookings" && (venuesError || bookingsError))
@@ -1047,7 +908,7 @@ export default function BookingsScreen() {
       (activeSection === "appointments" ||
         activeSection === "clients" ||
         activeSection === "earnings") &&
-      coachScheduleError
+      (coachScheduleError || coachVenueWorkError || coachClientsError)
     )
       return "Unable to load coach sessions.";
     if (activeSection === "appointments" && appointmentsError)
@@ -1058,6 +919,8 @@ export default function BookingsScreen() {
     appointmentsError,
     bookingsError,
     coachScheduleError,
+    coachClientsError,
+    coachVenueWorkError,
     isCoachRole,
     venuesError,
   ]);
@@ -1145,11 +1008,15 @@ export default function BookingsScreen() {
   useEffect(() => {
     if (!isFocused || !user?.id || !isCoachRole) return;
     void refetchCoachSchedule();
+    void refetchCoachVenueWork();
+    void refetchCoachClients();
   }, [
     bookingRefreshTick,
     isCoachRole,
     isFocused,
     refetchCoachSchedule,
+    refetchCoachVenueWork,
+    refetchCoachClients,
     user?.id,
   ]);
 
@@ -1189,36 +1056,24 @@ export default function BookingsScreen() {
   const cancelAppointmentMutation = useMutation(
     cancelAppointmentMutationOptions(mobileApiClient, queryClient),
   );
-  const payAppointmentMutation = useMutation(
-    payAppointmentDownpaymentMutationOptions(mobileApiClient, queryClient),
-  );
   const submitCoachReviewMutation = useMutation(
     submitCoachReviewMutationOptions(mobileApiClient, queryClient),
-  );
-  const confirmCoachAppointmentMutation = useMutation(
-    confirmCoachAppointmentMutationOptions(mobileApiClient, queryClient),
-  );
-  const declineCoachAppointmentMutation = useMutation(
-    declineCoachAppointmentMutationOptions(mobileApiClient, queryClient),
   );
   const completeCoachAppointmentMutation = useMutation(
     completeCoachAppointmentMutationOptions(mobileApiClient, queryClient),
   );
-  const createClientAppointmentMutation = useMutation({
-    mutationFn: (payload: CreateCoachManagedAppointmentPayload) =>
-      mobileApiClient.coaches.createManagedAppointment(payload),
-    onSuccess: async () => {
-      await invalidateCoachScheduleQueries(queryClient, user?.id);
-    },
-  });
-  const createRecurringPlanMutation = useMutation({
-    mutationFn: (payload: RecurringCoachingPlanInput) =>
-      mobileApiClient.recurringCoachingPlans.create(payload),
-    onSuccess: async () => {
-      await recurringPlansQuery.refetch();
-      await invalidateCoachScheduleQueries(queryClient, user?.id);
-    },
-  });
+  const completeCoachVenueWorkMutation = useMutation(
+    completeCoachVenueWorkMutationOptions(mobileApiClient, queryClient),
+  );
+  const cancelCoachVenueWorkMutation = useMutation(
+    cancelCoachVenueWorkMutationOptions(mobileApiClient, queryClient),
+  );
+  const noShowCoachVenueWorkMutation = useMutation(
+    noShowCoachVenueWorkMutationOptions(mobileApiClient, queryClient),
+  );
+  const rescheduleAppointmentMutation = useMutation(
+    rescheduleAppointmentMutationOptions(mobileApiClient, queryClient),
+  );
   const submitClientFeedbackMutation = useMutation({
     mutationFn: ({
       appointmentId,
@@ -1233,9 +1088,9 @@ export default function BookingsScreen() {
     },
   });
   const coachActionLoading =
-    confirmCoachAppointmentMutation.isPending ||
-    declineCoachAppointmentMutation.isPending ||
-    completeCoachAppointmentMutation.isPending;
+    completeCoachAppointmentMutation.isPending ||
+    completeCoachVenueWorkMutation.isPending ||
+    noShowCoachVenueWorkMutation.isPending;
 
   const cancellingReservationLabel = useLoadingText(
     "CANCELLING",
@@ -1245,47 +1100,9 @@ export default function BookingsScreen() {
     "CANCELLING",
     cancelAppointmentMutation.isPending,
   );
-  const confirmingPaymentLabel = useLoadingText(
-    "CONFIRMING PAYMENT",
-    payAppointmentMutation.isPending,
-  );
   const coachActionLoadingLabel = useLoadingText(
     "UPDATING",
     coachActionLoading,
-  );
-
-  const handleSubmitAppointmentPayment = useCallback(
-    async ({ booking, provider, stage }: PendingAppointmentPayment) => {
-      try {
-        const result = await payAppointmentMutation.mutateAsync({
-          appointmentId: booking.id,
-          paymentStage: stage,
-          provider,
-          userId: user?.id,
-        });
-
-        if (!result.checkoutUrl) {
-          throw new Error("PayMongo did not return a checkout link.");
-        }
-
-        await Linking.openURL(result.checkoutUrl);
-        setPendingAppointmentPayment(null);
-        setDetailBooking(null);
-        setPaymentConfirmation({
-          title: "PayMongo checkout opened",
-          message:
-            "Complete the full payment in PayMongo. Your booking stays unconfirmed until FitTrack receives the successful payment confirmation.",
-        });
-      } catch {
-        setPendingAppointmentPayment(null);
-        setPaymentConfirmation({
-          title: "Payment unavailable",
-          message:
-            "PayMongo payment is currently unavailable. Your booking was not confirmed. Please try again from Bookings.",
-        });
-      }
-    },
-    [payAppointmentMutation, user?.id],
   );
 
   const handleStartDateSelect = (date: string) => {
@@ -1336,7 +1153,7 @@ export default function BookingsScreen() {
       if (
         booking.status === "cancelled" ||
         booking.status === "completed" ||
-        booking.status === "declined"
+        booking.status === "no_show"
       )
         return;
       setIsCancelling(true);
@@ -1350,11 +1167,44 @@ export default function BookingsScreen() {
         });
         setPendingCancellation(null);
         setDetailBooking(null);
+      } catch {
+        setPendingCancellation(null);
+        setCancellationFailure({
+          title: "Cancellation unavailable",
+          message:
+            "We couldn't cancel this session. Its paid booking status has not changed. Please try again.",
+        });
       } finally {
         setIsCancelling(false);
       }
     },
     [cancelAppointmentMutation, isCoachRole, user?.id],
+  );
+
+  const executeCancelCoachVenueWork = useCallback(
+    async (booking: DetailBooking) => {
+      if (isFinalSessionStatus(booking.status)) return;
+      setIsCancelling(true);
+      try {
+        await cancelCoachVenueWorkMutation.mutateAsync({
+          bookingId: booking.id,
+          reason: "Cancelled by coach",
+          userId: user?.id,
+        });
+        setPendingCancellation(null);
+        setDetailBooking(null);
+      } catch {
+        setPendingCancellation(null);
+        setCancellationFailure({
+          title: "Cancellation unavailable",
+          message:
+            "We couldn't cancel this venue coaching assignment. Its paid booking status has not changed. Please try again.",
+        });
+      } finally {
+        setIsCancelling(false);
+      }
+    },
+    [cancelCoachVenueWorkMutation, user?.id],
   );
 
   const handleCancelReservation = useCallback((booking: DetailBooking) => {
@@ -1368,53 +1218,160 @@ export default function BookingsScreen() {
     if (
       booking.status === "cancelled" ||
       booking.status === "completed" ||
-      booking.status === "declined"
+      booking.status === "no_show"
     ) {
       return;
     }
     setPendingCancellation({ booking, type: "appointment" });
   }, []);
 
+  const handleCancelCoachVenueWork = useCallback((booking: DetailBooking) => {
+    if (isFinalSessionStatus(booking.status)) return;
+    setPendingCancellation({ booking, type: "venue_work" });
+  }, []);
+
   const handleCoachAction = useCallback(
     (booking: DetailBooking, action: PendingCoachAction["action"]) => {
       if (coachActionLoading) return;
-      setPendingCoachAction({ booking, action });
+      setPendingCoachAction({
+        booking,
+        action,
+        workType:
+          booking.bookingType === "venue_coach" ? "venue_work" : "appointment",
+      });
     },
     [coachActionLoading],
   );
 
   const executeCoachAction = useCallback(async () => {
     if (!pendingCoachAction) return;
-    const { action, booking } = pendingCoachAction;
+    const { action, booking, workType } = pendingCoachAction;
 
-    if (action === "confirm") {
-      await confirmCoachAppointmentMutation.mutateAsync({
-        appointmentId: booking.id,
-        userId: user?.id,
+    try {
+      if (workType === "venue_work") {
+        if (action === "no_show") {
+          await noShowCoachVenueWorkMutation.mutateAsync({
+            bookingId: booking.id,
+            userId: user?.id,
+          });
+        } else {
+          await completeCoachVenueWorkMutation.mutateAsync({
+            bookingId: booking.id,
+            userId: user?.id,
+          });
+        }
+      } else {
+        await completeCoachAppointmentMutation.mutateAsync({
+          appointmentId: booking.id,
+          sessionNotes: "Completed from mobile coach sessions.",
+          userId: user?.id,
+        });
+      }
+      setDetailBooking(null);
+    } catch (error) {
+      setCoachActionFailure({
+        title: "Session update unavailable",
+        message: getCoachFormErrorMessage(
+          error,
+          "We couldn't update this paid coaching session. Please try again.",
+        ),
       });
-    } else if (action === "decline") {
-      await declineCoachAppointmentMutation.mutateAsync({
-        appointmentId: booking.id,
-        reason: "Declined by coach.",
-        userId: user?.id,
-      });
-    } else {
-      await completeCoachAppointmentMutation.mutateAsync({
-        appointmentId: booking.id,
-        sessionNotes: "Completed from mobile coach sessions.",
-        userId: user?.id,
-      });
+    } finally {
+      setPendingCoachAction(null);
     }
-
-    setPendingCoachAction(null);
-    setDetailBooking(null);
   }, [
     completeCoachAppointmentMutation,
-    confirmCoachAppointmentMutation,
-    declineCoachAppointmentMutation,
+    completeCoachVenueWorkMutation,
+    noShowCoachVenueWorkMutation,
     pendingCoachAction,
     user?.id,
   ]);
+
+  const rescheduleSlots = useMemo<TimeSlot[]>(
+    () =>
+      (appointmentAvailabilityQuery.data ?? [])
+        .filter((slot: AppointmentAvailabilitySlot) => slot.available)
+        .map((slot: AppointmentAvailabilitySlot) => ({
+          duration: `${slot.durationMinutes} min · ends ${formatGymTime(slot.endAt)}`,
+          status: "available",
+          time: formatGymTime(slot.startAt),
+        })),
+    [appointmentAvailabilityQuery.data],
+  );
+
+  const handleOpenReschedule = useCallback((booking: DetailBooking) => {
+    if (
+      booking.bookingType !== "single" ||
+      booking.status !== "confirmed" ||
+      !booking.coachId ||
+      !booking.durationMinutes
+    ) {
+      return;
+    }
+    setRescheduleBooking(booking);
+    setRescheduleDate(booking.date >= getTodayString() ? booking.date : getTodayString());
+    setIsRescheduleCalendarOpen(true);
+  }, []);
+
+  const handleRescheduleDateSelect = useCallback((date: string) => {
+    if (date < getTodayString()) return;
+    setRescheduleDate(date);
+    setIsRescheduleCalendarOpen(false);
+    setIsRescheduleTimeOpen(true);
+  }, []);
+
+  const handleRescheduleTimeSelect = useCallback(
+    async (slot: TimeSlot) => {
+      if (
+        !rescheduleBooking?.durationMinutes ||
+        rescheduleAppointmentMutation.isPending
+      )
+        return;
+      const canonicalSlot = (appointmentAvailabilityQuery.data ?? []).find(
+        (candidate) =>
+          candidate.available && formatGymTime(candidate.startAt) === slot.time,
+      );
+      if (!canonicalSlot) {
+        setIsRescheduleTimeOpen(false);
+        setRescheduleFailure({
+          title: "Time no longer available",
+          message:
+            "That exact coach slot is no longer available. Choose another date or time.",
+        });
+        return;
+      }
+
+      try {
+        await rescheduleAppointmentMutation.mutateAsync({
+          appointmentId: rescheduleBooking.id,
+          payload: {
+            duration: rescheduleBooking.durationMinutes,
+            scheduledAt: canonicalSlot.startAt,
+          },
+          userId: user?.id,
+        });
+        setIsRescheduleTimeOpen(false);
+        setRescheduleBooking(null);
+        setRescheduleDate("");
+        setDetailBooking(null);
+      } catch (error) {
+        setIsRescheduleTimeOpen(false);
+        setRescheduleFailure({
+          title: "Reschedule unavailable",
+          message: getCoachFormErrorMessage(
+            error,
+            "We couldn't reserve that exact coach slot. Choose another time and try again.",
+          ),
+        });
+      }
+    },
+    [
+      appointmentAvailabilityQuery.data,
+      rescheduleAppointmentMutation,
+      rescheduleBooking,
+      user?.id,
+    ],
+  );
 
   const handleOpenCoachReview = useCallback((booking: DetailBooking) => {
     if (!booking.coachId || booking.coachReviewRating) return;
@@ -1464,417 +1421,17 @@ export default function BookingsScreen() {
     user?.id,
   ]);
 
-  const handleCreateClientAppointment = useCallback(async () => {
-    if (!clientDetail?.id) return;
-    const durationMinutes = Number(clientScheduleDuration);
-    const scheduledAt = buildLocalScheduleDate(
-      clientScheduleDate,
-      clientScheduleTime,
-    );
+  const handlePublishedWorkoutPlan = useCallback(
+    (transition: CoachWorkoutPlanTransition) => {
+      if (!clientDetail?.id || clientDetail.id !== transition.memberId) {
+        return false;
+      }
 
-    if (!scheduledAt || Number.isNaN(scheduledAt.getTime())) {
-      setClientScheduleMessage({
-        tone: "error",
-        text: "Enter a valid date and 24-hour time.",
-      });
-      return;
-    }
-
-    if (scheduledAt.getTime() <= Date.now()) {
-      setClientScheduleMessage({
-        tone: "error",
-        text: "Choose a future schedule time.",
-      });
-      return;
-    }
-
-    if (
-      !COACH_CLIENT_DURATION_OPTIONS.some(
-        (option) => option.value === durationMinutes,
-      )
-    ) {
-      setClientScheduleMessage({
-        tone: "error",
-        text: "Choose a valid duration.",
-      });
-      return;
-    }
-
-    setClientScheduleMessage(null);
-
-    try {
-      await createClientAppointmentMutation.mutateAsync({
-        durationMinutes,
-        memberId: clientDetail.id,
-        memberNotes: clientScheduleNotes.trim() || undefined,
-        scheduledAt: scheduledAt.toISOString(),
-      });
-      await refetchCoachSchedule();
-      setClientScheduleNotes("");
-      setClientScheduleMessage({
-        tone: "success",
-        text: "Appointment scheduled.",
-      });
-    } catch (error) {
-      setClientScheduleMessage({
-        tone: "error",
-        text: getCoachFormErrorMessage(
-          error,
-          "Unable to schedule appointment.",
-        ),
-      });
-    }
-  }, [
-    clientDetail?.id,
-    clientScheduleDate,
-    clientScheduleDuration,
-    clientScheduleNotes,
-    clientScheduleTime,
-    createClientAppointmentMutation,
-    refetchCoachSchedule,
-  ]);
-
-  const handleRepeatLastMonthlySchedule = useCallback(() => {
-    if (isCreatingMonthlyPlan || createRecurringPlanMutation.isPending) return;
-    const previousPlan = lastMonthlyPlanForClient;
-    if (!previousPlan?.scheduleItems?.length) return;
-
-    const repeatedRows = repeatMonthlyScheduleDraft(
-      previousPlan.scheduleItems,
-    ).map((row) => ({
-      date: row.date,
-      time: row.time,
-      durationMinutes: String(row.durationMinutes),
-    }));
-
-    if (repeatedRows.length === 0) return;
-
-    setMonthlyPlanRows(repeatedRows);
-    setMonthlyPlanQuote(
-      monthlyOfferDefaults.quote || previousPlan.quotedAmount,
-    );
-    setMonthlyPlanMessage({
-      tone: "success",
-      text: "Last monthly schedule copied into the next fresh month. Review dates and conflicts before creating the plan.",
-    });
-  }, [
-    createRecurringPlanMutation.isPending,
-    isCreatingMonthlyPlan,
-    lastMonthlyPlanForClient,
-    monthlyOfferDefaults.quote,
-  ]);
-
-  const handleOpenMonthlyPlan = useCallback(() => {
-    if (isCreatingMonthlyPlan || createRecurringPlanMutation.isPending) return;
-    setMonthlyPlanRows(
-      createFreshMonthlyPlanRows(
-        monthlyOfferDefaults.sessionCount,
-        monthlyOfferDefaults.durationMinutes,
-        lastMonthlyPlanForClient,
-      ),
-    );
-    setMonthlyPlanQuote(monthlyOfferDefaults.quote);
-    const defaultPlan =
-      clientCoachWorkoutPlans.find((plan) => plan.isActive) ??
-      clientCoachWorkoutPlans[0];
-    setMonthlyPlanTrainingPlanId(defaultPlan?.id ?? "");
-    setMonthlyPlanMessage(null);
-    setIsMonthlyPlanOpen(true);
-  }, [
-    createRecurringPlanMutation.isPending,
-    clientCoachWorkoutPlans,
-    isCreatingMonthlyPlan,
-    lastMonthlyPlanForClient,
-    monthlyOfferDefaults.durationMinutes,
-    monthlyOfferDefaults.quote,
-    monthlyOfferDefaults.sessionCount,
-  ]);
-
-  const updateMonthlyPlanRow = useCallback(
-    (index: number, patch: Partial<MonthlyPlanDraftRow>) => {
-      setMonthlyPlanRows((current) =>
-        current.map((row, rowIndex) =>
-          rowIndex === index ? { ...row, ...patch } : row,
-        ),
-      );
-      setMonthlyPlanMessage(null);
+      setClientDetailTab("workout");
+      return true;
     },
-    [],
+    [clientDetail?.id],
   );
-
-  const handleAddMonthlyPlanRow = useCallback(() => {
-    if (isCreatingMonthlyPlan || createRecurringPlanMutation.isPending) return;
-    if (monthlyPlanRows.length >= MAX_MONTHLY_PLAN_SESSIONS) {
-      setMonthlyPlanMessage({
-        tone: "error",
-        text: `A monthly plan can contain at most ${MAX_MONTHLY_PLAN_SESSIONS} sessions.`,
-      });
-      return;
-    }
-    const firstRow = monthlyPlanRows[0];
-    const lastRow = monthlyPlanRows[monthlyPlanRows.length - 1];
-    const nextDate = new Date(`${lastRow?.date ?? firstRow?.date}T12:00:00`);
-    nextDate.setDate(nextDate.getDate() + 1);
-    if (
-      !firstRow ||
-      Number.isNaN(nextDate.getTime()) ||
-      getMonthKey(toDateInputValue(nextDate)) !== getMonthKey(firstRow.date)
-    ) {
-      setMonthlyPlanMessage({
-        tone: "error",
-        text: "Monthly sessions must stay inside the same fresh calendar month.",
-      });
-      return;
-    }
-    setMonthlyPlanRows([
-      ...monthlyPlanRows,
-      {
-        date: toDateInputValue(nextDate),
-        time: firstRow.time || DEFAULT_MONTHLY_SESSION_TIME,
-        durationMinutes:
-          firstRow.durationMinutes ||
-          String(monthlyOfferDefaults.durationMinutes),
-      },
-    ]);
-    setMonthlyPlanMessage(null);
-  }, [
-    createRecurringPlanMutation.isPending,
-    isCreatingMonthlyPlan,
-    monthlyOfferDefaults.durationMinutes,
-    monthlyPlanRows,
-  ]);
-
-  const handleRemoveMonthlyPlanRow = useCallback((index: number) => {
-    setMonthlyPlanRows((current) =>
-      current.length <= 1
-        ? current
-        : current.filter((_, rowIndex) => rowIndex !== index),
-    );
-    setMonthlyPlanMessage(null);
-  }, []);
-
-  const handleCreateMonthlyPlan = useCallback(async () => {
-    if (isCreatingMonthlyPlan || createRecurringPlanMutation.isPending) return;
-    if (!clientDetail?.id) return;
-
-    const coachId =
-      coachProfileQuery.data?.id ??
-      coachScheduleRaw.find(
-        (appointment) => appointment.userId === clientDetail.id,
-      )?.coachId ??
-      coachScheduleRaw[0]?.coachId;
-    const quotedAmount = Number(monthlyPlanQuote.trim());
-
-    if (!coachId) {
-      setMonthlyPlanMessage({
-        tone: "error",
-        text: "This client has no coach relationship available yet.",
-      });
-      return;
-    }
-
-    if (coachProfileQuery.isPending) {
-      setMonthlyPlanMessage({
-        tone: "error",
-        text: "Wait for the coach monthly offer to finish loading.",
-      });
-      return;
-    }
-
-    if (coachProfileQuery.error || !monthlyOfferDefaults.isConfigured) {
-      setMonthlyPlanMessage({
-        tone: "error",
-        text: "Configure an active monthly offer with price, session count, and duration before creating a plan.",
-      });
-      return;
-    }
-
-    if (clientWorkoutPlansQuery.isPending) {
-      setMonthlyPlanMessage({
-        tone: "error",
-        text: "Wait while FitTrack checks the client's active workout plan.",
-      });
-      return;
-    }
-
-    if (clientWorkoutPlansQuery.error || clientCoachWorkoutPlans.length === 0) {
-      setMonthlyPlanMessage({
-        tone: "error",
-        text: "Assign a coach workout plan in the Workout tab before creating this month.",
-      });
-      return;
-    }
-
-    if (!selectedClientWorkoutPlan) {
-      setMonthlyPlanMessage({
-        tone: "error",
-        text: "Choose the coach workout plan this monthly schedule should follow.",
-      });
-      return;
-    }
-
-    if (!Number.isFinite(quotedAmount) || quotedAmount <= 0) {
-      setMonthlyPlanMessage({
-        tone: "error",
-        text: "Enter the full monthly quote. Credits and down payments are not used.",
-      });
-      return;
-    }
-
-    if (monthlyPlanRows.length === 0) {
-      setMonthlyPlanMessage({
-        tone: "error",
-        text: "Add at least one actual appointment date.",
-      });
-      return;
-    }
-
-    const periodKey = getMonthKey(monthlyPlanRows[0]?.date ?? "");
-    const currentMonthKey = getMonthKey(toDateInputValue(new Date()));
-    if (!periodKey || periodKey <= currentMonthKey) {
-      setMonthlyPlanMessage({
-        tone: "error",
-        text: "Choose dates in a future fresh calendar month.",
-      });
-      return;
-    }
-    const latestExistingTimestamp = getLatestMonthlyPlanTimestamp(
-      lastMonthlyPlanForClient,
-    );
-    if (
-      latestExistingTimestamp > 0 &&
-      periodKey <=
-        getMonthKey(toDateInputValue(new Date(latestExistingTimestamp)))
-    ) {
-      setMonthlyPlanMessage({
-        tone: "error",
-        text: "This client already has a plan in that month. Use Repeat Last Schedule for the next fresh period.",
-      });
-      return;
-    }
-
-    const scheduleItems: RecurringCoachingPlanInput["scheduleItems"] = [];
-    let previousTimestamp = 0;
-    const sessionsPerWeek = new Map<string, number>();
-
-    for (const [index, row] of monthlyPlanRows.entries()) {
-      const durationMinutes = Number(row.durationMinutes);
-      const scheduledAt = buildLocalScheduleDate(row.date, row.time);
-
-      if (
-        !scheduledAt ||
-        Number.isNaN(scheduledAt.getTime()) ||
-        scheduledAt.getTime() <= Date.now()
-      ) {
-        setMonthlyPlanMessage({
-          tone: "error",
-          text: `Enter a valid future date and 24-hour time for session ${index + 1}.`,
-        });
-        return;
-      }
-
-      if (getMonthKey(row.date) !== periodKey) {
-        setMonthlyPlanMessage({
-          tone: "error",
-          text: "All monthly session dates must stay inside one fresh calendar month.",
-        });
-        return;
-      }
-
-      if (scheduledAt.getTime() <= previousTimestamp) {
-        setMonthlyPlanMessage({
-          tone: "error",
-          text: "Monthly sessions must be listed in chronological order without duplicates.",
-        });
-        return;
-      }
-
-      if (
-        !COACH_CLIENT_DURATION_OPTIONS.some(
-          (option) => option.value === durationMinutes,
-        )
-      ) {
-        setMonthlyPlanMessage({
-          tone: "error",
-          text: `Choose a valid duration for session ${index + 1}.`,
-        });
-        return;
-      }
-
-      const weekKey = getWeekKey(row.date);
-      const nextWeekCount = (sessionsPerWeek.get(weekKey) ?? 0) + 1;
-      if (nextWeekCount > MAX_MONTHLY_SESSIONS_PER_WEEK) {
-        setMonthlyPlanMessage({
-          tone: "error",
-          text: `Keep each week to at most ${MAX_MONTHLY_SESSIONS_PER_WEEK} sessions.`,
-        });
-        return;
-      }
-      sessionsPerWeek.set(weekKey, nextWeekCount);
-
-      previousTimestamp = scheduledAt.getTime();
-      scheduleItems.push({
-        durationMinutes,
-        scheduledAt: scheduledAt.toISOString(),
-        sequenceIndex: index + 1,
-      });
-    }
-
-    setIsCreatingMonthlyPlan(true);
-    setMonthlyPlanMessage(null);
-    try {
-      await createRecurringPlanMutation.mutateAsync({
-        coachId,
-        durationMinutes: scheduleItems[0]?.durationMinutes ?? 60,
-        durationMonths: 1,
-        endDate:
-          monthlyPlanRows[monthlyPlanRows.length - 1]?.date ??
-          monthlyPlanRows[0]?.date ??
-          "",
-        frequency: "monthly",
-        memberId: clientDetail.id,
-        preferredDays: Array.from(
-          new Set(
-            scheduleItems.map((item) => new Date(item.scheduledAt).getDay()),
-          ),
-        ),
-        preferredTime: monthlyPlanRows[0]?.time ?? "17:00",
-        quotedAmount,
-        scheduleItems,
-        startDate: monthlyPlanRows[0]?.date ?? "",
-        trainingPlanId: selectedClientWorkoutPlan.id,
-      });
-      setIsMonthlyPlanOpen(false);
-      setClientDetailTab("overview");
-      setClientScheduleMessage({
-        tone: "success",
-        text: "Monthly plan created. The client can review and pay the full quote in Bookings.",
-      });
-    } catch (error) {
-      setMonthlyPlanMessage({
-        tone: "error",
-        text: getCoachFormErrorMessage(error, "Unable to create monthly plan."),
-      });
-    } finally {
-      setIsCreatingMonthlyPlan(false);
-    }
-  }, [
-    clientCoachWorkoutPlans.length,
-    clientDetail?.id,
-    clientWorkoutPlansQuery.error,
-    clientWorkoutPlansQuery.isPending,
-    coachScheduleRaw,
-    coachProfileQuery.data?.id,
-    coachProfileQuery.error,
-    coachProfileQuery.isPending,
-    createRecurringPlanMutation,
-    isCreatingMonthlyPlan,
-    lastMonthlyPlanForClient,
-    monthlyOfferDefaults,
-    monthlyPlanQuote,
-    monthlyPlanRows,
-    selectedClientWorkoutPlan,
-  ]);
 
   const handleSubmitClientFeedback = useCallback(async () => {
     if (!selectedClientFeedbackAppointmentId) {
@@ -1955,11 +1512,7 @@ export default function BookingsScreen() {
   const filtered = useMemo(() => {
     let result = activeItems;
     if (statusFilter !== "all")
-      result = result.filter((booking) =>
-        statusFilter === "pending"
-          ? isPendingStatus(booking.status)
-          : booking.status === statusFilter,
-      );
+      result = result.filter((booking) => booking.status === statusFilter);
     if (startDate)
       result = result.filter((booking) => booking.date >= startDate);
     if (endDate) result = result.filter((booking) => booking.date <= endDate);
@@ -1977,11 +1530,7 @@ export default function BookingsScreen() {
   const coachSessionsForClientSummary = useMemo(() => {
     let result = appointmentsWithTimeline;
     if (statusFilter !== "all") {
-      result = result.filter((booking) =>
-        statusFilter === "pending"
-          ? isPendingStatus(booking.status)
-          : booking.status === statusFilter,
-      );
+      result = result.filter((booking) => booking.status === statusFilter);
     }
     if (startDate)
       result = result.filter((booking) => booking.date >= startDate);
@@ -1990,29 +1539,56 @@ export default function BookingsScreen() {
   }, [appointmentsWithTimeline, endDate, startDate, statusFilter]);
 
   const coachClientSummaries = useMemo<CoachClientSummary[]>(() => {
-    const byClient = new Map<string, DetailBooking[]>();
-    coachSessionsForClientSummary.forEach((appointment) => {
+    const byClient = new Map<
+      string,
+      { email: string; name: string; sessions: DetailBooking[] }
+    >();
+    coachClientsRaw.forEach((relationship) => {
       const clientId =
-        appointment.resourceId || appointment.participantName || appointment.id;
-      const existing = byClient.get(clientId) ?? [];
-      existing.push(appointment);
-      byClient.set(clientId, existing);
+        relationship.member_id?.trim() || relationship.member?.id?.trim();
+      if (!clientId) return;
+      const profile = relationship.member?.profile;
+      const name = [profile?.first_name, profile?.last_name]
+        .filter(Boolean)
+        .join(' ')
+        .trim();
+      byClient.set(clientId, {
+        email: relationship.member?.email ?? '',
+        name: name || 'Member',
+        sessions: [],
+      });
+    });
+    coachVenueWorkRaw.forEach((booking) => {
+      const clientId = booking.userId?.trim() || booking.user?.id?.trim();
+      if (!clientId || byClient.has(clientId)) return;
+      const profile = booking.user?.profile;
+      const name = [profile?.firstName, profile?.lastName]
+        .filter(Boolean)
+        .join(" ")
+        .trim();
+      byClient.set(clientId, {
+        email: booking.user?.email ?? "",
+        name: name || "Member",
+        sessions: [],
+      });
+    });
+    coachSessionsForClientSummary.forEach((appointment) => {
+      const clientId = appointment.memberId?.trim() || appointment.resourceId?.trim();
+      if (!clientId) return;
+      const existing = byClient.get(clientId);
+      if (existing) existing.sessions.push(appointment);
     });
 
     return Array.from(byClient.entries())
-      .map(([clientId, sessions]) => {
+      .map(([clientId, client]) => {
+        const { sessions } = client;
         const sortedSessions = [...sessions].sort((left, right) =>
           `${left.date} ${left.startTime ?? left.time}`.localeCompare(
             `${right.date} ${right.startTime ?? right.time}`,
           ),
         );
-        const nextSession = sortedSessions.find(
-          (session) =>
-            session.date >= todayString &&
-            session.status !== "cancelled" &&
-            session.status !== "completed" &&
-            session.status !== "declined" &&
-            session.status !== "no_show",
+        const nextSession = sortedSessions.find((session) =>
+          isUpcomingCoachSession(session),
         );
         const lastSession = [...sortedSessions]
           .reverse()
@@ -2020,39 +1596,29 @@ export default function BookingsScreen() {
         const completedCount = sessions.filter(
           (session) => session.status === "completed",
         ).length;
-        const pendingCount = sessions.filter((session) =>
-          isPendingStatus(session.status),
-        ).length;
-        const needsCoachReply = sessions.some(
-          (session) => session.status === "pending_coach",
+        const hasActiveBooking = sessions.some(
+          (session) => session.status === "confirmed",
         );
-        const readinessLabel = needsCoachReply
-          ? "Needs Reply"
-          : pendingCount > 0
-            ? "Pending"
-            : nextSession
-              ? "Active"
-              : completedCount > 0
-                ? "Ready"
-                : "New";
-        const readinessColor = needsCoachReply
-          ? colors.warning
-          : pendingCount > 0
-            ? colors.warning
-            : nextSession
-              ? colors.success
-              : completedCount > 0
-                ? colors.brand
-                : colors.textMuted;
+        const readinessLabel =
+          nextSession || hasActiveBooking
+            ? "Active"
+            : completedCount > 0
+              ? "Completed"
+              : "Ready";
+        const readinessColor =
+          nextSession || hasActiveBooking
+            ? colors.success
+            : completedCount > 0
+              ? colors.brand
+              : colors.textMuted;
 
         return {
           completedCount,
-          email: coachMemberEmailById.get(clientId) ?? "",
+          email: client.email,
           id: clientId,
           lastSession,
-          name: sortedSessions[0]?.resourceName ?? "Member",
+          name: client.name,
           nextSession,
-          pendingCount,
           readinessColor,
           readinessLabel,
           sessions: sortedSessions,
@@ -2070,24 +1636,34 @@ export default function BookingsScreen() {
         return left.name.localeCompare(right.name);
       });
   }, [
-    coachMemberEmailById,
+    coachClientsRaw,
     coachSessionsForClientSummary,
+    coachVenueWorkRaw,
     colors.brand,
     colors.success,
     colors.textMuted,
-    colors.warning,
     todayString,
   ]);
 
   const filteredCoachClients = useMemo(() => {
     const query = debouncedSearchQuery.trim().toLowerCase();
-    if (!query) return coachClientSummaries;
-    return coachClientSummaries.filter(
-      (client) =>
+    const hasSessionFilters =
+      statusFilter !== "all" || Boolean(startDate) || Boolean(endDate);
+    return coachClientSummaries.filter((client) => {
+      if (hasSessionFilters && client.sessions.length === 0) return false;
+      if (!query) return true;
+      return (
         client.name.toLowerCase().includes(query) ||
-        client.email.toLowerCase().includes(query),
-    );
-  }, [coachClientSummaries, debouncedSearchQuery]);
+        client.email.toLowerCase().includes(query)
+      );
+    });
+  }, [
+    coachClientSummaries,
+    debouncedSearchQuery,
+    endDate,
+    startDate,
+    statusFilter,
+  ]);
 
   const coachEarningsSummary = useMemo(() => {
     const earningsSource =
@@ -2156,11 +1732,17 @@ export default function BookingsScreen() {
   }, [bookingTotalPages]);
   const detailVenue = useMemo(
     () =>
-      venues.find((venue) => String(venue.id) === detailBooking?.resourceId) ??
-      null,
-    [detailBooking?.resourceId, venues],
+      venues.find(
+        (venue) =>
+          String(venue.id) ===
+          (detailBooking?.venueId ?? detailBooking?.resourceId),
+      ) ?? null,
+    [detailBooking?.resourceId, detailBooking?.venueId, venues],
   );
-  const clientDetailSessions = clientDetail?.sessions ?? [];
+  const clientDetailSessions = useMemo(
+    () => clientDetail?.sessions ?? [],
+    [clientDetail?.sessions],
+  );
   const clientLatestSession =
     clientDetailSessions.length > 0
       ? clientDetailSessions[clientDetailSessions.length - 1]
@@ -2192,19 +1774,10 @@ export default function BookingsScreen() {
   useEffect(() => {
     if (!clientDetail) {
       setSelectedClientFeedbackAppointmentId("");
-      setClientScheduleMessage(null);
       setClientFeedbackMessage(null);
-      setIsMonthlyPlanOpen(false);
-      setMonthlyPlanCalendarRowIndex(null);
       return;
     }
 
-    const nextInputs = getDefaultCoachScheduleInputs();
-    setClientScheduleDate(nextInputs.date);
-    setClientScheduleTime(nextInputs.time);
-    setClientScheduleDuration("60");
-    setClientScheduleNotes("");
-    setClientScheduleMessage(null);
     setClientFeedbackMessage(null);
 
     const firstCompletedSession =
@@ -2213,7 +1786,7 @@ export default function BookingsScreen() {
     setSelectedClientFeedbackAppointmentId(firstCompletedSession?.id ?? "");
     setClientCoachFeedback(firstCompletedSession?.coachFeedback ?? "");
     setClientAssessmentReport(firstCompletedSession?.assessmentReport ?? "");
-  }, [clientDetail?.id]);
+  }, [clientDetail]);
 
   useEffect(() => {
     if (!selectedClientFeedbackAppointmentId) return;
@@ -2248,39 +1821,9 @@ export default function BookingsScreen() {
       ];
     }
     if (isCoachRole) {
-      const isFinal =
-        detailBooking.status === "cancelled" ||
-        detailBooking.status === "completed" ||
-        detailBooking.status === "declined" ||
-        detailBooking.status === "no_show";
+      const isFinal = isFinalSessionStatus(detailBooking.status);
+      const isVenueWork = detailBooking.bookingType === "venue_coach";
       const actions = [];
-
-      if (detailBooking.status === "pending_coach") {
-        actions.push(
-          {
-            key: "confirm-session",
-            label: "Confirm Session",
-            variant: "primary" as const,
-            icon: CheckCircle2,
-            onPress: (booking: DetailBooking) =>
-              handleCoachAction(booking, "confirm"),
-            disabled: coachActionLoading || isCancelling,
-            loading: confirmCoachAppointmentMutation.isPending,
-            loadingLabel: coachActionLoadingLabel,
-          },
-          {
-            key: "decline-session",
-            label: "Decline Session",
-            variant: "danger" as const,
-            icon: CircleOff,
-            onPress: (booking: DetailBooking) =>
-              handleCoachAction(booking, "decline"),
-            disabled: coachActionLoading || isCancelling,
-            loading: declineCoachAppointmentMutation.isPending,
-            loadingLabel: coachActionLoadingLabel,
-          },
-        );
-      }
 
       if (detailBooking.status === "confirmed") {
         actions.push({
@@ -2291,9 +1834,38 @@ export default function BookingsScreen() {
           onPress: (booking: DetailBooking) =>
             handleCoachAction(booking, "complete"),
           disabled: coachActionLoading || isCancelling,
-          loading: completeCoachAppointmentMutation.isPending,
+          loading: isVenueWork
+            ? completeCoachVenueWorkMutation.isPending
+            : completeCoachAppointmentMutation.isPending,
           loadingLabel: coachActionLoadingLabel,
         });
+        if (isVenueWork) {
+          actions.push({
+            key: "no-show-session",
+            label: "Mark No Show",
+            variant: "danger" as const,
+            icon: CircleOff,
+            onPress: (booking: DetailBooking) =>
+              handleCoachAction(booking, "no_show"),
+            disabled: coachActionLoading || isCancelling,
+            loading: noShowCoachVenueWorkMutation.isPending,
+            loadingLabel: coachActionLoadingLabel,
+          });
+        } else if (detailBooking.bookingType === "single") {
+          actions.push({
+            key: "reschedule-session",
+            label: "Reschedule",
+            variant: "ghost" as const,
+            icon: CalendarDays,
+            onPress: handleOpenReschedule,
+            disabled:
+              coachActionLoading ||
+              isCancelling ||
+              rescheduleAppointmentMutation.isPending,
+            loading: rescheduleAppointmentMutation.isPending,
+            loadingLabel: "RESCHEDULING",
+          });
+        }
       }
 
       if (!isFinal) {
@@ -2302,7 +1874,9 @@ export default function BookingsScreen() {
           label: isCancelling ? cancellingAppointmentLabel : "Cancel Session",
           variant: "danger" as const,
           icon: CircleOff,
-          onPress: handleCancelAppointment,
+          onPress: isVenueWork
+            ? handleCancelCoachVenueWork
+            : handleCancelAppointment,
           disabled: coachActionLoading || isCancelling,
           loading: isCancelling,
           loadingLabel: cancellingAppointmentLabel,
@@ -2310,41 +1884,6 @@ export default function BookingsScreen() {
       }
 
       return actions;
-    }
-    if (canStartMemberAppointmentPayment(detailBooking)) {
-      const paymentStage = getMemberAppointmentPaymentStage();
-      return [
-        {
-          key: "paymongo-appointment-full",
-          label: payAppointmentMutation.isPending
-            ? confirmingPaymentLabel
-            : "PayMongo Full Payment",
-          variant: "primary" as const,
-          icon: CheckCircle2,
-          onPress: async (booking: DetailBooking) => {
-            setPendingAppointmentPayment({
-              booking,
-              provider: "paymongo",
-              stage: paymentStage,
-            });
-          },
-          disabled: payAppointmentMutation.isPending || isCancelling,
-          loading: payAppointmentMutation.isPending,
-          loadingLabel: confirmingPaymentLabel,
-        },
-        {
-          key: "cancel-appointment",
-          label: isCancelling
-            ? cancellingAppointmentLabel
-            : "Cancel Appointment",
-          variant: "danger" as const,
-          icon: CircleOff,
-          onPress: handleCancelAppointment,
-          disabled: payAppointmentMutation.isPending || isCancelling,
-          loading: isCancelling,
-          loadingLabel: cancellingAppointmentLabel,
-        },
-      ];
     }
     const actions = [];
     if (
@@ -2373,7 +1912,6 @@ export default function BookingsScreen() {
         isCancelling ||
         detailBooking.status === "cancelled" ||
         detailBooking.status === "completed" ||
-        detailBooking.status === "declined" ||
         detailBooking.status === "no_show",
       loading: isCancelling,
       loadingLabel: cancellingAppointmentLabel,
@@ -2386,51 +1924,20 @@ export default function BookingsScreen() {
     coachActionLoading,
     coachActionLoadingLabel,
     completeCoachAppointmentMutation.isPending,
-    confirmCoachAppointmentMutation.isPending,
-    declineCoachAppointmentMutation.isPending,
+    completeCoachVenueWorkMutation.isPending,
     detailBooking,
     handleCoachAction,
     handleCancelAppointment,
+    handleCancelCoachVenueWork,
     handleCancelReservation,
     handleOpenCoachReview,
+    handleOpenReschedule,
     isCancelling,
     isCoachRole,
-    confirmingPaymentLabel,
-    payAppointmentMutation,
+    noShowCoachVenueWorkMutation.isPending,
+    rescheduleAppointmentMutation.isPending,
     submitCoachReviewMutation.isPending,
-    user?.id,
   ]);
-
-  const handlePayRecurringCycle = useCallback(
-    async (
-      _plan: RecurringCoachingPlanRecord,
-      cycle: RecurringCoachingBillingCycleRecord,
-    ) => {
-      try {
-        setRecurringPlanPaymentError(null);
-        setPayingRecurringCycleId(cycle.id);
-        const result =
-          await mobileApiClient.recurringCoachingPlans.payBillingCycle(
-            cycle.recurringPlanId,
-            cycle.id,
-            { provider: "paymongo" },
-          );
-        if (!result.checkoutUrl) {
-          throw new Error(
-            "PayMongo did not return a checkout link. No appointment was activated.",
-          );
-        }
-        await Linking.openURL(result.checkoutUrl);
-      } catch {
-        setRecurringPlanPaymentError(
-          "PayMongo payment is currently unavailable. Your monthly plan was not activated. Please try again.",
-        );
-      } finally {
-        setPayingRecurringCycleId(null);
-      }
-    },
-    [],
-  );
 
   const sectionOptions = isCoachRole
     ? COACH_SECTION_OPTIONS
@@ -2508,7 +2015,6 @@ export default function BookingsScreen() {
           : isCoachRole
             ? "Coach sessions will appear here"
             : "Your trainer appointments will appear here";
-
   return (
     <View style={[base.screen, !isFocused && { display: "none" }]}>
       <Animated.View style={[s.searchAnimWrap, contentStyle]}>
@@ -2551,9 +2057,7 @@ export default function BookingsScreen() {
           topChipLabel="View"
           chipOptions={chipOptions}
           activeChip={statusFilter}
-          onChipChange={(value) =>
-            setStatusFilter(value as ExtendedStatusFilter)
-          }
+          onChipChange={(value) => setStatusFilter(value as StatusFilter)}
           showDateRange
           startDate={startDate}
           endDate={endDate}
@@ -2578,10 +2082,12 @@ export default function BookingsScreen() {
         <Animated.View style={contentStyle}>
           {isUserRole ? (
             <RecurringPlanMobilePanel
-              error={recurringPlanPaymentError}
+              error={
+                recurringPlansQuery.error
+                  ? "Unable to load paid monthly coaching."
+                  : null
+              }
               isLoading={recurringPlansQuery.isPending}
-              onPay={(plan, cycle) => void handlePayRecurringCycle(plan, cycle)}
-              payingCycleId={payingRecurringCycleId}
               plans={recurringPlansQuery.data ?? []}
             />
           ) : null}
@@ -2777,9 +2283,9 @@ export default function BookingsScreen() {
           !!detailBooking &&
           clientDetail == null &&
           reviewTarget == null &&
-          pendingAppointmentPayment == null &&
           pendingCancellation == null &&
-          pendingCoachAction == null
+          pendingCoachAction == null &&
+          rescheduleBooking == null
         }
         booking={detailBooking}
         venue={detailVenue}
@@ -2804,6 +2310,8 @@ export default function BookingsScreen() {
           ]}
         >
           <View
+            accessibilityLabel={`${clientDetail?.name ?? "Client"} coaching details`}
+            accessibilityViewIsModal
             style={{
               backgroundColor: colors.surface,
               borderColor: colors.border,
@@ -3009,7 +2517,7 @@ export default function BookingsScreen() {
                       )}
                     </View>
                     <Pressable
-                      onPress={handleOpenMonthlyPlan}
+                      onPress={() => setClientDetailTab("workout")}
                       style={{
                         alignItems: "center",
                         backgroundColor: colors.brand,
@@ -3033,279 +2541,28 @@ export default function BookingsScreen() {
                           fontWeight: "900",
                         }}
                       >
-                        CREATE MONTHLY PLAN
+                        OPEN WORKOUT PROGRAMS
                       </FitText>
                     </Pressable>
                   </View>
                 ) : null}
 
-                {clientDetailTab === "schedule" ? (
-                  <View style={{ gap: 14 }}>
-                    <FitText
-                      style={{
-                        color: colors.brand,
-                        fontSize: 13,
-                        fontWeight: "900",
-                      }}
-                    >
-                      SCHEDULE NEW APPOINTMENT
-                    </FitText>
-                    <FitText style={{ color: colors.textMuted, fontSize: 13 }}>
-                      Creates a confirmed appointment for this client using your
-                      current coach availability.
-                    </FitText>
-                    <View style={{ gap: 10 }}>
-                      <View style={{ gap: 6 }}>
-                        <FitText
-                          style={{
-                            color: colors.textMuted,
-                            fontSize: 11,
-                            fontWeight: "900",
-                          }}
-                        >
-                          DATE
-                        </FitText>
-                        <Pressable
-                          onPress={() => setIsClientScheduleCalendarOpen(true)}
-                          style={{
-                            borderColor: colors.border,
-                            borderRadius: 10,
-                            borderWidth: 1,
-                            justifyContent: "center",
-                            minHeight: 44,
-                            paddingHorizontal: 12,
-                          }}
-                        >
-                          <FitText
-                            style={{
-                              color: colors.textPrimary,
-                              fontSize: 13,
-                              fontWeight: "700",
-                            }}
-                          >
-                            {formatBookingDate(clientScheduleDate)}
-                          </FitText>
-                        </Pressable>
-                      </View>
-                      <View style={{ gap: 6 }}>
-                        <FitText
-                          style={{
-                            color: colors.textMuted,
-                            fontSize: 11,
-                            fontWeight: "900",
-                          }}
-                        >
-                          TIME
-                        </FitText>
-                        <TextInput
-                          value={clientScheduleTime}
-                          onChangeText={(value) => {
-                            setClientScheduleTime(value);
-                            setClientScheduleMessage(null);
-                          }}
-                          placeholder="17:00"
-                          placeholderTextColor={colors.textMuted}
-                          style={{
-                            borderColor: colors.border,
-                            borderRadius: 10,
-                            borderWidth: 1,
-                            color: colors.textPrimary,
-                            fontSize: 13,
-                            fontWeight: "700",
-                            minHeight: 44,
-                            paddingHorizontal: 12,
-                          }}
-                        />
-                      </View>
-                      <View style={{ gap: 6 }}>
-                        <FitText
-                          style={{
-                            color: colors.textMuted,
-                            fontSize: 11,
-                            fontWeight: "900",
-                          }}
-                        >
-                          DURATION
-                        </FitText>
-                        <View
-                          style={{
-                            flexDirection: "row",
-                            flexWrap: "wrap",
-                            gap: 8,
-                          }}
-                        >
-                          {COACH_CLIENT_DURATION_OPTIONS.map((option) => {
-                            const isActive =
-                              clientScheduleDuration === String(option.value);
-                            return (
-                              <Pressable
-                                key={option.value}
-                                onPress={() => {
-                                  setClientScheduleDuration(
-                                    String(option.value),
-                                  );
-                                  setClientScheduleMessage(null);
-                                }}
-                                style={{
-                                  backgroundColor: isActive
-                                    ? colors.brand + "22"
-                                    : colors.surfaceRaised,
-                                  borderColor: isActive
-                                    ? colors.brand
-                                    : colors.border,
-                                  borderRadius: 10,
-                                  borderWidth: 1,
-                                  minHeight: 42,
-                                  justifyContent: "center",
-                                  paddingHorizontal: 12,
-                                }}
-                              >
-                                <FitText
-                                  style={{
-                                    color: isActive
-                                      ? colors.brand
-                                      : colors.textPrimary,
-                                    fontSize: 12,
-                                    fontWeight: "800",
-                                  }}
-                                >
-                                  {option.label}
-                                </FitText>
-                              </Pressable>
-                            );
-                          })}
-                        </View>
-                      </View>
-                      <View style={{ gap: 6 }}>
-                        <FitText
-                          style={{
-                            color: colors.textMuted,
-                            fontSize: 11,
-                            fontWeight: "900",
-                          }}
-                        >
-                          SESSION NOTES
-                        </FitText>
-                        <TextInput
-                          value={clientScheduleNotes}
-                          onChangeText={(value) => {
-                            setClientScheduleNotes(value);
-                            setClientScheduleMessage(null);
-                          }}
-                          multiline
-                          placeholder="Add session focus, reminders, or prep notes."
-                          placeholderTextColor={colors.textMuted}
-                          style={{
-                            borderColor: colors.border,
-                            borderRadius: 10,
-                            borderWidth: 1,
-                            color: colors.textPrimary,
-                            fontSize: 13,
-                            minHeight: 76,
-                            paddingHorizontal: 12,
-                            paddingVertical: 10,
-                            textAlignVertical: "top",
-                          }}
-                        />
-                      </View>
-                      {clientScheduleMessage ? (
-                        <FitText
-                          style={{
-                            color:
-                              clientScheduleMessage.tone === "success"
-                                ? colors.success
-                                : colors.danger,
-                            fontSize: 12,
-                            fontWeight: "700",
-                          }}
-                        >
-                          {clientScheduleMessage.text}
-                        </FitText>
-                      ) : null}
-                      <Pressable
-                        disabled={createClientAppointmentMutation.isPending}
-                        onPress={() => {
-                          void handleCreateClientAppointment();
-                        }}
-                        style={{
-                          alignItems: "center",
-                          backgroundColor: colors.brand,
-                          borderRadius: 12,
-                          justifyContent: "center",
-                          minHeight: 46,
-                          opacity: createClientAppointmentMutation.isPending
-                            ? 0.65
-                            : 1,
-                        }}
-                      >
-                        <FitText
-                          style={{
-                            color: colors.onBrand ?? "#FFFFFF",
-                            fontSize: 12,
-                            fontWeight: "900",
-                          }}
-                        >
-                          {createClientAppointmentMutation.isPending
-                            ? "SCHEDULING"
-                            : "SCHEDULE APPOINTMENT"}
-                        </FitText>
-                      </Pressable>
-                    </View>
-                    <View
-                      style={{
-                        backgroundColor: colors.border,
-                        height: StyleSheet.hairlineWidth,
-                      }}
-                    />
-                    <FitText
-                      style={{
-                        color: colors.textMuted,
-                        fontSize: 12,
-                        fontWeight: "900",
-                      }}
-                    >
-                      SESSION HISTORY
-                    </FitText>
-                    <View style={s.groupCards}>
-                      {clientDetailSessions.length > 0 ? (
-                        clientDetailSessions.map((session, index) => (
-                          <FitCard
-                            key={session.id}
-                            icon={CalendarDays}
-                            iconSize={18}
-                            label={formatBookingDate(session.date)}
-                            subtitle={`${getSessionTimeLabel(session)} | ${
-                              session.sessionNotes ||
-                              session.description ||
-                              "No notes"
-                            }`}
-                            trailingLabel={formatStatusLabel(session.status)}
-                            trailingLabelColor={
-                              STATUS_COLORS[session.status] ?? colors.textMuted
-                            }
-                            hasBorder={index < clientDetailSessions.length - 1}
-                            noChevron
-                          />
-                        ))
-                      ) : (
-                        <FitText
-                          style={{
-                            color: colors.textMuted,
-                            fontSize: 13,
-                            padding: 14,
-                          }}
-                        >
-                          No sessions found for this client.
-                        </FitText>
-                      )}
-                    </View>
-                  </View>
+                {clientDetailTab === "schedule" && user?.id ? (
+                  <CoachClientPaidSchedule
+                    activeMonthlyPlan={lastMonthlyPlanForClient}
+                    canManage={Boolean(lastMonthlyPlanForClient)}
+                    coachUserId={user.id}
+                    onRescheduled={() => void recurringPlansQuery.refetch()}
+                  />
                 ) : null}
 
                 {clientDetailTab === "workout" && user?.id ? (
-                  <CoachClientWorkoutPlan
+                  <CoachClientWorkoutPrograms
+                    canManage={Boolean(lastMonthlyPlanForClient) || hasActivePaidOneSession}
                     coachUserId={user.id}
                     memberId={clientDetail.id}
+                    onPublished={handlePublishedWorkoutPlan}
+                    paidPeriodEndDate={lastMonthlyPlanForClient?.endDate}
                   />
                 ) : null}
 
@@ -3557,386 +2814,6 @@ export default function BookingsScreen() {
         </View>
       </Modal>
       <Modal
-        visible={isMonthlyPlanOpen && clientDetail != null}
-        transparent
-        animationType="slide"
-        onRequestClose={() => {
-          if (!isCreatingMonthlyPlan) setIsMonthlyPlanOpen(false);
-        }}
-      >
-        <View
-          style={[
-            StyleSheet.absoluteFillObject,
-            {
-              alignItems: "center",
-              backgroundColor: "rgba(0,0,0,0.58)",
-              justifyContent: "flex-end",
-              padding: 12,
-            },
-          ]}
-        >
-          <View
-            style={{
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-              borderRadius: 22,
-              borderWidth: 1,
-              maxHeight: "94%",
-              width: "100%",
-            }}
-          >
-            <ScrollView
-              contentContainerStyle={{ gap: 14, padding: 20 }}
-              keyboardShouldPersistTaps="handled"
-            >
-              <View
-                style={{
-                  alignItems: "flex-start",
-                  flexDirection: "row",
-                  gap: 12,
-                  justifyContent: "space-between",
-                }}
-              >
-                <View style={{ flex: 1, gap: 4 }}>
-                  <FitText
-                    style={{
-                      color: colors.textPrimary,
-                      fontSize: 20,
-                      fontWeight: "900",
-                    }}
-                  >
-                    Create monthly plan
-                  </FitText>
-                  <FitText style={{ color: colors.textMuted, fontSize: 13 }}>
-                    {clientDetail?.name ?? "Client"} · actual appointment dates
-                  </FitText>
-                </View>
-                <Pressable
-                  disabled={isCreatingMonthlyPlan}
-                  onPress={() => setIsMonthlyPlanOpen(false)}
-                  style={{
-                    alignItems: "center",
-                    borderColor: colors.border,
-                    borderRadius: 10,
-                    borderWidth: 1,
-                    height: 40,
-                    justifyContent: "center",
-                    width: 40,
-                  }}
-                >
-                  <FitText
-                    style={{
-                      color: colors.textMuted,
-                      fontSize: 18,
-                      fontWeight: "800",
-                    }}
-                  >
-                    ×
-                  </FitText>
-                </Pressable>
-              </View>
-
-              <FitText style={{ color: colors.textMuted, fontSize: 13 }}>
-                You allocate the schedule after discussing goals and
-                availability offline. The client sees this plan and pays the
-                full quote through PayMongo before any session is confirmed.
-              </FitText>
-
-              <View style={{ gap: 8 }}>
-                <FitText
-                  style={{
-                    color: colors.textMuted,
-                    fontSize: 11,
-                    fontWeight: "900",
-                  }}
-                >
-                  COACH WORKOUT PLAN
-                </FitText>
-                {clientWorkoutPlansQuery.isPending ? (
-                  <FitText style={{ color: colors.textMuted, fontSize: 12 }}>
-                    Loading the client&apos;s coach plans...
-                  </FitText>
-                ) : clientCoachWorkoutPlans.length > 0 ? (
-                  <View style={{ gap: 8 }}>
-                    {clientCoachWorkoutPlans.map((plan) => {
-                      const isSelected = plan.id === monthlyPlanTrainingPlanId;
-                      return (
-                        <Pressable
-                          key={plan.id}
-                          accessibilityRole="button"
-                          accessibilityState={{ selected: isSelected }}
-                          onPress={() => {
-                            setMonthlyPlanTrainingPlanId(plan.id);
-                            setMonthlyPlanMessage(null);
-                          }}
-                          style={{
-                            backgroundColor: isSelected
-                              ? colors.warning + "18"
-                              : colors.surfaceRaised,
-                            borderColor: isSelected
-                              ? colors.warning
-                              : colors.border,
-                            borderRadius: 10,
-                            borderWidth: 1,
-                            minHeight: 42,
-                            justifyContent: "center",
-                            paddingHorizontal: 12,
-                          }}
-                        >
-                          <FitText
-                            style={{
-                              color: isSelected
-                                ? colors.warning
-                                : colors.textPrimary,
-                              fontSize: 12,
-                              fontWeight: "800",
-                            }}
-                          >
-                            {plan.title}
-                            {plan.isActive ? " · ACTIVE" : ""}
-                          </FitText>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                ) : (
-                  <FitText style={{ color: colors.danger, fontSize: 12 }}>
-                    No coach-assigned workout plan is available for this client
-                    yet.
-                  </FitText>
-                )}
-              </View>
-
-              <View style={{ gap: 6 }}>
-                <FitText
-                  style={{
-                    color: colors.textMuted,
-                    fontSize: 11,
-                    fontWeight: "900",
-                  }}
-                >
-                  FULL MONTHLY QUOTE (PHP)
-                </FitText>
-                <TextInput
-                  value={monthlyPlanQuote}
-                  editable={false}
-                  keyboardType="decimal-pad"
-                  placeholder="12000"
-                  placeholderTextColor={colors.textMuted}
-                  style={{
-                    backgroundColor: colors.surfaceRaised,
-                    borderColor: colors.border,
-                    borderRadius: 10,
-                    borderWidth: 1,
-                    color: colors.textPrimary,
-                    fontSize: 14,
-                    fontWeight: "800",
-                    minHeight: 46,
-                    paddingHorizontal: 12,
-                  }}
-                />
-                <FitText style={{ color: colors.textMuted, fontSize: 11 }}>
-                  This comes from the active coach offer and is paid in full.
-                </FitText>
-              </View>
-
-              <View style={{ gap: 10 }}>
-                <View
-                  style={{
-                    alignItems: "center",
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                  }}
-                >
-                  <FitText
-                    style={{
-                      color: colors.textMuted,
-                      fontSize: 11,
-                      fontWeight: "900",
-                    }}
-                  >
-                    ACTUAL SESSION DATES ({monthlyPlanRows.length})
-                  </FitText>
-                  <View style={{ alignItems: "flex-end", gap: 4 }}>
-                    <FitText style={{ color: colors.textMuted, fontSize: 11 }}>
-                      Max 5 per week
-                    </FitText>
-                    {lastMonthlyPlanForClient ? (
-                      <Pressable
-                        disabled={isCreatingMonthlyPlan}
-                        onPress={handleRepeatLastMonthlySchedule}
-                        hitSlop={8}
-                      >
-                        <FitText
-                          style={{
-                            color: colors.brand,
-                            fontSize: 10,
-                            fontWeight: "900",
-                          }}
-                        >
-                          REPEAT LAST SCHEDULE
-                        </FitText>
-                      </Pressable>
-                    ) : null}
-                  </View>
-                </View>
-                {monthlyPlanRows.map((row, index) => (
-                  <View
-                    key={`monthly-plan-row-${index}`}
-                    style={{
-                      backgroundColor: colors.surfaceRaised,
-                      borderColor: colors.border,
-                      borderRadius: 14,
-                      borderWidth: 1,
-                      gap: 10,
-                      padding: 12,
-                    }}
-                  >
-                    <View
-                      style={{
-                        alignItems: "center",
-                        flexDirection: "row",
-                        justifyContent: "space-between",
-                      }}
-                    >
-                      <FitText
-                        style={{
-                          color: colors.brand,
-                          fontSize: 12,
-                          fontWeight: "900",
-                        }}
-                      >
-                        SESSION {index + 1}
-                      </FitText>
-                      {monthlyPlanRows.length > 1 ? (
-                        <Pressable
-                          onPress={() => handleRemoveMonthlyPlanRow(index)}
-                          hitSlop={8}
-                        >
-                          <FitText
-                            style={{
-                              color: colors.danger,
-                              fontSize: 11,
-                              fontWeight: "900",
-                            }}
-                          >
-                            REMOVE
-                          </FitText>
-                        </Pressable>
-                      ) : null}
-                    </View>
-                    <Pressable
-                      onPress={() => setMonthlyPlanCalendarRowIndex(index)}
-                      style={{
-                        borderColor: colors.border,
-                        borderRadius: 10,
-                        borderWidth: 1,
-                        justifyContent: "center",
-                        minHeight: 44,
-                        paddingHorizontal: 12,
-                      }}
-                    >
-                      <FitText
-                        style={{
-                          color: colors.textPrimary,
-                          fontSize: 13,
-                          fontWeight: "700",
-                        }}
-                      >
-                        {formatBookingDate(row.date)}
-                      </FitText>
-                    </Pressable>
-                    <TextInput
-                      value={row.time}
-                      onChangeText={(value) =>
-                        updateMonthlyPlanRow(index, { time: value })
-                      }
-                      placeholder="17:00"
-                      placeholderTextColor={colors.textMuted}
-                      style={{
-                        borderColor: colors.border,
-                        borderRadius: 10,
-                        borderWidth: 1,
-                        color: colors.textPrimary,
-                        fontSize: 13,
-                        fontWeight: "700",
-                        minHeight: 44,
-                        paddingHorizontal: 12,
-                      }}
-                    />
-                    <FitText style={{ color: colors.textMuted, fontSize: 11 }}>
-                      {monthlyOfferDefaults.durationMinutes} minutes · fixed by
-                      the coach offer
-                    </FitText>
-                  </View>
-                ))}
-                {monthlyPlanRows.length < 60 ? (
-                  <Pressable
-                    onPress={handleAddMonthlyPlanRow}
-                    style={{
-                      alignItems: "center",
-                      borderColor: colors.brand,
-                      borderRadius: 10,
-                      borderWidth: 1,
-                      minHeight: 44,
-                      justifyContent: "center",
-                    }}
-                  >
-                    <FitText
-                      style={{
-                        color: colors.brand,
-                        fontSize: 12,
-                        fontWeight: "900",
-                      }}
-                    >
-                      + ADD SESSION DATE
-                    </FitText>
-                  </Pressable>
-                ) : null}
-              </View>
-
-              {monthlyPlanMessage ? (
-                <FitText
-                  style={{
-                    color:
-                      monthlyPlanMessage.tone === "success"
-                        ? colors.success
-                        : colors.danger,
-                    fontSize: 12,
-                    fontWeight: "700",
-                  }}
-                >
-                  {monthlyPlanMessage.text}
-                </FitText>
-              ) : null}
-
-              <View style={{ flexDirection: "row", gap: 10 }}>
-                <FitButton
-                  disabled={isCreatingMonthlyPlan}
-                  flex={1}
-                  label="Cancel"
-                  onPress={() => setIsMonthlyPlanOpen(false)}
-                  variant="ghost"
-                />
-                <FitButton
-                  disabled={
-                    isCreatingMonthlyPlan ||
-                    !monthlyOfferDefaults.isConfigured ||
-                    !selectedClientWorkoutPlan
-                  }
-                  flex={1}
-                  label="Create plan"
-                  loading={isCreatingMonthlyPlan}
-                  loadingLabel="CREATING"
-                  onPress={() => void handleCreateMonthlyPlan()}
-                  variant="primary"
-                />
-              </View>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-      <Modal
         visible={reviewTarget != null}
         transparent
         animationType="fade"
@@ -4050,53 +2927,19 @@ export default function BookingsScreen() {
         </View>
       </Modal>
       <ConfirmModal
-        isVisible={pendingAppointmentPayment != null}
-        title="Continue to PayMongo?"
-        message={
-          pendingAppointmentPayment
-            ? `Pay PHP ${Number(
-                pendingAppointmentPayment.booking.totalAmount ??
-                  pendingAppointmentPayment.booking.amountDueNow ??
-                  0,
-              ).toLocaleString("en-PH", {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })} in full through PayMongo. The booking is confirmed only after FitTrack receives the successful payment.\n\nCancellation and refund policy: ${FITTRACK_PAYMENT_POLICY_SUMMARY}`
-            : ""
-        }
-        yesLabel={FITTRACK_PAYMENT_ACCEPTANCE_LABEL}
-        noLabel="Cancel"
-        isLoading={payAppointmentMutation.isPending}
-        loadingLabel="CONFIRMING PAYMENT"
-        loadingTitle="Confirming payment"
-        onNo={() => {
-          if (payAppointmentMutation.isPending) return;
-          setPendingAppointmentPayment(null);
-        }}
-        onYes={() => {
-          if (!pendingAppointmentPayment) return;
-          void handleSubmitAppointmentPayment(pendingAppointmentPayment);
-        }}
-      />
-      <NoticeModal
-        isVisible={paymentConfirmation != null}
-        title={paymentConfirmation?.title ?? "Payment updated"}
-        message={paymentConfirmation?.message ?? ""}
-        buttonLabel="Stay in Bookings"
-        onClose={() => setPaymentConfirmation(null)}
-      />
-      <ConfirmModal
         isVisible={pendingCancellation != null}
         title={
           pendingCancellation?.type === "appointment"
             ? "Cancel appointment?"
+            : pendingCancellation?.type === "venue_work"
+              ? "Cancel venue coaching work?"
             : "Cancel reservation?"
         }
         message={
           pendingCancellation
-            ? `Are you sure you want to cancel ${pendingCancellation.booking.resourceName} on ${formatBookingDate(
+              ? `Are you sure you want to cancel ${pendingCancellation.booking.resourceName} on ${formatBookingDate(
                 pendingCancellation.booking.date,
-              )}? This action will submit a cancellation request immediately.`
+              )}? This cancels the paid booking immediately under the cancellation policy.`
             : ""
         }
         yesLabel="Confirm Cancel"
@@ -4115,6 +2958,10 @@ export default function BookingsScreen() {
             void executeCancelAppointment(pendingCancellation.booking);
             return;
           }
+          if (pendingCancellation.type === "venue_work") {
+            void executeCancelCoachVenueWork(pendingCancellation.booking);
+            return;
+          }
           void executeCancelReservation(pendingCancellation.booking);
         }}
       />
@@ -4125,18 +2972,27 @@ export default function BookingsScreen() {
         buttonLabel="Stay in Bookings"
         onClose={() => setCancellationFailure(null)}
       />
+      <NoticeModal
+        isVisible={coachActionFailure != null}
+        title={coachActionFailure?.title ?? "Session update unavailable"}
+        message={coachActionFailure?.message ?? ""}
+        buttonLabel="Stay in Sessions"
+        onClose={() => setCoachActionFailure(null)}
+      />
       <ConfirmModal
         isVisible={pendingCoachAction != null}
         title={
-          pendingCoachAction?.action === "confirm"
-            ? "Confirm session?"
-            : pendingCoachAction?.action === "complete"
-              ? "Complete session?"
-              : "Decline session?"
+          pendingCoachAction?.action === "no_show"
+            ? "Mark member no show?"
+            : "Complete session?"
         }
         message={
           pendingCoachAction
-            ? `${formatStatusLabel(pendingCoachAction.action)} ${
+            ? `${
+                pendingCoachAction.action === "no_show"
+                  ? "Mark no show for"
+                  : "Complete"
+              } ${
                 pendingCoachAction.booking.resourceName
               } on ${formatBookingDate(
                 pendingCoachAction.booking.date,
@@ -4144,14 +3000,10 @@ export default function BookingsScreen() {
             : ""
         }
         yesLabel={
-          pendingCoachAction?.action === "confirm"
-            ? "Confirm"
-            : pendingCoachAction?.action === "complete"
-              ? "Complete"
-              : "Decline"
+          pendingCoachAction?.action === "no_show" ? "Mark No Show" : "Complete"
         }
         noLabel="Go Back"
-        isDestructive={pendingCoachAction?.action === "decline"}
+        isDestructive={pendingCoachAction?.action === "no_show"}
         isLoading={coachActionLoading}
         loadingLabel={coachActionLoadingLabel}
         loadingTitle="Updating session"
@@ -4163,38 +3015,68 @@ export default function BookingsScreen() {
           void executeCoachAction();
         }}
       />
+      <CalendarModal
+        isVisible={isRescheduleCalendarOpen}
+        selectedDate={rescheduleDate}
+        minDate={getTodayString()}
+        defaultYear={Number((rescheduleDate || getTodayString()).slice(0, 4))}
+        defaultMonth={Number((rescheduleDate || getTodayString()).slice(5, 7))}
+        onSelect={handleRescheduleDateSelect}
+        onClose={() => {
+          setIsRescheduleCalendarOpen(false);
+          setRescheduleBooking(null);
+          setRescheduleDate("");
+        }}
+      />
+      <TimeSlotModal
+        isVisible={isRescheduleTimeOpen}
+        title="Exact Coach Time"
+        emptyMessage={
+          appointmentAvailabilityQuery.isPending
+            ? "Loading exact coach slots..."
+            : appointmentAvailabilityQuery.error
+              ? "Exact coach slots could not be loaded. Close and try again."
+              : "No exact coach slots are available for this date."
+        }
+        slots={rescheduleSlots}
+        selectedTime=""
+        showAvailabilityLegend={false}
+        onSelect={(slot) => void handleRescheduleTimeSelect(slot)}
+        onClose={() => {
+          if (rescheduleAppointmentMutation.isPending) return;
+          setIsRescheduleTimeOpen(false);
+          setRescheduleBooking(null);
+          setRescheduleDate("");
+        }}
+      />
+      <NoticeModal
+        isVisible={rescheduleFailure != null}
+        title={rescheduleFailure?.title ?? "Reschedule unavailable"}
+        message={rescheduleFailure?.message ?? ""}
+        buttonLabel="Choose Another Time"
+        onClose={() => {
+          setRescheduleFailure(null);
+          if (rescheduleBooking) {
+            void appointmentAvailabilityQuery.refetch();
+            setIsRescheduleTimeOpen(true);
+          }
+        }}
+      />
       {isUserRole ? (
         <AppointmentModal
           isVisible={isAppointmentOpen}
           onClose={() => setIsAppointmentOpen(false)}
-          onMonthlySubmit={async ({ coachId }) => {
-            const enrollment =
-              await mobileApiClient.recurringCoachingPlans.enroll({ coachId });
-            await recurringPlansQuery.refetch();
-            const billingCycle = enrollment.plan.billingCycles?.[0];
-
-            if (!billingCycle) {
-              return {
-                errorMessage:
-                  "PayMongo payment is currently unavailable. Your monthly plan was not activated. Please try again.",
-              };
-            }
-
-            try {
-              const payment =
-                await mobileApiClient.recurringCoachingPlans.payBillingCycle(
-                  enrollment.plan.id,
-                  billingCycle.id,
-                  { provider: "paymongo" },
-                );
-              await recurringPlansQuery.refetch();
-              return { checkoutUrl: payment.checkoutUrl };
-            } catch {
-              return {
-                errorMessage:
-                  "PayMongo payment is currently unavailable. Your monthly plan was saved but not activated. Retry payment from Bookings.",
-              };
-            }
+          onMonthlySubmit={async ({ coachId, idempotencyKey, startDate }) => {
+            const checkout =
+              await mobileApiClient.recurringCoachingPlans.enroll({
+                coachId,
+                idempotencyKey,
+                startDate,
+              });
+            return {
+              attempt: checkout,
+              checkoutUrl: checkout.checkoutUrl,
+            };
           }}
           onSuccess={() => {
             setIsAppointmentOpen(false);
@@ -4203,40 +3085,10 @@ export default function BookingsScreen() {
         />
       ) : null}
       <CalendarModal
-        isVisible={monthlyPlanCalendarRowIndex != null}
-        selectedDate={
-          monthlyPlanCalendarRowIndex != null
-            ? (monthlyPlanRows[monthlyPlanCalendarRowIndex]?.date ?? "")
-            : ""
-        }
-        minDate={getTodayString()}
-        defaultYear={new Date().getFullYear()}
-        defaultMonth={new Date().getMonth() + 1}
-        onSelect={(date) => {
-          if (monthlyPlanCalendarRowIndex == null) return;
-          updateMonthlyPlanRow(monthlyPlanCalendarRowIndex, { date });
-          setMonthlyPlanCalendarRowIndex(null);
-        }}
-        onClose={() => setMonthlyPlanCalendarRowIndex(null)}
-      />
-      <CalendarModal
-        isVisible={isClientScheduleCalendarOpen}
-        selectedDate={clientScheduleDate}
-        minDate={getTodayString()}
-        defaultYear={new Date().getFullYear()}
-        defaultMonth={new Date().getMonth() + 1}
-        onSelect={(date) => {
-          setClientScheduleDate(date);
-          setClientScheduleMessage(null);
-          setIsClientScheduleCalendarOpen(false);
-        }}
-        onClose={() => setIsClientScheduleCalendarOpen(false)}
-      />
-      <CalendarModal
         isVisible={isStartCalOpen}
         selectedDate={startDate}
-        defaultYear={new Date().getFullYear()}
-        defaultMonth={new Date().getMonth() + 1}
+        defaultYear={Number(getTodayString().slice(0, 4))}
+        defaultMonth={Number(getTodayString().slice(5, 7))}
         onSelect={handleStartDateSelect}
         onClose={() => setIsStartCalOpen(false)}
       />
@@ -4245,8 +3097,8 @@ export default function BookingsScreen() {
         selectedDate=""
         allowEmpty
         minDate={startDate ? nextDate(startDate) : nextDate(getTodayString())}
-        defaultYear={new Date().getFullYear()}
-        defaultMonth={new Date().getMonth() + 1}
+        defaultYear={Number(getTodayString().slice(0, 4))}
+        defaultMonth={Number(getTodayString().slice(5, 7))}
         onSelect={handleEndDateSelect}
         onClose={() => setIsEndCalOpen(false)}
       />

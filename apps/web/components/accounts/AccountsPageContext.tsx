@@ -12,9 +12,14 @@ import {
   type SetStateAction,
 } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type {
+  CoachAppointmentScheduleRecord,
+} from "@fittrack/api-client";
 import {
   adminDeletionRequestsQueryOptions,
   approveDeletionRequestMutationOptions,
+  coachClientsQueryOptions,
+  coachScheduleQueryOptions,
   manualAttendanceCheckInMutationOptions,
   rejectDeletionRequestMutationOptions,
   scanAttendanceQrMutationOptions,
@@ -60,6 +65,17 @@ import {
   type ContentMode,
   type DirectoryViewMode,
 } from "@/components/accounts/accountComponentUtils";
+import {
+  filterCoachClientsByActivityLevel,
+  filterCoachClientsByMembershipStatus,
+  filterCoachClientsBySessionStatus,
+  mapCoachClientsToMembers,
+  retainOrSelectCoachClient,
+} from "@/components/accounts/coachClientDirectory";
+import {
+  buildCoachClientSummary,
+  type CoachClientSummary,
+} from "@/components/accounts/coachClientSummary";
 
 type ToastTone = "success" | "error" | "info" | "warning";
 type SelectOption = { label: string; value: string };
@@ -68,7 +84,11 @@ type NoticeModalState = {
   title: string;
   tone: ToastTone;
 } | null;
-export type CoachClientPanelMode = "overview" | "schedule" | "feedback";
+export type CoachClientPanelMode =
+  | "overview"
+  | "workout"
+  | "schedule"
+  | "feedback";
 
 const MANUAL_VERIFICATION_ROLE_NAMES = new Set(["ADMIN", "STAFF", "USER", "COACH"]);
 
@@ -119,6 +139,7 @@ type AccountsPageContextValue = {
   canTerminateEditTarget: boolean;
   closeInspector: () => void;
   coachClientPanelMode: CoachClientPanelMode;
+  coachClientSummary: ReadonlyMap<string, CoachClientSummary>;
   contentMode: ContentMode;
   deleteTarget: MemberRecord | null;
   directoryEmptyMessage: string;
@@ -340,6 +361,37 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
     ...adminDeletionRequestsQueryOptions<DeletionRequest>(webApiClient),
     enabled: canManageAccounts,
   });
+  const { data: coachAppointments = [] } = useQuery({
+    ...coachScheduleQueryOptions<CoachAppointmentScheduleRecord>(
+      webApiClient,
+      user?.id,
+    ),
+    enabled: isCoach && Boolean(user?.id),
+  });
+  const {
+    data: coachClientResult,
+    error: coachClientsError,
+    isLoading: coachClientsLoading,
+  } = useQuery({
+    ...coachClientsQueryOptions(webApiClient, { limit: 100, page: 1 }),
+    enabled: isCoach && Boolean(user?.id),
+    staleTime: 30_000,
+  });
+  const coachDirectoryMembers = useMemo(
+    () => mapCoachClientsToMembers(coachClientResult?.data ?? []),
+    [coachClientResult?.data],
+  );
+  const coachClientSummary = useMemo(
+    () =>
+      buildCoachClientSummary(
+        coachAppointments.filter(
+          (appointment) =>
+            appointment.status === "confirmed" ||
+            appointment.status === "completed",
+        ),
+      ),
+    [coachAppointments],
+  );
 
   useEffect(() => {
     if (!canInspectAccounts) return;
@@ -349,8 +401,10 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
   }, [canInspectAccounts, fetchMembers, notifyActionError]);
 
   useEffect(() => {
-    setDirectoryFilters(canInspectAccounts ? directoryServerFilters : {});
-  }, [canInspectAccounts, directoryServerFilters, setDirectoryFilters]);
+    setDirectoryFilters(
+      canInspectAccounts && !isCoach ? directoryServerFilters : {},
+    );
+  }, [canInspectAccounts, directoryServerFilters, isCoach, setDirectoryFilters]);
 
   useEffect(
     () => () => {
@@ -394,13 +448,23 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
     );
   }, [canManageAccounts, deletionRequestsError, notifyActionError]);
 
+  useEffect(() => {
+    if (!coachClientsError || !isCoach) return;
+    notifyActionError(
+      "Could not load your client roster",
+      coachClientsError,
+      "The coach client directory could not be loaded.",
+    );
+  }, [coachClientsError, isCoach, notifyActionError]);
+
   const roleScopedMembers = useMemo(() => {
-    return members.filter((member) => {
+    const sourceMembers = isCoach ? coachDirectoryMembers : members;
+    return sourceMembers.filter((member) => {
       if (isCoach) return member.role?.name === "USER";
       if (isStaff) return member.role?.name !== "ADMIN";
       return true;
     });
-  }, [isCoach, isStaff, members]);
+  }, [coachDirectoryMembers, isCoach, isStaff, members]);
 
   const pendingRequestsByUserId = useMemo(
     () =>
@@ -422,19 +486,52 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
 
   const [page, setPage] = useState(1);
   const directoryPageSize = viewMode === "grid" ? GRID_ROWS_PER_PAGE : LIST_ROWS_PER_PAGE;
-  const filtered = useMemo(
-    () =>
-      filterMembers(
-        roleScopedMembers,
-        "",
-        activeChip,
-        activeStatus,
-        pendingRequestsByUserId,
-      ),
-    [activeChip, activeStatus, pendingRequestsByUserId, roleScopedMembers],
-  );
+  const filtered = useMemo(() => {
+    const baseMembers = filterMembers(
+      roleScopedMembers,
+      debouncedQ,
+      activeChip,
+      activeStatus,
+      pendingRequestsByUserId,
+    );
 
-  useEffect(() => setPage(1), [debouncedQ, activeChip, activeStatus, activeTier, viewMode]);
+    if (!isCoach) return baseMembers;
+
+    return filterCoachClientsByActivityLevel(
+      filterCoachClientsByMembershipStatus(
+        filterCoachClientsBySessionStatus(
+          baseMembers,
+          activeCoachSessionStatus,
+          coachClientSummary,
+        ),
+        activeCoachMembershipStatus,
+      ),
+      activeCoachActivityLevel,
+    );
+  }, [
+    activeChip,
+    activeCoachActivityLevel,
+    activeCoachMembershipStatus,
+    activeCoachSessionStatus,
+    activeStatus,
+    coachClientSummary,
+    debouncedQ,
+    isCoach,
+    pendingRequestsByUserId,
+    roleScopedMembers,
+  ]);
+
+  useEffect(
+    () => setPage(1),
+    [
+      activeChip,
+      activeCoachSessionStatus,
+      activeStatus,
+      activeTier,
+      debouncedQ,
+      viewMode,
+    ],
+  );
 
   useEffect(() => {
     if (isTerminationRequestsView && activeChip !== "Member") {
@@ -490,10 +587,21 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
   }, [editInitialValues]);
 
   useEffect(() => {
-    if (contentMode !== "directory" || !editTarget || editModalOpen || editConfirmOpen) return;
-    if (paginatedRows.some((member) => member.id === editTarget.id)) return;
-    setEditTarget(null);
-  }, [contentMode, editConfirmOpen, editModalOpen, editTarget, paginatedRows]);
+    if (contentMode !== "directory" || editModalOpen || editConfirmOpen) return;
+    if (isCoach) {
+      const nextTarget = retainOrSelectCoachClient(
+        editTarget,
+        filtered,
+        paginatedRows,
+      );
+      if (nextTarget?.id !== editTarget?.id) {
+        setEditTarget(nextTarget);
+      }
+      return;
+    }
+    if (editTarget && paginatedRows.some((member) => member.id === editTarget.id)) return;
+    if (editTarget) setEditTarget(null);
+  }, [contentMode, editConfirmOpen, editModalOpen, editTarget, filtered, isCoach, paginatedRows]);
 
   useEffect(() => {
     if (editTarget) return;
@@ -592,7 +700,7 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
   );
   const editLoadingLabel = useLoadingText("UPDATING MEMBER", editLoading);
   const restoreLoadingLabel = useLoadingText("RESTORING ACCOUNT", restoreLoading);
-  const pageLoading = isLoading;
+  const pageLoading = isLoading || (isCoach && coachClientsLoading);
 
   const handleAdd = async (data: AdminCreateUserData) => {
     setAddLoading(true);
@@ -631,6 +739,7 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
 
   const openInspector = (member: MemberRecord) => {
     const isSelectedAgain = editTarget?.id === member.id;
+    if (isCoach && isSelectedAgain) return;
     setEditTarget(isSelectedAgain ? null : member);
     if (isAccountsHamburgerMode) {
       setMobileInspectorOpen(!isSelectedAgain);
@@ -1058,6 +1167,7 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
         canTerminateEditTarget,
         closeInspector,
         coachClientPanelMode,
+        coachClientSummary,
         contentMode,
         deleteTarget,
         directoryEmptyMessage,
@@ -1099,7 +1209,7 @@ export function AccountsPageProvider({ children }: { children: ReactNode }) {
         isStaff,
         isTerminationRequestsView,
         manualCheckInLoadingLabel,
-        members,
+        members: isCoach ? coachDirectoryMembers : members,
         membershipCardLoadingLabel,
         mobileInspectorOpen,
         noticeModal,
