@@ -23,6 +23,8 @@
     "dev:mobile:web": "pnpm --dir apps/mobile run web -- --port 8081",
     "build:mobile:apk": "pnpm --dir apps/mobile run android:apk",
     "install:mobile:apk": "pnpm run build:mobile:apk -- --install",
+    "build:mobile:ipa": "pnpm --dir apps/mobile run ios:ipa",
+    "install:mobile:ipa": "pnpm --dir apps/mobile run ios:ipa -- --install-only",
     "db:ensure-local": "pnpm --filter @fittrack/api exec node -r ts-node/register prisma/ensure-local-db.ts",
     "db:generate": "pnpm --filter @fittrack/api exec npx prisma generate && node tasks/ensure-prisma-client-link.mjs",
     "db:push": "pnpm --filter @fittrack/api exec npx prisma db push --accept-data-loss --schema=prisma/schema.prisma",

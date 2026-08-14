@@ -8,6 +8,8 @@
     "android": "node ./scripts/run-android.cjs",
     "android:apk": "node ./scripts/build-android-apk.cjs",
     "android:apk:install": "node ./scripts/build-android-apk.cjs --install",
+    "ios:ipa": "node ./scripts/build-ios-ipa.cjs",
+    "ios:ipa:install": "node ./scripts/build-ios-ipa.cjs --install-only",
     "ios": "node ./node_modules/expo/bin/cli run:ios",
     "web": "node ./scripts/start-web.cjs",
     "lint": "..\\web\\node_modules\\.bin\\eslint.cmd . --ext .ts,.tsx --config ..\\web\\eslint.config.mjs --ignore-pattern .expo/** --ignore-pattern .expo-bundle-smoke/** --ignore-pattern .turbo/** --ignore-pattern android/** --ignore-pattern dist-web-auth-check/** --rule no-empty:warn --rule @typescript-eslint/no-unused-expressions:warn --rule @typescript-eslint/no-require-imports:off",
