@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { getVenueBookingBlockReason } from "@fittrack/api-client";
 import {
   CheckCircle2,
   Dumbbell,
@@ -33,7 +34,13 @@ import { COLS, ROWS } from "@/data/facilities/mapTypes";
 import { FitDropdown, FitText, FitTextInput } from "@/components/fit";
 import FitButton from "@/components/fit/FitButton";
 import FitSection from "@/components/fit/FitSection";
-import { ConfirmModal, DetailsModal, FitModal, VenueDetailsContent, VenueDetailsModal } from "@/components/modals";
+import {
+  ConfirmModal,
+  DetailsModal,
+  FitModal,
+  VenueDetailsContent,
+  VenueDetailsModal,
+} from "@/components/modals";
 import {
   INVENTORY_EQUIPMENT_EDIT_FIELDS,
   validateInventoryEquipmentDetailForm,
@@ -76,7 +83,9 @@ function EquipmentInspectorImage({
   }, [src]);
 
   if (!src || imageFailed) {
-    return <Dumbbell size={19} color={color} aria-label={name + " image fallback"} />;
+    return (
+      <Dumbbell size={19} color={color} aria-label={name + " image fallback"} />
+    );
   }
 
   return (
@@ -98,8 +107,9 @@ export default function FacilitiesMapPageView({ controller }: Props) {
   const [canvasTool, setCanvasTool] = useState<"select" | "pan">("select");
   const [layoutModalVenue, setLayoutModalVenue] =
     useState<FloorVenueRecord | null>(null);
-  const [selectedPlacedEquipmentId, setSelectedPlacedEquipmentId] =
-    useState<string | null>(null);
+  const [selectedPlacedEquipmentId, setSelectedPlacedEquipmentId] = useState<
+    string | null
+  >(null);
   const [equipmentSearch, setEquipmentSearch] = useState("");
   const [equipmentCategoryFilter, setEquipmentCategoryFilter] = useState("all");
   const [equipmentEditorOpen, setEquipmentEditorOpen] = useState(false);
@@ -113,6 +123,29 @@ export default function FacilitiesMapPageView({ controller }: Props) {
   >(null);
   const [venueMaintenanceTarget, setVenueMaintenanceTarget] =
     useState<FloorVenueRecord | null>(null);
+  const maintenanceAffectedBookings = useMemo(() => {
+    if (
+      !venueMaintenanceTarget ||
+      venueMaintenanceTarget.status === "maintenance"
+    ) {
+      return [];
+    }
+    const venueId = String(
+      venueMaintenanceTarget.sourceVenueId ?? venueMaintenanceTarget.id,
+    );
+    const now = Date.now();
+    return controller.activeBookings
+      .filter(
+        (booking) =>
+          String(booking.venueId) === venueId &&
+          new Date(booking.endTime).getTime() > now,
+      )
+      .sort(
+        (left, right) =>
+          new Date(left.startTime).getTime() -
+          new Date(right.startTime).getTime(),
+      );
+  }, [controller.activeBookings, venueMaintenanceTarget]);
   const selectedVenue = useMemo(
     () => controller.selectedFloorVenue,
     [controller.selectedFloorVenue],
@@ -131,24 +164,25 @@ export default function FacilitiesMapPageView({ controller }: Props) {
       .filter((booking) => String(booking.venueId) === venueId)
       .sort(
         (left, right) =>
-          new Date(left.startTime).getTime() - new Date(right.startTime).getTime(),
+          new Date(left.startTime).getTime() -
+          new Date(right.startTime).getTime(),
       );
   }, [controller.activeBookings, selectedVenue]);
   const selectedInventoryEquipment = useMemo(
     () =>
       selectedPlacedEquipment?.inventoryItemId
-        ? controller.availableEquipment.find(
+        ? (controller.availableEquipment.find(
             (item) => item.id === selectedPlacedEquipment.inventoryItemId,
-          ) ?? null
+          ) ?? null)
         : null,
     [controller.availableEquipment, selectedPlacedEquipment],
   );
   const selectedInventoryRecord = useMemo(
     () =>
       selectedPlacedEquipment?.inventoryItemId
-        ? controller.inventoryEquipment.find(
+        ? (controller.inventoryEquipment.find(
             (item) => item.id === selectedPlacedEquipment.inventoryItemId,
-          ) ?? null
+          ) ?? null)
         : null,
     [controller.inventoryEquipment, selectedPlacedEquipment],
   );
@@ -172,21 +206,17 @@ export default function FacilitiesMapPageView({ controller }: Props) {
     }
   }, [selectedPlacedEquipment, selectedPlacedEquipmentId]);
 
+  const activeFloorVenues = controller.activeFloorVenues;
+  const setSelectedFloorVenue = controller.setSelectedFloorVenue;
   useEffect(() => {
     if (
       selectedVenue &&
-      !controller.activeFloorVenues.some(
-        (venue) => venue.mapId === selectedVenue.mapId,
-      )
+      !activeFloorVenues.some((venue) => venue.mapId === selectedVenue.mapId)
     ) {
-      controller.setSelectedFloorVenue(null);
+      setSelectedFloorVenue(null);
       setLayoutModalVenue(null);
     }
-  }, [
-    controller.activeFloorVenues,
-    controller.setSelectedFloorVenue,
-    selectedVenue,
-  ]);
+  }, [activeFloorVenues, selectedVenue, setSelectedFloorVenue]);
   const equipmentCategories = useMemo(
     () =>
       Array.from(
@@ -229,12 +259,12 @@ export default function FacilitiesMapPageView({ controller }: Props) {
   const selectedPlacedEquipmentVenue = useMemo(
     () =>
       selectedPlacedEquipment
-        ? controller.activeFloorVenues.find(
+        ? (controller.activeFloorVenues.find(
             (venue) =>
               venue.mapId === selectedPlacedEquipment.venueId ||
               String(venue.sourceVenueId ?? venue.id) ===
                 selectedPlacedEquipment.venueId,
-          ) ?? null
+          ) ?? null)
         : null,
     [controller.activeFloorVenues, selectedPlacedEquipment],
   );
@@ -291,10 +321,14 @@ export default function FacilitiesMapPageView({ controller }: Props) {
     const isSelectedAgain = selectedVenue?.mapId === venue.mapId;
     controller.setSelectedFloorVenue(isSelectedAgain ? null : venue);
     setSelectedPlacedEquipmentId(null);
-    setLayoutModalVenue(!isSelectedAgain && controller.isCompact ? venue : null);
+    setLayoutModalVenue(
+      !isSelectedAgain && controller.isCompact ? venue : null,
+    );
   };
 
-  const handleSelectMapEquipment = (equipment: (typeof controller.liveEquipment)[number]) => {
+  const handleSelectMapEquipment = (
+    equipment: (typeof controller.liveEquipment)[number],
+  ) => {
     setSelectedPlacedEquipmentId((current) =>
       current === equipment.id ? null : equipment.id,
     );
@@ -304,7 +338,9 @@ export default function FacilitiesMapPageView({ controller }: Props) {
 
   const modeButtonStyle = (mode: typeof controller.activeTab) => ({
     borderColor:
-      controller.activeTab === mode ? controller.colors.brand : controller.colors.border,
+      controller.activeTab === mode
+        ? controller.colors.brand
+        : controller.colors.border,
     backgroundColor:
       controller.activeTab === mode
         ? `${controller.colors.brand}18`
@@ -326,7 +362,9 @@ export default function FacilitiesMapPageView({ controller }: Props) {
         alignItems: "center",
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+      <div
+        style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}
+      >
         <div style={{ minWidth: 0 }}>
           <FitText
             style={{
@@ -367,7 +405,7 @@ export default function FacilitiesMapPageView({ controller }: Props) {
       <div
         style={{
           display: "grid",
-            gridTemplateColumns: controller.isCompact
+          gridTemplateColumns: controller.isCompact
             ? "repeat(2, minmax(0, 1fr))"
             : "repeat(2, auto)",
           gap: 6,
@@ -502,7 +540,10 @@ export default function FacilitiesMapPageView({ controller }: Props) {
             label={controller.isEditMode ? "Editing" : "Edit layout"}
             icon={controller.isEditMode ? LockOpen : Lock}
             onClick={controller.handleToggleEditMode}
-            style={{ marginLeft: controller.isCompact ? 0 : "auto", minHeight: 34 }}
+            style={{
+              marginLeft: controller.isCompact ? 0 : "auto",
+              minHeight: 34,
+            }}
           />
         </div>
         <div
@@ -524,7 +565,9 @@ export default function FacilitiesMapPageView({ controller }: Props) {
             floorBounds={controller.activeFloorBounds}
             floorImageUrl={controller.activeFloorImageUrl}
             isEditMode={controller.isEditMode && activeCanvasTool !== "pan"}
-            onAssignEquipmentToVenue={controller.handleAssignEquipmentFromCanvas}
+            onAssignEquipmentToVenue={
+              controller.handleAssignEquipmentFromCanvas
+            }
             onDropEquipmentToVenue={controller.handleAssignEquipmentFromCanvas}
             onMoveEquipment={controller.handleMoveEquipmentFromCanvas}
             onMoveVenue={controller.handleMoveVenueFromCanvas}
@@ -535,7 +578,9 @@ export default function FacilitiesMapPageView({ controller }: Props) {
               controller.handleCreateQuickFloorRegionAtFromCanvas
             }
             onSelectVenue={
-              activeCanvasTool === "pan" ? () => undefined : handleSelectMapVenue
+              activeCanvasTool === "pan"
+                ? () => undefined
+                : handleSelectMapVenue
             }
             onSelectEquipment={
               activeCanvasTool === "pan"
@@ -605,7 +650,9 @@ export default function FacilitiesMapPageView({ controller }: Props) {
                   const currentIndex = ZOOM_OPTIONS.findIndex(
                     (option) => option.value === current,
                   );
-                  return ZOOM_OPTIONS[Math.max(0, currentIndex - 1)]?.value ?? "0.75";
+                  return (
+                    ZOOM_OPTIONS[Math.max(0, currentIndex - 1)]?.value ?? "0.75"
+                  );
                 })
               }
               style={{ width: 34, height: 34, minHeight: 34, padding: 0 }}
@@ -627,9 +674,11 @@ export default function FacilitiesMapPageView({ controller }: Props) {
                   const currentIndex = ZOOM_OPTIONS.findIndex(
                     (option) => option.value === current,
                   );
-                  return ZOOM_OPTIONS[
-                    Math.min(ZOOM_OPTIONS.length - 1, currentIndex + 1)
-                  ]?.value ?? "1.25";
+                  return (
+                    ZOOM_OPTIONS[
+                      Math.min(ZOOM_OPTIONS.length - 1, currentIndex + 1)
+                    ]?.value ?? "1.25"
+                  );
                 })
               }
               style={{ width: 34, height: 34, minHeight: 34, padding: 0 }}
@@ -649,8 +698,11 @@ export default function FacilitiesMapPageView({ controller }: Props) {
             backgroundColor: controller.colors.surfaceRaised,
           }}
         >
-          <FitText style={{ color: controller.colors.textSecondary, fontSize: 12 }}>
-            Tip: select a region or placed item to inspect details, then enable edit mode to move nodes or place inventory.
+          <FitText
+            style={{ color: controller.colors.textSecondary, fontSize: 12 }}
+          >
+            Tip: select a region or placed item to inspect details, then enable
+            edit mode to move nodes or place inventory.
           </FitText>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             {[
@@ -773,8 +825,11 @@ export default function FacilitiesMapPageView({ controller }: Props) {
         <FitText style={{ display: "block", fontSize: 14, fontWeight: 800 }}>
           Available Equipment
         </FitText>
-        <FitText style={{ color: controller.colors.textSecondary, fontSize: 11 }}>
-          {filteredAvailableEquipment.length}/{controller.availableEquipment.length}
+        <FitText
+          style={{ color: controller.colors.textSecondary, fontSize: 11 }}
+        >
+          {filteredAvailableEquipment.length}/
+          {controller.availableEquipment.length}
         </FitText>
       </div>
       <div style={{ display: "grid", gap: 7 }}>
@@ -819,7 +874,9 @@ export default function FacilitiesMapPageView({ controller }: Props) {
                   );
                   event.dataTransfer.setData("text/plain", item.id);
                 }}
-                onClick={() => controller.handlePlaceEquipmentFromManager(item.id)}
+                onClick={() =>
+                  controller.handlePlaceEquipmentFromManager(item.id)
+                }
                 style={{
                   alignItems: "center",
                   backgroundColor: isSelected
@@ -854,7 +911,11 @@ export default function FacilitiesMapPageView({ controller }: Props) {
                     <img
                       src={item.imageUrl}
                       alt=""
-                      style={{ height: "100%", objectFit: "cover", width: "100%" }}
+                      style={{
+                        height: "100%",
+                        objectFit: "cover",
+                        width: "100%",
+                      }}
                     />
                   ) : (
                     <Icon size={16} color={item.color} />
@@ -885,7 +946,9 @@ export default function FacilitiesMapPageView({ controller }: Props) {
                   </FitText>
                 </span>
                 <span style={{ textAlign: "right" }}>
-                  <FitText style={{ display: "block", fontSize: 12, fontWeight: 850 }}>
+                  <FitText
+                    style={{ display: "block", fontSize: 12, fontWeight: 850 }}
+                  >
                     {remaining ?? "-"}
                   </FitText>
                   <FitText
@@ -933,8 +996,16 @@ export default function FacilitiesMapPageView({ controller }: Props) {
           padding: 10,
         }}
       >
-        <div style={{ alignItems: "baseline", display: "flex", justifyContent: "space-between" }}>
-          <FitText style={{ fontSize: 13, fontWeight: 850 }}>Asset Library</FitText>
+        <div
+          style={{
+            alignItems: "baseline",
+            display: "flex",
+            justifyContent: "space-between",
+          }}
+        >
+          <FitText style={{ fontSize: 13, fontWeight: 850 }}>
+            Asset Library
+          </FitText>
           <FitText style={{ color: controller.colors.textMuted, fontSize: 10 }}>
             {controller.activeFloorLabel}
           </FitText>
@@ -1000,7 +1071,9 @@ export default function FacilitiesMapPageView({ controller }: Props) {
             renderAvailableEquipmentPanel()
           ) : (
             <div style={{ display: "grid", gap: 8 }}>
-              <FitText style={{ color: controller.colors.textSecondary, fontSize: 10 }}>
+              <FitText
+                style={{ color: controller.colors.textSecondary, fontSize: 10 }}
+              >
                 {filteredRegionTemplates.length} reusable asset
                 {filteredRegionTemplates.length === 1 ? "" : "s"}
               </FitText>
@@ -1021,7 +1094,14 @@ export default function FacilitiesMapPageView({ controller }: Props) {
                       padding: 9,
                     }}
                   >
-                    <div style={{ alignItems: "center", display: "grid", gap: 8, gridTemplateColumns: "30px minmax(0, 1fr)" }}>
+                    <div
+                      style={{
+                        alignItems: "center",
+                        display: "grid",
+                        gap: 8,
+                        gridTemplateColumns: "30px minmax(0, 1fr)",
+                      }}
+                    >
                       <span
                         style={{
                           alignItems: "center",
@@ -1036,23 +1116,50 @@ export default function FacilitiesMapPageView({ controller }: Props) {
                         <AssetIcon size={16} color={controller.colors.brand} />
                       </span>
                       <span style={{ minWidth: 0 }}>
-                        <FitText style={{ display: "block", fontSize: 11, fontWeight: 850 }}>
+                        <FitText
+                          style={{
+                            display: "block",
+                            fontSize: 11,
+                            fontWeight: 850,
+                          }}
+                        >
                           {template.name}
                         </FitText>
-                        <FitText style={{ color: controller.colors.success, display: "block", fontSize: 9, marginTop: 2 }}>
+                        <FitText
+                          style={{
+                            color: controller.colors.success,
+                            display: "block",
+                            fontSize: 9,
+                            marginTop: 2,
+                          }}
+                        >
                           Reusable · {template.gridWidth}×{template.gridHeight}
                         </FitText>
                       </span>
                     </div>
-                    <FitText style={{ color: controller.colors.textMuted, fontSize: 9, lineHeight: 1.4 }}>
+                    <FitText
+                      style={{
+                        color: controller.colors.textMuted,
+                        fontSize: 9,
+                        lineHeight: 1.4,
+                      }}
+                    >
                       {template.description}
                     </FitText>
-                    <div style={{ display: "grid", gap: 5, gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
+                    <div
+                      style={{
+                        display: "grid",
+                        gap: 5,
+                        gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                      }}
+                    >
                       <FitButton
                         variant="ghost"
                         label="Add"
                         disabled={!controller.isEditMode}
-                        onClick={() => controller.handleAddQuickRegion(template)}
+                        onClick={() =>
+                          controller.handleAddQuickRegion(template)
+                        }
                         style={{ minHeight: 30 }}
                       />
                       <FitButton
@@ -1060,7 +1167,9 @@ export default function FacilitiesMapPageView({ controller }: Props) {
                         label={isActive ? "Cancel" : "Place"}
                         disabled={!controller.isEditMode}
                         onClick={() =>
-                          controller.handleToggleQuickPlacementTemplate(template)
+                          controller.handleToggleQuickPlacementTemplate(
+                            template,
+                          )
                         }
                         style={{ minHeight: 30 }}
                       />
@@ -1069,7 +1178,14 @@ export default function FacilitiesMapPageView({ controller }: Props) {
                 );
               })}
               {filteredRegionTemplates.length === 0 ? (
-                <FitText style={{ color: controller.colors.textMuted, fontSize: 11, padding: 10, textAlign: "center" }}>
+                <FitText
+                  style={{
+                    color: controller.colors.textMuted,
+                    fontSize: 11,
+                    padding: 10,
+                    textAlign: "center",
+                  }}
+                >
                   No assets match this search.
                 </FitText>
               ) : null}
@@ -1090,10 +1206,10 @@ export default function FacilitiesMapPageView({ controller }: Props) {
       selectedPlacedEquipment.status === "broken" ||
       selectedPlacedEquipment.status === "missing";
     const availableQuantity = selectedInventoryEquipment
-      ? controller.equipmentRemainingById[selectedInventoryEquipment.id] ??
+      ? (controller.equipmentRemainingById[selectedInventoryEquipment.id] ??
         selectedInventoryEquipment.quantityAvailable ??
-        null
-      : selectedPlacedEquipment.remainingPlaceableQuantity ?? null;
+        null)
+      : (selectedPlacedEquipment.remainingPlaceableQuantity ?? null);
     const totalQuantity = selectedInventoryEquipment?.quantityTotal ?? null;
     const detailItems = [
       [
@@ -1109,7 +1225,8 @@ export default function FacilitiesMapPageView({ controller }: Props) {
       ],
       [
         "Location",
-        (selectedPlacedEquipmentVenue?.name ?? selectedPlacedEquipment.floorId) +
+        (selectedPlacedEquipmentVenue?.name ??
+          selectedPlacedEquipment.floorId) +
           " · C" +
           (selectedPlacedEquipment.gridColumn ?? 1) +
           " / R" +
@@ -1120,7 +1237,14 @@ export default function FacilitiesMapPageView({ controller }: Props) {
     ];
     return (
       <div style={{ ...detailCardStyle, display: "grid", gap: 8 }}>
-        <div style={{ alignItems: "center", display: "flex", gap: 10, minWidth: 0 }}>
+        <div
+          style={{
+            alignItems: "center",
+            display: "flex",
+            gap: 10,
+            minWidth: 0,
+          }}
+        >
           <div
             style={{
               alignItems: "center",
@@ -1141,7 +1265,14 @@ export default function FacilitiesMapPageView({ controller }: Props) {
           </div>
           <div style={{ minWidth: 0 }}>
             <FitText
-              style={{ display: "block", fontSize: 13, fontWeight: 850, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+              style={{
+                display: "block",
+                fontSize: 13,
+                fontWeight: 850,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
             >
               {selectedPlacedEquipment.name}
             </FitText>
@@ -1158,7 +1289,8 @@ export default function FacilitiesMapPageView({ controller }: Props) {
                 textTransform: "capitalize",
               }}
             >
-              {selectedPlacedEquipment.status} · {selectedPlacedEquipmentVenue?.name ?? "Floor map"}
+              {selectedPlacedEquipment.status} ·{" "}
+              {selectedPlacedEquipmentVenue?.name ?? "Floor map"}
             </FitText>
           </div>
         </div>
@@ -1224,7 +1356,7 @@ export default function FacilitiesMapPageView({ controller }: Props) {
           fullWidth
           style={{ minHeight: 32 }}
           textStyle={{ fontSize: 11, fontWeight: 800 }}
-            onClick={() => setEquipmentMaintenanceTarget(selectedPlacedEquipment)}
+          onClick={() => setEquipmentMaintenanceTarget(selectedPlacedEquipment)}
         />
         {controller.isEditMode ? (
           <>
@@ -1246,12 +1378,19 @@ export default function FacilitiesMapPageView({ controller }: Props) {
                 lineHeight: 1.4,
               }}
             >
-              Removes this placement only. The inventory record remains available.
+              Removes this placement only. The inventory record remains
+              available.
             </FitText>
           </>
         ) : null}
         {!canToggleMaintenance ? (
-          <FitText style={{ color: controller.colors.textSecondary, fontSize: 10, lineHeight: 1.4 }}>
+          <FitText
+            style={{
+              color: controller.colors.textSecondary,
+              fontSize: 10,
+              lineHeight: 1.4,
+            }}
+          >
             {selectedPlacedEquipment.status} equipment keeps its current status.
           </FitText>
         ) : null}
@@ -1262,7 +1401,10 @@ export default function FacilitiesMapPageView({ controller }: Props) {
   const renderLayoutRail = () => {
     if (selectedPlacedEquipment) {
       return (
-        <aside className="facilities-asset-scroll" style={{ ...rightRailStyle, overflowY: "auto" }}>
+        <aside
+          className="facilities-asset-scroll"
+          style={{ ...rightRailStyle, overflowY: "auto" }}
+        >
           {renderPlacedEquipmentCard()}
         </aside>
       );
@@ -1272,7 +1414,6 @@ export default function FacilitiesMapPageView({ controller }: Props) {
       "No map item selected",
       "Select a venue or placed equipment node to review its details here.",
     );
-
   };
 
   const renderVenueDetailCard = () => {
@@ -1282,6 +1423,8 @@ export default function FacilitiesMapPageView({ controller }: Props) {
         "Select a venue from the table to review its details here.",
       );
     }
+
+    const bookingBlockReason = getVenueBookingBlockReason(selectedVenue);
 
     return (
       <aside
@@ -1319,8 +1462,9 @@ export default function FacilitiesMapPageView({ controller }: Props) {
               lineHeight: 1.45,
             }}
           >
-            {FACILITY_FLOOR_MAP[selectedVenue.floorId].label} · C{selectedVenue.gridColumn ?? 1} / R
-            {selectedVenue.gridRow ?? 1} · ID {String(selectedVenue.sourceVenueId ?? selectedVenue.id)}
+            {FACILITY_FLOOR_MAP[selectedVenue.floorId].label} · C
+            {selectedVenue.gridColumn ?? 1} / R{selectedVenue.gridRow ?? 1} · ID{" "}
+            {String(selectedVenue.sourceVenueId ?? selectedVenue.id)}
           </FitText>
           <FitText
             style={{
@@ -1329,35 +1473,107 @@ export default function FacilitiesMapPageView({ controller }: Props) {
               lineHeight: 1.45,
             }}
           >
-            Dimensions {selectedVenue.gridWidth ?? 1} × {selectedVenue.gridHeight ?? 1} grid cells
+            Dimensions {selectedVenue.gridWidth ?? 1} ×{" "}
+            {selectedVenue.gridHeight ?? 1} grid cells
           </FitText>
-          <div style={{ ...detailCardStyle, display: "grid", gap: 7, padding: 10 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-              <FitText style={{ color: controller.colors.textMuted, fontSize: 10 }}>
+          <div
+            style={{ ...detailCardStyle, display: "grid", gap: 7, padding: 10 }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 10,
+              }}
+            >
+              <FitText
+                style={{ color: controller.colors.textMuted, fontSize: 10 }}
+              >
                 Map visibility
               </FitText>
               <FitText style={{ fontSize: 10.5, fontWeight: 800 }}>
                 {selectedVenue.isMapped === false ? "Not visible" : "Visible"}
               </FitText>
             </div>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-              <FitText style={{ color: controller.colors.textMuted, fontSize: 10 }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 10,
+              }}
+            >
+              <FitText
+                style={{ color: controller.colors.textMuted, fontSize: 10 }}
+              >
+                Booking
+              </FitText>
+              <FitText
+                style={{
+                  color: bookingBlockReason
+                    ? controller.colors.danger
+                    : controller.colors.success,
+                  fontSize: 10.5,
+                  fontWeight: 800,
+                  textAlign: "right",
+                }}
+              >
+                {bookingBlockReason
+                  ? selectedVenue.status === "maintenance"
+                    ? "Unavailable — Maintenance"
+                    : "Unavailable"
+                  : "Available"}
+              </FitText>
+            </div>
+            {bookingBlockReason ? (
+              <FitText
+                style={{
+                  color: controller.colors.danger,
+                  fontSize: 9.5,
+                  lineHeight: 1.4,
+                }}
+              >
+                {bookingBlockReason}
+              </FitText>
+            ) : null}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 10,
+              }}
+            >
+              <FitText
+                style={{ color: controller.colors.textMuted, fontSize: 10 }}
+              >
                 Active bookings
               </FitText>
               <FitText style={{ fontSize: 10.5, fontWeight: 800 }}>
                 {selectedVenueBookings.length}
               </FitText>
             </div>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-              <FitText style={{ color: controller.colors.textMuted, fontSize: 10 }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 10,
+              }}
+            >
+              <FitText
+                style={{ color: controller.colors.textMuted, fontSize: 10 }}
+              >
                 Next booking
               </FitText>
-              <FitText style={{ fontSize: 10.5, fontWeight: 800, textAlign: "right" }}>
+              <FitText
+                style={{ fontSize: 10.5, fontWeight: 800, textAlign: "right" }}
+              >
                 {selectedVenueBookings[0]
-                  ? new Date(selectedVenueBookings[0].startTime).toLocaleString([], {
-                      dateStyle: "medium",
-                      timeStyle: "short",
-                    })
+                  ? new Date(selectedVenueBookings[0].startTime).toLocaleString(
+                      [],
+                      {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                      },
+                    )
                   : "None scheduled"}
               </FitText>
             </div>
@@ -1378,10 +1594,14 @@ export default function FacilitiesMapPageView({ controller }: Props) {
             fullWidth
             style={{ minHeight: 36 }}
             textStyle={{ fontSize: 12, fontWeight: 800 }}
-            onClick={() => controller.handleOpenVenueEditor("edit", selectedVenue)}
+            onClick={() =>
+              controller.handleOpenVenueEditor("edit", selectedVenue)
+            }
           />
           <FitButton
-            variant={selectedVenue.status === "maintenance" ? "ghost" : "danger"}
+            variant={
+              selectedVenue.status === "maintenance" ? "ghost" : "danger"
+            }
             label={
               selectedVenue.status === "maintenance"
                 ? "Mark Available"
@@ -1414,7 +1634,8 @@ export default function FacilitiesMapPageView({ controller }: Props) {
                   lineHeight: 1.4,
                 }}
               >
-                Removes the placement only. Bookings and the venue record remain.
+                Removes the placement only. Bookings and the venue record
+                remain.
               </FitText>
             </>
           ) : null}
@@ -1452,7 +1673,9 @@ export default function FacilitiesMapPageView({ controller }: Props) {
           venues={controller.activeFloorVenues}
           onAddVenue={() => controller.handleOpenVenueEditor("create")}
           onArchiveVenue={(venue) => controller.handleDeleteVenueRequest(venue)}
-          onEditVenue={(venue) => controller.handleOpenVenueEditor("edit", venue)}
+          onEditVenue={(venue) =>
+            controller.handleOpenVenueEditor("edit", venue)
+          }
           onFloorChange={handleFloorChange}
           onOpenArchive={() => controller.setArchiveModalOpen(true)}
           onRemoveFromMap={(venue) => setVenueMapRemovalTarget(venue)}
@@ -1570,7 +1793,9 @@ export default function FacilitiesMapPageView({ controller }: Props) {
               overflow: controller.isCompact ? "visible" : "hidden",
             }}
           >
-            {controller.activeTab === "venues" ? renderVenuesView() : renderMapView()}
+            {controller.activeTab === "venues"
+              ? renderVenuesView()
+              : renderMapView()}
           </div>
         </div>
       </div>
@@ -1591,7 +1816,8 @@ export default function FacilitiesMapPageView({ controller }: Props) {
         activeBookings={controller.activeBookings}
         isOpen={
           !!layoutModalVenue &&
-          (controller.activeTab === "floor" || controller.activeTab === "venues")
+          (controller.activeTab === "floor" ||
+            controller.activeTab === "venues")
         }
         onClose={() => {
           setLayoutModalVenue(null);
@@ -1756,11 +1982,11 @@ export default function FacilitiesMapPageView({ controller }: Props) {
             ? "Mark venue available"
             : "Mark venue for maintenance"
         }
-        message={`${venueMaintenanceTarget?.name ?? "This venue"} will be marked ${
+        message={
           venueMaintenanceTarget?.status === "maintenance"
-            ? "available"
-            : "for maintenance"
-        }.`}
+            ? `${venueMaintenanceTarget?.name ?? "This venue"} will be restored for new bookings.`
+            : `${venueMaintenanceTarget?.name ?? "This venue"} will stop accepting new bookings immediately. Existing bookings will not be automatically cancelled. This changes venue availability only.`
+        }
         confirmLabel={
           venueMaintenanceTarget?.status === "maintenance"
             ? "MARK AVAILABLE"
@@ -1769,6 +1995,11 @@ export default function FacilitiesMapPageView({ controller }: Props) {
         loadingLabel="UPDATING VENUE"
         loadingTitle="UPDATING VENUE"
         isLoading={controller.isVenueSubmitting}
+        confirmDisabled={
+          venueMaintenanceTarget?.status !== "maintenance" &&
+          (controller.activeBookingsLoading ||
+            Boolean(controller.activeBookingsError))
+        }
         onConfirm={async () => {
           if (!venueMaintenanceTarget) return;
           const updated = await controller.toggleVenueMaintenance(
@@ -1777,7 +2008,66 @@ export default function FacilitiesMapPageView({ controller }: Props) {
           if (updated) setVenueMaintenanceTarget(null);
         }}
         onCancel={() => setVenueMaintenanceTarget(null)}
-      />
+      >
+        {venueMaintenanceTarget?.status !== "maintenance" ? (
+          <div
+            style={{
+              backgroundColor: `${controller.colors.warning}12`,
+              border: `1px solid ${controller.colors.warning}44`,
+              borderRadius: 12,
+              display: "grid",
+              gap: 8,
+              marginTop: 10,
+              maxHeight: 190,
+              overflowY: "auto",
+              padding: 12,
+            }}
+          >
+            <FitText
+              style={{
+                color: controller.colors.textPrimary,
+                fontSize: 13,
+                fontWeight: 800,
+              }}
+            >
+              {controller.activeBookingsLoading
+                ? "Loading affected upcoming bookings..."
+                : controller.activeBookingsError
+                  ? "Affected bookings could not be loaded. Close and retry before changing availability."
+                  : `${maintenanceAffectedBookings.length} upcoming active booking${maintenanceAffectedBookings.length === 1 ? "" : "s"} ${maintenanceAffectedBookings.length === 1 ? "requires" : "require"} manual resolution.`}
+            </FitText>
+            {!controller.activeBookingsLoading &&
+            !controller.activeBookingsError
+              ? maintenanceAffectedBookings.slice(0, 5).map((booking) => (
+                  <FitText
+                    key={booking.id}
+                    style={{
+                      color: controller.colors.textSecondary,
+                      fontSize: 12,
+                    }}
+                  >
+                    {booking.user?.profile?.firstName ||
+                      booking.user?.email ||
+                      "Member"}{" "}
+                    ·{" "}
+                    {new Date(booking.startTime).toLocaleString("en-PH", {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                      timeZone: "Asia/Manila",
+                    })}
+                  </FitText>
+                ))
+              : null}
+            {maintenanceAffectedBookings.length > 5 ? (
+              <FitText
+                style={{ color: controller.colors.textMuted, fontSize: 11 }}
+              >
+                +{maintenanceAffectedBookings.length - 5} more in Gym Operations
+              </FitText>
+            ) : null}
+          </div>
+        ) : null}
+      </ConfirmModal>
       <ConfirmModal
         isOpen={!!equipmentMaintenanceTarget}
         title={

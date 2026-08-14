@@ -270,7 +270,7 @@ type AdminSeasonStandingApiRecord = {
   member_name: string;
   milestone_claimed_count: number;
   milestone_unlocked_count: number;
-  rank_position: number | null;
+  rank_position: number;
   season_id: string;
   season_points: number;
   season_status: AdminGamificationSeasonStandingRecord["seasonStatus"];

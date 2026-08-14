@@ -27,6 +27,7 @@ import {
   PaymongoCheckoutService,
 } from '../../membership/payment/paymongo-checkout.service';
 import { lockAndAssertVenueCoachWindow } from './venue-coach-scheduling';
+import { getAmenityBookingBlockReason } from '../../bookings/amenity/amenity-reservability';
 
 const CHECKOUT_HOLD_TTL_MINUTES = 15;
 
@@ -630,14 +631,29 @@ export class CoachingCommerceService {
   ): Promise<void> {
     const amenity = await tx.amenity.findUnique({
       where: { id: input.amenityId },
-      select: { capacity: true, is_reservable: true },
+      select: {
+        capacity: true,
+        is_active: true,
+        is_mapped: true,
+        is_reservable: true,
+        status: true,
+      },
     });
-    if (!amenity || amenity.is_reservable === false) {
+    if (!amenity) {
       throw new ConflictException({
         type: 'CONFLICT',
         title: 'Venue Not Reservable',
         status: 409,
-        detail: 'The requested venue is not available for booking.',
+        detail: 'The requested venue no longer exists.',
+      });
+    }
+    const blockReason = getAmenityBookingBlockReason(amenity);
+    if (blockReason) {
+      throw new ConflictException({
+        type: 'CONFLICT',
+        title: 'Venue Not Reservable',
+        status: 409,
+        detail: blockReason,
       });
     }
 

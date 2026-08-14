@@ -9,6 +9,7 @@ import { AmenityController } from './amenity.controller';
 function getGuardMetadata(
   methodName:
     | 'listAmenities'
+    | 'listOperationalAmenities'
     | 'listArchivedAmenities'
     | 'getAmenityById'
     | 'createAmenity'
@@ -28,7 +29,8 @@ function getRolesMetadata(
     | 'updateAmenity'
     | 'restoreAmenity'
     | 'deleteAmenity'
-    | 'listArchivedAmenities',
+    | 'listArchivedAmenities'
+    | 'listOperationalAmenities',
 ): UserRole[] | undefined {
   return Reflect.getMetadata(
     ROLES_KEY,
@@ -39,6 +41,7 @@ function getRolesMetadata(
 describe('AmenityController', () => {
   const amenityService = {
     listAmenities: jest.fn(),
+    listOperationalAmenities: jest.fn(),
     listArchivedAmenities: jest.fn(),
     getAmenityById: jest.fn(),
     createAmenity: jest.fn(),
@@ -64,6 +67,24 @@ describe('AmenityController', () => {
 
   it('keeps amenity listing public', () => {
     expect(getGuardMetadata('listAmenities')).toBeUndefined();
+  });
+
+  it('protects operational venue listing for admin and staff', async () => {
+    amenityService.listOperationalAmenities.mockResolvedValue([
+      { id: 'maintenance-venue' },
+    ]);
+
+    await controller.listOperationalAmenities();
+
+    expect(amenityService.listOperationalAmenities).toHaveBeenCalledTimes(1);
+    expect(getGuardMetadata('listOperationalAmenities')).toEqual([
+      JwtAuthGuard,
+      RolesGuard,
+    ]);
+    expect(getRolesMetadata('listOperationalAmenities')).toEqual([
+      UserRole.admin,
+      UserRole.staff,
+    ]);
   });
 
   it('lists archived amenities through the service', async () => {

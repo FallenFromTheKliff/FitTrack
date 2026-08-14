@@ -1,7 +1,6 @@
 "use client";
 
 import { DndContext, DragOverlay } from "@dnd-kit/core";
-import { useState } from "react";
 import {
   CalendarDays,
   CalendarPlus,
@@ -69,7 +68,6 @@ import {
 } from "@/components/schedule/SchedulePageShared";
 import { getWeekStart } from "./helpers";
 import { RecurringPlanActionModal } from "@/components/schedule/RecurringPlanActionModal";
-import StaffRecurringCashEnrollmentModal from "@/components/schedule/StaffRecurringCashEnrollmentModal";
 import {
   GymOperationsPageProvider,
   useGymOperationsPage,
@@ -150,6 +148,7 @@ function GymOperationsPageBody() {
     canAnimate,
     cancelAppointmentPending,
     cancelRecurringPlanMutation,
+    cancelVenueBookingForMaintenanceMutation,
     canManageGymOperations,
     canViewVenueBookings,
     coachAppointments,
@@ -166,6 +165,7 @@ function GymOperationsPageBody() {
     colors,
     completeAppointmentPending,
     createCoachBookingMutation,
+    createRecurringCashEnrollmentMutation,
     createCoachBookingOpen,
     createCoachMutation,
     createCoachOpen,
@@ -186,6 +186,7 @@ function GymOperationsPageBody() {
     handleBlockSave,
     handleCancelAppointment,
     handleCancelVenueBooking,
+    handleCancelVenueBookingForMaintenance,
     handleCoachFocus,
     handleCompleteAppointment,
     handleCompleteVenueBooking,
@@ -195,6 +196,7 @@ function GymOperationsPageBody() {
     handleDragEnd,
     handleDragStart,
     handleNoShowVenueBooking,
+    handleRescheduleVenueBookingForMaintenance,
     handleRecurringFutureUpdate,
     handleRecurringPlanCancel,
     handleRecurringSessionReschedule,
@@ -224,6 +226,7 @@ function GymOperationsPageBody() {
     refetchVenues,
     refreshGymOperationsData,
     replaceAvailabilityMutation,
+    rescheduleVenueBookingMutation,
     rightScrollRef,
     rosterBookings,
     scheduleLoading,
@@ -285,8 +288,6 @@ function GymOperationsPageBody() {
     weekStart,
     clearVenueBookingDateRange,
   } = useGymOperationsPage();
-  const [cashEnrollmentOpen, setCashEnrollmentOpen] = useState(false);
-
   const selectedCoachCompletedAppointments = coachAppointments.filter(
     (appointment) =>
       appointment.status === "completed" &&
@@ -449,21 +450,6 @@ function GymOperationsPageBody() {
                     textStyle={{ fontSize: 12, fontWeight: 800 }}
                   />
                 ) : null}
-                {canManageGymOperations ? (
-                  <FitButton
-                    variant="ghost"
-                    data-ui="gym-operations-recurring-cash-enrollment"
-                    label="CASH ENROLLMENT"
-                    onClick={() => setCashEnrollmentOpen(true)}
-                    disabled={memberOptions.length === 0 || coachOptions.length === 0}
-                    style={{
-                      minHeight: 38,
-                      borderRadius: 8,
-                      padding: "8px 14px",
-                    }}
-                    textStyle={{ fontSize: 11, fontWeight: 800 }}
-                  />
-                ) : null}
               </>
             ) : (
               <>
@@ -554,261 +540,277 @@ function GymOperationsPageBody() {
                       alignItems: "stretch",
                     }}
                   >
-                  <CoachIconRail
-                    draggable={canManageGymOperations}
-                    railRef={leftRailRef}
-                    maxHeight={coachRailAsRow ? null : scheduleRosterMaxHeight}
-                    orientation={coachRailAsRow ? "row" : "column"}
-                    filteredStaff={filteredStaff}
-                    bookings={rosterBookings}
-                    selectedStaffId={focusedCoachId}
-                    onStaffPreview={handleCoachFocus}
-                    onStaffClick={
-                      canManageGymOperations
-                        ? handleStaffClick
-                        : () => undefined
-                    }
-                    requireSecondClickToOpen={canManageGymOperations}
-                    colors={colors}
-                  />
-                  <div
-                    style={{
-                      borderRadius: 8,
-                      border: `1px solid ${colors.border}`,
-                      backgroundColor: colors.surface,
-                      display: "grid",
-                      gridTemplateRows: "auto minmax(0, 1fr)",
-                      gap: 0,
-                      minHeight: scheduleTimelineMaxHeight,
-                      overflow: "hidden",
-                    }}
-                  >
+                    <CoachIconRail
+                      draggable={canManageGymOperations}
+                      railRef={leftRailRef}
+                      maxHeight={
+                        coachRailAsRow ? null : scheduleRosterMaxHeight
+                      }
+                      orientation={coachRailAsRow ? "row" : "column"}
+                      filteredStaff={filteredStaff}
+                      bookings={rosterBookings}
+                      selectedStaffId={focusedCoachId}
+                      onStaffPreview={handleCoachFocus}
+                      onStaffClick={
+                        canManageGymOperations
+                          ? handleStaffClick
+                          : () => undefined
+                      }
+                      requireSecondClickToOpen={canManageGymOperations}
+                      colors={colors}
+                    />
                     <div
                       style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        gap: 12,
-                        flexWrap: "wrap",
-                        minHeight: 48,
-                        padding: "10px 12px",
-                        borderBottom: `1px solid ${colors.border}`,
-                        backgroundColor: colors.surfaceRaised,
+                        borderRadius: 8,
+                        border: `1px solid ${colors.border}`,
+                        backgroundColor: colors.surface,
+                        display: "grid",
+                        gridTemplateRows: "auto minmax(0, 1fr)",
+                        gap: 0,
+                        minHeight: scheduleTimelineMaxHeight,
+                        overflow: "hidden",
                       }}
                     >
                       <div
                         style={{
                           display: "flex",
                           alignItems: "center",
-                          gap: 14,
+                          justifyContent: "space-between",
+                          gap: 12,
                           flexWrap: "wrap",
-                        }}
-                        aria-label="Schedule legend"
-                      >
-                        {STATUS_OPTIONS.filter(
-                          (option) => option.value !== "all",
-                        ).map((option) => (
-                          <div
-                            key={option.value}
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: 6,
-                            }}
-                          >
-                            <span
-                              style={{
-                                width: 8,
-                                height: 8,
-                                borderRadius: 2,
-                                backgroundColor: getAppointmentStatusColor(
-                                  option.value,
-                                  colors,
-                                ),
-                              }}
-                            />
-                            <FitText
-                              excludeGlobalScale
-                              style={{
-                                fontSize: 10,
-                                fontWeight: 800,
-                                color: colors.textSecondary,
-                              }}
-                            >
-                              {getReadableStatus(option.value)}
-                            </FitText>
-                          </div>
-                        ))}
-                      </div>
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
-                          flexWrap: "wrap",
+                          minHeight: 48,
+                          padding: "10px 12px",
+                          borderBottom: `1px solid ${colors.border}`,
+                          backgroundColor: colors.surfaceRaised,
                         }}
                       >
-                        <FitButton
-                          variant="ghost"
-                          iconOnly
-                          icon={ChevronLeft}
-                          iconSize={16}
-                          onClick={prevWeek}
-                          aria-label={
-                            scheduleRangeMode === "weekly"
-                              ? "Previous week"
-                              : "Previous day"
-                          }
-                          style={{ minHeight: 32, borderRadius: 8 }}
-                        />
-                        <FitButton
-                          variant="ghost"
-                          icon={CalendarDays}
-                          iconSize={15}
-                          label={
-                            scheduleRangeMode === "weekly"
-                              ? formatWeekRange(weekStart)
-                              : formatScheduleDay(weekStart)
-                          }
-                          onClick={() => setCalendarOpen(true)}
+                        <div
                           style={{
-                            minHeight: 32,
-                            minWidth: 188,
-                            padding: "4px 9px",
-                            borderRadius: 8,
-                            backgroundColor: `${colors.brand}12`,
-                            color: colors.brand,
-                            whiteSpace: "nowrap",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 14,
+                            flexWrap: "wrap",
                           }}
-                          textStyle={{
-                            color: colors.brand,
-                            fontSize: 11,
-                            fontWeight: 800,
-                            lineHeight: 1,
-                            whiteSpace: "nowrap",
-                          }}
-                          aria-label={
-                            scheduleRangeMode === "weekly"
-                              ? "Pick week"
-                              : "Pick day"
-                          }
-                        />
-                        {isCoach ? (
-                          <OperationsControlField label="Client" minWidth={190}>
-                            <label
+                          aria-label="Schedule legend"
+                        >
+                          {STATUS_OPTIONS.filter(
+                            (option) => option.value !== "all",
+                          ).map((option) => (
+                            <div
+                              key={option.value}
                               style={{
+                                display: "inline-flex",
                                 alignItems: "center",
-                                border: `1px solid ${colors.border}`,
-                                borderRadius: 7,
-                                display: "flex",
-                                gap: 7,
-                                minHeight: 34,
-                                padding: "0 9px",
+                                gap: 6,
                               }}
                             >
-                              <Search aria-hidden color={colors.textMuted} size={13} />
-                              <input
-                                aria-label="Search coach clients"
-                                onChange={(event) =>
-                                  setAppointmentMemberSearch(event.target.value)
-                                }
-                                placeholder="Name or email"
-                                type="search"
-                                value={appointmentMemberSearch}
+                              <span
                                 style={{
-                                  background: "transparent",
-                                  border: 0,
-                                  color: colors.textPrimary,
-                                  font: "inherit",
-                                  fontSize: 11,
-                                  minWidth: 0,
-                                  outline: "none",
-                                  width: "100%",
+                                  width: 8,
+                                  height: 8,
+                                  borderRadius: 2,
+                                  backgroundColor: getAppointmentStatusColor(
+                                    option.value,
+                                    colors,
+                                  ),
                                 }}
                               />
-                            </label>
-                          </OperationsControlField>
-                        ) : null}
-                        {isCoach ? (
-                          <OperationsControlField label="Status" minWidth={154}>
-                            <FitSelect
-                              compact
-                              fullWidth
-                              value={appointmentStatusFilter}
-                              onChange={(event) =>
-                                setAppointmentStatusFilter(
-                                  event.target.value || "all",
-                                )
-                              }
-                              options={STATUS_OPTIONS}
-                              aria-label={`Schedule status filter: ${selectedAppointmentStatusLabel}`}
-                            />
-                          </OperationsControlField>
-                        ) : null}
-                        <FitButton
-                          variant="ghost"
-                          iconOnly
-                          icon={ChevronRight}
-                          iconSize={16}
-                          onClick={nextWeek}
-                          aria-label={
-                            scheduleRangeMode === "weekly"
-                              ? "Next week"
-                              : "Next day"
-                          }
-                          style={{ minHeight: 32, borderRadius: 8 }}
-                        />
-                        <FitButton
-                          variant="ghost"
-                          label={
-                            scheduleRangeMode === "weekly" ? "Weekly" : "Daily"
-                          }
-                          onClick={() => {
-                            setScheduleRangeMode((current) => {
-                              const next =
-                                current === "weekly" ? "daily" : "weekly";
-                              setWeekStart((date) =>
-                                next === "weekly" ? getWeekStart(date) : date,
-                              );
-                              setSlideKey((key) => key + 1);
-                              return next;
-                            });
-                          }}
-                          aria-label="Toggle schedule range"
+                              <FitText
+                                excludeGlobalScale
+                                style={{
+                                  fontSize: 10,
+                                  fontWeight: 800,
+                                  color: colors.textSecondary,
+                                }}
+                              >
+                                {getReadableStatus(option.value)}
+                              </FitText>
+                            </div>
+                          ))}
+                        </div>
+                        <div
                           style={{
-                            minHeight: 32,
-                            width: 74,
-                            borderRadius: 8,
-                            padding: "4px 0",
-                            fontSize: 10,
-                            fontWeight: 800,
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                            flexWrap: "wrap",
                           }}
+                        >
+                          <FitButton
+                            variant="ghost"
+                            iconOnly
+                            icon={ChevronLeft}
+                            iconSize={16}
+                            onClick={prevWeek}
+                            aria-label={
+                              scheduleRangeMode === "weekly"
+                                ? "Previous week"
+                                : "Previous day"
+                            }
+                            style={{ minHeight: 32, borderRadius: 8 }}
+                          />
+                          <FitButton
+                            variant="ghost"
+                            icon={CalendarDays}
+                            iconSize={15}
+                            label={
+                              scheduleRangeMode === "weekly"
+                                ? formatWeekRange(weekStart)
+                                : formatScheduleDay(weekStart)
+                            }
+                            onClick={() => setCalendarOpen(true)}
+                            style={{
+                              minHeight: 32,
+                              minWidth: 188,
+                              padding: "4px 9px",
+                              borderRadius: 8,
+                              backgroundColor: `${colors.brand}12`,
+                              color: colors.brand,
+                              whiteSpace: "nowrap",
+                            }}
+                            textStyle={{
+                              color: colors.brand,
+                              fontSize: 11,
+                              fontWeight: 800,
+                              lineHeight: 1,
+                              whiteSpace: "nowrap",
+                            }}
+                            aria-label={
+                              scheduleRangeMode === "weekly"
+                                ? "Pick week"
+                                : "Pick day"
+                            }
+                          />
+                          {isCoach ? (
+                            <OperationsControlField
+                              label="Client"
+                              minWidth={190}
+                            >
+                              <label
+                                style={{
+                                  alignItems: "center",
+                                  border: `1px solid ${colors.border}`,
+                                  borderRadius: 7,
+                                  display: "flex",
+                                  gap: 7,
+                                  minHeight: 34,
+                                  padding: "0 9px",
+                                }}
+                              >
+                                <Search
+                                  aria-hidden
+                                  color={colors.textMuted}
+                                  size={13}
+                                />
+                                <input
+                                  aria-label="Search coach clients"
+                                  onChange={(event) =>
+                                    setAppointmentMemberSearch(
+                                      event.target.value,
+                                    )
+                                  }
+                                  placeholder="Name or email"
+                                  type="search"
+                                  value={appointmentMemberSearch}
+                                  style={{
+                                    background: "transparent",
+                                    border: 0,
+                                    color: colors.textPrimary,
+                                    font: "inherit",
+                                    fontSize: 11,
+                                    minWidth: 0,
+                                    outline: "none",
+                                    width: "100%",
+                                  }}
+                                />
+                              </label>
+                            </OperationsControlField>
+                          ) : null}
+                          {isCoach ? (
+                            <OperationsControlField
+                              label="Status"
+                              minWidth={154}
+                            >
+                              <FitSelect
+                                compact
+                                fullWidth
+                                value={appointmentStatusFilter}
+                                onChange={(event) =>
+                                  setAppointmentStatusFilter(
+                                    event.target.value || "all",
+                                  )
+                                }
+                                options={STATUS_OPTIONS}
+                                aria-label={`Schedule status filter: ${selectedAppointmentStatusLabel}`}
+                              />
+                            </OperationsControlField>
+                          ) : null}
+                          <FitButton
+                            variant="ghost"
+                            iconOnly
+                            icon={ChevronRight}
+                            iconSize={16}
+                            onClick={nextWeek}
+                            aria-label={
+                              scheduleRangeMode === "weekly"
+                                ? "Next week"
+                                : "Next day"
+                            }
+                            style={{ minHeight: 32, borderRadius: 8 }}
+                          />
+                          <FitButton
+                            variant="ghost"
+                            label={
+                              scheduleRangeMode === "weekly"
+                                ? "Weekly"
+                                : "Daily"
+                            }
+                            onClick={() => {
+                              setScheduleRangeMode((current) => {
+                                const next =
+                                  current === "weekly" ? "daily" : "weekly";
+                                setWeekStart((date) =>
+                                  next === "weekly" ? getWeekStart(date) : date,
+                                );
+                                setSlideKey((key) => key + 1);
+                                return next;
+                              });
+                            }}
+                            aria-label="Toggle schedule range"
+                            style={{
+                              minHeight: 32,
+                              width: 74,
+                              borderRadius: 8,
+                              padding: "4px 0",
+                              fontSize: 10,
+                              fontWeight: 800,
+                            }}
+                          />
+                        </div>
+                      </div>
+                      <div
+                        ref={rightScrollRef}
+                        style={{
+                          height: scheduleTimelineMaxHeight,
+                          minHeight: 0,
+                          overflow: "hidden",
+                          boxSizing: "border-box",
+                        }}
+                      >
+                        <WeeklyTimeline
+                          weekDays={visibleTimelineDays}
+                          hours={visibleTimelineHours}
+                          bookings={focusedCoachScheduleBookings}
+                          slideStyle={slideStyle as MotionStyle}
+                          isLoading={appointmentsLoading}
+                          colors={colors}
+                          flush
+                          height={Math.max(320, scheduleTimelineMaxHeight)}
+                          allowDrag={false}
+                          onBlockClick={handleBlockClick}
                         />
                       </div>
                     </div>
-                    <div
-                      ref={rightScrollRef}
-                      style={{
-                        height: scheduleTimelineMaxHeight,
-                        minHeight: 0,
-                        overflow: "hidden",
-                        boxSizing: "border-box",
-                      }}
-                    >
-                      <WeeklyTimeline
-                        weekDays={visibleTimelineDays}
-                        hours={visibleTimelineHours}
-                        bookings={focusedCoachScheduleBookings}
-                        slideStyle={slideStyle as MotionStyle}
-                        isLoading={appointmentsLoading}
-                        colors={colors}
-                        flush
-                        height={Math.max(320, scheduleTimelineMaxHeight)}
-                        allowDrag={false}
-                        onBlockClick={handleBlockClick}
-                      />
-                    </div>
-                  </div>
                   </div>
                   {isCoach ? (
                     <section
@@ -848,7 +850,8 @@ function GymOperationsPageBody() {
                           excludeGlobalScale
                           style={{ color: colors.textMuted, fontSize: 11.5 }}
                         >
-                          Venue and coach fees stay separate. Only confirmed paid work appears here.
+                          Venue and coach fees stay separate. Only confirmed
+                          paid work appears here.
                         </FitText>
                       </div>
                       {coachVenueWorkLoading ? (
@@ -1132,7 +1135,10 @@ function GymOperationsPageBody() {
                       flexWrap: "wrap",
                     }}
                   >
-                    <OperationsControlField label="Member Search" minWidth={210}>
+                    <OperationsControlField
+                      label="Member Search"
+                      minWidth={210}
+                    >
                       <label
                         style={{
                           alignItems: "center",
@@ -1144,7 +1150,11 @@ function GymOperationsPageBody() {
                           padding: "0 9px",
                         }}
                       >
-                        <Search aria-hidden color={colors.textMuted} size={13} />
+                        <Search
+                          aria-hidden
+                          color={colors.textMuted}
+                          size={13}
+                        />
                         <input
                           aria-label="Search appointment members"
                           onChange={(event) =>
@@ -1828,20 +1838,11 @@ function GymOperationsPageBody() {
           onSelect={handleVenueEndDateSelect}
           onClose={() => setVenueEndCalendarOpen(false)}
         />
-        <StaffRecurringCashEnrollmentModal
-          coachOptions={coachOptions}
-          isOpen={canManageGymOperations && cashEnrollmentOpen}
-          memberOptions={memberOptions}
-          onClose={() => setCashEnrollmentOpen(false)}
-        />
         <GymOperationsCoachAppointmentModal
           appointment={appointmentReviewTarget}
           coachReadiness={appointmentReviewReadiness}
           isOpen={!!appointmentReviewTarget}
-          isSubmitting={
-            completeAppointmentPending ||
-            cancelAppointmentPending
-          }
+          isSubmitting={completeAppointmentPending || cancelAppointmentPending}
           onClose={() => setAppointmentReviewTarget(null)}
           onComplete={(payload) => {
             if (!appointmentReviewTarget) return;
@@ -1882,7 +1883,7 @@ function GymOperationsPageBody() {
           isOpen={canManageGymOperations && createVenueBookingOpen}
           isSubmitting={createVenueBookingMutation.isPending}
           onClose={() => setCreateVenueBookingOpen(false)}
-          onCreate={(payload) => void handleCreateVenueBooking(payload)}
+          onCreate={handleCreateVenueBooking}
           onRetryVenues={() => {
             void refetchVenues();
           }}
@@ -1894,9 +1895,12 @@ function GymOperationsPageBody() {
         />
         <GymOperationsCreateCoachBookingModal
           isOpen={canManageGymOperations && createCoachBookingOpen}
-          isSubmitting={createCoachBookingMutation.isPending}
+          isSubmitting={
+            createCoachBookingMutation.isPending ||
+            createRecurringCashEnrollmentMutation.isPending
+          }
           onClose={() => setCreateCoachBookingOpen(false)}
-          onCreate={(payload) => void handleCreateCoachBooking(payload)}
+          onCreate={handleCreateCoachBooking}
           memberOptions={memberOptions}
           coachOptions={coachOptions}
         />
@@ -1938,11 +1942,18 @@ function GymOperationsPageBody() {
           booking={venueReviewTarget}
           isOpen={!!venueReviewTarget}
           isCoachView={isCoach}
-          isSubmitting={scheduleLoading}
+          isSubmitting={
+            scheduleLoading ||
+            rescheduleVenueBookingMutation.isPending ||
+            cancelVenueBookingForMaintenanceMutation.isPending
+          }
           onClose={() => setVenueReviewTarget(null)}
           onCancel={(note) => void handleCancelVenueBooking(note)}
           onComplete={() => void handleCompleteVenueBooking()}
           onNoShow={() => void handleNoShowVenueBooking()}
+          onRescheduleMaintenance={handleRescheduleVenueBookingForMaintenance}
+          onCancelMaintenance={handleCancelVenueBookingForMaintenance}
+          venueOptions={bookableVenueOptions}
           onVenueDetails={() => {
             window.location.assign("/facilities");
           }}

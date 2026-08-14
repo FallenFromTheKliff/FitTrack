@@ -25,7 +25,7 @@ import {
   updateInventoryEquipmentMutationOptions,
   updateVenueMutationOptions,
   uploadImageMutationOptions,
-  venuesQueryOptions
+  operationalVenuesQueryOptions
 } from "@fittrack/query";
 import {
   buildVenueEquipmentAssignmentsFromRecords,
@@ -438,7 +438,7 @@ export function useVenueMutations() {
   const queryClient = useQueryClient();
   const { message, showMessage } = useTimedMessage(2200);
 
-  const venuesQuery = useQuery(venuesQueryOptions(webApiClient));
+  const venuesQuery = useQuery(operationalVenuesQueryOptions(webApiClient));
   const { data: venues = [], isLoading: venuesLoading } = venuesQuery;
   const archivedVenuesQuery = useQuery(archivedVenuesQueryOptions(webApiClient));
   const {
@@ -815,7 +815,9 @@ export function useFloorLayout() {
   const [gridSize, setGridSize] = useState("40");
   const [deleteTarget, setDeleteTarget] = useState<{ venueMapId: string; equipmentId: string } | null>(null);
   const { message, showMessage } = useTimedMessage(2200);
-  const { data: venues = [] } = useQuery(venuesQueryOptions(webApiClient));
+  const { data: venues = [] } = useQuery(
+    operationalVenuesQueryOptions(webApiClient),
+  );
   const { data: liveEquipment = [] } = useQuery(gymLayoutEquipmentQueryOptions(webApiClient));
   const { data: floorPlanMedia = [] } = useQuery(gymLayoutFloorPlanMediaQueryOptions(webApiClient));
   const archivedEquipmentQuery = useQuery(

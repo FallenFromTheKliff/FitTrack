@@ -11,14 +11,41 @@ const PAYMONGO_CURRENCY = 'PHP';
 interface PaymongoCheckoutSessionResponse {
   data?: {
     id?: string;
+    type?: string;
     attributes?: {
       checkout_url?: string;
+      line_items?: Array<{
+        amount?: number;
+        currency?: string;
+        quantity?: number;
+      }>;
+      metadata?: Record<string, unknown> | null;
+      paid_at?: number | null;
+      payment_method_used?: string | null;
+      payments?: Array<{
+        id?: string;
+        type?: string;
+        attributes?: {
+          amount?: number;
+          currency?: string;
+          paid_at?: number | null;
+          status?: string;
+        };
+      }>;
       reference_number?: string;
       status?: string;
       payment_method_types?: string[];
     };
   };
 }
+
+export type PaymongoRetrievedCheckoutSession = {
+  attributes: NonNullable<
+    NonNullable<PaymongoCheckoutSessionResponse['data']>['attributes']
+  >;
+  id: string;
+  type: string;
+};
 
 export interface CreatePaymongoCheckoutInput {
   amount: number;
@@ -125,6 +152,82 @@ export class PaymongoCheckoutService {
           settings.paymentMethodTypes,
         reference_number: payload.data?.attributes?.reference_number ?? null,
       },
+    };
+  }
+
+  async retrieveCheckoutSession(
+    providerRef: string,
+  ): Promise<PaymongoRetrievedCheckoutSession> {
+    const settings = this.getRequiredSettings();
+    const normalizedProviderRef = providerRef.trim();
+    const endpoint = `${settings.apiBaseUrl.replace(/\/+$/, '')}/checkout_sessions/${encodeURIComponent(normalizedProviderRef)}`;
+
+    let response: Response;
+    try {
+      response = await fetch(endpoint, {
+        method: 'GET',
+        headers: {
+          accept: 'application/json',
+          authorization: this.buildAuthorizationHeader(settings.secretKey),
+        },
+      });
+    } catch {
+      throw new HttpException(
+        {
+          type: 'BAD_GATEWAY',
+          title: 'Checkout Verification Unavailable',
+          status: 502,
+          detail: 'FitTrack could not verify the PayMongo checkout right now.',
+        },
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+
+    if (!response.ok) {
+      throw new HttpException(
+        {
+          type: 'BAD_GATEWAY',
+          title: 'Checkout Verification Unavailable',
+          status: 502,
+          detail: 'PayMongo could not verify this checkout right now.',
+        },
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+
+    let payload: PaymongoCheckoutSessionResponse;
+    try {
+      payload = (await response.json()) as PaymongoCheckoutSessionResponse;
+    } catch {
+      throw new HttpException(
+        {
+          type: 'BAD_GATEWAY',
+          title: 'Invalid Checkout Verification Response',
+          status: 502,
+          detail:
+            'PayMongo returned an invalid checkout verification response.',
+        },
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+
+    const id = payload.data?.id;
+    if (!id || !payload.data?.attributes) {
+      throw new HttpException(
+        {
+          type: 'BAD_GATEWAY',
+          title: 'Invalid Checkout Verification Response',
+          status: 502,
+          detail: 'PayMongo returned incomplete checkout verification details.',
+        },
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+
+    return {
+      attributes: payload.data.attributes,
+      id,
+      type: payload.data.type ?? 'checkout_session',
     };
   }
 

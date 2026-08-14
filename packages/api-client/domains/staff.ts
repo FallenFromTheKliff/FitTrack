@@ -12,6 +12,7 @@ import {
 import {
   mapAmenityBookingToVenueBookingRecord,
   mapBookingCheckoutResponse,
+  type AmenityBookingApiRecord,
   type BookingCheckoutApiResponse,
   toVenueBookingListParams,
   type VenueBookingListParams,
@@ -112,6 +113,17 @@ export type CreateStaffVenueBookingPayload = {
   startsAt: string;
 };
 
+export type RescheduleStaffVenueBookingPayload = {
+  amenityId: string;
+  endsAt: string;
+  note?: string;
+  startsAt: string;
+};
+
+export type CancelStaffVenueBookingForMaintenancePayload = {
+  note?: string;
+};
+
 export type CreateStaffCoachBookingPayload = {
   coachId: string;
   durationMinutes: number;
@@ -141,7 +153,10 @@ export type CreateStaffCoachPayload = {
 };
 
 function createIdempotencyKey() {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
     return crypto.randomUUID();
   }
 
@@ -632,6 +647,31 @@ export function createStaffApi(transport: ApiTransport) {
         "Unable to cancel booking.",
       );
     },
+    rescheduleBookingForMaintenance(
+      bookingId: string,
+      payload: RescheduleStaffVenueBookingPayload,
+    ) {
+      return unwrapResponse<AmenityBookingApiRecord>(
+        transport.patch(`/staff/bookings/${bookingId}/reschedule-maintenance`, {
+          amenity_id: payload.amenityId,
+          ends_at: payload.endsAt,
+          ...(payload.note ? { note: payload.note } : {}),
+          starts_at: payload.startsAt,
+        }),
+        "Unable to reschedule this maintenance-affected booking.",
+      ).then(mapAmenityBookingToVenueBookingRecord);
+    },
+    cancelBookingForMaintenance(
+      bookingId: string,
+      payload: CancelStaffVenueBookingForMaintenancePayload = {},
+    ) {
+      return unwrapResponse<AmenityBookingApiRecord>(
+        transport.patch(`/staff/bookings/${bookingId}/cancel-maintenance`, {
+          ...(payload.note ? { note: payload.note } : {}),
+        }),
+        "Unable to cancel this maintenance-affected booking.",
+      ).then(mapAmenityBookingToVenueBookingRecord);
+    },
     noShowBooking(bookingId: string) {
       return unwrapVoidResponse(
         transport.patch(`/staff/bookings/${bookingId}/no-show`, {}),
@@ -653,7 +693,8 @@ export function createStaffApi(transport: ApiTransport) {
           },
           {
             headers: {
-              "Idempotency-Key": payload.idempotencyKey ?? createIdempotencyKey(),
+              "Idempotency-Key":
+                payload.idempotencyKey ?? createIdempotencyKey(),
             },
           },
         ),
@@ -704,13 +745,16 @@ export function createStaffApi(transport: ApiTransport) {
             coach_id: payload.coachId,
             duration_minutes: payload.durationMinutes,
             member_id: payload.memberId,
-            ...(payload.memberNotes ? { member_notes: payload.memberNotes } : {}),
+            ...(payload.memberNotes
+              ? { member_notes: payload.memberNotes }
+              : {}),
             payment_stage: payload.paymentStage ?? "full",
             scheduled_at: payload.scheduledAt,
           },
           {
             headers: {
-              "Idempotency-Key": payload.idempotencyKey ?? createIdempotencyKey(),
+              "Idempotency-Key":
+                payload.idempotencyKey ?? createIdempotencyKey(),
             },
           },
         ),

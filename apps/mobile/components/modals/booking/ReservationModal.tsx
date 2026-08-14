@@ -27,6 +27,7 @@ import {
   isPaymongoCheckoutEnabled,
 } from "@fittrack/app-config";
 import {
+  isVenueBookable,
   resolveAmenityId,
   type BookingCheckoutResponse,
   CoachAvailabilityResponse,
@@ -84,26 +85,6 @@ type ReservationConfirmationState = {
 const MEMBER_OVERLAP_STATUSES = new Set([
   "confirmed",
 ]);
-function isDeterministicVenueId(value: string | number) {
-  return resolveAmenityId(value)?.split("-")[2]?.startsWith("5") ?? false;
-}
-
-function shouldPreferVenue(
-  current: VenueRecord,
-  candidate: VenueRecord,
-) {
-  const currentIsDeterministic = isDeterministicVenueId(current.id);
-  const candidateIsDeterministic = isDeterministicVenueId(candidate.id);
-  if (candidateIsDeterministic !== currentIsDeterministic) {
-    return candidateIsDeterministic;
-  }
-
-  const currentOrder = current.displayOrder ?? Number.MAX_SAFE_INTEGER;
-  const candidateOrder = candidate.displayOrder ?? Number.MAX_SAFE_INTEGER;
-  if (candidateOrder !== currentOrder) return candidateOrder < currentOrder;
-  return String(candidate.id).localeCompare(String(current.id)) < 0;
-}
-
 function timeToMinutes(value: string) {
   const match = value.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
   if (!match) return 0;
@@ -418,6 +399,8 @@ export default function ReservationModal({
   const [timeTarget, setTimeTarget] = useState<"start" | "end">("start");
   const isSubmitting = createBookingMutation.isPending;
   const [apiError, setApiError] = useState("");
+  const [reviewAttempted, setReviewAttempted] = useState(false);
+  const [venueFieldError, setVenueFieldError] = useState("");
   const resetFormRef = useRef<() => void>(() => undefined);
   const checkoutReturn = useCommerceCheckoutReturn({
     onSucceeded: async () => {
@@ -465,27 +448,13 @@ export default function ReservationModal({
 
   const bookableVenues = useMemo(
     () => {
-      const canonicalVenues = new Map<string, VenueRecord>();
-
-      venues.forEach((venue) => {
-        const amenityId = resolveAmenityId(venue.id);
-        if (
-          !amenityId ||
-          venue.isActive === false ||
-          venue.isReservable === false
-        ) {
-          return;
-        }
-
-        const candidate = { ...venue, id: amenityId };
-        const key = venue.name.trim().toLowerCase();
-        const current = canonicalVenues.get(key);
-        if (!current || shouldPreferVenue(current, candidate)) {
-          canonicalVenues.set(key, candidate);
-        }
-      });
-
-      return Array.from(canonicalVenues.values())
+      return venues
+        .flatMap((venue) => {
+          const amenityId = resolveAmenityId(venue.id);
+          return amenityId && isVenueBookable(venue)
+            ? [{ ...venue, id: amenityId }]
+            : [];
+        })
         .sort(
           (left, right) =>
             (left.displayOrder ?? Number.MAX_SAFE_INTEGER) -
@@ -986,6 +955,8 @@ export default function ReservationModal({
     setIsCalOpen(false);
     setIsTimeOpen(false);
     setApiError("");
+    setReviewAttempted(false);
+    setVenueFieldError("");
     setSuccessNotice(null);
     setReservationConfirmation(null);
   };
@@ -1066,15 +1037,21 @@ export default function ReservationModal({
     } catch (err: unknown) {
       attemptIdempotencyKeyRef.current = null;
       setReservationConfirmation(null);
-      setApiError(
+      const message =
         err instanceof Error
           ? err.message
-          : "Reservation failed. Please try again.",
-      );
+          : "Reservation failed. Please try again.";
+      if (/amenity|venue|maintenance|reservable/i.test(message)) {
+        setVenueFieldError(message);
+        setApiError("");
+      } else {
+        setApiError(message);
+      }
     }
   };
 
   const handleConfirm = () => {
+    setReviewAttempted(true);
     if (!canConfirm || !selectedBookableVenue) return;
 
     const venueName = selectedVenuePresentation?.name ?? "your venue";
@@ -1232,8 +1209,8 @@ export default function ReservationModal({
                   </FitText>
                 </Pressable>
               </View>
-              {startTime === "" || endTime === "" ? (
-                <FitText style={s.validationHint}>
+              {reviewAttempted && (startTime === "" || endTime === "") ? (
+                <FitText accessibilityRole="alert" style={s.unavailableText}>
                   Start and end time are required
                 </FitText>
               ) : null}
@@ -1287,14 +1264,19 @@ export default function ReservationModal({
                     : "Search and select a venue"}
                 </FitText>
               </Pressable>
+              {venueFieldError ? (
+                <FitText accessibilityRole="alert" style={s.unavailableText}>
+                  {venueFieldError}
+                </FitText>
+              ) : null}
               {venuesLoading ? (
                 <FitText style={s.validationHint}>Loading available venues...</FitText>
               ) : venuesError ? (
                 <FitText style={s.unavailableText}>Unable to load available venues. Open the picker to retry.</FitText>
               ) : bookableVenues.length === 0 ? (
                 <FitText style={s.validationHint}>No reservable venues are available.</FitText>
-              ) : !selectedBookableVenue ? (
-                <FitText style={s.validationHint}>A venue is required before choosing a live time.</FitText>
+              ) : reviewAttempted && !selectedBookableVenue ? (
+                <FitText accessibilityRole="alert" style={s.unavailableText}>A venue is required before choosing a live time.</FitText>
               ) : null}
               <View style={s.notesSectionHeader}>
                 <FitText
@@ -1485,7 +1467,7 @@ export default function ReservationModal({
                 label={isSubmitting ? reservingText : confirmButtonLabel}
                 variant="primary"
                 onPress={handleConfirm}
-                disabled={!canConfirm || isSubmitting}
+                disabled={isSubmitting}
                 loading={isSubmitting}
                 flex={2}
               />
@@ -1549,6 +1531,7 @@ export default function ReservationModal({
           setEndTime("");
           setSelectedCoachId(null);
           setApiError("");
+          setVenueFieldError("");
           setIsVenuePickerOpen(false);
         }}
         onClose={() => setIsVenuePickerOpen(false)}

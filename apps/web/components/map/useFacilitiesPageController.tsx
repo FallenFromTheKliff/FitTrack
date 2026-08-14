@@ -177,10 +177,18 @@ export function useFacilitiesPageController() {
     "all" | "venues" | "equipment"
   >("all");
 
-  const { data: activeBookings = [] } = useQuery({
+  const {
+    data: activeBookings = [],
+    error: activeBookingsError,
+    isLoading: activeBookingsLoading,
+  } = useQuery({
     ...adminBookingsQueryOptions<VenueBookingRecord>(webApiClient),
     select: (bookings) =>
-      bookings.filter((booking) => booking.status === "confirmed"),
+      bookings.filter(
+        (booking) =>
+          booking.status === "confirmed" ||
+          booking.status === "balance_pending",
+      ),
   });
 
   const [rawViewportMode, setRawViewportMode] = useState({
@@ -386,11 +394,16 @@ export function useFacilitiesPageController() {
     const liveVenueKey = String(targetVenue.sourceVenueId ?? targetVenue.id);
     const equipmentOutsideNextBounds = liveEquipment.some((item) => {
       const belongsToVenue =
-        item.venueId === liveVenueKey || isEquipmentInsideVenue(item, targetVenue);
+        item.venueId === liveVenueKey ||
+        isEquipmentInsideVenue(item, targetVenue);
       if (!belongsToVenue) return false;
       const placement = resolveEquipmentGridPlacement(item);
       return !isEquipmentInsideVenue(
-        { ...item, gridColumn: placement.gridColumn, gridRow: placement.gridRow },
+        {
+          ...item,
+          gridColumn: placement.gridColumn,
+          gridRow: placement.gridRow,
+        },
         nextVenueBounds,
       );
     });
@@ -450,7 +463,8 @@ export function useFacilitiesPageController() {
 
     setSelectedFloorVenue(null);
     showVenueMessage(
-      liveVenue.name + " removed from the map. Its venue record remains available.",
+      liveVenue.name +
+        " removed from the map. Its venue record remains available.",
     );
     return true;
   };
@@ -625,6 +639,8 @@ export function useFacilitiesPageController() {
     venuesError,
     refetchVenues,
     activeBookings,
+    activeBookingsError,
+    activeBookingsLoading,
     venuesLoading,
     viewSlideStyle,
     setVenueDeleteTarget,

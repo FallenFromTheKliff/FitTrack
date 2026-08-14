@@ -25,6 +25,10 @@ import {
   BOOKING_CONFIRMED_EVENT,
   type BookingConfirmedEvent,
 } from './events/booking-confirmed.event';
+import {
+  BOOKING_RESCHEDULED_EVENT,
+  type BookingRescheduledEvent,
+} from './events/booking-rescheduled.event';
 
 type BookingNotificationTarget = Awaited<
   ReturnType<BookingRepository['findBookingNotificationContextByIdOrThrow']>
@@ -87,6 +91,32 @@ export class BookingLifecycleService implements OnModuleInit {
         email: {
           subject: `Booking cancelled for ${booking.amenity.name}`,
           html: this.buildBookingCancelledHtml(booking),
+        },
+      },
+    );
+  }
+
+  @OnEvent(BOOKING_RESCHEDULED_EVENT, { async: true })
+  async handleBookingRescheduled(
+    event: BookingRescheduledEvent,
+  ): Promise<void> {
+    await this.replaceScheduledLifecycleJobs(
+      event.bookingId,
+      new Date(event.startsAt),
+    );
+    const booking = await this.repo.findBookingNotificationContextByIdOrThrow(
+      event.bookingId,
+    );
+    await this.notificationsService.dispatch(
+      booking.user.id,
+      NotificationType.system,
+      {
+        title: 'Venue booking rescheduled',
+        body: `Your booking is now at ${booking.amenity.name}. ${this.buildBookingWindowLabel(booking)}`,
+        data: this.buildBookingNotificationData(booking),
+        email: {
+          subject: `Venue booking rescheduled to ${booking.amenity.name}`,
+          html: `<p>Your FitTrack venue booking has been moved to <strong>${booking.amenity.name}</strong>.</p><p>${this.buildBookingWindowLabel(booking)}</p><p>Your recorded payment is unchanged.</p>`,
         },
       },
     );
@@ -259,6 +289,23 @@ export class BookingLifecycleService implements OnModuleInit {
     );
   }
 
+  private async replaceScheduledLifecycleJobs(
+    bookingId: string,
+    startsAt: Date,
+  ): Promise<void> {
+    const existingJobs = await Promise.all([
+      this.lifecycleQueue.getJob(`${BOOKING_REMINDER_JOB}:${bookingId}`),
+      this.lifecycleQueue.getJob(`${BOOKING_NO_SHOW_JOB}:${bookingId}`),
+    ]);
+    await Promise.all(
+      existingJobs
+        .filter((job): job is NonNullable<typeof job> => Boolean(job))
+        .map((job) => job.remove()),
+    );
+    await this.queueBookingReminder(bookingId, startsAt);
+    await this.queueNoShowCheck(bookingId, startsAt);
+  }
+
   private buildBookingConfirmedHtml(
     booking: BookingNotificationTarget,
   ): string {
@@ -337,9 +384,7 @@ export class BookingLifecycleService implements OnModuleInit {
     return `Your ${booking.amenity.name} booking is confirmed. ${this.buildBookingWindowLabel(booking)}`;
   }
 
-  private buildBookingReminderBody(
-    booking: BookingNotificationTarget,
-  ): string {
+  private buildBookingReminderBody(booking: BookingNotificationTarget): string {
     return `Reminder: your ${booking.amenity.name} booking starts in about 24 hours. ${this.buildBookingWindowLabel(booking)}`;
   }
 

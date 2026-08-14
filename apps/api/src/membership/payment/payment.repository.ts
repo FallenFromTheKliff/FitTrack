@@ -1,4 +1,9 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   AppointmentStatus,
   BookingStatus,
@@ -29,6 +34,7 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { CoachAvailabilityService } from '../../coaching/availability/coach-availability.service';
 import { lockAndAssertVenueCoachWindow } from '../../coaching/commerce/venue-coach-scheduling';
+import { getAmenityBookingBlockReason } from '../../bookings/amenity/amenity-reservability';
 import { PaymentFilterDTO, PaymentHistoryDTO } from './dto/payment.dto';
 
 type PaymentWithRelations = Prisma.PaymentGetPayload<{
@@ -90,6 +96,11 @@ export type PaymongoCommerceCheckoutFailureInput = {
   rejectionReason: string;
 };
 
+export type CommerceCheckoutReconciliationContext = {
+  hold: CommerceCheckoutHold;
+  payment: Payment;
+};
+
 @Injectable()
 export class PaymentRepository extends BaseRepository {
   constructor(prisma: PrismaService) {
@@ -100,6 +111,47 @@ export class PaymentRepository extends BaseRepository {
     user: { include: { profile: true } },
     verifier: { include: { profile: true } },
   } as const;
+
+  async findCommerceCheckoutForReconciliationOrThrow(
+    holdId: string,
+    requesterId: string,
+  ): Promise<CommerceCheckoutReconciliationContext> {
+    const hold = await this.prisma.commerceCheckoutHold.findUnique({
+      where: { id: holdId },
+      include: { payment: true },
+    });
+
+    if (!hold) {
+      throw new NotFoundException({
+        type: 'NOT_FOUND',
+        title: 'Checkout Hold Not Found',
+        status: 404,
+        detail: `Checkout hold with id "${holdId}" does not exist.`,
+      });
+    }
+
+    if (hold.user_id !== requesterId) {
+      throw new ForbiddenException({
+        type: 'FORBIDDEN',
+        title: 'Forbidden',
+        status: 403,
+        detail: 'You can only reconcile your own checkout.',
+      });
+    }
+
+    if (
+      !hold.payment ||
+      hold.payment_id !== hold.payment.id ||
+      hold.payment.payable_type !== PayableType.commerce_checkout_hold ||
+      hold.payment.payable_id !== hold.id ||
+      hold.payment.provider !== PaymentProvider.paymongo ||
+      hold.payment.user_id !== hold.user_id
+    ) {
+      throw this.invalidCheckoutHold(hold.id, 'a valid PayMongo payment link');
+    }
+
+    return { hold, payment: hold.payment };
+  }
 
   getMyPayments(
     userId: string,
@@ -673,7 +725,8 @@ export class PaymentRepository extends BaseRepository {
           type: 'CONFLICT',
           title: 'Recurring Coaching Enrollment Already Exists',
           status: 409,
-          detail: 'This member already has an active enrollment with this coach.',
+          detail:
+            'This member already has an active enrollment with this coach.',
         });
       }
 
@@ -685,8 +738,7 @@ export class PaymentRepository extends BaseRepository {
           frequency: RecurringCoachingFrequency.monthly,
           member: { connect: { id: hold.user_id } },
           preferred_days: hold.preferred_days,
-          preferred_time:
-            hold.preferred_time ?? new Date(Date.UTC(1970, 0, 1)),
+          preferred_time: hold.preferred_time ?? new Date(Date.UTC(1970, 0, 1)),
           quoted_amount: payment.amount,
           start_date: hold.start_date,
           status: RecurringCoachingPlanStatus.active,
@@ -723,12 +775,16 @@ export class PaymentRepository extends BaseRepository {
           },
         },
       });
-      if (relationship?.status === RelationshipStatus.active || relationship?.status === RelationshipStatus.paused) {
+      if (
+        relationship?.status === RelationshipStatus.active ||
+        relationship?.status === RelationshipStatus.paused
+      ) {
         throw new ConflictException({
           type: 'CONFLICT',
           title: 'Coach-Client Relationship Already Active',
           status: 409,
-          detail: 'This member already has an active relationship with this coach.',
+          detail:
+            'This member already has an active relationship with this coach.',
         });
       }
       if (relationship) {
@@ -769,13 +825,20 @@ export class PaymentRepository extends BaseRepository {
       }
       const lockKey = `${hold.amenity_id}:${CoachAvailabilityService.toGymDateKey(hold.scheduled_at)}`;
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 2))`;
-      await this.assertVenueCapacityWithClient(tx, hold.amenity_id, hold.scheduled_at, hold.ends_at);
+      await this.assertVenueCapacityWithClient(
+        tx,
+        hold.amenity_id,
+        hold.scheduled_at,
+        hold.ends_at,
+      );
       const booking = await tx.amenityBooking.create({
         data: {
           amenity: { connect: { id: hold.amenity_id } },
           balance_amount: new Prisma.Decimal(0),
           balance_paid_at: paidAt,
-          ...(hold.coach_id ? { coach: { connect: { id: hold.coach_id } } } : {}),
+          ...(hold.coach_id
+            ? { coach: { connect: { id: hold.coach_id } } }
+            : {}),
           downpayment_amount: new Prisma.Decimal(0),
           downpayment_paid_at: paidAt,
           ends_at: hold.ends_at,
@@ -797,7 +860,9 @@ export class PaymentRepository extends BaseRepository {
       const active = await tx.subscription.findFirst({
         where: {
           user_id: hold.user_id,
-          status: { in: [SubscriptionStatus.active, SubscriptionStatus.past_due] },
+          status: {
+            in: [SubscriptionStatus.active, SubscriptionStatus.past_due],
+          },
         },
         select: { id: true },
       });
@@ -812,7 +877,10 @@ export class PaymentRepository extends BaseRepository {
       // Legacy pending product rows are retained for reconciliation but cannot
       // remain a second live membership when a new full payment succeeds.
       await tx.subscription.updateMany({
-        where: { user_id: hold.user_id, status: SubscriptionStatus.pending_payment },
+        where: {
+          user_id: hold.user_id,
+          status: SubscriptionStatus.pending_payment,
+        },
         data: { status: SubscriptionStatus.cancelled },
       });
       const plan = await tx.membershipPlan.findUniqueOrThrow({
@@ -878,12 +946,19 @@ export class PaymentRepository extends BaseRepository {
         where: { id: hold.user_id },
         select: { id: true, qr_code_token: true, status: true },
       });
-      if (owner && (owner.status === UserStatus.pending || !owner.qr_code_token)) {
+      if (
+        owner &&
+        (owner.status === UserStatus.pending || !owner.qr_code_token)
+      ) {
         await tx.user.update({
           where: { id: owner.id },
           data: {
-            ...(owner.status === UserStatus.pending ? { status: UserStatus.active } : {}),
-            ...(!owner.qr_code_token ? { qr_code_token: randomBytes(32).toString('hex') } : {}),
+            ...(owner.status === UserStatus.pending
+              ? { status: UserStatus.active }
+              : {}),
+            ...(!owner.qr_code_token
+              ? { qr_code_token: randomBytes(32).toString('hex') }
+              : {}),
           },
         });
       }
@@ -901,14 +976,29 @@ export class PaymentRepository extends BaseRepository {
   ): Promise<void> {
     const amenity = await tx.amenity.findUnique({
       where: { id: amenityId },
-      select: { capacity: true, is_reservable: true },
+      select: {
+        capacity: true,
+        is_active: true,
+        is_mapped: true,
+        is_reservable: true,
+        status: true,
+      },
     });
-    if (!amenity || amenity.is_reservable === false) {
+    if (!amenity) {
       throw new ConflictException({
         type: 'CONFLICT',
         title: 'Venue Not Reservable',
         status: 409,
-        detail: 'The requested venue is not available for booking.',
+        detail: 'The requested venue no longer exists.',
+      });
+    }
+    const blockReason = getAmenityBookingBlockReason(amenity);
+    if (blockReason) {
+      throw new ConflictException({
+        type: 'CONFLICT',
+        title: 'Venue Not Reservable',
+        status: 409,
+        detail: blockReason,
       });
     }
     const [bookingCount, holdCount] = await Promise.all([

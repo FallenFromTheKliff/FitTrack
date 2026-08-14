@@ -335,7 +335,12 @@ export function updateFitnessPlanMutationOptions(
       userId?: string;
     }) => client.fitness.updatePlan(planId, input),
     onSuccess: async (_data, variables) => {
-      await invalidateFitnessQueries(queryClient, variables.userId);
+      await Promise.all([
+        invalidateFitnessQueries(queryClient, variables.userId),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.fitnessPlanDetail(variables.planId),
+        }),
+      ]);
     },
   });
 }

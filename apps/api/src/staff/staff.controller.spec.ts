@@ -60,10 +60,25 @@ describe('StaffController', () => {
   });
 
   it('loads coaches through the staff service', async () => {
-    staffService.getAllCoaches.mockResolvedValue([{ id: 'coach-1' }]);
+    staffService.getAllCoaches.mockResolvedValue([
+      {
+        id: 'coach-1',
+        monthlyOfferActive: true,
+        monthlyOfferDescription: 'Four focused sessions.',
+        monthlyRate: 4800,
+        monthlySessionCount: 4,
+        monthlySessionDurationMinutes: 60,
+      },
+    ]);
 
     await expect(controller.getAllCoaches()).resolves.toEqual([
-      { id: 'coach-1' },
+      expect.objectContaining({
+        id: 'coach-1',
+        monthlyOfferActive: true,
+        monthlyRate: 4800,
+        monthlySessionCount: 4,
+        monthlySessionDurationMinutes: 60,
+      }),
     ]);
     expect(staffService.getAllCoaches).toHaveBeenCalledTimes(1);
   });

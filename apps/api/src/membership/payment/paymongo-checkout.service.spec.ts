@@ -154,9 +154,14 @@ describe('PaymongoCheckoutService', () => {
       successQuery: { flow: 'membership-card', portal: 'member' },
     });
 
-    const requestBody = JSON.parse(
-      String((fetchMock.mock.calls[0] ?? [])[1]?.body ?? '{}'),
-    ) as {
+    const createRequest = fetchMock.mock.calls.at(0) as
+      | [RequestInfo | URL, RequestInit?]
+      | undefined;
+    const createBody = createRequest?.[1]?.body;
+    if (typeof createBody !== 'string') {
+      throw new Error('Expected the checkout request body to be JSON text.');
+    }
+    const requestBody = JSON.parse(createBody) as {
       data: {
         attributes: {
           cancel_url: string;
@@ -171,5 +176,103 @@ describe('PaymongoCheckoutService', () => {
     expect(requestBody.data.attributes.cancel_url).toBe(
       'https://fittrack.test/payments/cancel?flow=membership-card&portal=member',
     );
+  });
+
+  it('retrieves the exact checkout session using server-side PayMongo authorization', async () => {
+    const configValues: Record<string, string> = {
+      'paymongo.secretKey': 'sk_test_123',
+      'paymongo.apiBaseUrl': 'https://api.paymongo.com/v1',
+      'paymongo.successUrl': 'https://fittrack.test/payments/success',
+      'paymongo.cancelUrl': 'https://fittrack.test/payments/cancel',
+      'paymongo.paymentMethodTypes': 'card',
+    };
+    const config: Pick<ConfigService, 'get'> = {
+      get: jest.fn(
+        (key: string, fallback = '') => configValues[key] ?? fallback,
+      ),
+    };
+    const fetchMock = jest.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: {
+            id: 'cs_test_paid',
+            type: 'checkout_session',
+            attributes: {
+              metadata: { hold_id: 'hold-1', payment_id: 'payment-1' },
+              payments: [
+                {
+                  id: 'pay_test_paid',
+                  type: 'payment',
+                  attributes: {
+                    amount: 7500,
+                    currency: 'PHP',
+                    paid_at: 1786676400,
+                    status: 'paid',
+                  },
+                },
+              ],
+              status: 'paid',
+            },
+          },
+        }),
+        { status: 200 },
+      ),
+    );
+    global.fetch = fetchMock;
+
+    const service = new PaymongoCheckoutService(config as ConfigService);
+    await expect(
+      service.retrieveCheckoutSession('cs_test_paid'),
+    ).resolves.toMatchObject({ id: 'cs_test_paid', type: 'checkout_session' });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.paymongo.com/v1/checkout_sessions/cs_test_paid',
+      expect.objectContaining({ method: 'GET' }),
+    );
+    const retrieveRequest = fetchMock.mock.calls.at(0) as
+      | [RequestInfo | URL, RequestInit?]
+      | undefined;
+    const requestHeaders = retrieveRequest?.[1]?.headers as
+      | Record<string, string>
+      | undefined;
+    expect(requestHeaders?.authorization).toContain('Basic ');
+  });
+
+  it('redacts PayMongo provider errors from checkout verification failures', async () => {
+    const configValues: Record<string, string> = {
+      'paymongo.secretKey': 'sk_test_123',
+      'paymongo.apiBaseUrl': 'https://api.paymongo.com/v1',
+      'paymongo.successUrl': 'https://fittrack.test/payments/success',
+      'paymongo.cancelUrl': 'https://fittrack.test/payments/cancel',
+      'paymongo.paymentMethodTypes': 'card',
+    };
+    const config: Pick<ConfigService, 'get'> = {
+      get: jest.fn(
+        (key: string, fallback = '') => configValues[key] ?? fallback,
+      ),
+    };
+    global.fetch = jest.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          errors: [
+            {
+              detail: 'provider-internal-secret-detail',
+              source: { pointer: '/private/provider/path' },
+            },
+          ],
+        }),
+        { status: 500 },
+      ),
+    );
+
+    const service = new PaymongoCheckoutService(config as ConfigService);
+    const error = await service
+      .retrieveCheckoutSession('cs_test_paid')
+      .catch((caught: unknown) => caught);
+    const serialized = JSON.stringify(error);
+
+    expect(error).toMatchObject({ status: 502 });
+    expect(serialized).not.toContain('provider-internal-secret-detail');
+    expect(serialized).not.toContain('/private/provider/path');
+    expect(serialized).not.toContain('sk_test_123');
   });
 });

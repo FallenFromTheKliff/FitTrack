@@ -30,6 +30,7 @@ async function runCoachWorkoutPublishRegression() {
   const {
     DEFAULT_COACH_WORKOUT_PLAN_TITLE,
     createClientProgramPreviewInput,
+    canCreateClientWorkoutProgram,
     createCoachWorkoutPlanDraft,
     createCoachWorkoutPlanTransition,
     createSingleSubmitGate,
@@ -71,6 +72,33 @@ async function runCoachWorkoutPublishRegression() {
     ),
     false,
     "unpaid work never grants workout-program entitlement",
+  );
+  assertEqual(
+    canCreateClientWorkoutProgram({
+      existingProgramCount: 0,
+      hasMonthlyEntitlement: false,
+      hasPaidEntitlement: true,
+    }),
+    true,
+    "a paid one-session client can receive the single scoped program",
+  );
+  assertEqual(
+    canCreateClientWorkoutProgram({
+      existingProgramCount: 1,
+      hasMonthlyEntitlement: false,
+      hasPaidEntitlement: true,
+    }),
+    false,
+    "a paid one-session entitlement cannot create an additional program",
+  );
+  assertEqual(
+    canCreateClientWorkoutProgram({
+      existingProgramCount: 1,
+      hasMonthlyEntitlement: true,
+      hasPaidEntitlement: true,
+    }),
+    true,
+    "an active monthly entitlement can create a replacement paid-period program",
   );
 
   const gate = createSingleSubmitGate();

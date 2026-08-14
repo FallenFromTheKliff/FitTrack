@@ -208,7 +208,7 @@ export class EnrollRecurringCoachingPlanDTO {
   @ApiPropertyOptional({
     example: '2026-05-01',
     description:
-      'The calendar month to purchase. If omitted, the current gym month is used.',
+      'The first day of the one-month paid period. If omitted, the current gym date is used.',
   })
   @IsOptional()
   @IsISO8601(
@@ -227,7 +227,11 @@ export class CreateStaffRecurringCashEnrollmentDTO {
   @IsUUID('all', { message: 'coach_id must be a valid UUID' })
   coach_id: string;
 
-  @ApiPropertyOptional({ example: '2026-08-01' })
+  @ApiPropertyOptional({
+    example: '2026-08-14',
+    description:
+      'The first day of the one-month paid period. If omitted, the current gym date is used.',
+  })
   @IsOptional()
   @IsISO8601(
     { strict: false },

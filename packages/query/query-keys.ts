@@ -101,6 +101,7 @@ const memberKeys = {
   venues: (userId?: string) =>
     userId ? (["venues", userId] as const) : (["venues"] as const),
   archivedVenues: () => ["venues", "archived"] as const,
+  operationalVenues: () => ["venues", "operations"] as const,
   venueDetail: (venueId?: string | number) =>
     venueId != null
       ? (["venues", "detail", String(venueId)] as const)
@@ -622,6 +623,7 @@ export const queryKeys = {
   recurringCoachingPlans: recurringCoachingPlanKeys.list,
   venues: memberKeys.venues,
   archivedVenues: memberKeys.archivedVenues,
+  operationalVenues: memberKeys.operationalVenues,
   venueDetail: memberKeys.venueDetail,
   venueAvailability: memberKeys.venueAvailability,
   bookings: memberKeys.bookings,

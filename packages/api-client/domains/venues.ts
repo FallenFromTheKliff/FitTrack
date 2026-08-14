@@ -83,6 +83,12 @@ export function createVenuesApi(transport: ApiTransport) {
         "Unable to load venues."
       ).then((data) => data.map((record) => mapAmenityToVenueRecord(record)));
     },
+    listOperational() {
+      return unwrapResponse<AmenityApiRecord[]>(
+        transport.get('/bookings/amenities/operations'),
+        'Unable to load operational venues.',
+      ).then((data) => data.map((record) => mapAmenityToVenueRecord(record)));
+    },
     listArchived() {
       return unwrapResponse<AmenityApiRecord[]>(
         transport.get("/bookings/amenities/archived"),

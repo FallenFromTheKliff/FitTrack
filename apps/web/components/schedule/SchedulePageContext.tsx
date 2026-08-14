@@ -16,6 +16,7 @@ import type {
   StaffAppointmentRecord,
   SubmitCoachAppointmentFeedbackPayload,
 } from "@fittrack/api-client";
+import { getVenueBookingBlockReason } from "@fittrack/api-client";
 import type {
   CoachProfileRecord,
   CreateUserCoachProfileInput,
@@ -25,6 +26,7 @@ import type {
 import {
   bulkUpdateRecurringCoachingSessionsMutationOptions,
   cancelStaffAppointmentMutationOptions,
+  cancelStaffVenueBookingForMaintenanceMutationOptions,
   cancelAppointmentMutationOptions,
   cancelRecurringCoachingPlanMutationOptions,
   coachScheduleQueryOptions,
@@ -38,9 +40,11 @@ import {
   fitnessClientPlansQueryOptions,
   markCoachPayoutPaidMutationOptions,
   createRecurringCoachingPlanMutationOptions,
+  createRecurringCoachingCashEnrollmentMutationOptions,
   previewRecurringCoachingPlanMutationOptions,
   recurringCoachingPlanSessionsQueryOptions,
   replaceStaffCoachAvailabilityMutationOptions,
+  rescheduleStaffVenueBookingForMaintenanceMutationOptions,
   queryKeys,
   staffAppointmentsQueryOptions,
   staffCoachesQueryOptions,
@@ -48,7 +52,7 @@ import {
   updateCoachProfileMutationOptions,
   updateRecurringCoachingSessionMutationOptions,
   updateStaffCoachProfileMutationOptions,
-  venuesQueryOptions,
+  operationalVenuesQueryOptions,
 } from "@fittrack/query";
 import { coachProfileSchema } from "@fittrack/validators";
 
@@ -98,7 +102,12 @@ import {
   mapCoachesToRoster,
 } from "@/app/(auth)/schedule/helpers";
 
-const PRODUCT_BOOKING_STATUSES = new Set(["confirmed", "completed", "cancelled", "no_show"]);
+const PRODUCT_BOOKING_STATUSES = new Set([
+  "confirmed",
+  "completed",
+  "cancelled",
+  "no_show",
+]);
 
 function appointmentMatchesMemberSearch(
   appointment: StaffAppointmentRecord,
@@ -236,10 +245,7 @@ function useGymOperationsPageState() {
     });
   };
   const setActiveOperationsTab = (nextTab: GymOperationsTab) => {
-    replaceGymOperationsQuery(
-      "tab",
-      nextTab === "schedule" ? null : nextTab,
-    );
+    replaceGymOperationsQuery("tab", nextTab === "schedule" ? null : nextTab);
   };
   const setActiveScheduleSurfaceTab = (nextTab: ScheduleSurfaceTab) => {
     replaceGymOperationsQuery(
@@ -354,7 +360,7 @@ function useGymOperationsPageState() {
     isLoading: venuesLoading,
     refetch: refetchVenues,
   } = useQuery({
-    ...venuesQueryOptions(webApiClient),
+    ...operationalVenuesQueryOptions(webApiClient),
     enabled: canViewVenueBookings,
     staleTime: 60_000,
   });
@@ -429,21 +435,19 @@ function useGymOperationsPageState() {
     enabled: isCoach && Boolean(user?.id),
     staleTime: 30_000,
   });
-  const {
-    data: coachVenueWorkResult,
-    isLoading: coachVenueWorkLoading,
-  } = useQuery({
-    ...coachVenueWorkQueryOptions(webApiClient, user?.id, {
-      limit: 100,
-      page: 1,
-      startDate: toYmd(visibleTimelineDays[0] ?? weekStart),
-      endDate: toYmd(
-        visibleTimelineDays[visibleTimelineDays.length - 1] ?? weekStart,
-      ),
-    }),
-    enabled: isCoach && Boolean(user?.id),
-    staleTime: 30_000,
-  });
+  const { data: coachVenueWorkResult, isLoading: coachVenueWorkLoading } =
+    useQuery({
+      ...coachVenueWorkQueryOptions(webApiClient, user?.id, {
+        limit: 100,
+        page: 1,
+        startDate: toYmd(visibleTimelineDays[0] ?? weekStart),
+        endDate: toYmd(
+          visibleTimelineDays[visibleTimelineDays.length - 1] ?? weekStart,
+        ),
+      }),
+      enabled: isCoach && Boolean(user?.id),
+      staleTime: 30_000,
+    });
   const normalizedAppointmentMemberSearch = appointmentMemberSearch
     .trim()
     .toLowerCase();
@@ -451,7 +455,9 @@ function useGymOperationsPageState() {
     () =>
       (isCoach ? coachScheduleAppointments : appointmentResult.data).filter(
         (appointment) =>
-          PRODUCT_BOOKING_STATUSES.has((appointment.status ?? "").toLowerCase()) &&
+          PRODUCT_BOOKING_STATUSES.has(
+            (appointment.status ?? "").toLowerCase(),
+          ) &&
           (appointmentStatusFilter === "all" ||
             (appointment.status ?? "").toLowerCase() ===
               appointmentStatusFilter.toLowerCase()) &&
@@ -470,9 +476,14 @@ function useGymOperationsPageState() {
   );
   const rosterAppointmentRows = useMemo(
     () =>
-      (isCoach ? coachScheduleAppointments : rosterAppointmentResult.data).filter(
+      (isCoach
+        ? coachScheduleAppointments
+        : rosterAppointmentResult.data
+      ).filter(
         (appointment) =>
-          PRODUCT_BOOKING_STATUSES.has((appointment.status ?? "").toLowerCase()) &&
+          PRODUCT_BOOKING_STATUSES.has(
+            (appointment.status ?? "").toLowerCase(),
+          ) &&
           (!isCoach ||
             ((appointmentStatusFilter === "all" ||
               (appointment.status ?? "").toLowerCase() ===
@@ -558,6 +569,24 @@ function useGymOperationsPageState() {
   const createCoachBookingMutation = useMutation(
     createStaffAppointmentMutationOptions(webApiClient, queryClient),
   );
+  const rescheduleVenueBookingMutation = useMutation(
+    rescheduleStaffVenueBookingForMaintenanceMutationOptions(
+      webApiClient,
+      queryClient,
+    ),
+  );
+  const cancelVenueBookingForMaintenanceMutation = useMutation(
+    cancelStaffVenueBookingForMaintenanceMutationOptions(
+      webApiClient,
+      queryClient,
+    ),
+  );
+  const createRecurringCashEnrollmentMutation = useMutation(
+    createRecurringCoachingCashEnrollmentMutationOptions(
+      webApiClient,
+      queryClient,
+    ),
+  );
   const createCoachMutation = useMutation(
     createUserMutationOptions(webApiClient, queryClient),
   );
@@ -605,6 +634,11 @@ function useGymOperationsPageState() {
         .map((coach) => ({
           hourlyRate: coach.hourlyRate ?? 0,
           label: coach.name,
+          monthlyOfferActive: coach.monthlyOfferActive,
+          monthlyOfferDescription: coach.monthlyOfferDescription,
+          monthlyRate: coach.monthlyRate,
+          monthlySessionCount: coach.monthlySessionCount,
+          monthlySessionDurationMinutes: coach.monthlySessionDurationMinutes,
           value: coach.id,
         })),
     [coachRoster],
@@ -671,10 +705,7 @@ function useGymOperationsPageState() {
         })),
     [recurringTrainingPlanResult?.data, user?.id],
   );
-  const coachAppointments = useMemo(
-    () => appointmentRows,
-    [appointmentRows],
-  );
+  const coachAppointments = useMemo(() => appointmentRows, [appointmentRows]);
   const activeRecurringPlanId =
     recurringPlanAction?.appointment.recurringPlanId ??
     appointmentReviewTarget?.recurringPlanId ??
@@ -1168,15 +1199,18 @@ function useGymOperationsPageState() {
 
   const bookableVenueOptions = useMemo(
     () =>
-      venues
-        .filter(
-          (venue) => venue.isActive !== false && venue.isReservable !== false,
-        )
-        .map((venue) => ({
-          label: venue.name,
+      venues.map((venue) => {
+        const unavailableReason = getVenueBookingBlockReason(venue);
+        return {
+          disabled: Boolean(unavailableReason),
+          label: unavailableReason
+            ? `${venue.name} — ${unavailableReason}`
+            : venue.name,
           value: String(venue.id),
           hourlyRate: venue.hourlyRate ?? 0,
-        })),
+          unavailableReason,
+        };
+      }),
     [venues],
   );
 
@@ -1241,7 +1275,9 @@ function useGymOperationsPageState() {
   const filteredVenueBookings = useMemo(
     () =>
       rawBookings.filter((booking) => {
-        if (!PRODUCT_BOOKING_STATUSES.has((booking.status ?? "").toLowerCase())) {
+        if (
+          !PRODUCT_BOOKING_STATUSES.has((booking.status ?? "").toLowerCase())
+        ) {
           return false;
         }
         if (
@@ -1339,7 +1375,10 @@ function useGymOperationsPageState() {
   };
 
   const handleConfirmRecurringPlan = async () => {
-    if (recurringCreateInFlightRef.current || createRecurringPlanMutation.isPending) {
+    if (
+      recurringCreateInFlightRef.current ||
+      createRecurringPlanMutation.isPending
+    ) {
       return;
     }
     if (recurringPlanInputInvalid) {
@@ -1877,32 +1916,119 @@ function useGymOperationsPageState() {
       await createVenueBookingMutation.mutateAsync(payload);
       showFeedback("Venue booking created.");
       setCreateVenueBookingOpen(false);
+      return { success: true as const };
     } catch (error) {
+      const message = getErrorMessage(error, "Unable to create venue booking.");
+      showFeedback(message, "danger");
+      return { error: message, success: false as const };
+    }
+  };
+
+  const handleRescheduleVenueBookingForMaintenance = async (payload: {
+    amenityId: string;
+    endsAt: string;
+    note?: string;
+    startsAt: string;
+  }) => {
+    if (!venueReviewTarget) {
+      return {
+        error: "Select a venue booking first.",
+        success: false as const,
+      };
+    }
+    try {
+      await rescheduleVenueBookingMutation.mutateAsync({
+        bookingId: venueReviewTarget.id,
+        payload,
+      });
       showFeedback(
-        getErrorMessage(error, "Unable to create venue booking."),
-        "danger",
+        "Maintenance-affected booking rescheduled. Payment was preserved.",
       );
+      setVenueReviewTarget(null);
+      return { success: true as const };
+    } catch (error) {
+      return {
+        error: getErrorMessage(error, "Unable to reschedule this booking."),
+        success: false as const,
+      };
+    }
+  };
+
+  const handleCancelVenueBookingForMaintenance = async (note?: string) => {
+    if (!venueReviewTarget) {
+      return {
+        error: "Select a venue booking first.",
+        success: false as const,
+      };
+    }
+    try {
+      await cancelVenueBookingForMaintenanceMutation.mutateAsync({
+        bookingId: venueReviewTarget.id,
+        note,
+      });
+      showFeedback("Booking cancelled by operations for venue maintenance.");
+      setVenueReviewTarget(null);
+      return { success: true as const };
+    } catch (error) {
+      return {
+        error: getErrorMessage(
+          error,
+          "Unable to cancel this booking for maintenance.",
+        ),
+        success: false as const,
+      };
     }
   };
 
   const handleCreateCoachBooking = async (payload: {
+    bookingMode: "monthly" | "single";
     coachId: string;
-    durationMinutes: number;
+    durationMinutes?: number;
+    idempotencyKey: string;
     memberId: string;
     memberNotes?: string;
     paymentStage?: "full";
-    scheduledAt: string;
+    referenceNo?: string;
+    scheduledAt?: string;
+    startDate?: string;
   }) => {
     setCoachBookingFeedback(null);
     try {
-      await createCoachBookingMutation.mutateAsync(payload);
+      if (payload.bookingMode === "monthly") {
+        if (!payload.startDate) throw new Error("Choose a monthly start date.");
+        await createRecurringCashEnrollmentMutation.mutateAsync({
+          coachId: payload.coachId,
+          idempotencyKey: payload.idempotencyKey,
+          memberId: payload.memberId,
+          ...(payload.referenceNo ? { referenceNo: payload.referenceNo } : {}),
+          startDate: payload.startDate,
+        });
+      } else {
+        if (!payload.scheduledAt || !payload.durationMinutes) {
+          throw new Error("Choose an exact live coach slot.");
+        }
+        await createCoachBookingMutation.mutateAsync({
+          coachId: payload.coachId,
+          durationMinutes: payload.durationMinutes,
+          idempotencyKey: payload.idempotencyKey,
+          memberId: payload.memberId,
+          ...(payload.memberNotes ? { memberNotes: payload.memberNotes } : {}),
+          paymentStage: "full",
+          scheduledAt: payload.scheduledAt,
+        });
+      }
       setCreateCoachBookingOpen(false);
-      setCoachBookingFeedback("Coach booking created.");
+      setCoachBookingFeedback(
+        payload.bookingMode === "monthly"
+          ? "Monthly coaching enrolled and paid in full by cash."
+          : "Coach session created and paid in full by cash.",
+      );
     } catch (error) {
       showFeedback(
         getErrorMessage(error, "Unable to create coach booking."),
         "danger",
       );
+      throw error;
     }
   };
 
@@ -1956,6 +2082,7 @@ function useGymOperationsPageState() {
     canAnimate,
     cancelAppointmentMutation,
     cancelRecurringPlanMutation,
+    cancelVenueBookingForMaintenanceMutation,
     canManageCoaching,
     canManageGymOperations,
     canViewVenueBookings,
@@ -1976,6 +2103,7 @@ function useGymOperationsPageState() {
     completeAppointmentMutation,
     completeAppointmentPending,
     createCoachBookingMutation,
+    createRecurringCashEnrollmentMutation,
     createCoachBookingOpen,
     createCoachMutation,
     createCoachOpen,
@@ -1995,6 +2123,7 @@ function useGymOperationsPageState() {
     handleBlockSave,
     handleCancelAppointment,
     handleCancelVenueBooking,
+    handleCancelVenueBookingForMaintenance,
     handleCoachFocus,
     handleCompleteAppointment,
     handleCompleteVenueBooking,
@@ -2005,6 +2134,7 @@ function useGymOperationsPageState() {
     handleDragEnd,
     handleDragStart,
     handleNoShowVenueBooking,
+    handleRescheduleVenueBookingForMaintenance,
     handleVenueEndDateSelect,
     handleVenueStartDateSelect,
     handlePreviewRecurringPlan,
@@ -2052,6 +2182,7 @@ function useGymOperationsPageState() {
     refetchVenues,
     refreshGymOperationsData,
     replaceAvailabilityMutation,
+    rescheduleVenueBookingMutation,
     rightScrollRef,
     rosterBookings,
     scheduleLoading,

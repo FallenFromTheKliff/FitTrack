@@ -25,6 +25,7 @@ export type VenueDecision =
   | "no_show";
 export type SelectOption = {
   coachUserId?: string;
+  disabled?: boolean;
   hourlyRate?: number | null;
   label: string;
   monthlyOfferActive?: boolean;
@@ -32,6 +33,7 @@ export type SelectOption = {
   monthlyRate?: number | null;
   monthlySessionCount?: number | null;
   monthlySessionDurationMinutes?: number | null;
+  unavailableReason?: string | null;
   value: string;
 };
 export type OverlayConfirmation = {
@@ -169,7 +171,11 @@ export function getDurationMinutes(startTime: string, endTime: string) {
 }
 
 export function formatDurationLabel(durationMinutes: number) {
-  const hours = Math.max(1, Math.round(durationMinutes / 60));
+  if (durationMinutes < 60) return `${durationMinutes} min`;
+  if (durationMinutes % 60 !== 0) {
+    return `${Math.floor(durationMinutes / 60)} hr ${durationMinutes % 60} min`;
+  }
+  const hours = durationMinutes / 60;
   return `${hours} hr${hours === 1 ? "" : "s"}`;
 }
 

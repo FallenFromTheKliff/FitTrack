@@ -7,6 +7,7 @@ type VenueCoachWindowInput = {
   coachId: string;
   endsAt: Date;
   excludeHoldIds?: string[];
+  excludeAmenityBookingIds?: string[];
   now?: Date;
   startsAt: Date;
 };
@@ -27,6 +28,7 @@ export async function lockAndAssertVenueCoachWindow(
   await CoachAvailabilityService.assertAvailableWithClient(tx, {
     coachId: input.coachId,
     durationMinutes,
+    excludeAmenityBookingIds: input.excludeAmenityBookingIds,
     excludeHoldIds: [...new Set(input.excludeHoldIds ?? [])],
     now: input.now,
     startsAt: input.startsAt,

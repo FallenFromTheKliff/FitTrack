@@ -72,6 +72,7 @@ export type AmenityBookingApiRecord = {
   } | null;
   amenity_id?: string;
   cancelled_at?: string | null;
+  cancellation_reason?: string | null;
   coach?: {
     bio?: string | null;
     certification?: string | null;
@@ -311,6 +312,7 @@ export function mapAmenityBookingToVenueBookingRecord(
     status: toLegacyVenueStatus(record.status),
     createdAt: record.created_at,
     cancelledAt: record.cancelled_at ?? null,
+    cancelReason: record.cancellation_reason ?? null,
     userId: record.user?.id ?? record.user_id,
     user: {
       id: record.user?.id ?? record.user_id ?? "",
@@ -384,7 +386,8 @@ export function createBookingsApi(transport: ApiTransport) {
           },
           {
             headers: {
-              "Idempotency-Key": payload.idempotencyKey ?? createIdempotencyKey(),
+              "Idempotency-Key":
+                payload.idempotencyKey ?? createIdempotencyKey(),
             },
           },
         ),

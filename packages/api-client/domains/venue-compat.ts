@@ -230,6 +230,37 @@ export function mapVenueMutationPayloadToAmenityPayload(payload: VenueLikePayloa
   };
 }
 
+export function getVenueBookingBlockReason(
+  venue: Pick<
+    VenueRecord,
+    'isActive' | 'isMapped' | 'isReservable' | 'status'
+  >,
+): string | null {
+  if (venue.isActive === false) return 'This venue is inactive.';
+  if (venue.isMapped === false) {
+    return 'This venue is not published to booking surfaces.';
+  }
+  if (venue.isReservable !== true) {
+    return 'This venue is not enabled for reservations.';
+  }
+  if (venue.status === 'maintenance') {
+    return 'This venue is under maintenance and cannot be booked.';
+  }
+  if (venue.status && venue.status !== 'available') {
+    return `This venue is ${venue.status} and cannot be booked.`;
+  }
+  return null;
+}
+
+export function isVenueBookable(
+  venue: Pick<
+    VenueRecord,
+    'isActive' | 'isMapped' | 'isReservable' | 'status'
+  >,
+): boolean {
+  return getVenueBookingBlockReason(venue) === null;
+}
+
 export function mapAmenityAvailabilityToVenueAvailabilityRecord(
   record: AmenityAvailabilitySlotApiRecord
 ) {

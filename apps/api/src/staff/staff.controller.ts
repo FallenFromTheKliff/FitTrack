@@ -39,8 +39,10 @@ import {
 import { CoachService } from '../coaching/coach/coach.service';
 import { DateRangeDTO } from '../user/dto/user-dto';
 import {
+  CancelStaffVenueBookingForMaintenanceDTO,
   CreateStaffCoachBookingDTO,
   CreateStaffVenueBookingDTO,
+  RescheduleStaffVenueBookingDTO,
 } from './dto/staff-schedule.dto';
 import { StaffService } from './staff.service';
 
@@ -159,7 +161,8 @@ export class StaffController {
 
   @Patch('bookings/:id/confirm')
   @ApiOperation({
-    summary: 'Legacy compatibility route; pending booking confirmation is retired.',
+    summary:
+      'Legacy compatibility route; pending booking confirmation is retired.',
   })
   @ApiGoneResponse({
     description:
@@ -174,7 +177,8 @@ export class StaffController {
 
   @Patch('bookings/:id/reject')
   @ApiOperation({
-    summary: 'Legacy compatibility route; pending booking rejection is retired.',
+    summary:
+      'Legacy compatibility route; pending booking rejection is retired.',
   })
   @ApiGoneResponse({
     description:
@@ -190,7 +194,8 @@ export class StaffController {
 
   @Patch('bookings/:id/complete')
   @ApiOperation({
-    summary: 'Mark a confirmed venue booking complete from the staff schedule surface.',
+    summary:
+      'Mark a confirmed venue booking complete from the staff schedule surface.',
   })
   async completeBooking(
     @Param('id', ParseUUIDPipe) id: string,
@@ -213,9 +218,44 @@ export class StaffController {
     return null;
   }
 
+  @Patch('bookings/:id/reschedule-maintenance')
+  @ApiOperation({
+    summary:
+      'Atomically move a maintenance-affected venue booking without changing its payment.',
+  })
+  rescheduleBookingForMaintenance(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: RescheduleStaffVenueBookingDTO,
+  ) {
+    return this.bookingService.rescheduleBookingForMaintenance(
+      id,
+      user.sub,
+      dto,
+    );
+  }
+
+  @Patch('bookings/:id/cancel-maintenance')
+  @ApiOperation({
+    summary:
+      'Cancel a maintenance-affected venue booking as an operational cancellation.',
+  })
+  cancelBookingForMaintenance(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: CancelStaffVenueBookingForMaintenanceDTO,
+  ) {
+    return this.bookingService.cancelBookingForMaintenance(
+      id,
+      user.sub,
+      dto.note,
+    );
+  }
+
   @Patch('bookings/:id/no-show')
   @ApiOperation({
-    summary: 'Mark a confirmed venue booking as no-show from the staff schedule surface.',
+    summary:
+      'Mark a confirmed venue booking as no-show from the staff schedule surface.',
   })
   async markBookingNoShow(
     @Param('id', ParseUUIDPipe) id: string,

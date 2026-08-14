@@ -1,7 +1,7 @@
 "use client";
 
 import type { CSSProperties, KeyboardEvent, ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CalendarCheck,
   CalendarDays,
@@ -19,6 +19,7 @@ import type {
   CoachAvailabilityResponse,
   VenueAvailabilityRecord,
 } from "@fittrack/api-client";
+import { isVenueBookable } from "@fittrack/api-client";
 import { formatBookingDate } from "@fittrack/utils";
 import { isPaymongoCheckoutEnabled, WEEKDAY_NAMES } from "@fittrack/app-config";
 import type { CoachProfileRecord, VenueRecord } from "@fittrack/types";
@@ -2994,7 +2995,7 @@ function MemberReservationModal({
   const [touchedFields, setTouchedFields] = useState<Partial<Record<VenueValidationField, boolean>>>({});
   const [venuePickerOpen, setVenuePickerOpen] = useState(false);
   const reservableVenues = useMemo(
-    () => venues.filter((venue) => venue.isReservable !== false),
+    () => venues.filter(isVenueBookable),
     [venues],
   );
   const selectedVenue =
@@ -3277,18 +3278,33 @@ function MemberReservationModal({
     setErrorText("");
   };
 
+  const resetReservationDraft = useCallback(() => {
+    setDatePickerOpen(false);
+    setCoachPickerOpen(false);
+    setErrorText("");
+    setEndTime("");
+    setReservationReview(null);
+    setReservationDate(getTodayDateInputValue());
+    setReservationNotes("");
+    setReviewAttempted(false);
+    setSelectedCoachId("");
+    setSelectedVenueId("");
+    setStartTime("");
+    setSubmitFieldErrors({});
+    setTimePickerOpen(false);
+    setTimeTarget("start");
+    setTouchedFields({});
+    setVenuePickerOpen(false);
+  }, []);
+
   useEffect(() => {
     if (!isOpen) {
-      setReviewAttempted(false);
-      setSubmitFieldErrors({});
-      setTouchedFields({});
-      setCoachPickerOpen(false);
-      setVenuePickerOpen(false);
+      resetReservationDraft();
       return;
     }
     setErrorText("");
     setReservationReview(null);
-  }, [isOpen]);
+  }, [isOpen, resetReservationDraft]);
 
   useEffect(() => {
     setErrorText("");
@@ -3374,13 +3390,7 @@ function MemberReservationModal({
 
   const handleClose = () => {
     if (isSubmitting) return;
-    setReservationReview(null);
-    setErrorText("");
-    setReviewAttempted(false);
-    setSubmitFieldErrors({});
-    setTouchedFields({});
-    setCoachPickerOpen(false);
-    setVenuePickerOpen(false);
+    resetReservationDraft();
     onClose();
   };
 

@@ -2,6 +2,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { LucideIcon } from "lucide-react";
+import type { ReactNode } from "react";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useLoadingText } from "@fittrack/hooks";
 import FitButton from "@/components/fit/FitButton";
@@ -21,9 +22,15 @@ type Props = {
   confirmIcon?: LucideIcon;
   isLoading?: boolean;
   isDanger?: boolean;
+  children?: ReactNode;
+  confirmDisabled?: boolean;
 };
 
-function getLoadingTitle(title: string, actionLabel?: string, loadingTitle?: string) {
+function getLoadingTitle(
+  title: string,
+  actionLabel?: string,
+  loadingTitle?: string,
+) {
   if (loadingTitle) return loadingTitle;
   const nextTitle = (actionLabel ?? "").replace(/\.+$/, "").trim();
   return nextTitle || title;
@@ -41,7 +48,9 @@ export default function ConfirmModal({
   loadingTitle,
   confirmIcon,
   isLoading = false,
-  isDanger = false
+  isDanger = false,
+  children,
+  confirmDisabled = false,
 }: Props) {
   const { colors } = useTheme();
   const [visible, setVisible] = useState(false);
@@ -52,7 +61,10 @@ export default function ConfirmModal({
   const onCancelRef = useRef(onCancel);
   const titleId = useId();
   const messageId = useId();
-  const animatedLoadingLabel = useLoadingText(loadingLabel ?? confirmLabel, isLoading);
+  const animatedLoadingLabel = useLoadingText(
+    loadingLabel ?? confirmLabel,
+    isLoading,
+  );
   const modalTitle = isLoading
     ? getLoadingTitle(title, loadingLabel ?? confirmLabel, loadingTitle)
     : title;
@@ -157,7 +169,7 @@ export default function ConfirmModal({
         pointerEvents: isOpen && visible ? "auto" : "none",
         position: "fixed",
         transition: "opacity 180ms ease",
-        zIndex: 1200
+        zIndex: 1200,
       }}
       onClick={handleCancel}
     >
@@ -181,8 +193,9 @@ export default function ConfirmModal({
           padding: 24,
           pointerEvents: isOpen && visible ? "auto" : "none",
           transform: visible ? "scale(1)" : "scale(0.94)",
-          transition: "transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 180ms ease",
-          width: "min(90vw, 500px)"
+          transition:
+            "transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 180ms ease",
+          width: "min(90vw, 500px)",
         }}
         onClick={(event) => event.stopPropagation()}
       >
@@ -193,7 +206,7 @@ export default function ConfirmModal({
             fontSize: 22,
             fontWeight: 700,
             lineHeight: 1.2,
-            marginBottom: 4
+            marginBottom: 4,
           }}
         >
           {modalTitle}
@@ -207,17 +220,18 @@ export default function ConfirmModal({
             fontWeight: isLoading ? 600 : 400,
             lineHeight: 1.45,
             margin: 0,
-            textAlign: isLoading ? "center" : "left"
+            textAlign: isLoading ? "center" : "left",
           }}
         >
           {isLoading ? animatedLoadingLabel : message}
         </FitText>
+        {!isLoading && children ? children : null}
         {!isLoading ? (
           <div
             style={{
               display: "flex",
               gap: 10,
-              marginTop: 16
+              marginTop: 16,
             }}
           >
             <FitButton
@@ -231,12 +245,13 @@ export default function ConfirmModal({
               label={confirmLabel}
               icon={confirmIcon}
               onClick={onConfirm}
+              disabled={confirmDisabled}
               style={{ flex: 1 }}
             />
           </div>
         ) : null}
       </div>
     </div>,
-    portalRoot
+    portalRoot,
   );
 }

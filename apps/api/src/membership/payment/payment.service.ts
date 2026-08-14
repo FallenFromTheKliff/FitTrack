@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   ForbiddenException,
   GoneException,
   HttpException,
@@ -7,10 +8,12 @@ import {
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
+  CommerceCheckoutHoldStatus,
   PayableType,
   Prisma,
   Payment,
   PaymentProvider,
+  PaymentStatus,
   UserRole,
 } from '@prisma/client';
 import { randomUUID } from 'crypto';
@@ -41,6 +44,10 @@ import {
   PaymongoWebhookService,
 } from './paymongo-webhook.service';
 import {
+  PaymongoCheckoutService,
+  type PaymongoRetrievedCheckoutSession,
+} from './paymongo-checkout.service';
+import {
   PaymentRepository,
   PaymongoMembershipCardFailureInput,
   PaymongoMembershipCardWebhookInput,
@@ -64,6 +71,7 @@ export class PaymentService {
     private readonly paymongoWebhookService: PaymongoWebhookService,
     private readonly eventEmitter: EventEmitter2,
     private readonly commerceCheckoutService: CoachingCommerceService,
+    private readonly paymongoCheckoutService: PaymongoCheckoutService,
   ) {}
 
   async getMyPayments(
@@ -91,6 +99,113 @@ export class PaymentService {
     requesterId: string,
     requesterRole: UserRole,
   ) {
+    return this.commerceCheckoutService.getHoldStatusForUser(
+      holdId,
+      requesterId,
+      requesterRole,
+    );
+  }
+
+  async reconcileCheckoutHold(
+    holdId: string,
+    requesterId: string,
+    requesterRole: UserRole,
+  ) {
+    if (requesterRole !== UserRole.member) {
+      throw new ForbiddenException({
+        type: 'FORBIDDEN',
+        title: 'Forbidden',
+        status: 403,
+        detail: 'Only the member who started this checkout can reconcile it.',
+      });
+    }
+
+    const { hold, payment } =
+      await this.repo.findCommerceCheckoutForReconciliationOrThrow(
+        holdId,
+        requesterId,
+      );
+
+    if (
+      hold.status === CommerceCheckoutHoldStatus.consumed ||
+      payment.status === PaymentStatus.completed
+    ) {
+      return this.commerceCheckoutService.getHoldStatusForUser(
+        holdId,
+        requesterId,
+        requesterRole,
+      );
+    }
+
+    if (
+      payment.status === PaymentStatus.failed ||
+      hold.status !== CommerceCheckoutHoldStatus.held
+    ) {
+      return this.commerceCheckoutService.getHoldStatusForUser(
+        holdId,
+        requesterId,
+        requesterRole,
+      );
+    }
+
+    const providerRef = payment.provider_ref?.trim();
+    if (!providerRef) {
+      throw this.reconciliationConflict(
+        'This checkout does not have a PayMongo session to verify.',
+      );
+    }
+
+    const session =
+      await this.paymongoCheckoutService.retrieveCheckoutSession(providerRef);
+    const paidPayment = session.attributes?.payments?.find(
+      (candidate) =>
+        candidate.id && candidate.attributes?.status?.toLowerCase() === 'paid',
+    );
+
+    if (!paidPayment?.id || !paidPayment.attributes) {
+      return this.commerceCheckoutService.getHoldStatusForUser(
+        holdId,
+        requesterId,
+        requesterRole,
+      );
+    }
+
+    this.assertReconciliationMatches({ hold, paidPayment, payment, session });
+
+    const paidAtSeconds =
+      paidPayment.attributes.paid_at ?? session.attributes?.paid_at;
+    if (
+      typeof paidAtSeconds !== 'number' ||
+      !Number.isFinite(paidAtSeconds) ||
+      paidAtSeconds <= 0
+    ) {
+      throw this.reconciliationConflict(
+        'PayMongo did not return a valid paid timestamp for this checkout.',
+      );
+    }
+
+    const gatewayEventId = `reconcile:${session.id}:${paidPayment.id}`;
+    const event = this.toReconciliationEvent(session, gatewayEventId);
+    const transition = await this.repo.completePaymongoCommerceCheckout(
+      payment.id,
+      {
+        gatewayEventId,
+        gatewayMetadata: this.toWebhookGatewayMetadata(payment, event),
+        verifiedAt: new Date(paidAtSeconds * 1000),
+      },
+    );
+
+    if (transition.transitioned && transition.productCreated) {
+      this.emitPaymentCompleted({
+        paymentId: transition.payment.id,
+        userId: transition.payment.user_id,
+        payableType: transition.payment.payable_type,
+        payableId: transition.payment.payable_id,
+        amount: transition.payment.amount.toString(),
+        verifiedBy: null,
+      });
+    }
+
     return this.commerceCheckoutService.getHoldStatusForUser(
       holdId,
       requesterId,
@@ -439,10 +554,9 @@ export class PaymentService {
     }
 
     if (dto.payable_type === PayableType.recurring_coaching) {
-      const cycle =
-        await this.repo.findRecurringCoachingPaymentContextOrThrow(
-          dto.payable_id,
-        );
+      const cycle = await this.repo.findRecurringCoachingPaymentContextOrThrow(
+        dto.payable_id,
+      );
       return cycle.user_id;
     }
 
@@ -525,12 +639,12 @@ export class PaymentService {
     if (
       !(
         [
-        PayableType.subscription,
-        PayableType.booking,
-        PayableType.coaching,
-        PayableType.recurring_coaching,
-        PayableType.membership_card,
-        PayableType.commerce_checkout_hold,
+          PayableType.subscription,
+          PayableType.booking,
+          PayableType.coaching,
+          PayableType.recurring_coaching,
+          PayableType.membership_card,
+          PayableType.commerce_checkout_hold,
         ] as PayableType[]
       ).includes(payableType)
     ) {
@@ -610,11 +724,133 @@ export class PaymentService {
     );
   }
 
+  private assertReconciliationMatches(input: {
+    hold: Awaited<
+      ReturnType<
+        PaymentRepository['findCommerceCheckoutForReconciliationOrThrow']
+      >
+    >['hold'];
+    paidPayment: NonNullable<
+      PaymongoRetrievedCheckoutSession['attributes']['payments']
+    >[number];
+    payment: Payment;
+    session: PaymongoRetrievedCheckoutSession;
+  }): void {
+    const { hold, paidPayment, payment, session } = input;
+    const metadata = session.attributes.metadata;
+    const expectedAmount = Math.round(Number(payment.amount) * 100);
+    const paidAttributes = paidPayment.attributes;
+    const lineItems = session.attributes.line_items ?? [];
+    const lineItemAmount = lineItems.reduce(
+      (total, item) =>
+        total + Number(item.amount ?? 0) * Number(item.quantity ?? 1),
+      0,
+    );
+
+    if (
+      session.id !== payment.provider_ref ||
+      session.type !== 'checkout_session'
+    ) {
+      throw this.reconciliationConflict(
+        'The PayMongo checkout session does not match this payment.',
+      );
+    }
+
+    if (
+      payment.currency.toUpperCase() !== 'PHP' ||
+      hold.currency.toUpperCase() !== 'PHP' ||
+      Number(hold.amount) !== Number(payment.amount) ||
+      paidAttributes?.currency?.toUpperCase() !== 'PHP' ||
+      paidAttributes.amount !== expectedAmount
+    ) {
+      throw this.reconciliationConflict(
+        'The PayMongo payment amount or currency does not match this checkout.',
+      );
+    }
+
+    if (
+      lineItems.length > 0 &&
+      (lineItemAmount !== expectedAmount ||
+        lineItems.some((item) => item.currency?.toUpperCase() !== 'PHP'))
+    ) {
+      throw this.reconciliationConflict(
+        'The PayMongo checkout line items do not match this payment.',
+      );
+    }
+
+    if (
+      !metadata ||
+      metadata.hold_id !== hold.id ||
+      metadata.coaching_checkout_hold_id !== hold.id ||
+      metadata.payment_id !== payment.id ||
+      metadata.kind !== hold.kind
+    ) {
+      throw this.reconciliationConflict(
+        'The PayMongo checkout metadata does not match this hold.',
+      );
+    }
+  }
+
+  private toReconciliationEvent(
+    session: PaymongoRetrievedCheckoutSession,
+    eventId: string,
+  ): PaymongoWebhookEvent {
+    const payments = (session.attributes.payments ?? [])
+      .filter(
+        (
+          candidate,
+        ): candidate is typeof candidate & {
+          id: string;
+          attributes: NonNullable<typeof candidate.attributes>;
+        } => Boolean(candidate.id && candidate.attributes),
+      )
+      .map((candidate) => ({
+        id: candidate.id,
+        type: candidate.type ?? 'payment',
+        attributes: candidate.attributes,
+      }));
+
+    return {
+      data: {
+        id: eventId,
+        type: 'event',
+        attributes: {
+          type: PAYMONGO_CHECKOUT_SESSION_PAID_EVENT,
+          livemode: false,
+          data: {
+            id: session.id,
+            type: session.type,
+            attributes: {
+              checkout_url: session.attributes.checkout_url ?? null,
+              metadata: session.attributes.metadata ?? null,
+              paid_at: session.attributes.paid_at ?? null,
+              payment_method_used:
+                session.attributes.payment_method_used ?? null,
+              payments,
+              reference_number: session.attributes.reference_number ?? null,
+              status: session.attributes.status ?? null,
+            },
+          },
+          previous_data: {},
+        },
+      },
+    };
+  }
+
+  private reconciliationConflict(detail: string): ConflictException {
+    return new ConflictException({
+      type: 'CONFLICT',
+      title: 'Checkout Verification Mismatch',
+      status: 409,
+      detail,
+    });
+  }
+
   private extractWebhookPaidAt(event: PaymongoWebhookEvent): Date | null {
     const attributes = event.data.attributes.data.attributes;
     const paidAt =
-      attributes.paid_at ?? attributes.payments?.find(Boolean)?.attributes
-        .paid_at;
+      attributes.paid_at ??
+      attributes.payments?.find(Boolean)?.attributes.paid_at;
 
     if (typeof paidAt !== 'number' || !Number.isFinite(paidAt)) {
       return null;
@@ -662,7 +898,8 @@ export class PaymentService {
           ? {
               id: gatewayResource.id,
               paid_at: gatewayAttributes.paid_at ?? null,
-              payment_method_used: gatewayAttributes.payment_method_used ?? null,
+              payment_method_used:
+                gatewayAttributes.payment_method_used ?? null,
               reference_number: gatewayAttributes.reference_number ?? null,
               status: gatewayAttributes.status ?? null,
             }

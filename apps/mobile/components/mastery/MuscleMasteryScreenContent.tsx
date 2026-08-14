@@ -1,9 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AccessibilityInfo,
   ActivityIndicator,
   FlatList,
+  findNodeHandle,
+  type GestureResponderEvent,
   Modal,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   useWindowDimensions,
   View,
@@ -39,30 +44,31 @@ import type {
 
 import { useTheme } from "@/contexts/ThemeContext";
 import PremiumFeatureGate from "@/components/membership/PremiumFeatureGate";
-import {
-  FitButton,
-  FitAvatarImage,
-  FitCard,
-  FitFilter,
-  FitSearch,
-  FitSection,
-  FitText,
-} from "@/components/fit";
+import { FitButton, FitAvatarImage, FitCard, FitFilter, FitSearch, FitSection, FitText } from "@/components/fit";
 
 import type { useMuscleMasteryScreen } from "@/hooks/mastery/useMuscleMasteryScreen";
+import {
+  MILESTONE_NARROW_GEOMETRY,
+  resolveMilestoneBurstAnchor,
+  resolveMilestoneCardDisclosure,
+  resolveMilestoneFooterState,
+  resolveReducedMotionPreference,
+} from "./milestonePresentation";
 
 type MuscleMasteryScreenController = ReturnType<typeof useMuscleMasteryScreen>;
 type MasteryTab = MuscleMasteryScreenController["activeTab"];
 
-const RANK_FILTERS: Array<{ label: string; value: FitnessMasteryRank | "all" }> =
-  [
-    { label: "All", value: "all" },
-    { label: "Bronze", value: "bronze" },
-    { label: "Silver", value: "silver" },
-    { label: "Gold", value: "gold" },
-    { label: "Platinum", value: "platinum" },
-    { label: "Adamantite", value: "adamantite" },
-  ];
+const RANK_FILTERS: Array<{
+  label: string;
+  value: FitnessMasteryRank | "all";
+}> = [
+  { label: "All", value: "all" },
+  { label: "Bronze", value: "bronze" },
+  { label: "Silver", value: "silver" },
+  { label: "Gold", value: "gold" },
+  { label: "Platinum", value: "platinum" },
+  { label: "Adamantite", value: "adamantite" },
+];
 
 const TABS: Array<{ label: string; value: MasteryTab }> = [
   { label: "Summary", value: "summary" },
@@ -92,6 +98,8 @@ const LIBRARY_ICONS: Record<string, LucideIcon> = {
 function getRankColor(rank: FitnessMasteryRank) {
   return RANK_COLORS[rank];
 }
+
+export const getMasteryRankColor = getRankColor;
 
 function getLibraryIcon(iconKey: string | null | undefined, fallback = Dumbbell) {
   return LIBRARY_ICONS[iconKey ?? ""] ?? fallback;
@@ -137,10 +145,10 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
       alignItems: "center",
       height: 1,
       justifyContent: "center",
-      left: 0,
+      left: 28,
       position: "absolute",
-      right: 0,
-      top: 32,
+      top: 28,
+      width: 1,
       zIndex: 12,
     },
     emptyMessage: {
@@ -325,24 +333,34 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
       gap: 10,
     },
     milestoneGrid: {
-      flexGrow: 0,
-      height: 432,
+      flexDirection: "row",
+      flexWrap: "wrap",
+      justifyContent: "space-between",
     },
     milestoneActions: {
       flexDirection: "row",
-      justifyContent: "flex-end",
-      marginTop: 10,
+      marginTop: "auto",
     },
     claimButton: {
-      minWidth: 128,
+      alignItems: "center",
+      borderRadius: R.md,
+      borderWidth: 1,
+      flex: 1,
+      flexDirection: "row",
+      gap: 6,
+      justifyContent: "center",
+      minHeight: MILESTONE_NARROW_GEOMETRY.claimTargetMinHeight,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
     },
     milestoneCard: {
       borderRadius: R.lg,
       borderWidth: 1,
       flexBasis: "48%",
-      height: 204,
+      gap: 10,
       marginBottom: 10,
       maxWidth: "48%",
+      minHeight: 188,
       overflow: "visible",
       padding: 11,
       position: "relative",
@@ -363,36 +381,22 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
     },
     milestoneCardHeader: {
       alignItems: "flex-start",
+      flexDirection: "column",
+      gap: 6,
+    },
+    milestoneProgressCopy: {
+      alignItems: "center",
       flexDirection: "row",
-      gap: 8,
-    },
-    milestoneDescription: {
-      color: colors.textSecondary,
-      fontSize: 13,
-      lineHeight: 18,
-    },
-    milestoneMeta: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: 8,
-    },
-    milestoneReviewHint: {
-      borderRadius: R.md,
-      borderWidth: 1,
-      marginTop: 2,
-      paddingHorizontal: 10,
-      paddingVertical: 8,
-    },
-    milestoneReviewHintText: {
-      fontSize: 12,
-      fontWeight: "700",
-      lineHeight: 17,
+      gap: 6,
+      justifyContent: "space-between",
     },
     milestoneTitle: {
       color: colors.textPrimary,
       fontSize: 15,
       fontWeight: "700",
-      lineHeight: 18,
+      flexShrink: 1,
+      lineHeight: 20,
+      minHeight: MILESTONE_NARROW_GEOMETRY.titleMinHeight,
     },
     milestoneSearchRow: {
       alignItems: "center",
@@ -421,7 +425,9 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
     lazyFooter: {
       alignItems: "center",
       gap: 8,
-      paddingVertical: 8,
+      paddingBottom: 6,
+      paddingTop: 12,
+      width: "100%",
     },
     noticeCard: {
       borderRadius: R.lg,
@@ -713,6 +719,27 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
       color: colors.textMuted,
       fontSize: 11,
     },
+    milestoneDetailsBody: {
+      gap: 14,
+      paddingBottom: 4,
+    },
+    milestoneDetailsDescription: {
+      color: colors.textSecondary,
+      fontSize: 14,
+      lineHeight: 21,
+    },
+    milestoneDetailsHeader: {
+      alignItems: "center",
+      flex: 1,
+      flexDirection: "row",
+      gap: 12,
+    },
+    milestoneDetailsMeta: {
+      borderRadius: R.md,
+      borderWidth: 1,
+      gap: 4,
+      padding: 12,
+    },
     modalEmpty: {
       alignItems: "center",
       gap: 8,
@@ -767,10 +794,7 @@ function getMilestoneStatusLabel(milestone: FitnessMilestoneProgressRecord) {
   return "Locked";
 }
 
-function getMilestoneTone(
-  milestone: FitnessMilestoneProgressRecord,
-  colors: ReturnType<typeof useTheme>["colors"],
-) {
+function getMilestoneTone(milestone: FitnessMilestoneProgressRecord, colors: ReturnType<typeof useTheme>["colors"]) {
   if (milestone.status === "claimed") return colors.success ?? colors.brand;
   if (milestone.status === "unlocked") return colors.brand;
   if (milestone.status === "pending_review" || milestone.status === "rejected") {
@@ -779,15 +803,60 @@ function getMilestoneTone(
   return colors.textMuted;
 }
 
-function BurstParticle({
-  activeKey,
-  color,
-  index,
-}: {
-  activeKey: number;
-  color: string;
-  index: number;
-}) {
+type FocusableMilestoneElement = View & { focus?: () => void };
+
+function focusMilestoneElement(element: FocusableMilestoneElement | null) {
+  if (!element) return;
+  if (Platform.OS === "web" && typeof element.focus === "function") {
+    element.focus();
+    return;
+  }
+  const nativeTag = findNodeHandle(element);
+  if (typeof nativeTag === "number") {
+    AccessibilityInfo.setAccessibilityFocus(nativeTag);
+  }
+}
+
+function useMilestoneReducedMotionPreference() {
+  const [nativePreference, setNativePreference] = useState(false);
+  const [webMediaPreference, setWebMediaPreference] = useState(() =>
+    Platform.OS === "web" && typeof window !== "undefined"
+      ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      : false,
+  );
+
+  useEffect(() => {
+    let active = true;
+    void AccessibilityInfo.isReduceMotionEnabled().then((enabled) => {
+      if (active) setNativePreference(enabled);
+    });
+    const subscription = AccessibilityInfo.addEventListener(
+      "reduceMotionChanged",
+      setNativePreference,
+    );
+    return () => {
+      active = false;
+      subscription.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== "web" || typeof window === "undefined") return;
+    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const onChange = (event: MediaQueryListEvent) =>
+      setWebMediaPreference(event.matches);
+    setWebMediaPreference(mediaQuery.matches);
+    mediaQuery.addEventListener("change", onChange);
+    return () => mediaQuery.removeEventListener("change", onChange);
+  }, []);
+
+  return resolveReducedMotionPreference(
+    nativePreference,
+    webMediaPreference,
+  );
+}
+
+function BurstParticle({ activeKey, color, index }: { activeKey: number; color: string; index: number }) {
   const progress = useSharedValue(1);
   const angle = (Math.PI * 2 * index) / 12;
   const distance = 42 + (index % 3) * 12;
@@ -826,13 +895,7 @@ function BurstParticle({
   );
 }
 
-function MilestoneClaimBurst({
-  activeKey,
-  color,
-}: {
-  activeKey: number;
-  color: string;
-}) {
+function MilestoneClaimBurst({ activeKey, color }: { activeKey: number; color: string }) {
   if (activeKey <= 0) return null;
   return (
     <>
@@ -879,23 +942,19 @@ function ProgressionSummary({
     <View
       style={[
         styles.progressionCard,
-        { borderColor: rankColor + "66", backgroundColor: colors.surfaceRaised },
+        {
+          borderColor: rankColor + "66",
+          backgroundColor: colors.surfaceRaised,
+        },
       ]}
     >
       <FitText style={styles.progressionLabel}>{label}</FitText>
-      <FitText style={[styles.progressionLevel, { color: rankColor }]}>
-        {getRankLabel(progression.level)}
-      </FitText>
+      <FitText style={[styles.progressionLevel, { color: rankColor }]}>{getRankLabel(progression.level)}</FitText>
       <FitText style={styles.progressionXp}>
         {points.toLocaleString("en-US")} {pointsLabel}
       </FitText>
       <View style={styles.progressionTrack}>
-        <View
-          style={[
-            styles.progressionFill,
-            { backgroundColor: rankColor, width: `${progress}%` },
-          ]}
-        />
+        <View style={[styles.progressionFill, { backgroundColor: rankColor, width: `${progress}%` }]} />
       </View>
       <FitText style={styles.progressionMeta}>
         {progress}% to next level · {nextLabel}
@@ -941,12 +1000,7 @@ function MasteryIcon({
   if (iconKind === "custom" && iconAssetKey?.trim()) {
     return (
       <View style={{ height: size, width: size }}>
-        <FitAvatarImage
-          alt={alt}
-          borderRadius={R.md}
-          fallback={fallback}
-          uri={iconAssetKey}
-        />
+        <FitAvatarImage alt={alt} borderRadius={R.md} fallback={fallback} uri={iconAssetKey} />
       </View>
     );
   }
@@ -972,9 +1026,7 @@ function LeaderboardAvatar({
         borderRadius={20}
         fallback={
           <View style={styles.leaderboardAvatar}>
-            <FitText style={[styles.leaderboardAvatarText, { color: colors.brand }]}>
-              {initials}
-            </FitText>
+            <FitText style={[styles.leaderboardAvatarText, { color: colors.brand }]}>{initials}</FitText>
           </View>
         }
         uri={uri}
@@ -983,17 +1035,11 @@ function LeaderboardAvatar({
   );
 }
 
-export function MuscleMasteryHeaderPanel({
-  controller,
-}: {
-  controller: MuscleMasteryScreenController;
-}) {
+export function MuscleMasteryHeaderPanel({ controller }: { controller: MuscleMasteryScreenController }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const heroProgressPercent = Math.min(
-    Math.max(controller.totalXpProgress, 0),
-    1,
-  );
+  const heroProgressPercent = Math.min(Math.max(controller.totalXpProgress, 0), 1);
+  const heroAccentColor = getRankColor(controller.lifetimeProgression.level);
   const currentStreak = controller.progressionProfile?.currentStreak ?? 0;
   const streakLabel = `${currentStreak} day streak`;
   const totalXpLabel = `${controller.totalXp.toLocaleString("en-US")} EXP`;
@@ -1004,44 +1050,61 @@ export function MuscleMasteryHeaderPanel({
         <FitText style={styles.heroTitle}>{streakLabel}</FitText>
         <View>
           <FitText style={styles.heroValueLabel}>TOTAL EXP</FitText>
-          <FitText style={[styles.heroValue, { color: colors.success }]}>
-            {totalXpLabel}
-          </FitText>
+          <FitText style={[styles.heroValue, { color: heroAccentColor }]}>{totalXpLabel}</FitText>
         </View>
       </View>
       <View style={{ gap: 8 }}>
-        <View style={styles.heroProgressTrack}>
+        <View style={[styles.heroProgressTrack, { backgroundColor: heroAccentColor + "18" }]}>
           <View
             style={[
               styles.heroProgressFill,
               {
-                backgroundColor: colors.brand,
+                backgroundColor: heroAccentColor,
                 width: `${heroProgressPercent * 100}%`,
               },
             ]}
           />
         </View>
         <FitText style={styles.heroProgressMeta}>
-          {controller.totalXp.toLocaleString("en-US")} /{" "}
-          {controller.totalXpGoal.toLocaleString("en-US")} EXP
+          {controller.totalXp.toLocaleString("en-US")} / {controller.totalXpGoal.toLocaleString("en-US")} EXP
         </FitText>
       </View>
     </View>
   );
 }
 
-export default function MuscleMasteryScreenContent({
-  controller,
-}: {
-  controller: MuscleMasteryScreenController;
-}) {
+export default function MuscleMasteryScreenContent({ controller }: { controller: MuscleMasteryScreenController }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [isMilestoneFilterOpen, setIsMilestoneFilterOpen] = useState(false);
   const [isMuscleFilterOpen, setIsMuscleFilterOpen] = useState(false);
-  const [isLeaderboardMuscleFilterOpen, setIsLeaderboardMuscleFilterOpen] =
-    useState(false);
+  const [isLeaderboardMuscleFilterOpen, setIsLeaderboardMuscleFilterOpen] = useState(false);
+  const [selectedMilestone, setSelectedMilestone] = useState<FitnessMilestoneProgressRecord | null>(null);
+  const milestoneCardRefs = useRef(
+    new Map<string, FocusableMilestoneElement>(),
+  );
+  const originatingMilestoneIdRef = useRef<string | null>(null);
+  const reduceMotion = useMilestoneReducedMotionPreference();
   const maxXp = controller.mastery[0]?.xpPoints ?? 0;
+
+  const openMilestoneDetails = useCallback(
+    (milestone: FitnessMilestoneProgressRecord) => {
+      originatingMilestoneIdRef.current = milestone.milestoneDefinitionId;
+      setSelectedMilestone(milestone);
+    },
+    [],
+  );
+
+  const closeMilestoneDetails = useCallback(() => {
+    const originatingMilestoneId = originatingMilestoneIdRef.current;
+    setSelectedMilestone(null);
+    if (!originatingMilestoneId) return;
+    requestAnimationFrame(() => {
+      focusMilestoneElement(
+        milestoneCardRefs.current.get(originatingMilestoneId) ?? null,
+      );
+    });
+  }, []);
 
   const renderSummary = () => (
     <>
@@ -1062,9 +1125,7 @@ export default function MuscleMasteryScreenContent({
                   },
                 ]}
               >
-                <FitText style={[styles.heroValue, { color: colors.success }]}>
-                  {item.value}
-                </FitText>
+                <FitText style={[styles.heroValue, { color: colors.success }]}>{item.value}</FitText>
                 <FitText style={styles.heroValueLabel}>TOTAL EXP</FitText>
               </View>
             ) : (
@@ -1143,9 +1204,7 @@ export default function MuscleMasteryScreenContent({
             style={[
               styles.milestoneFilterButton,
               {
-                backgroundColor: isMilestoneFilterOpen
-                  ? colors.brand + "16"
-                  : colors.surfaceRaised,
+                backgroundColor: isMilestoneFilterOpen ? colors.brand + "16" : colors.surfaceRaised,
                 borderColor: isMilestoneFilterOpen ? colors.brand : colors.border,
               },
             ]}
@@ -1174,136 +1233,175 @@ export default function MuscleMasteryScreenContent({
         />
       </View>
 
-      <FitSection heading="Milestones" cardStyle={{ padding: 14 }}>
+      <FitSection heading="Milestones" cardStyle={{ overflow: "visible", padding: 14 }}>
         {controller.sortedMilestones.length === 0 ? (
           <FitText style={styles.sectionMessage}>
-            Visible milestones will appear after the progression backbone publishes
-            active goals for this member account.
+            Visible milestones will appear after the progression backbone publishes active goals for this member
+            account.
           </FitText>
         ) : controller.milestonePageItems.length === 0 ? (
-          <FitText style={styles.sectionMessage}>
-            No milestones match the current search and state filter.
-          </FitText>
+          <FitText style={styles.sectionMessage}>No milestones match the current search and state filter.</FitText>
         ) : (
-          <FlatList
-            data={controller.milestonePageItems}
-            keyExtractor={(milestone) => milestone.milestoneDefinitionId}
-            numColumns={2}
-            nestedScrollEnabled
-            initialNumToRender={6}
-            maxToRenderPerBatch={6}
-            windowSize={5}
-            onEndReached={() => {
-              if (controller.milestoneHasMore) controller.onLoadMoreMilestones();
-            }}
-            onEndReachedThreshold={0.45}
-            style={styles.milestoneGrid}
-            columnWrapperStyle={{ justifyContent: "space-between" }}
-            showsVerticalScrollIndicator={false}
-            renderItem={({ item: milestone }) => {
+          <View accessibilityLabel="Milestone list" style={styles.milestoneGrid} testID="milestone-grid">
+            {controller.milestonePageItems.map((milestone) => {
+              const card = resolveMilestoneCardDisclosure(milestone);
               const tone = getMilestoneTone(milestone, colors);
               const canClaim = milestone.status === "unlocked";
-              const isRecalculating =
-                milestone.status === "pending_review" || milestone.status === "rejected";
-              const reviewHint = isRecalculating
-                ? "Recalculating shortly"
-                : null;
+              const statusLabel = getMilestoneStatusLabel(milestone);
+              const burstAnchor = resolveMilestoneBurstAnchor(
+                controller.celebratedMilestoneId,
+                milestone.milestoneDefinitionId,
+                controller.celebrationKey,
+                reduceMotion,
+              );
 
               return (
                 <View
+                  key={milestone.milestoneDefinitionId}
                   style={[
                     styles.milestoneCard,
                     {
-                      backgroundColor: canClaim
-                        ? colors.brand + "10"
-                        : colors.surfaceRaised,
+                      backgroundColor: canClaim ? colors.brand + "10" : colors.surfaceRaised,
                       borderColor: canClaim ? colors.brand + "55" : colors.border,
                     },
                   ]}
+                  testID={`milestone-card-${milestone.milestoneDefinitionId}`}
                 >
-                  {controller.celebratedMilestoneId === milestone.milestoneDefinitionId ? (
-                    <View pointerEvents="none" style={styles.claimBurstLayer}>
-                      <MilestoneClaimBurst
-                        activeKey={controller.celebrationKey}
-                        color={colors.brand}
+                  <Pressable
+                    accessibilityHint="Opens milestone details"
+                    accessibilityLabel={`${milestone.title}, ${statusLabel}`}
+                    accessibilityRole="button"
+                    onPress={() => openMilestoneDetails(milestone)}
+                    ref={(element) => {
+                      if (element) {
+                        milestoneCardRefs.current.set(
+                          milestone.milestoneDefinitionId,
+                          element as FocusableMilestoneElement,
+                        );
+                      } else {
+                        milestoneCardRefs.current.delete(
+                          milestone.milestoneDefinitionId,
+                        );
+                      }
+                    }}
+                    style={StyleSheet.absoluteFill}
+                    testID={`milestone-details-trigger-${milestone.milestoneDefinitionId}`}
+                  />
+                  {burstAnchor ? (
+                    <View
+                      accessibilityElementsHidden
+                      importantForAccessibility="no-hide-descendants"
+                      pointerEvents="none"
+                      style={styles.claimBurstLayer}
+                      testID={`milestone-burst-${burstAnchor.milestoneDefinitionId}`}
+                    >
+                      <MilestoneClaimBurst activeKey={burstAnchor.celebrationKey} color={colors.brand} />
+                    </View>
+                  ) : null}
+                  <View pointerEvents="none" style={{ gap: 10 }}>
+                    <View style={styles.milestoneCardHeader}>
+                      <MasteryIcon
+                        alt={`${milestone.title} icon`}
+                        iconAssetKey={milestone.iconAssetKey}
+                        iconKey={milestone.iconKey}
+                        iconKind={milestone.iconKind}
+                        tone={tone}
                       />
+                      <View style={{ flex: 1 }}>
+                        <FitText
+                          numberOfLines={MILESTONE_NARROW_GEOMETRY.titleLineCount}
+                          style={styles.milestoneTitle}
+                        >
+                          {card.title}
+                        </FitText>
+                      </View>
                     </View>
-                  ) : null}
-                  <View style={styles.milestoneCardHeader}>
-                    <MasteryIcon
-                      alt={`${milestone.title} icon`}
-                      iconAssetKey={milestone.iconAssetKey}
-                      iconKey={milestone.iconKey}
-                      iconKind={milestone.iconKind}
-                      tone={tone}
-                    />
-                    <View style={{ flex: 1, gap: 3 }}>
-                      <FitText numberOfLines={2} style={styles.milestoneTitle}>
-                        {milestone.title}
+                    <View style={styles.milestoneProgressCopy}>
+                      <FitText numberOfLines={1} style={styles.progressMeta}>
+                        {card.progressValue.toLocaleString("en-US")} / {card.targetValue.toLocaleString("en-US")}
                       </FitText>
-                      <FitText numberOfLines={2} style={styles.milestoneDescription}>
-                        {milestone.description ??
-                          `${formatTitle(milestone.triggerType)} milestone progress.`}
+                      <FitText style={[styles.progressMeta, { color: tone }]}>
+                        {Math.round(card.progressPercent)}%
                       </FitText>
                     </View>
-                  </View>
-                  <View style={styles.milestoneMeta}>
-                    <FitText numberOfLines={1} style={styles.progressMeta}>
-                      {formatTitle(milestone.category)}
-                    </FitText>
-                    <FitText numberOfLines={1} style={styles.progressMeta}>
-                      {milestone.progressValue.toLocaleString("en-US")} /{" "}
-                      {milestone.targetValue.toLocaleString("en-US")}
-                    </FitText>
-                    <FitText numberOfLines={1} style={[styles.progressMeta, { color: tone }]}>
-                      {getMilestoneStatusLabel(milestone)}
-                    </FitText>
-                  </View>
-                  {reviewHint ? (
-                    <FitText numberOfLines={1} style={[styles.milestoneReviewHintText, { color: tone }]}>
-                      {reviewHint}
-                    </FitText>
-                  ) : null}
-                  <View style={{ backgroundColor: colors.border, borderRadius: 999, height: 5, overflow: "hidden" }}>
                     <View
                       style={{
-                        backgroundColor: tone,
+                        backgroundColor: colors.border,
+                        borderRadius: 999,
                         height: 5,
-                        width: `${Math.min(Math.max(milestone.progressPercent, 0), 100)}%`,
+                        overflow: "hidden",
                       }}
-                    />
-                  </View>
-                  {canClaim ? (
-                    <View style={styles.milestoneActions}>
-                      <FitButton
-                        label="Claim"
-                        icon={Sparkles}
-                        onPress={() => void controller.onClaimMilestone(milestone)}
-                        variant="primary"
-                        disabled={controller.isClaimingMilestone}
-                        loading={controller.isClaimingMilestone}
-                        style={styles.claimButton}
-                        textStyle={{ fontSize: 11, textAlign: "center" }}
+                    >
+                      <View
+                        style={{
+                          backgroundColor: tone,
+                          height: 5,
+                          width: `${card.progressPercent}%`,
+                        }}
                       />
                     </View>
-                  ) : null}
+                  </View>
+                  <View style={styles.milestoneActions}>
+                    <Pressable
+                      accessibilityLabel={canClaim ? `Claim ${milestone.title}` : statusLabel}
+                      accessibilityRole="button"
+                      accessibilityState={{
+                        disabled: !canClaim || controller.isClaimingMilestone,
+                      }}
+                      disabled={!canClaim || controller.isClaimingMilestone}
+                      onPress={(event: GestureResponderEvent) => {
+                        event.stopPropagation();
+                        void controller.onClaimMilestone(milestone);
+                      }}
+                      style={[
+                        styles.claimButton,
+                        {
+                          backgroundColor: canClaim ? colors.brand : colors.surface,
+                          borderColor: canClaim ? colors.brand : colors.border,
+                          opacity: controller.isClaimingMilestone ? 0.65 : 1,
+                        },
+                      ]}
+                      testID={`milestone-claim-${milestone.milestoneDefinitionId}`}
+                    >
+                      {canClaim ? <Sparkles size={14} color={colors.onBrand ?? "#FFFFFF"} /> : null}
+                      <FitText
+                        style={{
+                          color: canClaim ? (colors.onBrand ?? "#FFFFFF") : tone,
+                          fontSize: 12,
+                          fontWeight: "800",
+                        }}
+                      >
+                        {canClaim && controller.isClaimingMilestone ? "Claiming..." : canClaim ? "Claim" : statusLabel}
+                      </FitText>
+                    </Pressable>
+                  </View>
                 </View>
               );
-            }}
-          />
-        )}
-        {controller.milestoneHasMore ? (
-          <View style={styles.lazyFooter}>
-            <FitButton
-              label="Load more milestones"
-              onPress={controller.onLoadMoreMilestones}
-              variant="ghost"
-            />
-            <FitText style={styles.progressMeta}>
-              Showing {controller.milestonePageItems.length} of {controller.sortedMilestones.length}
-            </FitText>
+            })}
           </View>
-        ) : null}
+        )}
+        {controller.milestonePageItems.length > 0
+          ? (() => {
+              const footer = resolveMilestoneFooterState({
+                hasMore: controller.milestoneHasMore,
+                total: controller.filteredMilestoneCount,
+                visible: controller.milestonePageItems.length,
+              });
+              return (
+                <View style={styles.lazyFooter} testID="milestone-list-footer">
+                  <FitButton
+                    accessibilityLabel={footer.label}
+                    disabled={footer.disabled}
+                    label={footer.label}
+                    onPress={controller.onLoadMoreMilestones}
+                    style={{ alignSelf: "stretch", width: "100%" }}
+                    variant={controller.milestoneHasMore ? "primary" : "ghost"}
+                  />
+                  <FitText style={styles.progressMeta}>{footer.summary}</FitText>
+                </View>
+              );
+            })()
+          : null}
       </FitSection>
     </>
   );
@@ -1327,11 +1425,7 @@ export default function MuscleMasteryScreenContent({
             onPress={() => setIsMuscleFilterOpen((open) => !open)}
             style={styles.muscleFilterButton}
           >
-            <SlidersHorizontal
-              size={20}
-              color={isMuscleFilterOpen ? colors.brand : colors.textMuted}
-              strokeWidth={2}
-            />
+            <SlidersHorizontal size={20} color={isMuscleFilterOpen ? colors.brand : colors.textMuted} strokeWidth={2} />
           </Pressable>
         </View>
         <FitFilter
@@ -1352,16 +1446,10 @@ export default function MuscleMasteryScreenContent({
             controller.mastery
               .filter((entry) =>
                 controller.muscleSearch.trim()
-                  ? entry.muscleGroup
-                      .toLowerCase()
-                      .includes(controller.muscleSearch.trim().toLowerCase())
+                  ? entry.muscleGroup.toLowerCase().includes(controller.muscleSearch.trim().toLowerCase())
                   : true,
               )
-              .filter(
-                (entry) =>
-                  controller.muscleRankFilter === "all" ||
-                  entry.rank === controller.muscleRankFilter,
-              )
+              .filter((entry) => controller.muscleRankFilter === "all" || entry.rank === controller.muscleRankFilter)
               .map((entry) => {
                 const lifetimeColor = getRankColor(entry.lifetimeProgression.level);
                 const seasonColor = getRankColor(entry.seasonProgression.level);
@@ -1376,7 +1464,13 @@ export default function MuscleMasteryScreenContent({
                       },
                     ]}
                   >
-                    <View style={{ alignItems: "center", flexDirection: "row", gap: 10 }}>
+                    <View
+                      style={{
+                        alignItems: "center",
+                        flexDirection: "row",
+                        gap: 10,
+                      }}
+                    >
                       <MasteryIcon
                         alt={`${entry.muscleGroup} icon`}
                         iconAssetKey={entry.iconAssetKey}
@@ -1395,32 +1489,58 @@ export default function MuscleMasteryScreenContent({
                       </FitText>
                     </View>
                     <View style={{ gap: 6 }}>
-                      <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          justifyContent: "space-between",
+                        }}
+                      >
                         <FitText style={styles.progressionLabel}>Lifetime</FitText>
                         <FitText style={styles.progressionXp}>
-                          {entry.lifetimeProgression.currentExp.toLocaleString("en-US")} EXP · {entry.lifetimeProgression.progressPercent}%
+                          {entry.lifetimeProgression.currentExp.toLocaleString("en-US")} EXP ·{" "}
+                          {entry.lifetimeProgression.progressPercent}%
                         </FitText>
                       </View>
                       <View style={styles.progressionTrack}>
-                        <View style={[styles.progressionFill, { backgroundColor: lifetimeColor, width: `${entry.lifetimeProgression.progressPercent}%` }]} />
+                        <View
+                          style={[
+                            styles.progressionFill,
+                            {
+                              backgroundColor: lifetimeColor,
+                              width: `${entry.lifetimeProgression.progressPercent}%`,
+                            },
+                          ]}
+                        />
                       </View>
-                      <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          justifyContent: "space-between",
+                        }}
+                      >
                         <FitText style={styles.progressionLabel}>Season</FitText>
                         <FitText style={[styles.progressionXp, { color: seasonColor }]}>
-                          {entry.seasonProgression.currentExp.toLocaleString("en-US")} EXP · {entry.seasonProgression.progressPercent}%
+                          {entry.seasonProgression.currentExp.toLocaleString("en-US")} EXP ·{" "}
+                          {entry.seasonProgression.progressPercent}%
                         </FitText>
                       </View>
                       <View style={styles.progressionTrack}>
-                        <View style={[styles.progressionFill, { backgroundColor: seasonColor, width: `${entry.seasonProgression.progressPercent}%` }]} />
+                        <View
+                          style={[
+                            styles.progressionFill,
+                            {
+                              backgroundColor: seasonColor,
+                              width: `${entry.seasonProgression.progressPercent}%`,
+                            },
+                          ]}
+                        />
                       </View>
                     </View>
                   </View>
                 );
               })
           ) : (
-            <FitText style={styles.sectionMessage}>
-              No muscle EXP entries match the current filters.
-            </FitText>
+            <FitText style={styles.sectionMessage}>No muscle EXP entries match the current filters.</FitText>
           )}
         </View>
       </FitSection>
@@ -1429,13 +1549,9 @@ export default function MuscleMasteryScreenContent({
 
   const renderLeaderboard = () => {
     const leaderboardEntries =
-      controller.leaderboardMode === "muscle"
-        ? controller.muscleLeaderboard
-        : controller.leaderboard;
+      controller.leaderboardMode === "muscle" ? controller.muscleLeaderboard : controller.leaderboard;
     const hasMore =
-      controller.leaderboardMode === "muscle"
-        ? controller.muscleLeaderboardHasMore
-        : controller.leaderboardHasMore;
+      controller.leaderboardMode === "muscle" ? controller.muscleLeaderboardHasMore : controller.leaderboardHasMore;
     const muscleDefinitionsBlocked =
       controller.leaderboardMode === "muscle" &&
       (controller.muscleDefinitionsLoading ||
@@ -1446,9 +1562,7 @@ export default function MuscleMasteryScreenContent({
         return (
           <View style={{ alignItems: "center", paddingVertical: 8 }}>
             <ActivityIndicator color={colors.brand} />
-            <FitText style={styles.sectionMessage}>
-              Loading active muscle filters...
-            </FitText>
+            <FitText style={styles.sectionMessage}>Loading active muscle filters...</FitText>
           </View>
         );
       }
@@ -1458,20 +1572,13 @@ export default function MuscleMasteryScreenContent({
             <FitText style={styles.sectionMessage}>
               Unable to load active muscle filters. {controller.muscleDefinitionsError}
             </FitText>
-            <FitButton
-              label="Retry"
-              icon={RefreshCw}
-              onPress={() => void controller.onRefresh()}
-              variant="ghost"
-            />
+            <FitButton label="Retry" icon={RefreshCw} onPress={() => void controller.onRefresh()} variant="ghost" />
           </View>
         );
       }
       return (
         <View style={{ alignItems: "center", paddingVertical: 8 }}>
-          <FitText style={styles.sectionMessage}>
-            No active muscle definitions are available yet.
-          </FitText>
+          <FitText style={styles.sectionMessage}>No active muscle definitions are available yet.</FitText>
         </View>
       );
     };
@@ -1496,18 +1603,13 @@ export default function MuscleMasteryScreenContent({
                     style={[
                       styles.leaderboardChip,
                       {
-                        backgroundColor: active
-                          ? colors.brand + "16"
-                          : colors.surfaceRaised,
+                        backgroundColor: active ? colors.brand + "16" : colors.surfaceRaised,
                         borderColor: active ? colors.brand : colors.border,
                       },
                     ]}
                   >
                     <FitText
-                      style={[
-                        styles.leaderboardChipText,
-                        { color: active ? colors.brand : colors.textSecondary },
-                      ]}
+                      style={[styles.leaderboardChipText, { color: active ? colors.brand : colors.textSecondary }]}
                     >
                       {option.label}
                     </FitText>
@@ -1519,11 +1621,7 @@ export default function MuscleMasteryScreenContent({
               <View style={styles.leaderboardSearchField}>
                 <FitSearch
                   value={controller.leaderboardSearch}
-                  placeholder={
-                    controller.leaderboardMode === "muscle"
-                      ? "Search By Muscle"
-                      : "Search Overall"
-                  }
+                  placeholder={controller.leaderboardMode === "muscle" ? "Search By Muscle" : "Search Overall"}
                   onChangeText={controller.setLeaderboardSearch}
                 />
               </View>
@@ -1531,17 +1629,15 @@ export default function MuscleMasteryScreenContent({
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={`Filter By Muscle: ${formatTitle(controller.selectedLeaderboardMuscle)} (${controller.leaderboardMuscleOptions.length} active muscles)`}
-                  accessibilityState={{ expanded: isLeaderboardMuscleFilterOpen }}
+                  accessibilityState={{
+                    expanded: isLeaderboardMuscleFilterOpen,
+                  }}
                   onPress={() => setIsLeaderboardMuscleFilterOpen((open) => !open)}
                   style={[
                     styles.leaderboardFilterButton,
                     {
-                      backgroundColor: isLeaderboardMuscleFilterOpen
-                        ? colors.brand + "16"
-                        : colors.surfaceRaised,
-                      borderColor: isLeaderboardMuscleFilterOpen
-                        ? colors.brand
-                        : colors.border,
+                      backgroundColor: isLeaderboardMuscleFilterOpen ? colors.brand + "16" : colors.surfaceRaised,
+                      borderColor: isLeaderboardMuscleFilterOpen ? colors.brand : colors.border,
                     },
                   ]}
                 >
@@ -1581,9 +1677,7 @@ export default function MuscleMasteryScreenContent({
                         style={[
                           styles.leaderboardChip,
                           {
-                            backgroundColor: active
-                              ? colors.brand + "16"
-                              : colors.surfaceRaised,
+                            backgroundColor: active ? colors.brand + "16" : colors.surfaceRaised,
                             borderColor: active ? colors.brand : colors.border,
                           },
                         ]}
@@ -1591,7 +1685,9 @@ export default function MuscleMasteryScreenContent({
                         <FitText
                           style={[
                             styles.leaderboardChipText,
-                            { color: active ? colors.brand : colors.textSecondary },
+                            {
+                              color: active ? colors.brand : colors.textSecondary,
+                            },
                           ]}
                         >
                           {scope === "season" ? "This season" : "Lifetime"}
@@ -1610,13 +1706,17 @@ export default function MuscleMasteryScreenContent({
             <View
               style={[
                 styles.privatePanel,
-                { backgroundColor: colors.surfaceRaised, borderColor: colors.border },
+                {
+                  backgroundColor: colors.surfaceRaised,
+                  borderColor: colors.border,
+                },
               ]}
             >
               <Lock size={24} color={colors.textMuted} strokeWidth={2} />
               <FitText style={styles.privatePanelTitle}>Leaderboard is private</FitText>
               <FitText style={styles.privatePanelText}>
-                Your progression still counts in history, but no member rows are shown while ranking visibility is private.
+                Your progression still counts in history, but no member rows are shown while ranking visibility is
+                private.
               </FitText>
             </View>
           ) : muscleDefinitionsBlocked ? null : leaderboardEntries.length > 0 ? (
@@ -1629,23 +1729,15 @@ export default function MuscleMasteryScreenContent({
                 return (
                   <View key={`${entry.userId}-${entry.rankPosition}`}>
                     <View style={styles.leaderboardRow}>
-                      <LeaderboardAvatar
-                        displayName={entry.displayName}
-                        styles={styles}
-                        uri={entry.avatarUrl}
-                      />
+                      <LeaderboardAvatar displayName={entry.displayName} styles={styles} uri={entry.avatarUrl} />
                       <View style={{ flex: 1 }}>
                         <FitText style={styles.leaderboardName} numberOfLines={1}>
                           {entry.displayName}
                         </FitText>
-                        <FitText style={styles.leaderboardSubtitle}>
-                          Rank #{entry.rankPosition}
-                        </FitText>
+                        <FitText style={styles.leaderboardSubtitle}>Rank #{entry.rankPosition}</FitText>
                       </View>
                       <View style={styles.leaderboardMeta}>
-                        <FitText style={styles.leaderboardXp}>
-                          {xp.toLocaleString("en-US")} EXP
-                        </FitText>
+                        <FitText style={styles.leaderboardXp}>{xp.toLocaleString("en-US")} EXP</FitText>
                         <FitText style={styles.leaderboardSubtitle}>
                           {isCurrent
                             ? "You"
@@ -1663,9 +1755,7 @@ export default function MuscleMasteryScreenContent({
               })}
             </View>
           ) : (
-            <FitText style={styles.sectionMessage}>
-              No visible rankings match this search or filter yet.
-            </FitText>
+            <FitText style={styles.sectionMessage}>No visible rankings match this search or filter yet.</FitText>
           )}
           {controller.rankingVisibility !== "private" && hasMore ? (
             <FitButton
@@ -1709,9 +1799,7 @@ export default function MuscleMasteryScreenContent({
             },
           ]}
         >
-          <FitText style={[styles.sectionMessage, { color: colors.brand }]}>
-            {controller.statusMessage}
-          </FitText>
+          <FitText style={[styles.sectionMessage, { color: colors.brand }]}>{controller.statusMessage}</FitText>
         </View>
       ) : null}
 
@@ -1738,9 +1826,7 @@ export default function MuscleMasteryScreenContent({
         </FitSection>
       ) : controller.isError ? (
         <FitSection heading="Overview">
-          <FitText style={styles.sectionMessage}>
-            {controller.errorMessage}
-          </FitText>
+          <FitText style={styles.sectionMessage}>{controller.errorMessage}</FitText>
           <FitButton
             label="Retry"
             icon={RefreshCw}
@@ -1752,8 +1838,8 @@ export default function MuscleMasteryScreenContent({
       ) : controller.isEmpty ? (
         <FitSection heading="Overview">
           <FitText style={styles.emptyMessage}>
-            No progression has landed on this account yet. Finish a tracked
-            workout to start earning EXP, milestone progress, and season points.
+            No progression has landed on this account yet. Finish a tracked workout to start earning EXP, milestone
+            progress, and season points.
           </FitText>
           <FitButton
             label="Start First Workout"
@@ -1774,9 +1860,7 @@ export default function MuscleMasteryScreenContent({
                   style={[
                     styles.tabButton,
                     {
-                      backgroundColor: active
-                        ? colors.brand + "12"
-                        : colors.surfaceRaised,
+                      backgroundColor: active ? colors.brand + "12" : colors.surfaceRaised,
                       borderColor: active ? colors.brand : colors.border,
                     },
                   ]}
@@ -1785,12 +1869,7 @@ export default function MuscleMasteryScreenContent({
                   accessibilityLabel={`Show ${tab.label}`}
                   accessibilityState={{ selected: active }}
                 >
-                  <FitText
-                    style={[
-                      styles.tabText,
-                      { color: active ? colors.brand : colors.textSecondary },
-                    ]}
-                  >
+                  <FitText style={[styles.tabText, { color: active ? colors.brand : colors.textSecondary }]}>
                     {tab.label}
                   </FitText>
                 </Pressable>
@@ -1804,22 +1883,178 @@ export default function MuscleMasteryScreenContent({
           {controller.activeTab === "leaderboard" ? renderLeaderboard() : null}
         </>
       )}
+      <MilestoneDetailsModal
+        milestone={selectedMilestone}
+        onClose={closeMilestoneDetails}
+      />
       <SeasonHistoryModal controller={controller} />
     </View>
   );
 }
 
-function SeasonHistoryModal({
-  controller,
+function getMilestoneRewardLabel(rewardPayload: Record<string, unknown> | null): string | null {
+  if (!rewardPayload) return null;
+  const xp = rewardPayload.xp;
+  if (typeof xp === "number" && Number.isFinite(xp)) {
+    return `${xp.toLocaleString("en-US")} EXP`;
+  }
+  return null;
+}
+
+function MilestoneDetailsModal({
+  milestone,
+  onClose,
 }: {
-  controller: MuscleMasteryScreenController;
+  milestone: FitnessMilestoneProgressRecord | null;
+  onClose: () => void;
 }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { height, width } = useWindowDimensions();
+  const closeControlRef = useRef<FocusableMilestoneElement | null>(null);
+
+  useEffect(() => {
+    if (!milestone || Platform.OS !== "web" || typeof window === "undefined") {
+      return;
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      onClose();
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, [milestone, onClose]);
+
+  if (!milestone) return null;
+
+  const tone = getMilestoneTone(milestone, colors);
+  const rewardLabel = getMilestoneRewardLabel(milestone.rewardPayload);
+  const progressPercent = Math.min(Math.max(milestone.progressPercent, 0), 100);
+
+  return (
+    <Modal
+      animationType="fade"
+      onRequestClose={onClose}
+      onShow={() =>
+        requestAnimationFrame(() =>
+          focusMilestoneElement(closeControlRef.current),
+        )
+      }
+      transparent
+      visible
+    >
+      <Pressable
+        accessibilityLabel="Dismiss milestone details"
+        onPress={onClose}
+        style={styles.modalBackdrop}
+        testID="milestone-details-backdrop"
+      >
+        <Pressable
+          accessibilityLabel={`${milestone.title} milestone details`}
+          accessibilityViewIsModal
+          onPress={(event) => event.stopPropagation()}
+          role="dialog"
+          style={[
+            styles.modalCard,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              maxHeight: Math.min(height - 24, 620),
+              maxWidth: Math.min(Math.max(width - 24, 300), 560),
+            },
+          ]}
+          testID="milestone-details-modal"
+        >
+          <View style={styles.modalHeader}>
+            <View style={styles.milestoneDetailsHeader}>
+              <MasteryIcon
+                alt={`${milestone.title} icon`}
+                iconAssetKey={milestone.iconAssetKey}
+                iconKey={milestone.iconKey}
+                iconKind={milestone.iconKind}
+                tone={tone}
+              />
+              <FitText style={styles.modalTitle}>{milestone.title}</FitText>
+            </View>
+            <Pressable
+              accessibilityLabel="Close milestone details"
+              accessibilityRole="button"
+              onPress={onClose}
+              ref={(element) => {
+                closeControlRef.current =
+                  element as FocusableMilestoneElement | null;
+              }}
+              style={[styles.modalClose, { borderColor: colors.border }]}
+              testID="milestone-details-close"
+            >
+              <X size={18} color={colors.textSecondary} />
+            </Pressable>
+          </View>
+          <ScrollView
+            contentContainerStyle={styles.milestoneDetailsBody}
+            nestedScrollEnabled={false}
+            showsVerticalScrollIndicator={false}
+          >
+            <FitText style={styles.milestoneDetailsDescription}>
+              {milestone.description ?? `${formatTitle(milestone.triggerType)} milestone progress.`}
+            </FitText>
+            <View
+              style={[
+                styles.milestoneDetailsMeta,
+                {
+                  backgroundColor: colors.surfaceRaised,
+                  borderColor: colors.border,
+                },
+              ]}
+            >
+              <View style={styles.milestoneProgressCopy}>
+                <FitText style={styles.progressMeta}>
+                  {milestone.progressValue.toLocaleString("en-US")} / {milestone.targetValue.toLocaleString("en-US")}
+                </FitText>
+                <FitText style={[styles.progressMeta, { color: tone }]}>{Math.round(progressPercent)}%</FitText>
+              </View>
+              <View
+                style={{
+                  backgroundColor: colors.border,
+                  borderRadius: 999,
+                  height: 7,
+                  overflow: "hidden",
+                }}
+              >
+                <View
+                  style={{
+                    backgroundColor: tone,
+                    height: 7,
+                    width: `${progressPercent}%`,
+                  }}
+                />
+              </View>
+              <FitText style={[styles.progressMeta, { color: tone }]}>
+                {getMilestoneStatusLabel(milestone)}
+                {rewardLabel ? ` · Reward: ${rewardLabel}` : ""}
+              </FitText>
+            </View>
+          </ScrollView>
+          <FitButton label="Close" onPress={onClose} variant="ghost" />
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+function SeasonHistoryModal({ controller }: { controller: MuscleMasteryScreenController }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { height, width } = useWindowDimensions();
   const [isPickerOpen, setIsPickerOpen] = useState(false);
-  const [isSeasonHistoryMuscleFilterOpen, setIsSeasonHistoryMuscleFilterOpen] =
-    useState(false);
+  const [isSeasonHistoryMuscleFilterOpen, setIsSeasonHistoryMuscleFilterOpen] = useState(false);
   const [seasonSearch, setSeasonSearch] = useState("");
   const modalWidth = Math.min(Math.max(width - 24, 300), 680);
   const listHeight = Math.min(Math.max(height * 0.48, 260), 430);
@@ -1842,9 +2077,7 @@ function SeasonHistoryModal({
       return (
         <View style={{ alignItems: "center", paddingVertical: 8 }}>
           <ActivityIndicator color={colors.brand} />
-          <FitText style={styles.sectionMessage}>
-            Loading active muscle filters...
-          </FitText>
+          <FitText style={styles.sectionMessage}>Loading active muscle filters...</FitText>
         </View>
       );
     }
@@ -1854,38 +2087,25 @@ function SeasonHistoryModal({
           <FitText style={styles.sectionMessage}>
             Unable to load active muscle filters. {controller.muscleDefinitionsError}
           </FitText>
-          <FitButton
-            label="Retry"
-            icon={RefreshCw}
-            onPress={() => void controller.onRefresh()}
-            variant="ghost"
-          />
+          <FitButton label="Retry" icon={RefreshCw} onPress={() => void controller.onRefresh()} variant="ghost" />
         </View>
       );
     }
     return (
       <View style={{ alignItems: "center", paddingVertical: 8 }}>
-        <FitText style={styles.sectionMessage}>
-          No active muscle definitions are available yet.
-        </FitText>
+        <FitText style={styles.sectionMessage}>No active muscle definitions are available yet.</FitText>
       </View>
     );
   };
 
-  const renderOverallRow = ({
-    item,
-  }: {
-    item: FitnessSeasonHistoryRecord["topPerformers"][number];
-  }) => {
+  const renderOverallRow = ({ item }: { item: FitnessSeasonHistoryRecord["topPerformers"][number] }) => {
     const isTopThree = item.rankPosition <= 3;
     return (
       <View
         style={[
           styles.modalRow,
           {
-            backgroundColor: isTopThree
-              ? colors.brand + (item.rankPosition === 1 ? "22" : "12")
-              : colors.surfaceRaised,
+            backgroundColor: isTopThree ? colors.brand + (item.rankPosition === 1 ? "22" : "12") : colors.surfaceRaised,
             borderColor: isTopThree ? colors.brand + "66" : colors.border,
           },
         ]}
@@ -1929,11 +2149,7 @@ function SeasonHistoryModal({
     );
   };
 
-  const renderMuscleRow = ({
-    item,
-  }: {
-    item: FitnessMuscleLeaderboardEntryRecord;
-  }) => {
+  const renderMuscleRow = ({ item }: { item: FitnessMuscleLeaderboardEntryRecord }) => {
     const isTopThree = item.rankPosition <= 3;
     const rankColor = getRankColor(item.progression?.level ?? "bronze");
     return (
@@ -1947,9 +2163,7 @@ function SeasonHistoryModal({
         ]}
       >
         <View style={[styles.modalRank, { backgroundColor: rankColor + "24" }]}>
-          <FitText style={[styles.modalRankText, { color: rankColor }]}>
-            #{item.rankPosition}
-          </FitText>
+          <FitText style={[styles.modalRankText, { color: rankColor }]}>#{item.rankPosition}</FitText>
         </View>
         <LeaderboardAvatar displayName={item.displayName} styles={styles} uri={item.avatarUrl} />
         <View style={styles.modalCopy}>
@@ -1960,9 +2174,7 @@ function SeasonHistoryModal({
             {getRankLabel(item.progression?.level ?? "bronze")} · {formatTitle(controller.seasonHistoryMuscleKey)}
           </FitText>
         </View>
-        <FitText style={[styles.modalValue, { color: rankColor }]}>
-          {item.xpPoints.toLocaleString("en-US")} EXP
-        </FitText>
+        <FitText style={[styles.modalValue, { color: rankColor }]}>{item.xpPoints.toLocaleString("en-US")} EXP</FitText>
       </View>
     );
   };
@@ -2004,10 +2216,10 @@ function SeasonHistoryModal({
             </View>
 
             <View style={styles.modalControlRow}>
-              {([
+              {[
                 { label: "Overall", value: "overall" as const },
                 { label: "By muscle", value: "muscle" as const },
-              ]).map((option) => {
+              ].map((option) => {
                 const active = controller.seasonHistoryScope === option.value;
                 return (
                   <Pressable
@@ -2062,41 +2274,29 @@ function SeasonHistoryModal({
                   accessibilityState={{
                     expanded: isSeasonHistoryMuscleFilterOpen,
                   }}
-                  onPress={() =>
-                    setIsSeasonHistoryMuscleFilterOpen((open) => !open)
-                  }
+                  onPress={() => setIsSeasonHistoryMuscleFilterOpen((open) => !open)}
                   disabled={muscleDefinitionsBlocked}
                   style={[
                     styles.modalFilterButton,
                     {
-                      backgroundColor: isSeasonHistoryMuscleFilterOpen
-                        ? colors.brand + "16"
-                        : colors.surfaceRaised,
-                      borderColor: isSeasonHistoryMuscleFilterOpen
-                        ? colors.brand
-                        : colors.border,
+                      backgroundColor: isSeasonHistoryMuscleFilterOpen ? colors.brand + "16" : colors.surfaceRaised,
+                      borderColor: isSeasonHistoryMuscleFilterOpen ? colors.brand : colors.border,
                     },
                   ]}
                 >
                   <SlidersHorizontal
                     size={18}
-                    color={
-                      isSeasonHistoryMuscleFilterOpen
-                        ? colors.brand
-                        : colors.textMuted
-                    }
+                    color={isSeasonHistoryMuscleFilterOpen ? colors.brand : colors.textMuted}
                     strokeWidth={2}
                   />
                 </Pressable>
                 <FitFilter
                   isOpen={isSeasonHistoryMuscleFilterOpen && !muscleDefinitionsBlocked}
                   topChipLabel="Muscle"
-                  topChipOptions={controller.seasonHistoryMuscleOptions.map(
-                    (muscle) => ({
-                      label: formatTitle(muscle),
-                      value: muscle,
-                    }),
-                  )}
+                  topChipOptions={controller.seasonHistoryMuscleOptions.map((muscle) => ({
+                    label: formatTitle(muscle),
+                    value: muscle,
+                  }))}
                   dropdownStyle={styles.modalFilterDropdown}
                   activeTopChip={controller.seasonHistoryMuscleKey}
                   onTopChipChange={(value) => {
@@ -2117,7 +2317,12 @@ function SeasonHistoryModal({
             ) : controller.seasonHistoryError ? (
               <View style={styles.modalEmpty}>
                 <FitText style={styles.sectionMessage}>{controller.seasonHistoryError}</FitText>
-                <FitButton label="Retry" icon={RefreshCw} onPress={() => void controller.onRefreshSeasonHistory()} variant="ghost" />
+                <FitButton
+                  label="Retry"
+                  icon={RefreshCw}
+                  onPress={() => void controller.onRefreshSeasonHistory()}
+                  variant="ghost"
+                />
               </View>
             ) : controller.seasonHistoryScope === "muscle" && controller.seasonHistoryMuscleLoading ? (
               <View style={styles.modalEmpty}>
@@ -2127,7 +2332,12 @@ function SeasonHistoryModal({
             ) : controller.seasonHistoryScope === "muscle" && controller.seasonHistoryMuscleError ? (
               <View style={styles.modalEmpty}>
                 <FitText style={styles.sectionMessage}>{controller.seasonHistoryMuscleError}</FitText>
-                <FitButton label="Retry" icon={RefreshCw} onPress={() => void controller.onRefreshSeasonHistory()} variant="ghost" />
+                <FitButton
+                  label="Retry"
+                  icon={RefreshCw}
+                  onPress={() => void controller.onRefreshSeasonHistory()}
+                  variant="ghost"
+                />
               </View>
             ) : controller.seasonHistoryScope === "muscle" ? (
               muscleRows.length > 0 ? (
@@ -2140,7 +2350,9 @@ function SeasonHistoryModal({
                 />
               ) : (
                 <View style={styles.modalEmpty}>
-                  <FitText style={styles.sectionMessage}>No muscle season rankings are available for this season yet.</FitText>
+                  <FitText style={styles.sectionMessage}>
+                    No muscle season rankings are available for this season yet.
+                  </FitText>
                 </View>
               )
             ) : selectedSeason && selectedSeason.topPerformers.length > 0 ? (
@@ -2190,11 +2402,7 @@ function SeasonHistoryModal({
                 <X size={19} color={colors.textMuted} strokeWidth={2} />
               </Pressable>
             </View>
-            <FitSearch
-              value={seasonSearch}
-              placeholder="Search seasons"
-              onChangeText={setSeasonSearch}
-            />
+            <FitSearch value={seasonSearch} placeholder="Search seasons" onChangeText={setSeasonSearch} />
             <FlatList
               data={filteredSeasons}
               keyExtractor={(season) => season.seasonId}
@@ -2222,7 +2430,15 @@ function SeasonHistoryModal({
                       {season.title}
                     </FitText>
                     <FitText style={styles.modalHint}>
-                      {new Date(season.startsAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })} – {new Date(season.endsAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      {new Date(season.startsAt).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                      })}{" "}
+                      –{" "}
+                      {new Date(season.endsAt).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                      })}
                     </FitText>
                   </Pressable>
                 );

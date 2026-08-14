@@ -855,15 +855,21 @@ export class AnalyticsRepository extends BaseRepository {
         const actorName = toDisplayName(entry.user.profile);
         const occurredAt =
           entry.completed_at ?? entry.cancelled_at ?? entry.created_at;
+        const isMaintenanceCancellation =
+          entry.cancellation_reason === 'VENUE_MAINTENANCE';
 
         return {
           id: entry.id,
           kind: 'booking' as const,
           title: 'Venue booking activity',
-          description: `${actorName} updated a ${entry.amenity.name} booking.`,
+          description: isMaintenanceCancellation
+            ? `${entry.amenity.name} was cancelled by operations because of venue maintenance.`
+            : `${actorName} updated a ${entry.amenity.name} booking.`,
           occurred_at: occurredAt,
           actor_name: actorName,
-          status: entry.status,
+          status: isMaintenanceCancellation
+            ? 'operational_maintenance'
+            : entry.status,
           entity_label: 'Venue booking',
           entity_id: entry.id,
         };

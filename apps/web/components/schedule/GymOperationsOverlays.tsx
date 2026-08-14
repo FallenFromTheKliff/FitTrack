@@ -1,15 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { CalendarPlus, UserPlus } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 
 import type {
+  AppointmentAvailabilitySlot,
   CoachAvailabilityResponse,
   VenueAvailabilityRecord,
 } from "@fittrack/api-client";
 import type { CreateUserCoachProfileInput } from "@fittrack/types";
 import {
+  appointmentAvailabilityQueryOptions,
   coachAvailabilityQueryOptions,
   venueAvailabilityQueryOptions,
 } from "@fittrack/query";
@@ -23,6 +25,7 @@ import {
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { webApiClient } from "@/lib/api-client";
+import { createClientIdempotencyKey } from "@/lib/commerce-checkout";
 import CoachSpecialtyPicker from "@/components/coaching/CoachSpecialtyPicker";
 import {
   FitButton,
@@ -33,6 +36,13 @@ import {
 } from "@/components/fit";
 import { CalendarModal, ConfirmModal } from "@/components/modals";
 import { OverlayAmountGrid } from "./GymOperationsOverlayCards";
+import {
+  buildStaffCoachBookingSubmission,
+  getMonthlyCoachPaidPeriod,
+  isActiveMonthlyCoachOffer,
+  STAFF_COACH_SESSION_DURATIONS,
+  type StaffCoachBookingSubmission,
+} from "./coachCashBooking";
 import { OverlayFrame } from "./GymOperationsOverlayFrame";
 import {
   EMAIL_PATTERN,
@@ -391,39 +401,6 @@ function sortVenueAvailabilitySlots(slots: VenueAvailabilityRecord[]) {
   );
 }
 
-function findNextCoachSlot(
-  availability: CoachAvailabilityResponse | undefined,
-) {
-  const slots = expandCoachAvailabilitySlots(
-    availability?.availability ?? [],
-    availability?.scheduleType ?? "part_time",
-  );
-  const currentMinutes = getCurrentGymMinutes();
-
-  for (let offset = 0; offset <= 30; offset += 1) {
-    const candidateDate = getDateInputOffset(offset);
-    const dailySlots = slots
-      .filter(
-        (slot) => slot.isAvailable && matchesDay(candidateDate, slot.dayOfWeek),
-      )
-      .sort(
-        (left, right) => toMinutes(left.startTime) - toMinutes(right.startTime),
-      );
-
-    for (const slot of dailySlots) {
-      const durationMinutes = slot.durationMinutes;
-      if (durationMinutes <= 0) continue;
-      if (offset === 0 && toMinutes(slot.startTime) <= currentMinutes) continue;
-      return {
-        date: candidateDate,
-        slotValue: `${slot.startTime}|${durationMinutes}`,
-      };
-    }
-  }
-
-  return null;
-}
-
 function getUpcomingCoachAvailableDates(
   availability: CoachAvailabilityResponse | undefined,
   windowDays = 30,
@@ -453,6 +430,16 @@ function getUpcomingCoachAvailableDates(
   return dates;
 }
 
+function formatCanonicalCoachTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Unavailable";
+  return date.toLocaleTimeString("en-PH", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "Asia/Manila",
+  });
+}
+
 export function GymOperationsCreateVenueBookingModal({
   coachOptions,
   isOpen,
@@ -478,7 +465,7 @@ export function GymOperationsCreateVenueBookingModal({
     notes?: string;
     paymentStage?: "full";
     startsAt: string;
-  }) => void;
+  }) => Promise<{ error?: string; success: boolean }>;
   onRetryVenues?: () => void;
   venueOptions: SelectOption[];
   venuesLoadFailed?: boolean;
@@ -495,6 +482,9 @@ export function GymOperationsCreateVenueBookingModal({
   const [note, setNote] = useState("");
   const paymentStage = "full" as const;
   const [errorText, setErrorText] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<
+    Partial<Record<"date" | "end" | "member" | "start" | "venue", string>>
+  >({});
   const [createConfirm, setCreateConfirm] =
     useState<OverlayConfirmation | null>(null);
   const shouldAnimate = settings.animationLevel !== "none";
@@ -518,9 +508,11 @@ export function GymOperationsCreateVenueBookingModal({
     const defaultMemberId = memberOptions[0]?.value ?? "";
     setMemberId((current) => current || defaultMemberId);
     setVenueId((current) =>
-      venueOptions.some((option) => option.value === current)
+      venueOptions.some(
+        (option) => option.value === current && !option.disabled,
+      )
         ? current
-        : venueOptions[0]?.value || "",
+        : venueOptions.find((option) => !option.disabled)?.value || "",
     );
     setCoachId("");
     setDate(getDefaultDateInput());
@@ -529,6 +521,7 @@ export function GymOperationsCreateVenueBookingModal({
     setEndTime("10:00");
     setNote("");
     setErrorText("");
+    setFieldErrors({});
     setCreateConfirm(null);
   }, [coachOptions, isOpen, memberOptions, venueOptions]);
 
@@ -641,6 +634,8 @@ export function GymOperationsCreateVenueBookingModal({
   const selectedVenueOption = venueOptions.find(
     (option) => option.value === venueId,
   );
+  const selectedVenueUnavailableReason =
+    selectedVenueOption?.unavailableReason ?? null;
   const selectedCoachOption = coachOptions.find(
     (option) => option.value === coachId,
   );
@@ -658,20 +653,9 @@ export function GymOperationsCreateVenueBookingModal({
   const isVenueWindowInFuture =
     Boolean(startTime) &&
     (date !== getDefaultDateInput() || toMinutes(startTime) > currentMinutes);
-  const canSubmit =
-    Boolean(memberId) &&
-    Boolean(selectedVenueOption) &&
-    Boolean(date) &&
-    Boolean(startTime) &&
-    Boolean(endTime) &&
-    endTime > startTime &&
-    isVenueWindowInFuture &&
-    !venueAvailabilityLoading &&
-    !venueAvailabilityError &&
-    !hasConflict;
-
-  const submitVenueBooking = () => {
-    onCreate({
+  const submitVenueBooking = async () => {
+    setCreateConfirm(null);
+    const result = await onCreate({
       amenityId: venueId,
       ...(coachId ? { coachId } : {}),
       endsAt: toIsoString(date, endTime),
@@ -680,30 +664,45 @@ export function GymOperationsCreateVenueBookingModal({
       paymentStage,
       startsAt: toIsoString(date, startTime),
     });
+    if (!result.success) {
+      const message = result.error ?? "Unable to create venue booking.";
+      if (/venue|amenity|maintenance|reservable/i.test(message)) {
+        setFieldErrors((current) => ({ ...current, venue: message }));
+        setErrorText("");
+      } else {
+        setErrorText(message);
+      }
+    }
   };
 
   const handleCreate = () => {
     setErrorText("");
+    const nextFieldErrors: typeof fieldErrors = {};
     if (!memberId) {
-      setErrorText("Select the member for this venue booking.");
-      return;
+      nextFieldErrors.member = "Select the member for this venue booking.";
     }
     if (!selectedVenueOption) {
-      setErrorText("Select a venue before creating the booking.");
-      return;
+      nextFieldErrors.venue = "Select a venue before creating the booking.";
+    } else if (selectedVenueOption.disabled || selectedVenueUnavailableReason) {
+      nextFieldErrors.venue =
+        selectedVenueUnavailableReason ?? "This venue is not bookable.";
     }
-    if (!date || !startTime || !endTime || endTime <= startTime) {
-      setErrorText("Select a valid date and time window.");
-      return;
+    if (!date) nextFieldErrors.date = "Select a booking date.";
+    if (!startTime) nextFieldErrors.start = "Select a live start time.";
+    if (!endTime) nextFieldErrors.end = "Select a live end time.";
+    if (startTime && endTime && endTime <= startTime) {
+      nextFieldErrors.end = "End time must be after the start time.";
     }
     if (!isVenueWindowInFuture) {
-      setErrorText("Same-day bookings must use a future start time.");
-      return;
+      nextFieldErrors.start =
+        "Same-day bookings must use a future start time.";
     }
     if (hasConflict) {
-      setErrorText(
-        "The selected venue already has a pending or confirmed booking in this time window.",
-      );
+      nextFieldErrors.end =
+        "The selected venue already has a pending or confirmed booking in this time window.";
+    }
+    setFieldErrors(nextFieldErrors);
+    if (Object.keys(nextFieldErrors).length > 0) {
       return;
     }
 
@@ -730,7 +729,7 @@ export function GymOperationsCreateVenueBookingModal({
             icon={CalendarPlus}
             iconSize={15}
             onClick={handleCreate}
-            disabled={!canSubmit || isSubmitting}
+            disabled={isSubmitting}
             style={actionPillStyle(colors, true)}
             textStyle={{ fontSize: 13, fontWeight: 700 }}
           />
@@ -769,12 +768,20 @@ export function GymOperationsCreateVenueBookingModal({
                   name="manualVenueBookingMember"
                   aria-label="Manual venue booking member"
                   value={memberId}
-                  onChange={(event) => setMemberId(event.target.value)}
+                  onChange={(event) => {
+                    setMemberId(event.target.value);
+                    setFieldErrors((current) => ({ ...current, member: undefined }));
+                  }}
                   options={memberOptions}
                   placeholder="Select member"
                   compact
                   fullWidth
                 />
+                {fieldErrors.member ? (
+                  <FitText style={{ color: colors.danger, fontSize: 11 }}>
+                    {fieldErrors.member}
+                  </FitText>
+                ) : null}
               </div>
               <div style={{ display: "grid", gap: 6 }}>
                 <FitText
@@ -796,6 +803,13 @@ export function GymOperationsCreateVenueBookingModal({
                     setVenueId(event.target.value);
                     setStartTime("");
                     setEndTime("");
+                    const option = venueOptions.find(
+                      (candidate) => candidate.value === event.target.value,
+                    );
+                    setFieldErrors((current) => ({
+                      ...current,
+                      venue: option?.unavailableReason ?? undefined,
+                    }));
                   }}
                   options={venueOptions}
                   disabled={
@@ -826,6 +840,11 @@ export function GymOperationsCreateVenueBookingModal({
                 ) : venueOptions.length === 0 ? (
                   <FitText style={{ color: colors.textMuted, fontSize: 12 }}>
                     No reservable venues are available.
+                  </FitText>
+                ) : null}
+                {fieldErrors.venue ? (
+                  <FitText style={{ color: colors.danger, fontSize: 11 }}>
+                    {fieldErrors.venue}
                   </FitText>
                 ) : null}
               </div>
@@ -864,6 +883,11 @@ export function GymOperationsCreateVenueBookingModal({
                   }}
                   textStyle={{ fontSize: 13, fontWeight: 700 }}
                 />
+                {fieldErrors.date ? (
+                  <FitText style={{ color: colors.danger, fontSize: 11 }}>
+                    {fieldErrors.date}
+                  </FitText>
+                ) : null}
               </div>
               <div style={{ display: "grid", gap: 6 }}>
                 <FitText
@@ -884,6 +908,11 @@ export function GymOperationsCreateVenueBookingModal({
                   onChange={(event) => {
                     setStartTime(event.target.value);
                     setEndTime("");
+                    setFieldErrors((current) => ({
+                      ...current,
+                      start: undefined,
+                      end: undefined,
+                    }));
                   }}
                   options={venueStartOptions}
                   disabled={
@@ -892,6 +921,11 @@ export function GymOperationsCreateVenueBookingModal({
                   compact
                   fullWidth
                 />
+                {fieldErrors.start ? (
+                  <FitText style={{ color: colors.danger, fontSize: 11 }}>
+                    {fieldErrors.start}
+                  </FitText>
+                ) : null}
               </div>
               <div style={{ display: "grid", gap: 6 }}>
                 <FitText
@@ -909,12 +943,20 @@ export function GymOperationsCreateVenueBookingModal({
                   name="manualVenueBookingEndTime"
                   aria-label="Manual venue booking end time"
                   value={endTime}
-                  onChange={(event) => setEndTime(event.target.value)}
+                  onChange={(event) => {
+                    setEndTime(event.target.value);
+                    setFieldErrors((current) => ({ ...current, end: undefined }));
+                  }}
                   options={venueEndOptions}
                   disabled={!startTime || venueEndOptions.length === 0}
                   compact
                   fullWidth
                 />
+                {fieldErrors.end ? (
+                  <FitText style={{ color: colors.danger, fontSize: 11 }}>
+                    {fieldErrors.end}
+                  </FitText>
+                ) : null}
               </div>
             </div>
 
@@ -1048,6 +1090,12 @@ export function GymOperationsCreateVenueBookingModal({
               setDate(nextDate);
               setStartTime("");
               setEndTime("");
+              setFieldErrors((current) => ({
+                ...current,
+                date: undefined,
+                end: undefined,
+                start: undefined,
+              }));
             }}
           />
         </div>
@@ -1062,7 +1110,6 @@ export function GymOperationsCreateVenueBookingModal({
         isLoading={isSubmitting}
         onConfirm={() => {
           const nextAction = createConfirm?.onConfirm;
-          setCreateConfirm(null);
           nextAction?.();
         }}
         onCancel={() => setCreateConfirm(null)}
@@ -1084,39 +1131,55 @@ export function GymOperationsCreateCoachBookingModal({
   isSubmitting?: boolean;
   memberOptions: SelectOption[];
   onClose: () => void;
-  onCreate: (payload: {
-    coachId: string;
-    durationMinutes: number;
-    memberId: string;
-    memberNotes?: string;
-    paymentStage?: "full";
-    scheduledAt: string;
-  }) => void;
+  onCreate: (payload: StaffCoachBookingSubmission) => Promise<void>;
 }) {
   const { colors, settings } = useTheme();
+  const [bookingMode, setBookingMode] = useState<"monthly" | "single">("single");
   const [memberId, setMemberId] = useState("");
   const [coachId, setCoachId] = useState("");
   const [memberSearch, setMemberSearch] = useState("");
   const [coachSearch, setCoachSearch] = useState("");
   const [date, setDate] = useState(getDefaultDateInput());
   const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const [durationMinutes, setDurationMinutes] = useState<number>(60);
   const [slotValue, setSlotValue] = useState("");
   const [note, setNote] = useState("");
-  const paymentStage = "full" as const;
-  const [errorText, setErrorText] = useState("");
+  const [referenceNo, setReferenceNo] = useState("");
+  const idempotencyKeyRef = useRef(createClientIdempotencyKey());
+  const [fieldErrors, setFieldErrors] = useState<
+    Partial<
+      Record<"coach" | "date" | "member" | "monthlyOffer" | "slot", string>
+    >
+  >({});
   const [createConfirm, setCreateConfirm] =
     useState<OverlayConfirmation | null>(null);
+  const [submitError, setSubmitError] = useState("");
   const shouldAnimate = settings.animationLevel !== "none";
   const inputStyle = modalFieldStyle(colors);
   const textAreaStyle = modalTextAreaStyle(colors);
-  const { data: coachAvailability, isLoading: coachAvailabilityLoading } =
-    useQuery({
+  const { data: coachAvailability } = useQuery({
       ...coachAvailabilityQueryOptions<CoachAvailabilityResponse>(
         webApiClient,
         coachId || undefined,
       ),
-      enabled: isOpen && Boolean(coachId),
+      enabled: isOpen && bookingMode === "single" && Boolean(coachId),
     });
+  const {
+    data: canonicalAvailability = [],
+    error: canonicalAvailabilityError,
+    isLoading: canonicalAvailabilityLoading,
+  } = useQuery({
+    ...appointmentAvailabilityQueryOptions(
+      webApiClient,
+      coachId || undefined,
+      date || undefined,
+      durationMinutes,
+    ),
+    enabled:
+      isOpen &&
+      bookingMode === "single" &&
+      Boolean(coachId && date && durationMinutes),
+  });
 
   useEffect(() => {
     if (!isOpen) return;
@@ -1133,48 +1196,40 @@ export function GymOperationsCreateCoachBookingModal({
         "",
     );
     setDate(getDefaultDateInput());
+    setDurationMinutes(60);
+    setBookingMode("single");
     setDatePickerOpen(false);
     setSlotValue("");
     setNote("");
-    setErrorText("");
+    setReferenceNo("");
+    idempotencyKeyRef.current = createClientIdempotencyKey();
+    setFieldErrors({});
+    setSubmitError("");
     setCreateConfirm(null);
   }, [coachOptions, isOpen, memberOptions]);
 
-  const currentMinutes = useMemo(() => {
-    return getCurrentGymMinutes();
-  }, []);
-
   const slotOptions = useMemo(() => {
-    if (!coachAvailability?.availability) {
-      return [];
-    }
-
-    return expandCoachAvailabilitySlots(
-      coachAvailability.availability,
-      coachAvailability.scheduleType,
-    )
+    const seen = new Set<string>();
+    return canonicalAvailability
       .filter(
-        (slot) =>
-          slot.isAvailable &&
-          matchesDay(date, slot.dayOfWeek) &&
-          (date !== getDefaultDateInput() ||
-            toMinutes(slot.startTime) > currentMinutes),
+        (slot: AppointmentAvailabilitySlot) =>
+          slot.available &&
+          slot.durationMinutes === durationMinutes &&
+          new Date(slot.startAt).getTime() > Date.now(),
       )
-      .map((slot) => {
-        const durationMinutes = slot.durationMinutes;
-        return {
-          durationMinutes,
-          label: `${formatSlotLabel(slot.startTime)} - ${formatDurationLabel(durationMinutes)}`,
-          startTime: slot.startTime,
-          value: `${slot.startTime}|${durationMinutes}`,
-        };
-      });
-  }, [
-    coachAvailability?.availability,
-    coachAvailability?.scheduleType,
-    currentMinutes,
-    date,
-  ]);
+      .filter((slot: AppointmentAvailabilitySlot) => {
+        if (seen.has(slot.startAt)) return false;
+        seen.add(slot.startAt);
+        return true;
+      })
+      .sort((left, right) => left.startAt.localeCompare(right.startAt))
+      .map((slot: AppointmentAvailabilitySlot) => ({
+        durationMinutes: slot.durationMinutes,
+        label: `${formatCanonicalCoachTime(slot.startAt)} - ${formatCanonicalCoachTime(slot.endAt)}`,
+        scheduledAt: slot.startAt,
+        value: slot.startAt,
+      }));
+  }, [canonicalAvailability, durationMinutes]);
 
   useEffect(() => {
     if (!slotOptions.some((slot) => slot.value === slotValue)) {
@@ -1191,13 +1246,16 @@ export function GymOperationsCreateCoachBookingModal({
     () => filterScheduleOptions(memberOptions, memberSearch, memberId),
     [memberId, memberOptions, memberSearch],
   );
-  const filteredCoachOptions = useMemo(
-    () => filterScheduleOptions(coachOptions, coachSearch, coachId),
-    [coachId, coachOptions, coachSearch],
+  const eligibleCoachOptions = useMemo(
+    () =>
+      bookingMode === "monthly"
+        ? coachOptions.filter((option) => isActiveMonthlyCoachOffer(option))
+        : coachOptions,
+    [bookingMode, coachOptions],
   );
-  const nextAvailableSlot = useMemo(
-    () => findNextCoachSlot(coachAvailability),
-    [coachAvailability],
+  const filteredCoachOptions = useMemo(
+    () => filterScheduleOptions(eligibleCoachOptions, coachSearch, coachId),
+    [coachId, coachSearch, eligibleCoachOptions],
   );
   const highlightedCoachDates = useMemo(
     () => getUpcomingCoachAvailableDates(coachAvailability),
@@ -1206,53 +1264,72 @@ export function GymOperationsCreateCoachBookingModal({
   const coachHourlyRate = selectedCoachOption?.hourlyRate ?? 0;
   const estimatedCoachTotal =
     (coachHourlyRate * (selectedSlot?.durationMinutes ?? 0)) / 60;
-  const canSubmit =
-    Boolean(memberId) &&
-    Boolean(coachId) &&
-    Boolean(date) &&
-    Boolean(selectedSlot);
+  const monthlyOfferReady = isActiveMonthlyCoachOffer(
+    selectedCoachOption ?? {},
+  );
+  const monthlyPaidPeriod = getMonthlyCoachPaidPeriod(date);
 
-  const submitCoachBooking = () => {
-    onCreate({
-      coachId,
-      durationMinutes: selectedSlot?.durationMinutes ?? 0,
-      memberId,
-      ...(note.trim() ? { memberNotes: note.trim() } : {}),
-      paymentStage,
-      scheduledAt: toIsoString(date, selectedSlot?.startTime ?? "00:00"),
-    });
+  const submitCoachBooking = async () => {
+    setSubmitError("");
+    try {
+      await onCreate(buildStaffCoachBookingSubmission({
+        bookingMode,
+        coachId,
+        durationMinutes,
+        idempotencyKey: idempotencyKeyRef.current,
+        memberId,
+        memberNotes: note,
+        referenceNo,
+        scheduledAt: selectedSlot?.scheduledAt,
+        startDate: date,
+      }));
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error && error.message.trim()
+          ? error.message
+          : "Unable to create this coach booking. Review the fields and try again.",
+      );
+    }
   };
 
   const handleCreate = () => {
-    setErrorText("");
+    const nextFieldErrors: typeof fieldErrors = {};
     if (!memberId) {
-      setErrorText("Select the member for this coach booking.");
-      return;
+      nextFieldErrors.member = "Select the member for this coach booking.";
     }
     if (!coachId) {
-      setErrorText("Select a coach profile before creating the booking.");
-      return;
+      nextFieldErrors.coach =
+        "Select a coach profile before creating the booking.";
     }
     if (!date) {
-      setErrorText("Select a booking date.");
-      return;
+      nextFieldErrors.date = "Select a booking date.";
     }
-    if (!selectedSlot) {
-      setErrorText(
-        "Select one of the coach's available timeslots for this date.",
-      );
-      return;
+    if (bookingMode === "monthly" && !monthlyOfferReady) {
+      nextFieldErrors.monthlyOffer =
+        "Select a coach with an active monthly coaching offer.";
     }
-    if (selectedSlot.durationMinutes > 180) {
-      setErrorText("Coach bookings cannot exceed 180 minutes.");
+    if (bookingMode === "single" && !selectedSlot) {
+      nextFieldErrors.slot =
+        "Select one of the coach's available timeslots for this date.";
+    }
+    setFieldErrors(nextFieldErrors);
+    setSubmitError("");
+    if (Object.keys(nextFieldErrors).length > 0) {
       return;
     }
 
     setCreateConfirm({
-      confirmLabel: "CREATE COACH BOOKING",
-      message: `Create this manual coach booking and record ${formatPeso(estimatedCoachTotal)} as full cash payment?`,
+      confirmLabel:
+        bookingMode === "monthly" ? "ENROLL MONTHLY" : "CREATE 1 SESSION",
+      message:
+        bookingMode === "monthly"
+          ? `Enroll this member for ${formatPeso(Number(selectedCoachOption?.monthlyRate ?? 0))} covering ${monthlyPaidPeriod ? `${formatCompactDate(monthlyPaidPeriod.startDate)} to ${formatCompactDate(monthlyPaidPeriod.endDate)}` : "one month"}, and record one full cash payment? The package becomes active immediately.`
+          : `Create this one-session booking and record ${formatPeso(estimatedCoachTotal)} as full cash payment?`,
       onConfirm: submitCoachBooking,
-      title: "Confirm coach booking",
+      title:
+        bookingMode === "monthly"
+          ? "Confirm monthly coaching"
+          : "Confirm coach session",
     });
   };
 
@@ -1263,15 +1340,21 @@ export function GymOperationsCreateCoachBookingModal({
         onClose={onClose}
         closeDisabled={isSubmitting}
         title="Create coach booking"
-        subtitle="Create a front-desk coaching session and record the full cash payment from the shared schedule."
+        subtitle="Create one paid coach session or a fully paid monthly coaching enrollment."
         footer={
           <FitButton
             variant="primary"
-            label={isSubmitting ? "CREATING..." : "CREATE COACH BOOKING"}
+            label={
+              isSubmitting
+                ? "CREATING..."
+                : bookingMode === "monthly"
+                  ? "ENROLL 1 MONTH"
+                  : "CREATE 1 SESSION"
+            }
             icon={CalendarPlus}
             iconSize={15}
             onClick={handleCreate}
-            disabled={!canSubmit || isSubmitting}
+            disabled={isSubmitting}
             style={actionPillStyle(colors, true)}
             textStyle={{ fontSize: 13, fontWeight: 700 }}
           />
@@ -1287,6 +1370,72 @@ export function GymOperationsCreateCoachBookingModal({
           }}
         >
           <div style={{ ...overlaySurfaceStyle(colors), gap: 14 }}>
+            <div style={{ display: "grid", gap: 7 }}>
+              <FitText
+                excludeGlobalScale
+                style={{ fontSize: 12, fontWeight: 700, color: colors.textMuted }}
+              >
+                Booking type
+              </FitText>
+              <div
+                role="radiogroup"
+                aria-label="Coach booking type"
+                style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}
+              >
+                {[
+                  { label: "1 Session", value: "single" as const },
+                  { label: "1 Month", value: "monthly" as const },
+                ].map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={bookingMode === option.value}
+                    onClick={() => {
+                      setBookingMode(option.value);
+                      if (option.value === "monthly") {
+                        const currentCoach = coachOptions.find(
+                          (coach) => coach.value === coachId,
+                        );
+                        if (!currentCoach || !isActiveMonthlyCoachOffer(currentCoach)) {
+                          const firstEligibleCoach = coachOptions.find((coach) =>
+                            isActiveMonthlyCoachOffer(coach),
+                          );
+                          setCoachId(firstEligibleCoach?.value ?? "");
+                          setCoachSearch(firstEligibleCoach?.label ?? "");
+                        }
+                      } else if (!coachId) {
+                        setCoachId(coachOptions[0]?.value ?? "");
+                        setCoachSearch(coachOptions[0]?.label ?? "");
+                      }
+                      setSlotValue("");
+                      setFieldErrors({});
+                      setSubmitError("");
+                    }}
+                    disabled={isSubmitting}
+                    style={{
+                      ...inputStyle,
+                      backgroundColor:
+                        bookingMode === option.value
+                          ? `${colors.brand}20`
+                          : colors.surfaceRaised,
+                      borderColor:
+                        bookingMode === option.value
+                          ? colors.brand
+                          : colors.border,
+                      color:
+                        bookingMode === option.value
+                          ? colors.brand
+                          : colors.textPrimary,
+                      cursor: "pointer",
+                      fontWeight: 800,
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div
               style={{
                 display: "grid",
@@ -1315,6 +1464,11 @@ export function GymOperationsCreateCoachBookingModal({
                   onChange={(option) => {
                     setMemberId(option.value);
                     setMemberSearch(option.label);
+                    setFieldErrors((current) => ({
+                      ...current,
+                      member: undefined,
+                    }));
+                    setSubmitError("");
                   }}
                   onSearchChange={setMemberSearch}
                   options={filteredCoachMemberOptions}
@@ -1322,6 +1476,11 @@ export function GymOperationsCreateCoachBookingModal({
                   searchValue={memberSearch}
                   selectedValue={memberId}
                 />
+                {fieldErrors.member ? (
+                  <FitText excludeGlobalScale style={{ color: colors.danger, fontSize: 11 }}>
+                    {fieldErrors.member}
+                  </FitText>
+                ) : null}
               </div>
               <div style={{ display: "grid", gap: 6 }}>
                 <FitText
@@ -1345,6 +1504,13 @@ export function GymOperationsCreateCoachBookingModal({
                     setCoachId(option.value);
                     setSlotValue("");
                     setCoachSearch(option.label);
+                    setFieldErrors((current) => ({
+                      ...current,
+                      coach: undefined,
+                      monthlyOffer: undefined,
+                      slot: undefined,
+                    }));
+                    setSubmitError("");
                   }}
                   onSearchChange={setCoachSearch}
                   options={filteredCoachOptions}
@@ -1352,6 +1518,11 @@ export function GymOperationsCreateCoachBookingModal({
                   searchValue={coachSearch}
                   selectedValue={coachId}
                 />
+                {fieldErrors.coach ? (
+                  <FitText excludeGlobalScale style={{ color: colors.danger, fontSize: 11 }}>
+                    {fieldErrors.coach}
+                  </FitText>
+                ) : null}
               </div>
             </div>
 
@@ -1371,12 +1542,12 @@ export function GymOperationsCreateCoachBookingModal({
                     color: colors.textMuted,
                   }}
                 >
-                  Date
+                  {bookingMode === "monthly" ? "Start date" : "Date"}
                 </FitText>
                 <FitButton
                   variant="ghost"
                   label={date ? formatCompactDate(date) : "Select date"}
-                  aria-label={`Manual coach booking date: ${
+                  aria-label={`Manual coach booking ${bookingMode === "monthly" ? "start " : ""}date: ${
                     date ? formatCompactDate(date) : "Select date"
                   }`}
                   onClick={() => setDatePickerOpen(true)}
@@ -1386,44 +1557,17 @@ export function GymOperationsCreateCoachBookingModal({
                     minHeight: 46,
                     width: "100%",
                     borderColor:
-                      slotOptions.length > 0 ? colors.success : colors.border,
+                      bookingMode === "monthly" || slotOptions.length > 0
+                        ? colors.success
+                        : colors.border,
                   }}
                   textStyle={{ fontSize: 13, fontWeight: 700 }}
                 />
-                <FitButton
-                  variant="primary"
-                  label="NEXT AVAILABLE SLOT"
-                  onClick={() => {
-                    setErrorText("");
-                    if (!coachId) {
-                      setErrorText(
-                        "Select a coach before choosing the next available slot.",
-                      );
-                      return;
-                    }
-                    if (!nextAvailableSlot) {
-                      setErrorText(
-                        "No available coach slot was found in the next 30 days.",
-                      );
-                      return;
-                    }
-                    setDate(nextAvailableSlot.date);
-                    setSlotValue(nextAvailableSlot.slotValue);
-                  }}
-                  disabled={
-                    isSubmitting ||
-                    coachAvailabilityLoading ||
-                    !coachId ||
-                    !nextAvailableSlot
-                  }
-                  style={{
-                    ...actionPillStyle(colors, true),
-                    minHeight: 40,
-                    padding: "0 12px",
-                    width: "100%",
-                  }}
-                  textStyle={{ fontSize: 12, fontWeight: 800 }}
-                />
+                {fieldErrors.date ? (
+                  <FitText excludeGlobalScale style={{ color: colors.danger, fontSize: 11 }}>
+                    {fieldErrors.date}
+                  </FitText>
+                ) : null}
                 <FitText
                   excludeGlobalScale
                   style={{
@@ -1434,16 +1578,52 @@ export function GymOperationsCreateCoachBookingModal({
                         : colors.textMuted,
                   }}
                 >
-                  {coachAvailabilityLoading
-                    ? "Checking coach availability..."
+                  {bookingMode === "monthly"
+                    ? "Choose when the fully paid monthly package starts. Session dates are allocated separately."
+                    : canonicalAvailabilityLoading
+                    ? "Checking exact live availability..."
                     : slotOptions.length > 0
-                      ? `${slotOptions.length} available coach slot${slotOptions.length === 1 ? "" : "s"} on this date.`
+                      ? `${slotOptions.length} exact ${durationMinutes}-minute slot${slotOptions.length === 1 ? "" : "s"} on this date.`
                       : coachId
-                        ? "No coach slots are available on this date."
+                        ? `No exact ${durationMinutes}-minute slots are available on this date.`
                         : "Select a coach to check availability."}
                 </FitText>
               </div>
-              <div style={{ display: "grid", gap: 6, gridColumn: "span 2" }}>
+              {bookingMode === "single" ? <div style={{ display: "grid", gap: 6, gridColumn: "span 2" }}>
+                <FitText
+                  excludeGlobalScale
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: colors.textMuted,
+                  }}
+                >
+                  Session duration
+                </FitText>
+                <div
+                  role="radiogroup"
+                  aria-label="Coach session duration"
+                  style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 7 }}
+                >
+                  {STAFF_COACH_SESSION_DURATIONS.map((duration) => (
+                    <FitButton
+                      active={durationMinutes === duration}
+                      aria-checked={durationMinutes === duration}
+                      key={duration}
+                      label={formatDurationLabel(duration)}
+                      onClick={() => {
+                        setDurationMinutes(duration);
+                        setSlotValue("");
+                        setFieldErrors((current) => ({ ...current, slot: undefined }));
+                        setSubmitError("");
+                      }}
+                      role="radio"
+                      style={{ minHeight: 40 }}
+                      textStyle={{ fontSize: 11, fontWeight: 800 }}
+                      variant="chip"
+                    />
+                  ))}
+                </div>
                 <FitText
                   excludeGlobalScale
                   style={{
@@ -1459,20 +1639,54 @@ export function GymOperationsCreateCoachBookingModal({
                   name="manualCoachBookingTimeslot"
                   aria-label="Manual coach booking available timeslot"
                   value={slotValue}
-                  onChange={(event) => setSlotValue(event.target.value)}
+                  onChange={(event) => {
+                    setSlotValue(event.target.value);
+                    setFieldErrors((current) => ({ ...current, slot: undefined }));
+                    setSubmitError("");
+                  }}
                   options={slotOptions.map((slot) => ({
                     label: slot.label,
                     value: slot.value,
                   }))}
                   placeholder={
-                    coachAvailabilityLoading
+                    canonicalAvailabilityLoading
                       ? "Loading slots"
                       : "No slots found"
                   }
                   compact
                   fullWidth
                 />
-              </div>
+                {canonicalAvailabilityError ? (
+                  <FitText excludeGlobalScale style={{ color: colors.danger, fontSize: 11 }}>
+                    Unable to load exact live coach availability. Try again.
+                  </FitText>
+                ) : fieldErrors.slot ? (
+                  <FitText excludeGlobalScale style={{ color: colors.danger, fontSize: 11 }}>
+                    {fieldErrors.slot}
+                  </FitText>
+                ) : null}
+              </div> : (
+                <div style={{ display: "grid", gap: 8, gridColumn: "span 2" }}>
+                  <FitText excludeGlobalScale style={{ fontSize: 12, fontWeight: 700, color: colors.textMuted }}>
+                    Monthly offer
+                  </FitText>
+                  <FitText excludeGlobalScale style={{ fontSize: 12, color: monthlyOfferReady ? colors.textPrimary : colors.danger, lineHeight: 1.5 }}>
+                    {monthlyOfferReady
+                      ? `${selectedCoachOption?.monthlySessionCount} sessions / ${selectedCoachOption?.monthlySessionDurationMinutes} minutes each / ${formatPeso(Number(selectedCoachOption?.monthlyRate ?? 0))} full cash`
+                      : "This coach does not have an active monthly offer."}
+                  </FitText>
+                  {selectedCoachOption?.monthlyOfferDescription ? (
+                    <FitText excludeGlobalScale style={{ fontSize: 11, color: colors.textMuted }}>
+                      {selectedCoachOption.monthlyOfferDescription}
+                    </FitText>
+                  ) : null}
+                  {fieldErrors.monthlyOffer ? (
+                    <FitText excludeGlobalScale style={{ color: colors.danger, fontSize: 11 }}>
+                      {fieldErrors.monthlyOffer}
+                    </FitText>
+                  ) : null}
+                </div>
+              )}
             </div>
 
             <div
@@ -1493,13 +1707,17 @@ export function GymOperationsCreateCoachBookingModal({
                   lineHeight: 1.45,
                 }}
               >
-                {coachAvailabilityLoading
-                  ? "Loading live coach availability."
+                {bookingMode === "monthly"
+                  ? monthlyOfferReady
+                    ? "The atomic cash enrollment activates the monthly entitlement immediately. Appointment dates remain independent."
+                    : "Select a coach with a configured monthly offer."
+                  : canonicalAvailabilityLoading
+                  ? "Loading exact live coach availability."
                   : slotOptions.length > 0
                     ? `${slotOptions.length} live slot${slotOptions.length === 1 ? "" : "s"} available on the selected date.`
                     : "No live coach slots are available on the selected date."}
               </FitText>
-              {selectedSlot ? (
+              {bookingMode === "single" && selectedSlot ? (
                 <FitText
                   excludeGlobalScale
                   style={{
@@ -1516,7 +1734,26 @@ export function GymOperationsCreateCoachBookingModal({
             <OverlayAmountGrid
               colors={colors}
               columns="repeat(3, minmax(0, 1fr))"
-              items={[
+              items={bookingMode === "monthly" ? [
+                {
+                  helper: "Published coach offer",
+                  label: "Monthly price",
+                  value: formatPeso(Number(selectedCoachOption?.monthlyRate ?? 0)),
+                  valueColor: colors.brand,
+                },
+                {
+                  helper: monthlyPaidPeriod
+                    ? `${formatCompactDate(monthlyPaidPeriod.startDate)} to ${formatCompactDate(monthlyPaidPeriod.endDate)}`
+                    : "One paid month",
+                  label: "Session allowance",
+                  value: `${selectedCoachOption?.monthlySessionCount ?? 0} sessions`,
+                },
+                {
+                  helper: "Each allocated session",
+                  label: "Session duration",
+                  value: `${selectedCoachOption?.monthlySessionDurationMinutes ?? 0} min`,
+                },
+              ] : [
                 {
                   helper: "Per hour from coach profile",
                   label: "Coach rate",
@@ -1541,31 +1778,10 @@ export function GymOperationsCreateCoachBookingModal({
               excludeGlobalScale
               style={{ fontSize: 12, color: colors.textMuted }}
             >
-              Cashier bookings record the full amount immediately. This creates
-              a confirmed product booking with no deferred collection step.
+              {bookingMode === "monthly"
+                ? "Front-desk cash is recorded once for the full package. The paid entitlement activates immediately with no approval or later collection."
+                : "Front-desk cash is recorded once for the full session. The appointment is confirmed immediately with no approval or later collection."}
             </FitText>
-
-            {errorText ? (
-              <div
-                style={{
-                  borderRadius: 14,
-                  border: `1px solid ${colors.danger}44`,
-                  backgroundColor: `${colors.danger}12`,
-                  padding: 12,
-                }}
-              >
-                <FitText
-                  excludeGlobalScale
-                  style={{
-                    fontSize: 12,
-                    color: colors.danger,
-                    lineHeight: 1.45,
-                  }}
-                >
-                  {errorText}
-                </FitText>
-              </div>
-            ) : null}
 
             <div style={{ display: "grid", gap: 6 }}>
               <FitText
@@ -1576,19 +1792,44 @@ export function GymOperationsCreateCoachBookingModal({
                   color: colors.textMuted,
                 }}
               >
-                Session note
+                {bookingMode === "monthly" ? "Cash reference (optional)" : "Session note"}
               </FitText>
-              <FitTextArea
+              {bookingMode === "monthly" ? (
+                <FitTextInput
+                  id="manual-coach-booking-cash-reference"
+                  name="manualCoachBookingCashReference"
+                  aria-label="Monthly coaching cash reference"
+                  value={referenceNo}
+                  onChange={(event) => {
+                    setReferenceNo(event.target.value);
+                    setSubmitError("");
+                  }}
+                  placeholder="Receipt or audit reference"
+                  style={inputStyle}
+                />
+              ) : <FitTextArea
                 id="manual-coach-booking-note"
                 name="manualCoachBookingNote"
                 aria-label="Manual coach booking session note"
                 value={note}
-                onChange={(event) => setNote(event.target.value)}
+                onChange={(event) => {
+                  setNote(event.target.value);
+                  setSubmitError("");
+                }}
                 rows={3}
                 placeholder="Optional handoff note for the coach or front desk..."
                 style={textAreaStyle}
-              />
+              />}
             </div>
+            {submitError ? (
+              <FitText
+                aria-live="polite"
+                excludeGlobalScale
+                style={{ color: colors.danger, fontSize: 12 }}
+              >
+                {submitError}
+              </FitText>
+            ) : null}
           </div>
 
           <CalendarModal
@@ -1599,6 +1840,13 @@ export function GymOperationsCreateCoachBookingModal({
             onClose={() => setDatePickerOpen(false)}
             onSelect={(nextDate) => {
               setDate(nextDate);
+              setSlotValue("");
+              setFieldErrors((current) => ({
+                ...current,
+                date: undefined,
+                slot: undefined,
+              }));
+              setSubmitError("");
             }}
           />
         </div>

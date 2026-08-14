@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -102,7 +104,9 @@ export class PaymentController {
   @ApiResponse({
     status: 200,
     description: 'Checkout hold status returned.',
-    schema: apiEnvelopeSchema(getSchemaPath(CommerceCheckoutHoldStatusResponseDTO)),
+    schema: apiEnvelopeSchema(
+      getSchemaPath(CommerceCheckoutHoldStatusResponseDTO),
+    ),
   })
   @ApiResponse({ status: 403, description: 'Forbidden.' })
   @ApiResponse({ status: 404, description: 'Checkout hold not found.' })
@@ -111,6 +115,39 @@ export class PaymentController {
     @CurrentUser() user: JwtPayload,
   ) {
     return this.paymentService.getCheckoutHoldStatus(
+      holdId,
+      user.sub,
+      user.role,
+    );
+  }
+
+  @Post('checkout-holds/:holdId/reconcile')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.member)
+  @ApiOperation({
+    summary:
+      'Reconcile an owned pending PayMongo checkout from the provider. Verified webhooks remain canonical.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Checkout hold reconciliation status returned.',
+    schema: apiEnvelopeSchema(
+      getSchemaPath(CommerceCheckoutHoldStatusResponseDTO),
+    ),
+  })
+  @ApiResponse({ status: 403, description: 'Forbidden.' })
+  @ApiResponse({ status: 404, description: 'Checkout hold not found.' })
+  @ApiResponse({ status: 409, description: 'Checkout verification mismatch.' })
+  @ApiResponse({
+    status: 502,
+    description: 'PayMongo verification unavailable.',
+  })
+  reconcileCheckoutHold(
+    @Param('holdId', ParseUUIDPipe) holdId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.paymentService.reconcileCheckoutHold(
       holdId,
       user.sub,
       user.role,

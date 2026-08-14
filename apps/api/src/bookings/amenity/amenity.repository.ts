@@ -3,6 +3,7 @@ import { Amenity, AmenityFeedback, Prisma } from '@prisma/client';
 
 import { BaseRepository } from '../../common/base-repository/base-repository';
 import { PrismaService } from '../../prisma/prisma.service';
+import { isAmenityBookable } from './amenity-reservability';
 
 @Injectable()
 export class AmenityRepository extends BaseRepository {
@@ -15,6 +16,11 @@ export class AmenityRepository extends BaseRepository {
       { type: 'asc' },
       { name: 'asc' },
     ]);
+  }
+
+  async listBookableAmenities(): Promise<Amenity[]> {
+    const amenities = await this.listActiveAmenities();
+    return amenities.filter(isAmenityBookable);
   }
 
   listArchivedAmenities(): Promise<Amenity[]> {

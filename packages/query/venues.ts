@@ -10,6 +10,15 @@ export function venuesQueryOptions(client: Pick<ApiClient, "venues">, userId?: s
   });
 }
 
+export function operationalVenuesQueryOptions(
+  client: Pick<ApiClient, 'venues'>,
+) {
+  return queryOptions({
+    queryKey: queryKeys.operationalVenues(),
+    queryFn: () => client.venues.listOperational(),
+  });
+}
+
 export function archivedVenuesQueryOptions(client: Pick<ApiClient, "venues">) {
   return queryOptions({
     queryKey: queryKeys.archivedVenues(),

@@ -1450,7 +1450,7 @@ export type AdminGamificationSeasonStandingRecord = {
   memberName: string;
   milestoneClaimedCount: number;
   milestoneUnlockedCount: number;
-  rankPosition: number | null;
+  rankPosition: number;
   seasonId: string;
   seasonPoints: number;
   seasonProgression?: FitnessExpProgressionRecord;

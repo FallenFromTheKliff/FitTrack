@@ -34,7 +34,12 @@ export function invalidateVenueQueries(
   queryClient: QueryClient,
   userId?: string,
 ) {
-  return queryClient.invalidateQueries({ queryKey: queryKeys.venues(userId) });
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: queryKeys.venues(userId) }),
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.operationalVenues(),
+    }),
+  ]);
 }
 
 export function invalidateBookingQueries(

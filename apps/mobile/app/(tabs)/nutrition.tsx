@@ -20,6 +20,10 @@ import {
   nutritionLogsQueryOptions
 } from "@fittrack/query";
 import { getTodayString } from "@/data/bookings";
+import {
+  resolveCalorieIntakeStatus,
+  type CalorieIntakeTone,
+} from "@/data/calorieIntakeStatus";
 import { formatNutritionLogSubtitle } from "@/data/nutrition";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -41,6 +45,7 @@ import { R } from "@fittrack/ui/tokens";
 type ThemeColors = ReturnType<typeof useTheme>["colors"];
 type RatioTone = "success" | "warning" | "danger";
 
+const ACCESSIBLE_DARK_CALORIE_DANGER = "#F05252";
 const TODAY_LOG_PREVIEW_COUNT = 6;
 const TODAY_MEAL_GROUPS = ["Breakfast", "Lunch", "Dinner", "Snacks"] as const;
 type TodayMealGroup = (typeof TODAY_MEAL_GROUPS)[number];
@@ -230,6 +235,14 @@ function getRatioColor(tone: RatioTone, colors: ThemeColors) {
   return colors.danger;
 }
 
+function getCalorieIntakeColor(tone: CalorieIntakeTone, colors: ThemeColors) {
+  if (tone === "neutral") return colors.textMuted;
+  if (tone === "danger" && colors.danger.toUpperCase() === "#EF4444") {
+    return ACCESSIBLE_DARK_CALORIE_DANGER;
+  }
+  return getRatioColor(tone, colors);
+}
+
 function getMacroCategoryColor(color: string, colors: ThemeColors) {
   if (color === "success") return colors.success;
   if (color === "warning") return colors.warning;
@@ -385,6 +398,14 @@ export default function NutritionScreen() {
   const today = loggedTotals.calories;
   const target = targetTotals?.calories ?? 0;
   const calorieDelta = target - today;
+  const calorieIntakeStatus = resolveCalorieIntakeStatus(
+    isNutritionLoading ? null : today,
+    isNutritionLoading ? null : target,
+  );
+  const calorieIntakeColor = getCalorieIntakeColor(calorieIntakeStatus.tone, colors);
+  const calorieBalanceText = calorieDelta >= 0
+    ? `${calorieDelta.toFixed(0)} kcal remaining`
+    : `${Math.abs(calorieDelta).toFixed(0)} kcal over target`;
   const hasGoal = !!activeNutrition?.macros;
   const goalLabel = formatGoalLabel(activeNutrition?.tdee.fitnessGoal);
   const recentTdee = nutritionHistory.data[0] ?? activeNutrition?.tdee ?? null;
@@ -508,16 +529,26 @@ export default function NutritionScreen() {
         <View style={s.headerSummary}>
           <View style={s.headerTopRow}>
             <View style={s.headerTitleStack}>
-              <FitText style={s.headerGoalName}>
+              <FitText style={[s.headerGoalName, { color: calorieIntakeColor }]}>
                 {hasGoal ? goalLabel.toUpperCase() : "TARGET SETUP"}
               </FitText>
               <FitText style={s.headerCaloriesLabel}>TODAY'S CALORIES</FitText>
             </View>
-            <View style={s.headerFlameIcon}>
-              <Flame size={30} color={colors.brand} strokeWidth={2.2} />
+            <View
+              style={[
+                s.headerFlameIcon,
+                {
+                  backgroundColor: calorieIntakeColor + "14",
+                  borderColor: calorieIntakeColor + "3D",
+                  borderRadius: 18,
+                  borderWidth: 1,
+                },
+              ]}
+            >
+              <Flame size={30} color={calorieIntakeColor} strokeWidth={2.2} />
             </View>
           </View>
-          <FitText style={s.headerCaloriesValue}>
+          <FitText style={[s.headerCaloriesValue, { color: calorieIntakeColor }]}>
             {isNutritionLoading ? "--" : today.toFixed(0)}
           </FitText>
           <FitText style={s.headerCaloriesTarget}>
@@ -525,18 +556,28 @@ export default function NutritionScreen() {
           </FitText>
           {target > 0 ? (
             <>
-              <View style={s.headerCaloriesBar}>
+              <View
+                style={[
+                  s.headerCaloriesBar,
+                  { backgroundColor: calorieIntakeColor + "20" },
+                ]}
+              >
                 <View
                   style={[
                     s.headerCaloriesBarFill,
-                    { width: `${Math.min(1, today / target) * 100}%` },
+                    {
+                      backgroundColor: calorieIntakeColor,
+                      width: `${calorieIntakeStatus.progressPercent}%`,
+                    },
                   ]}
                 />
               </View>
-              <FitText style={s.headerCaloriesRemaining}>
-                {calorieDelta >= 0
-                  ? `${calorieDelta.toFixed(0)} kcal remaining`
-                  : `${Math.abs(calorieDelta).toFixed(0)} kcal over target`}
+              <FitText
+                accessibilityLabel={`Calorie status: ${calorieIntakeStatus.label}. ${calorieBalanceText}.`}
+                accessibilityLiveRegion="polite"
+                style={[s.headerCaloriesRemaining, { color: calorieIntakeColor, opacity: 1 }]}
+              >
+                {calorieIntakeStatus.label} · {calorieBalanceText}
               </FitText>
               {!isFrozen ? (
                 <View style={s.headerHintRow}>

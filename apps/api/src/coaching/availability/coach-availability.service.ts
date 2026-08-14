@@ -14,14 +14,13 @@ const GYM_TIMEZONE_OFFSET_MINUTES = 8 * 60;
 const SLOT_INTERVAL_MINUTES = 30;
 const MAX_DURATION_LOOKBACK_MINUTES = 180;
 
-export type CoachAvailabilityClient =
-  | PrismaService
-  | Prisma.TransactionClient;
+export type CoachAvailabilityClient = PrismaService | Prisma.TransactionClient;
 
 export type CoachAvailabilityCheckInput = {
   coachId: string;
   durationMinutes: number;
   excludeAppointmentIds?: string[];
+  excludeAmenityBookingIds?: string[];
   excludeHoldIds?: string[];
   startsAt: Date;
   now?: Date;
@@ -144,7 +143,10 @@ export class CoachAvailabilityService {
     client: CoachAvailabilityClient,
     input: CoachAvailabilityCheckInput,
   ): Promise<void> {
-    const result = await CoachAvailabilityService.checkWithClient(client, input);
+    const result = await CoachAvailabilityService.checkWithClient(
+      client,
+      input,
+    );
     if (result.available) {
       return;
     }
@@ -232,6 +234,9 @@ export class CoachAvailabilityService {
       client.amenityBooking.findMany({
         where: {
           coach_id: input.coachId,
+          ...(input.excludeAmenityBookingIds?.length
+            ? { id: { notIn: input.excludeAmenityBookingIds } }
+            : {}),
           ends_at: { gt: input.startsAt },
           starts_at: { lt: endsAt },
           status: BookingStatus.confirmed,
@@ -278,21 +283,19 @@ export class CoachAvailabilityService {
     }
 
     if (
-      (holds as HoldConflictRow[]).some(
-        (hold) => {
-          if (hold.scheduled_at === null) return false;
-          const holdEndsAt =
-            hold.ends_at ??
-            new Date(
-              hold.scheduled_at.getTime() +
-                (hold.duration_minutes ?? input.durationMinutes) * 60 * 1000,
-            );
-          return (
-            hold.scheduled_at.getTime() < endsAt.getTime() &&
-            holdEndsAt.getTime() > input.startsAt.getTime()
+      (holds as HoldConflictRow[]).some((hold) => {
+        if (hold.scheduled_at === null) return false;
+        const holdEndsAt =
+          hold.ends_at ??
+          new Date(
+            hold.scheduled_at.getTime() +
+              (hold.duration_minutes ?? input.durationMinutes) * 60 * 1000,
           );
-        },
-      )
+        return (
+          hold.scheduled_at.getTime() < endsAt.getTime() &&
+          holdEndsAt.getTime() > input.startsAt.getTime()
+        );
+      })
     ) {
       conflictReasons.push('checkout_hold_conflict');
     }

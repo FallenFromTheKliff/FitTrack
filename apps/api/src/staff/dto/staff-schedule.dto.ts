@@ -1,7 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
-  IsEnum,
   IsIn,
   IsISO8601,
   IsInt,
@@ -68,6 +67,43 @@ export class CreateStaffVenueBookingDTO {
     message: 'payment_stage must be full for new cash registrations',
   })
   payment_stage?: CreateStaffInitialPaymentStage;
+}
+
+export class RescheduleStaffVenueBookingDTO {
+  @ApiProperty({ example: '7e9f96f7-8efe-5598-a978-5cd6ecf73a06' })
+  @IsUUID('all', { message: 'amenity_id must be a valid UUID' })
+  amenity_id: string;
+
+  @ApiProperty({ example: '2026-05-03T10:00:00.000Z' })
+  @IsISO8601({}, { message: 'starts_at must be a valid ISO 8601 date string' })
+  starts_at: string;
+
+  @ApiProperty({ example: '2026-05-03T11:00:00.000Z' })
+  @IsISO8601({}, { message: 'ends_at must be a valid ISO 8601 date string' })
+  @IsOnOrAfter('starts_at', 'starts_at', {
+    message: 'ends_at must be on or after starts_at',
+  })
+  ends_at: string;
+
+  @ApiPropertyOptional({
+    example: 'Moved because the original venue is under maintenance.',
+  })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'note must be a string' })
+  @MaxLength(500, { message: 'note must not exceed 500 characters' })
+  note?: string;
+}
+
+export class CancelStaffVenueBookingForMaintenanceDTO {
+  @ApiPropertyOptional({
+    example: 'No suitable replacement venue was available.',
+  })
+  @IsOptional()
+  @TrimString()
+  @IsString({ message: 'note must be a string' })
+  @MaxLength(500, { message: 'note must not exceed 500 characters' })
+  note?: string;
 }
 
 export class CreateStaffCoachBookingDTO {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { VenueBookingRecord } from "@fittrack/api-client";
+import { getVenueBookingBlockReason, type VenueBookingRecord } from "@fittrack/api-client";
 import type { FloorVenueRecord, GymLayoutEquipmentRecord, ThemeColors } from "@fittrack/types";
 import { buildRenderableAssetUrl } from "@fittrack/utils";
 import { Archive, Building2, Eye, MoreVertical, Pencil, RotateCw, Trash2, Wrench } from "lucide-react";
@@ -116,6 +116,7 @@ export function FacilitiesVenuesTable({
       const equipmentCount = equipment.filter((item) => venueKeys.has(String(item.venueId))).length;
       const bookingCount = activeBookings.filter((booking) => String(booking.venueId) === String(venue.sourceVenueId ?? venue.id)).length;
       const updatedAt = (venue as FloorVenueRecord & { updatedAt?: string }).updatedAt;
+      const bookingBlockReason = getVenueBookingBlockReason(venue);
       const stateColor = state === "available" ? colors.success : state === "maintenance" ? colors.warning : colors.textMuted;
       const maintenanceLabel = state === "maintenance" ? "Maintenance" : state === "inactive" ? "Inactive" : "Active";
       return (
@@ -127,7 +128,7 @@ export function FacilitiesVenuesTable({
           <div style={{ alignContent: "center", display: "grid", padding: "8px 10px" }}><FitText style={{ fontSize: 11, fontWeight: 700 }}>{FACILITY_FLOOR_MAP[venue.floorId].label}</FitText><FitText style={{ color: colors.textMuted, fontSize: 9.5, marginTop: 2 }}>C{venue.gridColumn ?? 1} / R{venue.gridRow ?? 1}</FitText></div>
           <div style={{ alignItems: "center", display: "flex", padding: "8px 10px" }}><FitText style={{ fontSize: 11 }}>{venue.capacity ?? 0}</FitText></div>
           <div style={{ alignItems: "center", display: "flex", padding: "8px 10px" }}><FitText style={{ fontSize: 11 }}>{equipmentCount}</FitText></div>
-          <div style={{ alignItems: "center", display: "flex", padding: "8px 10px" }}><FitText style={{ color: bookingCount ? colors.warning : colors.success, fontSize: 10.5, fontWeight: 750 }}>{bookingCount ? `${bookingCount} active` : "Available"}</FitText></div>
+          <div style={{ alignContent: "center", display: "grid", padding: "8px 10px" }}><FitText style={{ color: bookingBlockReason ? colors.danger : bookingCount ? colors.warning : colors.success, fontSize: 10.5, fontWeight: 750 }}>{bookingBlockReason ? state === "maintenance" ? "Unavailable - Maintenance" : "Unavailable" : bookingCount ? `${bookingCount} active` : "Available"}</FitText>{bookingBlockReason ? <FitText style={{ color: colors.textMuted, fontSize: 8.5, marginTop: 2 }}>{state === "maintenance" ? "Maintenance blocks booking" : bookingBlockReason}</FitText> : null}</div>
           <div style={{ alignItems: "center", display: "flex", padding: "8px 10px" }}><span style={{ backgroundColor: `${stateColor}18`, border: `1px solid ${stateColor}55`, borderRadius: 6, color: stateColor, fontSize: 9.5, fontWeight: 800, padding: "4px 6px" }}>{maintenanceLabel}</span></div>
           <div style={{ alignContent: "center", display: "grid", padding: "8px 10px" }}><FitText style={{ fontSize: 10.5 }}>{updatedAt ? new Date(updatedAt).toLocaleDateString() : "Current"}</FitText><FitText style={{ color: colors.textMuted, fontSize: 9, marginTop: 2 }}>{updatedAt ? new Date(updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "API synced"}</FitText></div>
           <div style={{ alignItems: "center", display: "flex", gap: 5, padding: "7px 8px", position: "relative" }}>

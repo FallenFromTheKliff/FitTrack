@@ -187,6 +187,10 @@ export class AmenityService {
   constructor(private readonly repo: AmenityRepository) {}
 
   listAmenities(): Promise<Amenity[]> {
+    return this.repo.listBookableAmenities();
+  }
+
+  listOperationalAmenities(): Promise<Amenity[]> {
     return this.repo.listActiveAmenities();
   }
 

@@ -44,9 +44,11 @@ import {
 import {
   CreateStaffInitialPaymentStage,
   CreateStaffVenueBookingDTO,
+  RescheduleStaffVenueBookingDTO,
 } from '../../staff/dto/staff-schedule.dto';
 import { DateRangeDTO } from '../../user/dto/user-dto';
 import { AmenityRepository } from '../amenity/amenity.repository';
+import { getAmenityBookingBlockReason } from '../amenity/amenity-reservability';
 import {
   BookingRepository,
   type CoachVenueWorkRecord,
@@ -69,6 +71,10 @@ import {
   BOOKING_CONFIRMED_EVENT,
   BookingConfirmedEvent,
 } from './events/booking-confirmed.event';
+import {
+  BOOKING_RESCHEDULED_EVENT,
+  BookingRescheduledEvent,
+} from './events/booking-rescheduled.event';
 
 const SLOT_INTERVAL_MINUTES = 60;
 const SLOT_INTERVAL_MS = SLOT_INTERVAL_MINUTES * 60 * 1000;
@@ -178,13 +184,15 @@ export class BookingService {
   ): Promise<{ booking: AmenityBooking; message: string }> {
     void bookingId;
     void actorUserId;
-    return Promise.reject(new GoneException({
-      type: 'GONE',
-      title: 'Pending Booking Confirmation Retired',
-      status: 410,
-      detail:
-        'Venue bookings are confirmed only by a successful full payment or an atomic staff cash registration.',
-    }));
+    return Promise.reject(
+      new GoneException({
+        type: 'GONE',
+        title: 'Pending Booking Confirmation Retired',
+        status: 410,
+        detail:
+          'Venue bookings are confirmed only by a successful full payment or an atomic staff cash registration.',
+      }),
+    );
     /*
     const booking =
       await this.bookingRepository.findBookingWithAmenityByIdOrThrow(bookingId);
@@ -299,13 +307,15 @@ export class BookingService {
     void bookingId;
     void actorUserId;
     void reason;
-    return Promise.reject(new GoneException({
-      type: 'GONE',
-      title: 'Pending Booking Rejection Retired',
-      status: 410,
-      detail:
-        'Venue bookings are created as confirmed only after full payment or atomic staff cash registration. Pending booking rejection is retired.',
-    }));
+    return Promise.reject(
+      new GoneException({
+        type: 'GONE',
+        title: 'Pending Booking Rejection Retired',
+        status: 410,
+        detail:
+          'Venue bookings are created as confirmed only after full payment or atomic staff cash registration. Pending booking rejection is retired.',
+      }),
+    );
   }
 
   async createBooking(
@@ -440,6 +450,7 @@ export class BookingService {
     const amenity = await this.amenityRepository.findActiveAmenityByIdOrThrow(
       dto.amenity_id,
     );
+    this.assertAmenityReservable(amenity);
 
     const linkedCoach = dto.coach_id
       ? await this.coachService.assertCoachReservableForBookingWindow(
@@ -513,13 +524,15 @@ export class BookingService {
   ): Promise<BookingCheckoutResponseDTO> {
     void bookingId;
     void dto;
-    return Promise.reject(new GoneException({
-      type: 'GONE',
-      title: 'Balance Collection Retired',
-      status: 410,
-      detail:
-        'Venue bookings are full-payment-only. The balance collection endpoint is retained only as a legacy compatibility route and cannot create payment records.',
-    }));
+    return Promise.reject(
+      new GoneException({
+        type: 'GONE',
+        title: 'Balance Collection Retired',
+        status: 410,
+        detail:
+          'Venue bookings are full-payment-only. The balance collection endpoint is retained only as a legacy compatibility route and cannot create payment records.',
+      }),
+    );
     /*
     const booking =
       await this.bookingRepository.findBookingWithAmenityByIdOrThrow(bookingId);
@@ -845,6 +858,53 @@ export class BookingService {
     void paymentStage;
     void actorRole;
     return PaymentStage.full;
+  }
+
+  async rescheduleBookingForMaintenance(
+    bookingId: string,
+    actorUserId: string,
+    dto: RescheduleStaffVenueBookingDTO,
+  ): Promise<AmenityBooking> {
+    const schedule = parseBookingSchedule(dto, true);
+    const result = await this.bookingRepository.rescheduleBookingForMaintenance(
+      {
+        actorUserId,
+        amenityId: dto.amenity_id,
+        bookingId,
+        endsAt: schedule.endsAt,
+        note: dto.note,
+        startsAt: schedule.startsAt,
+      },
+    );
+
+    this.eventEmitter.emit(BOOKING_RESCHEDULED_EVENT, {
+      amenityId: result.booking.amenity_id,
+      bookingId: result.booking.id,
+      startsAt: result.booking.starts_at.toISOString(),
+      userId: result.booking.user_id,
+    } satisfies BookingRescheduledEvent);
+    return result.booking;
+  }
+
+  async cancelBookingForMaintenance(
+    bookingId: string,
+    actorUserId: string,
+    note?: string,
+  ): Promise<AmenityBooking> {
+    const cancelledAt = new Date();
+    const booking = await this.bookingRepository.cancelBookingForMaintenance({
+      actorUserId,
+      bookingId,
+      cancelledAt,
+      note,
+    });
+    this.emitBookingCancelled({
+      bookingId: booking.id,
+      userId: booking.user_id,
+      amenityId: booking.amenity_id,
+      cancelledAt: cancelledAt.toISOString(),
+    });
+    return booking;
   }
 
   private assertSelfServicePaymentPolicy(
@@ -1245,14 +1305,14 @@ export class BookingService {
   }
 
   private assertAmenityReservable(amenity: Amenity): void {
-    if (amenity.is_reservable === false) {
+    const reason = getAmenityBookingBlockReason(amenity);
+    if (reason) {
       throw new HttpException(
         {
           type: 'BUSINESS_RULE_VIOLATION',
           title: 'Venue Not Reservable',
           status: 422,
-          detail:
-            'This venue is marked facility-only and cannot be used for venue bookings.',
+          detail: reason,
         },
         HttpStatus.UNPROCESSABLE_ENTITY,
       );
@@ -1402,7 +1462,9 @@ function buildAvailabilitySlots(
   });
 }
 
-function invalidDateError(detail = 'date must be a valid YYYY-MM-DD calendar date.'): BadRequestException {
+function invalidDateError(
+  detail = 'date must be a valid YYYY-MM-DD calendar date.',
+): BadRequestException {
   return new BadRequestException({
     type: 'INVALID_DATE',
     title: 'Invalid Date',

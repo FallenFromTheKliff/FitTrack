@@ -9,6 +9,7 @@ import {
 
 import { MembershipCardRepository } from '../card/card.repository';
 import { MembershipCardService } from '../card/card.service';
+import { CoachingCommerceService } from '../../coaching/commerce/coaching-commerce.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { PaymongoCheckoutService } from './paymongo-checkout.service';
 import {
@@ -67,6 +68,10 @@ describe('Payment webhook integration', () => {
 
   const paymongoCheckoutService = {
     createCheckoutSession: jest.fn(),
+    retrieveCheckoutSession: jest.fn(),
+  };
+  const coachingCommerceService = {
+    getHoldStatusForUser: jest.fn(),
   };
   const notificationsService = {
     dispatch: jest.fn(),
@@ -87,6 +92,7 @@ describe('Payment webhook integration', () => {
         { provide: NotificationsService, useValue: notificationsService },
         { provide: PaymongoWebhookService, useValue: paymongoWebhookService },
         { provide: PaymongoCheckoutService, useValue: paymongoCheckoutService },
+        { provide: CoachingCommerceService, useValue: coachingCommerceService },
       ],
     }).compile();
 

@@ -529,6 +529,10 @@ async function cleanupDeprecatedCoachSeeds() {
 }
 
 async function cleanupGymOperationsData() {
+  // Checkout holds reference coaches, venues, and optional payments. Clear
+  // these short-lived commerce intents before rebuilding the shared booking
+  // fixtures so foreign keys cannot strand stale test data.
+  await prisma.commerceCheckoutHold.deleteMany({});
   await prisma.payment.deleteMany({
     where: {
       payable_type: {

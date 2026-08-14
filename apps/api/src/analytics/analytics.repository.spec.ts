@@ -119,6 +119,31 @@ describe('AnalyticsRepository', () => {
     expect(getQueryText(2)).toContain('FROM attendance_logs');
   });
 
+  it('labels maintenance cancellations as operational work instead of customer cancellation', async () => {
+    prisma.attendanceLog.findMany.mockResolvedValue([]);
+    prisma.amenityBooking.findMany.mockResolvedValue([
+      {
+        amenity: { name: 'Boxing Ring' },
+        cancellation_reason: 'VENUE_MAINTENANCE',
+        cancelled_at: new Date('2026-08-14T10:00:00.000Z'),
+        completed_at: null,
+        created_at: new Date('2026-08-10T10:00:00.000Z'),
+        id: 'booking-1',
+        status: 'cancelled',
+        user: { profile: { first_name: 'Ava', last_name: 'Rivera' } },
+      },
+    ]);
+    prisma.coachAppointment.findMany.mockResolvedValue([]);
+    prisma.saleTransaction.findMany.mockResolvedValue([]);
+
+    await expect(repo.listRecentActivities()).resolves.toEqual([
+      expect.objectContaining({
+        id: 'booking-1',
+        status: 'operational_maintenance',
+      }),
+    ]);
+  });
+
   it('queries member metrics from users and subscriptions', async () => {
     const start = new Date('2025-01-01T00:00:00.000Z');
     const end = new Date('2025-01-31T23:59:59.999Z');
@@ -133,9 +158,7 @@ describe('AnalyticsRepository', () => {
     expect(getQueryText(0)).toContain('FROM membership_cards');
     expect(getQueryText(1)).toContain('FROM users');
     expect(getQueryText(1)).toContain('LEFT JOIN subscriptions');
-    expect(getQueryText(0)).toContain(
-      "membership_cards.status = 'active'",
-    );
+    expect(getQueryText(0)).toContain("membership_cards.status = 'active'");
   });
 
   it('queries coach earnings rollups with coach profile joins', async () => {

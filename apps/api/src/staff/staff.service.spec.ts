@@ -206,6 +206,11 @@ describe('StaffService', () => {
         specialization: 'Strength, Mobility',
         certification: 'NASM-CPT, CPR',
         hourly_rate: { toString: () => '1200' },
+        monthly_offer_active: true,
+        monthly_offer_description: 'Four focused sessions.',
+        monthly_rate: { toString: () => '4800' },
+        monthly_session_count: 4,
+        monthly_session_duration_minutes: 60,
         schedule_type: 'part_time',
         is_available_for_booking: false,
         user: {
@@ -254,6 +259,11 @@ describe('StaffService', () => {
         certifications: ['NASM-CPT', 'CPR'],
         yearsExperience: null,
         hourlyRate: 1200,
+        monthlyOfferActive: true,
+        monthlyOfferDescription: 'Four focused sessions.',
+        monthlyRate: 4800,
+        monthlySessionCount: 4,
+        monthlySessionDurationMinutes: 60,
         scheduleType: 'part_time',
         isActive: false,
         availability: [

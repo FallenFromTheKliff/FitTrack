@@ -8,6 +8,7 @@ import { FitText } from "@/components/fit";
 import { useTheme } from "@/contexts/ThemeContext";
 
 type FeatureHeaderProps = {
+  accentColor?: string;
   children?: ReactNode;
   icon: LucideIcon;
   iconMode?: "boxed" | "none";
@@ -17,6 +18,7 @@ type FeatureHeaderProps = {
 };
 
 export default function FeatureHeader({
+  accentColor,
   children,
   icon: Icon,
   iconMode = "boxed",
@@ -25,6 +27,7 @@ export default function FeatureHeader({
   title,
 }: FeatureHeaderProps) {
   const { colors } = useTheme();
+  const resolvedAccentColor = accentColor ?? colors.brand;
 
   return (
     <View
@@ -41,12 +44,12 @@ export default function FeatureHeader({
           style={[
             styles.iconWrap,
             {
-              backgroundColor: colors.brand + "14",
-              borderColor: colors.brand + "30",
+              backgroundColor: resolvedAccentColor + "14",
+              borderColor: resolvedAccentColor + "30",
             },
           ]}
         >
-          <Icon size={30} color={colors.brand} strokeWidth={2.2} />
+          <Icon size={30} color={resolvedAccentColor} strokeWidth={2.2} />
         </View>
       ) : null}
       <View style={styles.info}>

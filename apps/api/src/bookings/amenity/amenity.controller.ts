@@ -40,6 +40,17 @@ export class AmenityController {
     return this.amenityService.listAmenities();
   }
 
+  @Get('amenities/operations')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.admin, UserRole.staff)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'List active amenities for operational management.',
+  })
+  listOperationalAmenities() {
+    return this.amenityService.listOperationalAmenities();
+  }
+
   @Get('amenities/archived')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.admin)

@@ -14,9 +14,11 @@ import {
 } from "@fittrack/query";
 
 import { FitButton, FitText } from "@/components/fit";
+import { ConfirmModal } from "@/components/modals";
 import ExerciseRestTimerModal from "@/components/workout/ExerciseRestTimerModal";
 import { DAY_NAMES, type DraftExercise } from "@/components/workout/workoutPlanDraft";
 import {
+  canCreateClientWorkoutProgram,
   createCoachWorkoutPlanTransition,
   createSingleSubmitGate,
   type CoachWorkoutPlanTransition,
@@ -171,6 +173,7 @@ export function CoachClientWorkoutPrograms({
   const goal: FitnessGoal = "maintenance";
   const [message, setMessage] = useState("");
   const [messageIsError, setMessageIsError] = useState(false);
+  const [saveConfirmationOpen, setSaveConfirmationOpen] = useState(false);
 
   const clientPlansQuery = useQuery({
     ...fitnessClientPlansQueryOptions(mobileApiClient, coachUserId, memberId, { limit: 50, page: 1 }),
@@ -209,6 +212,11 @@ export function CoachClientWorkoutPrograms({
   const weekNumbers = Array.from({ length: durationWeeks }, (_, index) => index + 1);
   const paidPeriodWeekCount = getRemainingPaidWorkoutWeeks(paidPeriodEndDate);
   const canRepeatThroughPaidPeriod = Boolean(paidPeriodEndDate);
+  const canCreateProgram = canCreateClientWorkoutProgram({
+    existingProgramCount: clientPrograms.length,
+    hasMonthlyEntitlement: canRepeatThroughPaidPeriod,
+    hasPaidEntitlement: canManage,
+  });
   const recurrenceOptions: Array<{ label: string; mode: WorkoutRecurrenceMode }> = canRepeatThroughPaidPeriod
     ? [
         { label: "This week only", mode: "this_week" },
@@ -254,6 +262,7 @@ export function CoachClientWorkoutPrograms({
   };
 
   const openNew = () => {
+    if (!canCreateProgram) return;
     setEditor(createNewEditorDraft());
     setMessage("");
     setMessageIsError(false);
@@ -379,27 +388,47 @@ export function CoachClientWorkoutPrograms({
     });
   };
 
+  const validateProgramDraft = () => {
+    if (!canManage) {
+      setBuilderError(
+        "This client does not have a fully paid coaching entitlement for program assignment.",
+      );
+      return false;
+    }
+    const input = toCoachPlanInput(title, goal, durationWeeks, draftWeeks);
+    if (!input.title) {
+      setBuilderError("Give this program a clear name.");
+      return false;
+    }
+    if (input.schedule.length === 0) {
+      setBuilderError("Select at least one training day.");
+      return false;
+    }
+    const emptyDay = findEmptyWorkoutDay(draftWeeks);
+    if (emptyDay) {
+      setActiveWeek(emptyDay.weekNumber);
+      setActiveDraftDay(emptyDay.dayOfWeek);
+      setBuilderError(
+        `Add at least one exercise to week ${emptyDay.weekNumber} ${DAY_NAMES[emptyDay.dayOfWeek]}.`,
+      );
+      return false;
+    }
+    return true;
+  };
+
+  const requestSaveConfirmation = () => {
+    setBuilderError("");
+    if (!validateProgramDraft()) return;
+    setSaveConfirmationOpen(true);
+  };
+
   const saveProgram = async () => {
     if (!saveInFlightRef.current.tryAcquire()) return;
+    setSaveConfirmationOpen(false);
     setBuilderError("");
     setMessage("");
     try {
-      if (!canManage) {
-        setBuilderError(
-          "This client does not have a fully paid coaching entitlement for program assignment.",
-        );
-        return;
-      }
       const input = toCoachPlanInput(title, goal, durationWeeks, draftWeeks);
-      if (!input.title) { setBuilderError("Give this program a clear name."); return; }
-      if (input.schedule.length === 0) { setBuilderError("Select at least one training day."); return; }
-       const emptyDay = findEmptyWorkoutDay(draftWeeks);
-      if (emptyDay) {
-        setActiveWeek(emptyDay.weekNumber);
-        setActiveDraftDay(emptyDay.dayOfWeek);
-        setBuilderError(`Add at least one exercise to week ${emptyDay.weekNumber} ${DAY_NAMES[emptyDay.dayOfWeek]}.`);
-        return;
-      }
       let planId = selectedPlanId;
       if (planId) {
         await updateMutation.mutateAsync({ input, planId, userId: coachUserId });
@@ -431,7 +460,8 @@ export function CoachClientWorkoutPrograms({
         <View style={{ alignItems: "center", flexDirection: "row", gap: 8, justifyContent: "space-between" }}><FitText style={{ color: colors.textPrimary, flex: 1, fontSize: 13, fontWeight: "900" }}>{plan.title}</FitText><FitText style={{ color: plan.isActive ? colors.success : colors.textMuted, fontSize: 10, fontWeight: "900" }}>{plan.isActive ? "ACTIVE" : "INACTIVE"}</FitText></View>
         <FitText style={{ color: colors.textMuted, fontSize: 10.5 }}>{plan.daysPerWeek} day split · {plan.durationWeeks} weeks · Tap to edit</FitText>
       </Pressable>)}</View> : <View style={{ backgroundColor: colors.surfaceRaised, borderColor: colors.border, borderRadius: 10, borderWidth: 1, gap: 4, padding: 12 }}><FitText style={{ color: colors.textPrimary, fontSize: 12, fontWeight: "800" }}>No client-specific programs yet.</FitText><FitText style={{ color: colors.textMuted, fontSize: 10.5 }}>Create a one-session/week program or repeat it through an active paid monthly period.</FitText></View>}
-      {canManage ? <FitButton disabled={Boolean(loadingPlanId)} label={loadingPlanId ? "LOADING PROGRAM" : "CREATE PROGRAM"} onPress={openNew} style={{ minHeight: 46 }} textStyle={{ fontSize: 13, fontWeight: "900" }} variant="ghost" /> : null}
+      {canCreateProgram ? <FitButton disabled={Boolean(loadingPlanId)} label={loadingPlanId ? "LOADING PROGRAM" : "CREATE PROGRAM"} onPress={openNew} style={{ minHeight: 46 }} textStyle={{ fontSize: 13, fontWeight: "900" }} variant="ghost" /> : null}
+      {canManage && !canCreateProgram ? <FitText style={{ color: colors.textMuted, fontSize: 10.5 }}>This one-session entitlement already has its workout program. Open it above to edit.</FitText> : null}
       {!canManage ? <FitText accessibilityRole="alert" style={{ color: colors.danger, fontSize: 10.5 }}>A fully paid one-session booking or active paid monthly plan is required before a coach can create or edit this client's program.</FitText> : null}
       {message ? <FitText accessibilityLiveRegion="polite" style={{ color: messageIsError ? colors.danger : colors.success, fontSize: 12 }}>{message}</FitText> : null}
       <Modal animationType="slide" onRequestClose={() => setEditor(null)} transparent visible={Boolean(editor)}>
@@ -440,6 +470,7 @@ export function CoachClientWorkoutPrograms({
           <ScrollView contentContainerStyle={{ gap: 12, padding: 16, paddingTop: 4 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
             <FitText style={{ color: colors.textMuted, fontSize: 10.5, fontWeight: "900" }}>PROGRAM NAME</FitText>
             <TextInput accessibilityLabel="Client workout program name" onChangeText={(value) => { setTitle(value); setBuilderError(""); }} placeholder="Strength foundation" placeholderTextColor={colors.textMuted} style={inputStyle} value={title} />
+            {builderError === "Give this program a clear name." ? <FitText accessibilityRole="alert" style={{ color: colors.danger, fontSize: 10.5 }}>{builderError}</FitText> : null}
             <View style={{ gap: 7 }}>
               <FitText style={{ color: colors.textMuted, fontSize: 10.5, fontWeight: "900" }}>WORKOUT RECURRENCE</FitText>
               <View style={{ backgroundColor: colors.surfaceRaised, borderColor: colors.border, borderRadius: 9, borderWidth: 1, flexDirection: "row", gap: 4, padding: 4 }}>
@@ -475,14 +506,27 @@ export function CoachClientWorkoutPrograms({
               {activeDay.exercises.map((exercise) => <View key={exercise.exerciseId} style={{ backgroundColor: colors.surfaceRaised, borderColor: colors.border, borderRadius: 9, borderWidth: 1, gap: 9, padding: 11 }}><View style={{ alignItems: "center", flexDirection: "row", gap: 8, justifyContent: "space-between" }}><FitText style={{ color: colors.textPrimary, flex: 1, fontSize: 12, fontWeight: "900" }}>{exercise.exerciseName}</FitText><Pressable accessibilityLabel={`Remove ${exercise.exerciseName}`} accessibilityRole="button" onPress={() => removeExercise(exercise.exerciseId)} style={{ padding: 3 }}><Trash2 size={16} color={colors.danger} /></Pressable></View><View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>{[{ key: "sets" as const, label: "Sets", max: 20, min: 1, value: exercise.sets }, { key: "reps" as const, label: "Reps", max: 100, min: 1, value: exercise.reps }].map((control) => <View key={control.key} style={{ alignItems: "center", backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 8, borderWidth: 1, flex: 1, flexDirection: "row", justifyContent: "space-between", minWidth: 92, paddingHorizontal: 5, paddingVertical: 7 }}><Pressable accessibilityLabel={`Decrease ${control.label}`} accessibilityRole="button" onPress={() => patchExercise(exercise.exerciseId, { [control.key]: Math.max(control.min, control.value - 1) })} style={{ padding: 2 }}><Minus size={14} color={colors.textMuted} /></Pressable><FitText adjustsFontSizeToFit minimumFontScale={0.82} numberOfLines={1} style={{ color: colors.textPrimary, flex: 1, fontSize: 9.5, fontWeight: "800", minWidth: 0, textAlign: "center" }}>{control.value} {control.label}</FitText><Pressable accessibilityLabel={`Increase ${control.label}`} accessibilityRole="button" onPress={() => patchExercise(exercise.exerciseId, { [control.key]: Math.min(control.max, control.value + 1) })} style={{ padding: 2 }}><Plus size={14} color={colors.brand} /></Pressable></View>)}<Pressable accessibilityLabel={`Edit ${exercise.exerciseName} rest timer`} accessibilityRole="button" onPress={() => setRestEditorExerciseId(exercise.exerciseId)} style={{ alignItems: "center", backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 8, borderWidth: 1, flex: 1, justifyContent: "center", minWidth: 92, paddingHorizontal: 5, paddingVertical: 7 }}><FitText adjustsFontSizeToFit minimumFontScale={0.82} numberOfLines={1} style={{ color: colors.textPrimary, fontSize: 9.5, fontWeight: "800" }}>{exercise.restSecondsBySet ? "SET REST" : `REST ${exercise.restSeconds}s`}</FitText></Pressable></View></View>)}
               <TextInput accessibilityLabel="Search exercise catalog" onChangeText={setExerciseSearch} placeholder="Search exercises" placeholderTextColor={colors.textMuted} style={inputStyle} value={exerciseSearch} /><View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>{visibleExercises.map((exercise) => { const selected = activeDay.exercises.some((item) => item.exerciseId === exercise.id); return <Pressable accessibilityLabel={`${selected ? "Added" : "Add"} ${exercise.name}`} accessibilityRole="button" disabled={selected} key={exercise.id} onPress={() => addExercise(exercise)} style={{ backgroundColor: selected ? `${colors.success}12` : colors.surfaceRaised, borderColor: selected ? colors.success : colors.border, borderRadius: 8, borderWidth: 1, opacity: selected ? 0.65 : 1, paddingHorizontal: 9, paddingVertical: 7 }}><FitText style={{ color: selected ? colors.success : colors.textPrimary, fontSize: 9.5, fontWeight: "800" }}>{selected ? "Added · " : "+ "}{exercise.name}</FitText></Pressable>; })}</View>{!exercisesQuery.isLoading && visibleExercises.length === 0 ? <FitText style={{ color: colors.textMuted, fontSize: 10.5 }}>No exercises match this search.</FitText> : null}<FitText style={{ color: colors.textMuted, fontSize: 10.5 }}>{activeDay.exercises.length} exercise{activeDay.exercises.length === 1 ? "" : "s"} on {DAY_NAMES[activeDraftDay]}.</FitText>
             </View> : <FitText style={{ color: colors.textMuted, fontSize: 11 }}>Select a training day to add its workout.</FitText>}
-            {builderError ? <FitText accessibilityLiveRegion="polite" style={{ color: colors.danger, fontSize: 12, fontWeight: "700" }}>{builderError}</FitText> : null}
+            {builderError && builderError !== "Give this program a clear name." ? <FitText accessibilityLiveRegion="polite" style={{ color: colors.danger, fontSize: 12, fontWeight: "700" }}>{builderError}</FitText> : null}
           </ScrollView>
           <View style={{ borderTopColor: colors.border, borderTopWidth: 1, flexDirection: "row", gap: 8, paddingHorizontal: 16, paddingTop: 10 }}>
             <FitButton disabled={isSaving} flex={1} label="BACK" onPress={() => setEditor(null)} style={{ minHeight: 46 }} textStyle={{ fontSize: 12, fontWeight: "900" }} variant="ghost" />
-            <FitButton disabled={!canManage || isSaving || !editor} flex={1} label={isSaving ? "SAVING" : "SAVE PROGRAM"} loading={isSaving} loadingLabel="SAVING" onPress={() => void saveProgram()} style={{ minHeight: 46 }} textStyle={{ fontSize: 12, fontWeight: "900" }} />
+            <FitButton disabled={!canManage || isSaving || !editor} flex={1} label={isSaving ? "SAVING" : "SAVE PROGRAM"} loading={isSaving} loadingLabel="SAVING" onPress={requestSaveConfirmation} style={{ minHeight: 46 }} textStyle={{ fontSize: 12, fontWeight: "900" }} />
           </View>
         </View></View>
       </Modal>
+      <ConfirmModal
+        isVisible={saveConfirmationOpen}
+        title={selectedPlanId ? "Save program changes?" : "Create client program?"}
+        message={selectedPlanId
+          ? `Update ${title.trim()} for this client? The existing assignment stays attached and paid appointments are not changed.`
+          : `Create and assign ${title.trim()} to this client? Paid appointments and their dates remain unchanged.`}
+        yesLabel={selectedPlanId ? "SAVE CHANGES" : "CREATE PROGRAM"}
+        noLabel="CANCEL"
+        isLoading={isSaving}
+        loadingLabel="SAVING"
+        onNo={() => setSaveConfirmationOpen(false)}
+        onYes={() => void saveProgram()}
+      />
       <ExerciseRestTimerModal exerciseName={restEditorExercise?.exerciseName ?? "Exercise"} isVisible={Boolean(restEditorExercise)} onClose={() => setRestEditorExerciseId(null)} onSave={({ restSeconds, restSecondsBySet }) => { if (!restEditorExercise) return; patchExercise(restEditorExercise.exerciseId, { restSeconds, restSecondsBySet }); setRestEditorExerciseId(null); }} restSeconds={restEditorExercise?.restSeconds ?? 75} restSecondsBySet={restEditorExercise?.restSecondsBySet ?? null} sets={restEditorExercise?.sets ?? 1} />
     </View>
   );

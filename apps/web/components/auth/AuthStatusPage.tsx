@@ -21,9 +21,11 @@ import { authStyles } from "@/styles/authStyles";
 type StatusTone = "brand" | "success" | "warning" | "danger";
 
 type StatusAction = {
-  href: string;
+  href?: string;
   icon?: LucideIcon;
   label: string;
+  onClick?: () => void;
+  replace?: boolean;
   variant?: "ghost" | "primary";
 };
 
@@ -265,6 +267,18 @@ export function AuthStatusPage({
   const themeTransition = useThemeTransition();
   const accent = resolveAccent(colors, tone);
   const s = makeStatusStyles(colors, accent);
+  const runAction = (action: StatusAction) => {
+    if (action.onClick) {
+      action.onClick();
+      return;
+    }
+    if (!action.href) return;
+    if (action.replace) {
+      router.replace(action.href);
+      return;
+    }
+    router.push(action.href);
+  };
 
   return (
     <div className={themeTransition} style={s.screen}>
@@ -383,7 +397,7 @@ export function AuthStatusPage({
                 fullWidth
                 icon={primaryAction.icon}
                 label={primaryAction.label}
-                onClick={() => router.push(primaryAction.href)}
+                onClick={() => runAction(primaryAction)}
                 style={s.loginPrimaryBtn}
                 variant={primaryAction.variant ?? "primary"}
               />
@@ -392,7 +406,7 @@ export function AuthStatusPage({
                   fullWidth
                   icon={secondaryAction.icon}
                   label={secondaryAction.label}
-                  onClick={() => router.push(secondaryAction.href)}
+                  onClick={() => runAction(secondaryAction)}
                   style={{ fontSize: 15, fontWeight: 700, minHeight: 56 }}
                   variant={secondaryAction.variant ?? "ghost"}
                 />

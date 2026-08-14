@@ -1,3 +1,4 @@
+import { HttpException } from '@nestjs/common';
 import {
   CommerceCheckoutHoldKind,
   CommerceCheckoutHoldStatus,
@@ -7,6 +8,29 @@ import {
 } from '@prisma/client';
 
 import { PaymentRepository } from './payment.repository';
+
+type MockCallSource = { mock: { calls: unknown[][] } };
+
+function lastCallArgument<T>(mock: MockCallSource): T {
+  const argument = mock.mock.calls.at(-1)?.[0];
+  if (argument === undefined)
+    throw new Error('Expected the mock to be called.');
+  return argument as T;
+}
+
+async function expectHttpDetail(
+  request: Promise<unknown>,
+  expected: string,
+): Promise<void> {
+  try {
+    await request;
+    throw new Error('Expected the request to reject.');
+  } catch (error) {
+    if (!(error instanceof HttpException)) throw error;
+    const response = error.getResponse() as { detail?: string };
+    expect(response.detail).toContain(expected);
+  }
+}
 
 describe('PaymentRepository', () => {
   const payment = {
@@ -57,12 +81,35 @@ describe('PaymentRepository', () => {
   it('looks up payments by the stable idempotency key', async () => {
     payment.findUnique.mockResolvedValue({ id: 'payment-1' });
 
-    await expect(repo.findPaymentByIdempotencyKey('attempt-1')).resolves.toEqual(
-      { id: 'payment-1' },
-    );
+    await expect(
+      repo.findPaymentByIdempotencyKey('attempt-1'),
+    ).resolves.toEqual({ id: 'payment-1' });
     expect(payment.findUnique).toHaveBeenCalledWith(
       expect.objectContaining({ where: { idempotency_key: 'attempt-1' } }),
     );
+  });
+
+  it('returns a valid PayMongo commerce hold only to its owner', async () => {
+    const linkedPayment = {
+      id: 'payment-hold-1',
+      payable_id: 'hold-1',
+      payable_type: 'commerce_checkout_hold',
+      provider: PaymentProvider.paymongo,
+      user_id: 'member-1',
+    };
+    commerceCheckoutHold.findUnique.mockResolvedValue({
+      id: 'hold-1',
+      payment: linkedPayment,
+      payment_id: linkedPayment.id,
+      user_id: 'member-1',
+    });
+
+    await expect(
+      repo.findCommerceCheckoutForReconciliationOrThrow('hold-1', 'member-1'),
+    ).resolves.toMatchObject({ payment: linkedPayment });
+    await expect(
+      repo.findCommerceCheckoutForReconciliationOrThrow('hold-1', 'member-2'),
+    ).rejects.toMatchObject({ status: 403 });
   });
 
   it('filters the admin payments queue by status and payable type', async () => {
@@ -239,7 +286,9 @@ describe('PaymentRepository', () => {
     await expect(
       repo.completePaymongoCommerceCheckout('payment-hold-1', {
         gatewayEventId: 'evt-expired-1',
-        gatewayMetadata: { checkout_url: 'https://checkout.paymongo.com/expired' },
+        gatewayMetadata: {
+          checkout_url: 'https://checkout.paymongo.com/expired',
+        },
         verifiedAt,
       }),
     ).resolves.toMatchObject({
@@ -248,21 +297,27 @@ describe('PaymentRepository', () => {
       productKind: CommerceCheckoutHoldKind.one_time,
       transitioned: true,
     });
-    expect(tx.commerceCheckoutHold.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: 'hold-1', status: CommerceCheckoutHoldStatus.held },
-        data: expect.objectContaining({ status: CommerceCheckoutHoldStatus.expired }),
-      }),
-    );
-    expect(tx.payment.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: 'payment-hold-1' },
-        data: expect.objectContaining({
-          gateway_event_id: 'evt-expired-1',
-          status: PaymentStatus.failed,
-        }),
-      }),
-    );
+    expect(
+      lastCallArgument<{
+        data: { status: CommerceCheckoutHoldStatus };
+        where: { id: string; status: CommerceCheckoutHoldStatus };
+      }>(tx.commerceCheckoutHold.updateMany),
+    ).toMatchObject({
+      where: { id: 'hold-1', status: CommerceCheckoutHoldStatus.held },
+      data: { status: CommerceCheckoutHoldStatus.expired },
+    });
+    expect(
+      lastCallArgument<{
+        data: { gateway_event_id: string; status: PaymentStatus };
+        where: { id: string };
+      }>(tx.payment.update),
+    ).toMatchObject({
+      where: { id: 'payment-hold-1' },
+      data: {
+        gateway_event_id: 'evt-expired-1',
+        status: PaymentStatus.failed,
+      },
+    });
   });
 
   it('fails a commerce hold and releases it on a failed webhook', async () => {
@@ -315,12 +370,15 @@ describe('PaymentRepository', () => {
         },
       }),
     );
-    expect(tx.commerceCheckoutHold.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: 'hold-1', status: CommerceCheckoutHoldStatus.held },
-        data: expect.objectContaining({ status: CommerceCheckoutHoldStatus.failed }),
-      }),
-    );
+    expect(
+      lastCallArgument<{
+        data: { status: CommerceCheckoutHoldStatus };
+        where: { id: string; status: CommerceCheckoutHoldStatus };
+      }>(tx.commerceCheckoutHold.updateMany),
+    ).toMatchObject({
+      where: { id: 'hold-1', status: CommerceCheckoutHoldStatus.held },
+      data: { status: CommerceCheckoutHoldStatus.failed },
+    });
   });
 
   it('does not transition a commerce hold twice for a duplicate paid webhook', async () => {
@@ -406,9 +464,8 @@ describe('PaymentRepository', () => {
       },
       amenityBooking: {
         count: jest.fn().mockResolvedValue(0),
-        create: jest
-          .fn()
-          .mockResolvedValue({ id: 'booking-venue-coach-1' }),
+        findMany: jest.fn().mockResolvedValue([]),
+        create: jest.fn().mockResolvedValue({ id: 'booking-venue-coach-1' }),
       },
       coachAppointment: { findMany: jest.fn().mockResolvedValue([]) },
       coachProfile: {
@@ -426,6 +483,7 @@ describe('PaymentRepository', () => {
         findMany: jest.fn().mockResolvedValue([]),
         findUnique: jest.fn().mockResolvedValue(hold),
         update: jest.fn().mockResolvedValue(consumedHold),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
       payment: {
         findUnique: jest.fn().mockResolvedValue(pendingPayment),
@@ -449,11 +507,13 @@ describe('PaymentRepository', () => {
       productKind: CommerceCheckoutHoldKind.venue,
       transitioned: true,
     });
-    expect(tx.amenityBooking.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        coach: { connect: { id: 'coach-venue-1' } },
-        user: { connect: { id: 'member-1' } },
-      }),
+    expect(
+      lastCallArgument<{ data: Record<string, unknown> }>(
+        tx.amenityBooking.create,
+      ).data,
+    ).toMatchObject({
+      coach: { connect: { id: 'coach-venue-1' } },
+      user: { connect: { id: 'member-1' } },
     });
     expect(tx.$executeRaw).toHaveBeenNthCalledWith(
       1,
@@ -471,6 +531,70 @@ describe('PaymentRepository', () => {
     expect(tx.$executeRaw.mock.invocationCallOrder[1]).toBeLessThan(
       tx.amenityBooking.create.mock.invocationCallOrder[0],
     );
+  });
+
+  it('rejects venue fulfillment if maintenance starts after checkout began', async () => {
+    const verifiedAt = new Date('2026-08-13T00:00:00.000Z');
+    const pendingPayment = {
+      amount: new Prisma.Decimal('800'),
+      id: 'payment-maintenance-race',
+      payable_id: 'hold-maintenance-race',
+      payable_type: 'commerce_checkout_hold',
+      provider: PaymentProvider.paymongo,
+      status: PaymentStatus.pending,
+      user_id: 'member-1',
+      verified_at: verifiedAt,
+    };
+    const hold = {
+      amenity_id: 'maintenance-venue',
+      booking_id: null,
+      coach_id: null,
+      ends_at: new Date('2026-08-13T02:00:00.000Z'),
+      expires_at: new Date('2026-08-13T00:15:00.000Z'),
+      id: 'hold-maintenance-race',
+      kind: CommerceCheckoutHoldKind.venue,
+      member_notes: null,
+      scheduled_at: new Date('2026-08-13T01:00:00.000Z'),
+      status: CommerceCheckoutHoldStatus.held,
+      user_id: 'member-1',
+    };
+    const tx = {
+      $executeRaw: jest.fn(),
+      amenity: {
+        findUnique: jest.fn().mockResolvedValue({
+          capacity: 2,
+          is_active: true,
+          is_mapped: true,
+          is_reservable: true,
+          status: 'maintenance',
+        }),
+      },
+      amenityBooking: {
+        count: jest.fn(),
+        create: jest.fn(),
+      },
+      commerceCheckoutHold: {
+        count: jest.fn(),
+        findUnique: jest.fn().mockResolvedValue(hold),
+      },
+      payment: {
+        findUnique: jest.fn().mockResolvedValue(pendingPayment),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+    };
+    prisma.$transaction.mockImplementation(
+      (callback: (value: unknown) => unknown) => callback(tx),
+    );
+
+    await expectHttpDetail(
+      repo.completePaymongoCommerceCheckout('payment-maintenance-race', {
+        gatewayEventId: 'evt-maintenance-race',
+        gatewayMetadata: {},
+        verifiedAt,
+      }),
+      'under maintenance',
+    );
+    expect(tx.amenityBooking.create).not.toHaveBeenCalled();
   });
 
   it('rolls back paid venue fulfillment when another live coach hold overlaps', async () => {
@@ -498,8 +622,18 @@ describe('PaymentRepository', () => {
     };
     const tx = {
       $executeRaw: jest.fn(),
+      amenity: {
+        findUnique: jest.fn().mockResolvedValue({
+          capacity: 2,
+          is_active: true,
+          is_mapped: true,
+          is_reservable: true,
+          status: 'available',
+        }),
+      },
       amenityBooking: {
         count: jest.fn().mockResolvedValue(0),
+        findMany: jest.fn().mockResolvedValue([]),
         create: jest.fn(),
       },
       coachAppointment: { findMany: jest.fn().mockResolvedValue([]) },
@@ -514,8 +648,10 @@ describe('PaymentRepository', () => {
         }),
       },
       commerceCheckoutHold: {
+        count: jest.fn().mockResolvedValue(0),
         findMany: jest
           .fn()
+          .mockResolvedValueOnce([])
           .mockResolvedValueOnce([
             {
               ends_at: new Date('2026-08-13T02:00:00.000Z'),
@@ -526,6 +662,7 @@ describe('PaymentRepository', () => {
           .mockResolvedValue([]),
         findUnique: jest.fn().mockResolvedValue(hold),
         update: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
       payment: {
         findUnique: jest.fn().mockResolvedValue(pendingPayment),

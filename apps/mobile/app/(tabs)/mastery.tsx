@@ -15,8 +15,10 @@ import { useMuscleMasteryScreen } from "@/hooks/mastery/useMuscleMasteryScreen";
 import { makeScreenStyles } from "@/styles/shared/ScreenStyles";
 import FeatureHeader from "@/components/layout/FeatureHeader";
 import MuscleMasteryScreenContent, {
+  getMasteryRankColor,
   MuscleMasteryHeaderPanel,
 } from "@/components/mastery/MuscleMasteryScreenContent";
+import { MILESTONE_SCROLL_OWNER } from "@/components/mastery/milestonePresentation";
 
 export default function MuscleMasteryScreen() {
   const { colors } = useTheme();
@@ -25,6 +27,7 @@ export default function MuscleMasteryScreen() {
   const { opacity, translateY } = usePassageAnim({ mode: "focus" });
   const base = useMemo(() => makeScreenStyles(colors), [colors]);
   const controller = useMuscleMasteryScreen({ isFocused });
+  const lifetimeAccentColor = getMasteryRankColor(controller.lifetimeProgression.level);
   const scrollY = useSharedValue(0);
 
   const scrollHandler = useAnimatedScrollHandler({
@@ -91,19 +94,20 @@ export default function MuscleMasteryScreen() {
 
   return (
     <Animated.View testID="mastery-screen" style={[base.screen, !isFocused && { display: "none" }]}>
-      <FeatureHeader
-        icon={Trophy}
-      >
-        <MuscleMasteryHeaderPanel controller={controller} />
-      </FeatureHeader>
       <Animated.ScrollView
         style={[base.content, screenStyle]}
-        contentContainerStyle={base.scrollContent}
+        contentContainerStyle={[base.scrollContent, { padding: 0 }]}
         showsVerticalScrollIndicator={false}
         onScroll={scrollHandler}
         scrollEventThrottle={16}
+        testID={`${MILESTONE_SCROLL_OWNER}-scroll`}
       >
-        <MuscleMasteryScreenContent controller={controller} />
+        <FeatureHeader accentColor={lifetimeAccentColor} icon={Trophy}>
+          <MuscleMasteryHeaderPanel controller={controller} />
+        </FeatureHeader>
+        <Animated.View style={{ padding: 20, paddingBottom: 120 }}>
+          <MuscleMasteryScreenContent controller={controller} />
+        </Animated.View>
       </Animated.ScrollView>
     </Animated.View>
   );

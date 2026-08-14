@@ -1,15 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft, CheckCircle2, XCircle } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { reconcileCommerceCheckoutMutationOptions } from "@fittrack/query";
 
 import { webApiClient } from "@/lib/api-client";
 import {
   clearCommerceCheckoutHold,
+  installCompletedCheckoutHistoryGuard,
   readCommerceCheckoutHold,
+  resolveCompletedCheckoutReturnAction,
+  selectLatestCheckoutAttempt,
   type StoredCommerceCheckoutHold,
 } from "@/lib/commerce-checkout";
 import { AuthStatusPage } from "./AuthStatusPage";
@@ -301,6 +305,7 @@ export function PaymentReturnPage({ variant }: { variant: PaymentReturnVariant }
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const [storedHold, setStoredHold] = useState<StoredCommerceCheckoutHold | null>(null);
+  const reconcileAttemptedHoldId = useRef<string | null>(null);
   const queryHoldId = searchParams.get("hold_id") ?? searchParams.get("checkout_hold_id");
 
   useEffect(() => {
@@ -309,24 +314,63 @@ export function PaymentReturnPage({ variant }: { variant: PaymentReturnVariant }
 
   const holdId = queryHoldId ?? storedHold?.holdId ?? null;
   const matchingStoredHold = storedHold?.holdId === holdId ? storedHold : null;
+  const reconcileMutation = useMutation({
+    ...reconcileCommerceCheckoutMutationOptions(webApiClient),
+    onSuccess: (attempt) => {
+      queryClient.setQueryData(["commerce-checkout-return", attempt.holdId], attempt);
+    },
+  });
+  const {
+    data: reconciledAttempt,
+    isError: isReconcileError,
+    isPending: isReconciling,
+    isSuccess: isReconcileSuccess,
+    mutate: reconcileHold,
+    reset: resetReconcile,
+  } = reconcileMutation;
   const holdQuery = useQuery({
-    enabled: variant === "success" && Boolean(holdId),
+    enabled:
+      variant === "success" &&
+      Boolean(holdId) &&
+      isReconcileSuccess,
     queryFn: () => webApiClient.commerceCheckout.getHoldStatus(holdId!),
     queryKey: ["commerce-checkout-return", holdId],
     refetchInterval: (query) => (query.state.data?.state === "pending" ? 2000 : false),
     retry: 2
   });
 
+  useEffect(() => {
+    if (
+      variant !== "success" ||
+      !holdId ||
+      reconcileAttemptedHoldId.current === holdId
+    ) {
+      return;
+    }
+
+    reconcileAttemptedHoldId.current = holdId;
+    reconcileHold(holdId);
+  }, [holdId, reconcileHold, variant]);
+
+  const latestAttempt = selectLatestCheckoutAttempt(
+    reconciledAttempt,
+    holdQuery.data,
+  );
+
   const checkoutState: CheckoutHoldState | null | undefined =
-    holdQuery.isError
+    isReconcileError
+      ? "error"
+      : isReconciling
+        ? "pending"
+        : holdQuery.isError
       ? holdQuery.isFetching
         ? "retry"
         : "error"
-      : holdQuery.data?.state === "pending" &&
-          (holdQuery.data.expiresAt ?? matchingStoredHold?.expiresAt) &&
-          Date.parse(holdQuery.data.expiresAt ?? matchingStoredHold?.expiresAt ?? "") <= Date.now()
+      : latestAttempt?.state === "pending" &&
+          (latestAttempt.expiresAt ?? matchingStoredHold?.expiresAt) &&
+          Date.parse(latestAttempt.expiresAt ?? matchingStoredHold?.expiresAt ?? "") <= Date.now()
         ? "expired"
-        : holdQuery.data?.state ?? (holdQuery.isFetching ? "pending" : undefined);
+        : latestAttempt?.state ?? (holdQuery.isFetching ? "pending" : undefined);
 
   useEffect(() => {
     if (variant === "cancel") {
@@ -339,6 +383,11 @@ export function PaymentReturnPage({ variant }: { variant: PaymentReturnVariant }
       void queryClient.invalidateQueries();
     }
   }, [checkoutState, holdId, queryClient, variant]);
+
+  useEffect(() => {
+    if (checkoutState !== "succeeded") return;
+    return installCompletedCheckoutHistoryGuard();
+  }, [checkoutState]);
 
   const baseContent = useMemo(() => {
     const flow = searchParams.get("flow");
@@ -358,6 +407,14 @@ export function PaymentReturnPage({ variant }: { variant: PaymentReturnVariant }
       ),
     [baseContent, checkoutState, holdId],
   );
+  const primaryAction = resolveCompletedCheckoutReturnAction(
+    {
+      href: content.primaryActionHref,
+      label: content.primaryActionLabel,
+    },
+    checkoutState,
+    latestAttempt,
+  );
 
   return (
     <AuthStatusPage
@@ -376,10 +433,25 @@ export function PaymentReturnPage({ variant }: { variant: PaymentReturnVariant }
       noticeBody={content.noticeBody}
       noticeTitle={content.noticeTitle}
       primaryAction={{
-        href: content.primaryActionHref,
+        href: primaryAction.href,
         icon: ArrowLeft,
-        label: content.primaryActionLabel
+        label: primaryAction.label,
+        replace: checkoutState === "succeeded",
       }}
+      secondaryAction={
+        checkoutState === "error" && holdId
+          ? {
+              label: isReconciling
+                ? "Verifying payment..."
+                : "Retry payment verification",
+              onClick: () => {
+                resetReconcile();
+                reconcileHold(holdId);
+              },
+              variant: "ghost",
+            }
+          : undefined
+      }
       title={content.title}
       tone={content.tone}
     />

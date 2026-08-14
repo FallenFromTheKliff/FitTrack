@@ -29,6 +29,7 @@ describe('RecurringCoachingPlanService', () => {
     findClientProgram: jest.fn(),
     findMemberCoachEnrollment: jest.fn(),
     findConflictingAppointments: jest.fn(),
+    createStaffCashEnrollment: jest.fn(),
     createPlanWithSessions: jest.fn(),
     fillPendingPlanWithSessions: jest.fn(),
     fillPaidPlanWithSessions: jest.fn(),
@@ -87,6 +88,9 @@ describe('RecurringCoachingPlanService', () => {
     });
     repo.findMemberCoachEnrollment.mockResolvedValue(null);
     repo.findConflictingAppointments.mockResolvedValue([]);
+    repo.createStaffCashEnrollment.mockResolvedValue(makePlan({
+      status: RecurringCoachingPlanStatus.active,
+    }));
     coachAvailabilityService.check.mockResolvedValue({
       available: true,
       conflictReasons: [],
@@ -561,7 +565,16 @@ describe('RecurringCoachingPlanService', () => {
   });
 
   it('starts a full-payment monthly checkout without creating a plan shell', async () => {
-    const startDate = targetMonthStart().toISOString().slice(0, 10);
+    const requestedStart = targetMonthStart();
+    requestedStart.setUTCDate(14);
+    const startDate = requestedStart.toISOString().slice(0, 10);
+    const expectedEnd = new Date(
+      Date.UTC(
+        requestedStart.getUTCFullYear(),
+        requestedStart.getUTCMonth() + 1,
+        13,
+      ),
+    );
 
     const result = await service.enroll(
       { role: UserRole.member, sub: 'member-1' } as never,
@@ -574,8 +587,10 @@ describe('RecurringCoachingPlanService', () => {
         amount: new Prisma.Decimal('12000'),
         coachId: 'coach-1',
         durationMinutes: 60,
+        endDate: expectedEnd,
         idempotencyKey: '4d36dc38-74c9-4f7e-a7d0-fd4102a4e8b0',
         sessionCount: 4,
+        startDate: requestedStart,
         userId: 'member-1',
       }),
     );
@@ -585,6 +600,41 @@ describe('RecurringCoachingPlanService', () => {
       kind: 'monthly',
       checkout_url: 'https://checkout.paymongo.com/monthly-1',
     });
+  });
+
+  it('records a staff cash enrollment for the exact selected one-month period', async () => {
+    const requestedStart = targetMonthStart();
+    requestedStart.setUTCDate(14);
+    const startDate = requestedStart.toISOString().slice(0, 10);
+    const expectedEnd = new Date(
+      Date.UTC(
+        requestedStart.getUTCFullYear(),
+        requestedStart.getUTCMonth() + 1,
+        13,
+      ),
+    );
+
+    await service.createStaffCashEnrollment(
+      { role: UserRole.staff, sub: 'staff-1' } as never,
+      {
+        coach_id: 'coach-1',
+        member_id: 'member-1',
+        reference_no: 'OR-101',
+        start_date: startDate,
+      },
+      '4d36dc38-74c9-4f7e-a7d0-fd4102a4e8b0',
+    );
+
+    expect(repo.createStaffCashEnrollment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorId: 'staff-1',
+        coachId: 'coach-1',
+        endDate: expectedEnd,
+        memberId: 'member-1',
+        referenceNo: 'OR-101',
+        startDate: requestedStart,
+      }),
+    );
   });
 
   it('does not treat an awaiting-payment row as a recurring entitlement', async () => {

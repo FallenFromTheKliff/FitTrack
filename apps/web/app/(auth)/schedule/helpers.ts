@@ -10,6 +10,11 @@ export type CoachRosterResource = Resource & {
   email: string;
   hourlyRate: number | null;
   isActive: boolean;
+  monthlyOfferActive: boolean;
+  monthlyOfferDescription: string | null;
+  monthlyRate: number | null;
+  monthlySessionCount: number | null;
+  monthlySessionDurationMinutes: number | null;
   scheduleType: "full_time" | "part_time";
   specialties: string[];
 };
@@ -97,6 +102,12 @@ export function mapCoachesToRoster(
     specialties: coach.specialties ?? [],
     hourlyRate: coach.hourlyRate ?? null,
     isActive: coach.isActive ?? false,
+    monthlyOfferActive: coach.monthlyOfferActive ?? false,
+    monthlyOfferDescription: coach.monthlyOfferDescription ?? null,
+    monthlyRate: coach.monthlyRate ?? null,
+    monthlySessionCount: coach.monthlySessionCount ?? null,
+    monthlySessionDurationMinutes:
+      coach.monthlySessionDurationMinutes ?? null,
     scheduleType: coach.scheduleType ?? "part_time",
     email: isLegacySeedIdentityEmail(coach.contactEmail)
       ? ""

@@ -40,6 +40,7 @@ import type {
   VenueBookingRecord,
   RecurringCoachingPlanRecord,
 } from "@fittrack/api-client";
+import type { CoachProfileRecord } from "@fittrack/types";
 
 import {
   appointmentsQueryOptions,
@@ -49,6 +50,7 @@ import {
   cancelBookingMutationOptions,
   cancelCoachVenueWorkMutationOptions,
   coachClientsQueryOptions,
+  coachSelfProfileQueryOptions,
   coachScheduleQueryOptions,
   coachVenueWorkQueryOptions,
   completeCoachAppointmentMutationOptions,
@@ -87,6 +89,7 @@ import { mobileApiClient } from "@/lib/api-client";
 import { toMobileBookings } from "@/utils/venueBookings";
 import { CoachClientPaidSchedule } from "@/components/bookings/CoachClientPaidSchedule";
 import { CoachClientWorkoutPrograms } from "@/components/bookings/CoachClientWorkoutPrograms";
+import { areCoachClientDetailsEquivalent } from "@/components/bookings/coachClientDetailSync";
 import type { CoachWorkoutPlanTransition } from "@/components/bookings/coachClientWorkoutPublish";
 import { hasPaidOneSessionProgramEntitlement } from "@/components/bookings/coachClientWorkoutPublish";
 
@@ -404,6 +407,16 @@ export default function BookingsScreen() {
     staleTime: 20_000,
     gcTime: 300_000,
   });
+  const coachSelfProfileQuery = useQuery({
+    ...coachSelfProfileQueryOptions<CoachProfileRecord>(
+      mobileApiClient,
+      user?.id,
+    ),
+    enabled: isFocused && !!user?.id && isCoachRole,
+    staleTime: 60_000,
+    gcTime: 300_000,
+  });
+  const currentCoachProfileId = coachSelfProfileQuery.data?.id ?? "";
 
   const [searchQuery, setSearchQuery] = useState("");
   const debouncedSearchQuery = useDebounce(searchQuery, 250);
@@ -434,7 +447,7 @@ export default function BookingsScreen() {
           plan.status === "active" &&
           plan.billingCycles?.some((cycle) => cycle.status === "paid") &&
           plan.memberId === clientDetail.id &&
-          plan.coachId === user?.id,
+          plan.coachId === currentCoachProfileId,
       );
 
       return (
@@ -452,7 +465,7 @@ export default function BookingsScreen() {
           return rightDate - leftDate;
         })[0] ?? null
       );
-    }, [clientDetail?.id, recurringPlansQuery.data, user?.id]);
+    }, [clientDetail?.id, currentCoachProfileId, recurringPlansQuery.data]);
   const [pendingCancellation, setPendingCancellation] =
     useState<PendingCancellation | null>(null);
   const [cancellationFailure, setCancellationFailure] =
@@ -568,20 +581,22 @@ export default function BookingsScreen() {
     () =>
       Boolean(
         clientDetail?.id &&
-          user?.id &&
+          currentCoachProfileId &&
           (hasPaidOneSessionProgramEntitlement(
             coachScheduleRaw,
             clientDetail.id,
-            user.id,
+            currentCoachProfileId,
           ) ||
             coachVenueWorkRaw.some(
               (booking) =>
                 (booking.userId ?? booking.user?.id) === clientDetail.id &&
-                booking.coachId === user.id &&
-                normalizeBookingStatus(booking.status) === "confirmed",
+                booking.coachId === currentCoachProfileId &&
+                ["confirmed", "completed"].includes(
+                  normalizeBookingStatus(booking.status),
+                ),
             )),
       ),
-    [clientDetail?.id, coachScheduleRaw, coachVenueWorkRaw, user?.id],
+    [clientDetail?.id, coachScheduleRaw, coachVenueWorkRaw, currentCoachProfileId],
   );
   const {
     data: coachClientsResponse,
@@ -1761,15 +1776,20 @@ export default function BookingsScreen() {
     [clientDetailSessions],
   );
 
+  const selectedClientDetailId = clientDetail?.id ?? null;
   useEffect(() => {
-    if (!clientDetail) return;
+    if (!selectedClientDetailId) return;
     const refreshedClient = coachClientSummaries.find(
-      (client) => client.id === clientDetail.id,
+      (client) => client.id === selectedClientDetailId,
     );
-    if (refreshedClient && refreshedClient !== clientDetail) {
-      setClientDetail(refreshedClient);
-    }
-  }, [clientDetail, clientDetail?.id, coachClientSummaries]);
+    if (!refreshedClient) return;
+    setClientDetail((current) => {
+      if (!current || current.id !== selectedClientDetailId) return current;
+      return areCoachClientDetailsEquivalent(current, refreshedClient)
+        ? current
+        : refreshedClient;
+    });
+  }, [coachClientSummaries, selectedClientDetailId]);
 
   useEffect(() => {
     if (!clientDetail) {

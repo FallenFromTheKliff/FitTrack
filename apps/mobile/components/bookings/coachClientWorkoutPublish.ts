@@ -56,6 +56,19 @@ export function hasPaidOneSessionProgramEntitlement(
   );
 }
 
+export function canCreateClientWorkoutProgram({
+  existingProgramCount,
+  hasMonthlyEntitlement,
+  hasPaidEntitlement,
+}: {
+  existingProgramCount: number;
+  hasMonthlyEntitlement: boolean;
+  hasPaidEntitlement: boolean;
+}) {
+  if (!hasPaidEntitlement) return false;
+  return hasMonthlyEntitlement || existingProgramCount === 0;
+}
+
 export function createCoachWorkoutPlanDraft(
   initialDay = new Date().getDay(),
 ): CoachWorkoutPlanDraftState {

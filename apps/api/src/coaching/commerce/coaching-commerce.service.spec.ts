@@ -565,6 +565,45 @@ describe('CoachingCommerceService', () => {
     expect(paymongoCheckoutService.createCheckoutSession).not.toHaveBeenCalled();
   });
 
+  it('rejects a maintenance venue while creating the checkout hold transaction', async () => {
+    const tx = {
+      $executeRaw: jest.fn(),
+      amenity: {
+        findUnique: jest.fn().mockResolvedValue({
+          capacity: 1,
+          is_active: true,
+          is_mapped: true,
+          is_reservable: true,
+          status: 'maintenance',
+        }),
+      },
+      amenityBooking: { count: jest.fn() },
+      commerceCheckoutHold: {
+        count: jest.fn(),
+        create: jest.fn(),
+      },
+    };
+    commerceCheckoutHold.findUnique.mockResolvedValue(null);
+    prisma.$transaction.mockImplementation(
+      (callback: (value: unknown) => unknown) => callback(tx),
+    );
+
+    await expect(
+      service.createVenueCheckout({
+        amenityId: 'maintenance-venue',
+        amount: new Prisma.Decimal('800'),
+        endsAt: new Date('2099-04-01T09:00:00.000Z'),
+        idempotencyKey: 'maintenance-venue-attempt',
+        startsAt: new Date('2099-04-01T08:00:00.000Z'),
+        userId: 'member-1',
+      }),
+    ).rejects.toMatchObject({
+      response: { detail: expect.stringContaining('under maintenance') },
+    });
+    expect(tx.commerceCheckoutHold.create).not.toHaveBeenCalled();
+    expect(paymongoCheckoutService.createCheckoutSession).not.toHaveBeenCalled();
+  });
+
   it('requires a stable idempotency key for every online checkout kind', async () => {
     await expect(
       service.createOneTimeCheckout({

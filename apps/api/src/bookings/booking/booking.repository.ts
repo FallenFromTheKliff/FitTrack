@@ -3,6 +3,7 @@ import {
   AmenityBooking,
   BookingStatus,
   CommerceCheckoutHoldStatus,
+  EquipmentStatus,
   Payment,
   PayableType,
   PaymentProvider,
@@ -15,6 +16,7 @@ import { BaseRepository } from '../../common/base-repository/base-repository';
 import type { PaginatedResult } from '../../common/base-repository/base-repository';
 import { lockAndAssertVenueCoachWindow } from '../../coaching/commerce/venue-coach-scheduling';
 import { PrismaService } from '../../prisma/prisma.service';
+import { getAmenityBookingBlockReason } from '../amenity/amenity-reservability';
 import { DateRangeDTO } from '../../user/dto/user-dto';
 
 export const ACTIVE_CAPACITY_BOOKING_STATUSES = [
@@ -108,6 +110,13 @@ type StalePendingBooking = Pick<
   AmenityBooking,
   'amenity_id' | 'id' | 'user_id'
 >;
+
+export type MaintenanceBookingResolutionResult = {
+  booking: AmenityBooking;
+  previousAmenityId: string;
+  previousEndsAt: Date;
+  previousStartsAt: Date;
+};
 
 @Injectable()
 export class BookingRepository extends BaseRepository {
@@ -468,7 +477,8 @@ export class BookingRepository extends BaseRepository {
             type: 'CONFLICT',
             title: 'Idempotency Key Already Used',
             status: 409,
-            detail: 'The idempotency key is already associated with another payment.',
+            detail:
+              'The idempotency key is already associated with another payment.',
           });
         }
         return tx.amenityBooking.findUniqueOrThrow({
@@ -802,11 +812,176 @@ export class BookingRepository extends BaseRepository {
     );
   }
 
+  rescheduleBookingForMaintenance(input: {
+    actorUserId: string;
+    amenityId: string;
+    bookingId: string;
+    endsAt: Date;
+    note?: string;
+    startsAt: Date;
+  }): Promise<MaintenanceBookingResolutionResult> {
+    return this.transaction(async (tx) => {
+      const existing = await tx.amenityBooking.findUniqueOrThrow({
+        where: { id: input.bookingId },
+        include: { amenity: true },
+      });
+      if (
+        !ACTIVE_CAPACITY_BOOKING_STATUSES.includes(
+          existing.status as (typeof ACTIVE_CAPACITY_BOOKING_STATUSES)[number],
+        )
+      ) {
+        throw new ConflictException({
+          type: 'CONFLICT',
+          title: 'Booking Cannot Be Rescheduled',
+          status: 409,
+          detail: 'Only an active venue booking can be rescheduled.',
+        });
+      }
+      if (existing.amenity.status !== EquipmentStatus.maintenance) {
+        throw new ConflictException({
+          type: 'CONFLICT',
+          title: 'Maintenance Resolution Not Required',
+          status: 409,
+          detail: 'The current venue is no longer under maintenance.',
+        });
+      }
+
+      const lockKey = `venue-reschedule:${input.amenityId}:${input.startsAt.toISOString().slice(0, 10)}`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`;
+      if (existing.coach_id) {
+        await lockAndAssertVenueCoachWindow(tx, {
+          coachId: existing.coach_id,
+          endsAt: input.endsAt,
+          excludeAmenityBookingIds: [existing.id],
+          startsAt: input.startsAt,
+        });
+      }
+      await this.assertCapacityAvailable(
+        tx,
+        input.amenityId,
+        input.startsAt,
+        input.endsAt,
+        existing.id,
+      );
+
+      const targetAmenity = await tx.amenity.findUniqueOrThrow({
+        where: { id: input.amenityId },
+        select: { hourly_rate: true, name: true },
+      });
+      const booking = await tx.amenityBooking.update({
+        where: { id: existing.id },
+        data: {
+          amenity_id: input.amenityId,
+          ends_at: input.endsAt,
+          starts_at: input.startsAt,
+        },
+      });
+      await tx.auditLog.create({
+        data: {
+          user_id: input.actorUserId,
+          action: 'BOOKING_RESCHEDULED',
+          entity: 'AmenityBooking',
+          entity_id: existing.id,
+          before: {
+            amenity_id: existing.amenity_id,
+            amenity_name: existing.amenity.name,
+            ends_at: existing.ends_at.toISOString(),
+            starts_at: existing.starts_at.toISOString(),
+          },
+          after: {
+            amenity_id: input.amenityId,
+            amenity_name: targetAmenity.name,
+            ends_at: input.endsAt.toISOString(),
+            note: input.note ?? null,
+            payment_preserved: true,
+            starts_at: input.startsAt.toISOString(),
+            target_hourly_rate: targetAmenity.hourly_rate.toString(),
+            total_amount_preserved: existing.total_amount.toString(),
+          },
+        },
+      });
+
+      return {
+        booking,
+        previousAmenityId: existing.amenity_id,
+        previousEndsAt: existing.ends_at,
+        previousStartsAt: existing.starts_at,
+      };
+    });
+  }
+
+  cancelBookingForMaintenance(input: {
+    actorUserId: string;
+    bookingId: string;
+    cancelledAt: Date;
+    note?: string;
+  }): Promise<AmenityBooking> {
+    return this.transaction(async (tx) => {
+      const existing = await tx.amenityBooking.findUniqueOrThrow({
+        where: { id: input.bookingId },
+        include: { amenity: true },
+      });
+      if (
+        !ACTIVE_CAPACITY_BOOKING_STATUSES.includes(
+          existing.status as (typeof ACTIVE_CAPACITY_BOOKING_STATUSES)[number],
+        )
+      ) {
+        throw new ConflictException({
+          type: 'CONFLICT',
+          title: 'Booking Cannot Be Cancelled',
+          status: 409,
+          detail:
+            'Only an active venue booking can be cancelled for maintenance.',
+        });
+      }
+      if (existing.amenity.status !== EquipmentStatus.maintenance) {
+        throw new ConflictException({
+          type: 'CONFLICT',
+          title: 'Maintenance Resolution Not Required',
+          status: 409,
+          detail: 'The booked venue is no longer under maintenance.',
+        });
+      }
+
+      const booking = await tx.amenityBooking.update({
+        where: { id: existing.id },
+        data: {
+          cancellation_reason: 'VENUE_MAINTENANCE',
+          cancelled_at: input.cancelledAt,
+          status: BookingStatus.cancelled,
+        },
+      });
+      await tx.auditLog.create({
+        data: {
+          user_id: input.actorUserId,
+          action: 'BOOKING_CANCELLED_MAINTENANCE',
+          entity: 'AmenityBooking',
+          entity_id: existing.id,
+          before: {
+            cancellation_reason: existing.cancellation_reason,
+            cancelled_at: existing.cancelled_at?.toISOString() ?? null,
+            status: existing.status,
+          },
+          after: {
+            cancellation_reason: 'VENUE_MAINTENANCE',
+            cancelled_at: input.cancelledAt.toISOString(),
+            note: input.note ?? null,
+            payment_preserved: true,
+            refund: 'none',
+            status: BookingStatus.cancelled,
+          },
+        },
+      });
+      return booking;
+    });
+  }
+
   private async assertCapacityAvailable(
     tx: Prisma.TransactionClient,
     amenityId: string,
     startsAt: Date,
     endsAt: Date,
+    excludeBookingId?: string,
   ): Promise<void> {
     const overlappingCount = await tx.amenityBooking.count({
       where: {
@@ -820,6 +995,7 @@ export class BookingRepository extends BaseRepository {
     const overlappingHolds = await tx.commerceCheckoutHold.count({
       where: {
         amenity_id: amenityId,
+        ...(excludeBookingId ? { id: { not: excludeBookingId } } : {}),
         ends_at: { gt: startsAt },
         expires_at: { gt: new Date() },
         scheduled_at: { lt: endsAt },
@@ -829,11 +1005,23 @@ export class BookingRepository extends BaseRepository {
 
     const amenity = await tx.amenity.findUnique({
       where: { id: amenityId },
-      select: { capacity: true, is_active: true },
+      select: {
+        capacity: true,
+        is_active: true,
+        is_mapped: true,
+        is_reservable: true,
+        status: true,
+      },
     });
 
-    if (!amenity || !amenity.is_active) {
-      throw this.buildBookingConflict();
+    if (!amenity) {
+      throw this.buildVenueUnavailableConflict(
+        'The requested venue no longer exists.',
+      );
+    }
+    const blockReason = getAmenityBookingBlockReason(amenity);
+    if (blockReason) {
+      throw this.buildVenueUnavailableConflict(blockReason);
     }
 
     if (overlappingCount + overlappingHolds >= amenity.capacity) {
@@ -847,6 +1035,15 @@ export class BookingRepository extends BaseRepository {
       title: 'Booking Conflict',
       status: 409,
       detail: 'The requested booking slot is no longer available.',
+    });
+  }
+
+  private buildVenueUnavailableConflict(detail: string): ConflictException {
+    return new ConflictException({
+      type: 'CONFLICT',
+      title: 'Venue Not Reservable',
+      status: 409,
+      detail,
     });
   }
 }
@@ -876,8 +1073,7 @@ function normalizeGymDateBoundary(
 
   const [year, month, day] = value.split('-').map(Number);
   const gymDayStartUtc = new Date(
-    Date.UTC(year, month - 1, day) -
-      GYM_TIMEZONE_OFFSET_MINUTES * 60 * 1000,
+    Date.UTC(year, month - 1, day) - GYM_TIMEZONE_OFFSET_MINUTES * 60 * 1000,
   );
 
   if (boundary === 'start') {

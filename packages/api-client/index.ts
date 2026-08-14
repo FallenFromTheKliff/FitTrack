@@ -102,9 +102,7 @@ export type {
   CreateAppointmentPayload,
   RescheduleAppointmentPayload,
 } from "./domains/appointments";
-export {
-  mapCommerceCheckoutAttempt,
-} from "./domains/commerce-checkout";
+export { mapCommerceCheckoutAttempt } from "./domains/commerce-checkout";
 export type {
   CommerceCheckoutApiRecord,
   CommerceCheckoutAttempt,
@@ -117,7 +115,11 @@ export type {
   VenueBookingListParams,
   VenueBookingRecord,
 } from "./domains/bookings";
-export { resolveAmenityId } from "./domains/venue-compat";
+export {
+  getVenueBookingBlockReason,
+  isVenueBookable,
+  resolveAmenityId,
+} from "./domains/venue-compat";
 export type {
   CoachReceivedReviewRecord,
   CoachAppointmentScheduleRecord,
@@ -313,9 +315,11 @@ export type {
   GymLayoutEquipmentRecord,
 } from "./domains/gym-layout";
 export type {
+  CancelStaffVenueBookingForMaintenancePayload,
   CreateStaffCoachBookingPayload,
   CreateStaffCoachPayload,
   CreateStaffVenueBookingPayload,
+  RescheduleStaffVenueBookingPayload,
   StaffAppointmentListParams,
   StaffAppointmentRecord,
   StaffCoachAvailabilityPayload,

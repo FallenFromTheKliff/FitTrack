@@ -1,4 +1,28 @@
+import { HttpException } from '@nestjs/common';
 import { BookingRepository } from './booking.repository';
+
+type MockCallSource = { mock: { calls: unknown[][] } };
+
+function lastCallArgument<T>(mock: MockCallSource): T {
+  const argument = mock.mock.calls.at(-1)?.[0];
+  if (argument === undefined)
+    throw new Error('Expected the mock to be called.');
+  return argument as T;
+}
+
+async function expectHttpDetail(
+  request: Promise<unknown>,
+  expected: string,
+): Promise<void> {
+  try {
+    await request;
+    throw new Error('Expected the request to reject.');
+  } catch (error) {
+    if (!(error instanceof HttpException)) throw error;
+    const response = error.getResponse() as { detail?: string };
+    expect(response.detail).toContain(expected);
+  }
+}
 
 describe('BookingRepository', () => {
   const payment = {
@@ -11,6 +35,7 @@ describe('BookingRepository', () => {
   };
   const amenity = {
     findUnique: jest.fn(),
+    findUniqueOrThrow: jest.fn(),
   };
 
   const amenityBooking = {
@@ -19,6 +44,7 @@ describe('BookingRepository', () => {
     findFirst: jest.fn(),
     findMany: jest.fn(),
     findUnique: jest.fn(),
+    findUniqueOrThrow: jest.fn(),
     update: jest.fn(),
     updateMany: jest.fn(),
   };
@@ -29,10 +55,12 @@ describe('BookingRepository', () => {
     findMany: jest.fn(),
     updateMany: jest.fn(),
   };
+  const auditLog = { create: jest.fn() };
 
   const prisma = {
     amenity,
     amenityBooking,
+    auditLog,
     coachAppointment,
     coachProfile,
     commerceCheckoutHold,
@@ -51,6 +79,7 @@ describe('BookingRepository', () => {
         callback: (client: {
           amenity: typeof amenity;
           amenityBooking: typeof amenityBooking;
+          auditLog: typeof auditLog;
           coachAppointment: typeof coachAppointment;
           coachProfile: typeof coachProfile;
           commerceCheckoutHold: typeof commerceCheckoutHold;
@@ -61,6 +90,7 @@ describe('BookingRepository', () => {
         callback({
           amenity,
           amenityBooking,
+          auditLog,
           coachAppointment,
           coachProfile,
           commerceCheckoutHold,
@@ -71,6 +101,9 @@ describe('BookingRepository', () => {
     amenity.findUnique.mockResolvedValue({
       capacity: 1,
       is_active: true,
+      is_mapped: true,
+      is_reservable: true,
+      status: 'available',
     });
     amenityBooking.findMany.mockResolvedValue([]);
     coachAppointment.findMany.mockResolvedValue([]);
@@ -221,6 +254,182 @@ describe('BookingRepository', () => {
     expect(include.user.select).not.toHaveProperty('qr_code_token');
   });
 
+  it('cancels an active maintenance-affected booking atomically with an operational reason and audit', async () => {
+    amenityBooking.findUniqueOrThrow.mockResolvedValue({
+      amenity: { name: 'Boxing Ring', status: 'maintenance' },
+      amenity_id: 'amenity-1',
+      cancellation_reason: null,
+      cancelled_at: null,
+      id: 'booking-1',
+      status: 'confirmed',
+      total_amount: { toString: () => '900.00' },
+    });
+    amenityBooking.update.mockResolvedValue({
+      amenity_id: 'amenity-1',
+      cancellation_reason: 'VENUE_MAINTENANCE',
+      id: 'booking-1',
+      status: 'cancelled',
+    });
+
+    const result = await repository.cancelBookingForMaintenance({
+      actorUserId: 'staff-1',
+      bookingId: 'booking-1',
+      cancelledAt: new Date('2026-08-14T10:00:00.000Z'),
+      note: 'Unsafe floor.',
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        cancellation_reason: 'VENUE_MAINTENANCE',
+        status: 'cancelled',
+      }),
+    );
+    expect(
+      lastCallArgument<{ data: { cancellation_reason: string } }>(
+        amenityBooking.update,
+      ).data.cancellation_reason,
+    ).toBe('VENUE_MAINTENANCE');
+    expect(
+      lastCallArgument<{ data: { action: string } }>(auditLog.create).data
+        .action,
+    ).toBe('BOOKING_CANCELLED_MAINTENANCE');
+  });
+
+  it('reschedules a maintenance-affected booking while preserving its commercial record and auditing the move', async () => {
+    const startsAt = new Date('2026-08-20T01:00:00.000Z');
+    const endsAt = new Date('2026-08-20T02:00:00.000Z');
+    amenityBooking.findUniqueOrThrow.mockResolvedValue({
+      amenity: { name: 'Boxing Ring', status: 'maintenance' },
+      amenity_id: 'amenity-1',
+      coach_id: null,
+      ends_at: new Date('2026-08-15T03:00:00.000Z'),
+      id: 'booking-1',
+      starts_at: new Date('2026-08-15T02:00:00.000Z'),
+      status: 'confirmed',
+      total_amount: { toString: () => '1200.00' },
+    });
+    amenityBooking.count.mockResolvedValue(0);
+    amenity.findUnique.mockResolvedValue({
+      capacity: 1,
+      is_active: true,
+      is_mapped: true,
+      is_reservable: true,
+      status: 'available',
+    });
+    amenity.findUniqueOrThrow.mockResolvedValue({
+      hourly_rate: { toString: () => '900.00' },
+      name: 'Basketball Court',
+    });
+    amenityBooking.update.mockResolvedValue({
+      amenity_id: 'amenity-2',
+      id: 'booking-1',
+      starts_at: startsAt,
+      status: 'confirmed',
+    });
+
+    await repository.rescheduleBookingForMaintenance({
+      actorUserId: 'staff-1',
+      amenityId: 'amenity-2',
+      bookingId: 'booking-1',
+      endsAt,
+      note: 'Maintenance move.',
+      startsAt,
+    });
+
+    expect(amenityBooking.update).toHaveBeenCalledWith({
+      where: { id: 'booking-1' },
+      data: {
+        amenity_id: 'amenity-2',
+        ends_at: endsAt,
+        starts_at: startsAt,
+      },
+    });
+    expect(payment.create).not.toHaveBeenCalled();
+    expect(payment.updateMany).not.toHaveBeenCalled();
+    expect(
+      lastCallArgument<{
+        data: {
+          action: string;
+          after: {
+            payment_preserved: boolean;
+            total_amount_preserved: string;
+          };
+        };
+      }>(auditLog.create).data,
+    ).toMatchObject({
+      action: 'BOOKING_RESCHEDULED',
+      after: {
+        payment_preserved: true,
+        total_amount_preserved: '1200.00',
+      },
+    });
+  });
+
+  it('rejects a reschedule when the replacement becomes unavailable inside the transaction', async () => {
+    amenityBooking.findUniqueOrThrow.mockResolvedValue({
+      amenity: { name: 'Boxing Ring', status: 'maintenance' },
+      amenity_id: 'amenity-1',
+      coach_id: null,
+      ends_at: new Date('2026-08-15T03:00:00.000Z'),
+      id: 'booking-1',
+      starts_at: new Date('2026-08-15T02:00:00.000Z'),
+      status: 'confirmed',
+      total_amount: { toString: () => '1200.00' },
+    });
+    amenityBooking.count.mockResolvedValue(0);
+    amenity.findUnique.mockResolvedValue({
+      capacity: 1,
+      is_active: true,
+      is_mapped: true,
+      is_reservable: true,
+      status: 'maintenance',
+    });
+
+    await expect(
+      repository.rescheduleBookingForMaintenance({
+        actorUserId: 'staff-1',
+        amenityId: 'amenity-2',
+        bookingId: 'booking-1',
+        endsAt: new Date('2026-08-20T02:00:00.000Z'),
+        startsAt: new Date('2026-08-20T01:00:00.000Z'),
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(amenityBooking.update).not.toHaveBeenCalled();
+    expect(auditLog.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a reschedule when replacement capacity is consumed before commit', async () => {
+    amenityBooking.findUniqueOrThrow.mockResolvedValue({
+      amenity: { name: 'Boxing Ring', status: 'maintenance' },
+      amenity_id: 'amenity-1',
+      coach_id: null,
+      ends_at: new Date('2026-08-15T03:00:00.000Z'),
+      id: 'booking-1',
+      starts_at: new Date('2026-08-15T02:00:00.000Z'),
+      status: 'confirmed',
+      total_amount: { toString: () => '1200.00' },
+    });
+    amenityBooking.count.mockResolvedValue(1);
+    amenity.findUnique.mockResolvedValue({
+      capacity: 1,
+      is_active: true,
+      is_mapped: true,
+      is_reservable: true,
+      status: 'available',
+    });
+
+    await expect(
+      repository.rescheduleBookingForMaintenance({
+        actorUserId: 'staff-1',
+        amenityId: 'amenity-2',
+        bookingId: 'booking-1',
+        endsAt: new Date('2026-08-20T02:00:00.000Z'),
+        startsAt: new Date('2026-08-20T01:00:00.000Z'),
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(amenityBooking.update).not.toHaveBeenCalled();
+  });
+
   it('returns only fully paid venue add-ons owned by the authenticated coach', async () => {
     const paidBooking = {
       id: 'booking-paid',
@@ -243,16 +452,16 @@ describe('BookingRepository', () => {
     });
 
     expect(result.data).toEqual([paidBooking]);
-    expect(amenityBooking.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          coach: { is: { user_id: 'coach-user-1' } },
-          status: {
-            in: ['confirmed', 'completed', 'cancelled', 'no_show'],
-          },
-        }),
-      }),
-    );
+    expect(
+      lastCallArgument<{
+        where: { coach: unknown; status: { in: string[] } };
+      }>(amenityBooking.findMany).where,
+    ).toMatchObject({
+      coach: { is: { user_id: 'coach-user-1' } },
+      status: {
+        in: ['confirmed', 'completed', 'cancelled', 'no_show'],
+      },
+    });
     expect(payment.findMany).toHaveBeenCalledWith({
       where: {
         payable_id: { in: ['booking-paid', 'booking-unpaid'] },
@@ -303,15 +512,38 @@ describe('BookingRepository', () => {
       balanceAmount: 0 as never,
     });
 
-    expect(amenityBooking.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        user: { connect: { id: 'user-1' } },
-        amenity: { connect: { id: 'amenity-1' } },
-        coach: { connect: { id: 'coach-1' } },
-        starts_at: startsAt,
-        ends_at: endsAt,
-      }),
+    expect(
+      lastCallArgument<{ data: Record<string, unknown> }>(amenityBooking.create)
+        .data,
+    ).toMatchObject({
+      user: { connect: { id: 'user-1' } },
+      amenity: { connect: { id: 'amenity-1' } },
+      coach: { connect: { id: 'coach-1' } },
+      starts_at: startsAt,
+      ends_at: endsAt,
     });
+  });
+
+  it('revalidates maintenance inside the booking transaction', async () => {
+    amenity.findUnique.mockResolvedValue({
+      capacity: 1,
+      is_active: true,
+      is_mapped: true,
+      is_reservable: true,
+      status: 'maintenance',
+    });
+
+    const rejected = repository.createConfirmedFreeBooking({
+      userId: 'user-1',
+      amenityId: 'maintenance-venue',
+      startsAt: new Date('2099-03-24T10:00:00.000Z'),
+      endsAt: new Date('2099-03-24T11:00:00.000Z'),
+      totalAmount: 0 as never,
+      downpaymentAmount: 0 as never,
+      balanceAmount: 0 as never,
+    });
+    await expectHttpDetail(rejected, 'under maintenance');
+    expect(amenityBooking.create).not.toHaveBeenCalled();
   });
 
   it('persists optional coach linkage on pending paid bookings', async () => {
@@ -344,14 +576,15 @@ describe('BookingRepository', () => {
       provider: 'paymongo',
     });
 
-    expect(amenityBooking.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        user: { connect: { id: 'user-1' } },
-        amenity: { connect: { id: 'amenity-1' } },
-        coach: { connect: { id: 'coach-1' } },
-        starts_at: startsAt,
-        ends_at: endsAt,
-      }),
+    expect(
+      lastCallArgument<{ data: Record<string, unknown> }>(amenityBooking.create)
+        .data,
+    ).toMatchObject({
+      user: { connect: { id: 'user-1' } },
+      amenity: { connect: { id: 'amenity-1' } },
+      coach: { connect: { id: 'coach-1' } },
+      starts_at: startsAt,
+      ends_at: endsAt,
     });
   });
 
@@ -385,13 +618,13 @@ describe('BookingRepository', () => {
       provider: 'cash' as never,
     });
 
-    expect(payment.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        payment_stage: 'full',
-        amount: 800,
-        provider: 'cash',
-        status: 'awaiting_verification',
-      }),
+    expect(
+      lastCallArgument<{ data: Record<string, unknown> }>(payment.create).data,
+    ).toMatchObject({
+      payment_stage: 'full',
+      amount: 800,
+      provider: 'cash',
+      status: 'awaiting_verification',
     });
   });
 

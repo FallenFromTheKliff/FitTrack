@@ -2,10 +2,13 @@ import { GoneException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
+  CommerceCheckoutHoldKind,
+  CommerceCheckoutHoldStatus,
   PayableType,
   PaymentProvider,
   PaymentStage,
   PaymentStatus,
+  Prisma,
   UserRole,
 } from '@prisma/client';
 
@@ -14,6 +17,7 @@ import { PAYMENT_FAILED_EVENT } from './events/payment-failed.event';
 import { PaymentRepository } from './payment.repository';
 import { PaymentService } from './payment.service';
 import { CoachingCommerceService } from '../../coaching/commerce/coaching-commerce.service';
+import { PaymongoCheckoutService } from './paymongo-checkout.service';
 
 describe('PaymentService', () => {
   let service: PaymentService;
@@ -25,6 +29,7 @@ describe('PaymentService', () => {
     getAllPayments: jest.fn(),
     createPayment: jest.fn(),
     findPaymentByIdOrThrow: jest.fn(),
+    findCommerceCheckoutForReconciliationOrThrow: jest.fn(),
     findPaymentByGatewayEventId: jest.fn(),
     findPaymentByProviderRefOrThrow: jest.fn(),
     updatePayment: jest.fn(),
@@ -45,6 +50,10 @@ describe('PaymentService', () => {
     emit: jest.fn(),
   };
 
+  const paymongoCheckoutService = {
+    retrieveCheckoutSession: jest.fn(),
+  };
+
   const commerceCheckoutService = {
     getHoldStatusForUser: jest.fn(),
   };
@@ -57,11 +66,266 @@ describe('PaymentService', () => {
         { provide: PaymongoWebhookService, useValue: paymongoWebhookService },
         { provide: EventEmitter2, useValue: eventEmitter },
         { provide: CoachingCommerceService, useValue: commerceCheckoutService },
+        { provide: PaymongoCheckoutService, useValue: paymongoCheckoutService },
       ],
     }).compile();
 
     service = module.get<PaymentService>(PaymentService);
     jest.clearAllMocks();
+  });
+
+  it('allows only the member owner role to reconcile a checkout hold', async () => {
+    await expect(
+      service.reconcileCheckoutHold('hold-1', 'staff-1', UserRole.staff),
+    ).rejects.toMatchObject({ status: 403 });
+    expect(
+      repo.findCommerceCheckoutForReconciliationOrThrow,
+    ).not.toHaveBeenCalled();
+  });
+
+  it('returns the current hold state without completing when PayMongo is not paid', async () => {
+    const context = createReconciliationContext();
+    repo.findCommerceCheckoutForReconciliationOrThrow.mockResolvedValue(
+      context,
+    );
+    paymongoCheckoutService.retrieveCheckoutSession.mockResolvedValue(
+      createRetrievedSession({ payments: [] }),
+    );
+    commerceCheckoutService.getHoldStatusForUser.mockResolvedValue({
+      hold_id: context.hold.id,
+      state: 'pending',
+    });
+
+    await expect(
+      service.reconcileCheckoutHold(
+        context.hold.id,
+        context.hold.user_id,
+        UserRole.member,
+      ),
+    ).resolves.toMatchObject({ state: 'pending' });
+    expect(repo.completePaymongoCommerceCheckout).not.toHaveBeenCalled();
+  });
+
+  it.each(Object.values(CommerceCheckoutHoldKind))(
+    'reconciles a verified paid %s commerce checkout through the atomic completion path',
+    async (kind) => {
+      const context = createReconciliationContext(kind);
+      repo.findCommerceCheckoutForReconciliationOrThrow.mockResolvedValue(
+        context,
+      );
+      paymongoCheckoutService.retrieveCheckoutSession.mockResolvedValue(
+        createRetrievedSession({ kind }),
+      );
+      repo.completePaymongoCommerceCheckout.mockResolvedValue({
+        payment: context.payment,
+        productCreated: true,
+        productId: 'product-1',
+        productKind: kind,
+        transitioned: true,
+      });
+      commerceCheckoutService.getHoldStatusForUser.mockResolvedValue({
+        hold_id: context.hold.id,
+        state: 'succeeded',
+      });
+
+      await expect(
+        service.reconcileCheckoutHold(
+          context.hold.id,
+          context.hold.user_id,
+          UserRole.member,
+        ),
+      ).resolves.toMatchObject({ state: 'succeeded' });
+
+      expect(repo.completePaymongoCommerceCheckout).toHaveBeenCalledWith(
+        context.payment.id,
+        expect.objectContaining({
+          gatewayEventId: 'reconcile:cs_hold_1:pay_hold_1',
+          verifiedAt: new Date('2026-08-14T03:00:00.000Z'),
+        }),
+      );
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'payment.completed',
+        expect.objectContaining({ paymentId: context.payment.id }),
+      );
+      jest.clearAllMocks();
+    },
+  );
+
+  it.each([
+    ['session', { sessionId: 'cs_other' }],
+    ['amount', { amount: 7600 }],
+    ['currency', { currency: 'USD' }],
+    ['metadata', { paymentId: 'payment-other' }],
+  ])(
+    'rejects a paid provider %s mismatch without fulfillment',
+    async (_name, change) => {
+      const context = createReconciliationContext();
+      repo.findCommerceCheckoutForReconciliationOrThrow.mockResolvedValue(
+        context,
+      );
+      paymongoCheckoutService.retrieveCheckoutSession.mockResolvedValue(
+        createRetrievedSession(change),
+      );
+
+      await expect(
+        service.reconcileCheckoutHold(
+          context.hold.id,
+          context.hold.user_id,
+          UserRole.member,
+        ),
+      ).rejects.toMatchObject({ status: 409 });
+      expect(repo.completePaymongoCommerceCheckout).not.toHaveBeenCalled();
+    },
+  );
+
+  it('returns an already-consumed checkout without retrieving PayMongo again', async () => {
+    const context = createReconciliationContext();
+    context.hold.status = CommerceCheckoutHoldStatus.consumed;
+    context.payment.status = PaymentStatus.completed;
+    repo.findCommerceCheckoutForReconciliationOrThrow.mockResolvedValue(
+      context,
+    );
+    commerceCheckoutService.getHoldStatusForUser.mockResolvedValue({
+      hold_id: context.hold.id,
+      state: 'succeeded',
+    });
+
+    await expect(
+      service.reconcileCheckoutHold(
+        context.hold.id,
+        context.hold.user_id,
+        UserRole.member,
+      ),
+    ).resolves.toMatchObject({ state: 'succeeded' });
+    expect(
+      paymongoCheckoutService.retrieveCheckoutSession,
+    ).not.toHaveBeenCalled();
+    expect(repo.completePaymongoCommerceCheckout).not.toHaveBeenCalled();
+  });
+
+  it('keeps a later signed webhook harmless after reconciliation completed first', async () => {
+    const context = createReconciliationContext();
+    repo.findCommerceCheckoutForReconciliationOrThrow.mockResolvedValue(
+      context,
+    );
+    paymongoCheckoutService.retrieveCheckoutSession.mockResolvedValue(
+      createRetrievedSession(),
+    );
+    repo.completePaymongoCommerceCheckout
+      .mockResolvedValueOnce({
+        payment: context.payment,
+        productCreated: true,
+        productId: 'booking-1',
+        productKind: CommerceCheckoutHoldKind.venue,
+        transitioned: true,
+      })
+      .mockResolvedValueOnce({
+        payment: { ...context.payment, status: PaymentStatus.completed },
+        productCreated: true,
+        productId: 'booking-1',
+        productKind: CommerceCheckoutHoldKind.venue,
+        transitioned: false,
+      });
+    commerceCheckoutService.getHoldStatusForUser.mockResolvedValue({
+      hold_id: context.hold.id,
+      state: 'succeeded',
+    });
+
+    await service.reconcileCheckoutHold(
+      context.hold.id,
+      context.hold.user_id,
+      UserRole.member,
+    );
+
+    repo.findPaymentByGatewayEventId.mockResolvedValue(null);
+    repo.findPaymentByProviderRefOrThrow.mockResolvedValue({
+      ...context.payment,
+      status: PaymentStatus.completed,
+    });
+    paymongoWebhookService.parseAndVerify.mockReturnValue({
+      data: {
+        id: 'evt_late_signed_webhook',
+        type: 'event',
+        attributes: {
+          type: 'checkout_session.payment.paid',
+          livemode: false,
+          data: {
+            id: 'cs_hold_1',
+            type: 'checkout_session',
+            attributes: {
+              paid_at: 1786676400,
+              payments: [],
+            },
+          },
+          previous_data: {},
+        },
+      },
+    });
+
+    await expect(
+      service.handleWebhook(Buffer.from('{}'), 't=1,te=signed'),
+    ).resolves.toEqual({ message: 'SUCCESS' });
+    expect(repo.completePaymongoCommerceCheckout).toHaveBeenCalledTimes(2);
+    expect(eventEmitter.emit).toHaveBeenCalledTimes(1);
+  });
+
+  it('emits one completion when reconciliation races the signed webhook', async () => {
+    const context = createReconciliationContext();
+    repo.findCommerceCheckoutForReconciliationOrThrow.mockResolvedValue(
+      context,
+    );
+    paymongoCheckoutService.retrieveCheckoutSession.mockResolvedValue(
+      createRetrievedSession(),
+    );
+    commerceCheckoutService.getHoldStatusForUser.mockResolvedValue({
+      hold_id: context.hold.id,
+      state: 'succeeded',
+    });
+    repo.findPaymentByGatewayEventId.mockResolvedValue(null);
+    repo.findPaymentByProviderRefOrThrow.mockResolvedValue(context.payment);
+    repo.completePaymongoCommerceCheckout
+      .mockResolvedValueOnce({
+        payment: context.payment,
+        productCreated: true,
+        productId: 'booking-1',
+        productKind: CommerceCheckoutHoldKind.venue,
+        transitioned: true,
+      })
+      .mockResolvedValueOnce({
+        payment: { ...context.payment, status: PaymentStatus.completed },
+        productCreated: true,
+        productId: 'booking-1',
+        productKind: CommerceCheckoutHoldKind.venue,
+        transitioned: false,
+      });
+    paymongoWebhookService.parseAndVerify.mockReturnValue({
+      data: {
+        id: 'evt_racing_signed_webhook',
+        type: 'event',
+        attributes: {
+          type: 'checkout_session.payment.paid',
+          livemode: false,
+          data: {
+            id: 'cs_hold_1',
+            type: 'checkout_session',
+            attributes: { paid_at: 1786676400, payments: [] },
+          },
+          previous_data: {},
+        },
+      },
+    });
+
+    await Promise.all([
+      service.reconcileCheckoutHold(
+        context.hold.id,
+        context.hold.user_id,
+        UserRole.member,
+      ),
+      service.handleWebhook(Buffer.from('{}'), 't=1,te=signed'),
+    ]);
+
+    expect(repo.completePaymongoCommerceCheckout).toHaveBeenCalledTimes(2);
+    expect(eventEmitter.emit).toHaveBeenCalledTimes(1);
   });
 
   it('retires manual subscription payments with HTTP 410', async () => {
@@ -552,3 +816,106 @@ describe('PaymentService', () => {
     );
   });
 });
+
+function createReconciliationContext(
+  kind: CommerceCheckoutHoldKind = CommerceCheckoutHoldKind.venue,
+) {
+  const payment = {
+    amount: new Prisma.Decimal('75'),
+    created_at: new Date('2026-08-14T02:55:00.000Z'),
+    currency: 'PHP',
+    gateway_event_id: null,
+    gateway_metadata: {
+      checkout_url: 'https://checkout.paymongo.com/cs_hold_1',
+    },
+    id: 'payment-hold-1',
+    idempotency_key: 'checkout-idempotency-1',
+    payable_id: 'hold-1',
+    payable_type: PayableType.commerce_checkout_hold,
+    payment_stage: PaymentStage.full,
+    provider: PaymentProvider.paymongo,
+    provider_ref: 'cs_hold_1',
+    rejection_reason: null,
+    screenshot_url: null,
+    status: PaymentStatus.pending,
+    updated_at: new Date('2026-08-14T02:55:00.000Z'),
+    user_id: 'member-1',
+    verified_at: null,
+    verified_by: null,
+  };
+  return {
+    hold: {
+      amenity_id: kind === CommerceCheckoutHoldKind.venue ? 'venue-1' : null,
+      amount: new Prisma.Decimal('75'),
+      appointment_id: null,
+      booking_id: null,
+      coach_id: null,
+      consumed_at: null,
+      created_at: new Date('2026-08-14T02:55:00.000Z'),
+      currency: 'PHP',
+      duration_minutes: 60,
+      end_date: null,
+      ends_at: new Date('2026-08-14T04:00:00.000Z'),
+      expires_at: new Date('2026-08-14T03:10:00.000Z'),
+      failure_reason: null,
+      id: 'hold-1',
+      idempotency_key: 'checkout-idempotency-1',
+      kind,
+      member_notes: null,
+      membership_card_id: null,
+      membership_plan_id: null,
+      payment_id: payment.id,
+      preferred_days: [],
+      preferred_time: null,
+      recurring_plan_id: null,
+      released_at: null,
+      scheduled_at: new Date('2026-08-14T03:00:00.000Z'),
+      session_count: null,
+      start_date: null,
+      status: CommerceCheckoutHoldStatus.held,
+      subscription_id: null,
+      updated_at: new Date('2026-08-14T02:55:00.000Z'),
+      user_id: 'member-1',
+    },
+    payment,
+  };
+}
+
+function createRetrievedSession(input?: {
+  amount?: number;
+  currency?: string;
+  kind?: CommerceCheckoutHoldKind;
+  paymentId?: string;
+  payments?: unknown[];
+  sessionId?: string;
+}) {
+  const amount = input?.amount ?? 7500;
+  const currency = input?.currency ?? 'PHP';
+  return {
+    attributes: {
+      line_items: [{ amount, currency, quantity: 1 }],
+      metadata: {
+        coaching_checkout_hold_id: 'hold-1',
+        hold_id: 'hold-1',
+        kind: input?.kind ?? CommerceCheckoutHoldKind.venue,
+        payment_id: input?.paymentId ?? 'payment-hold-1',
+      },
+      paid_at: 1786676400,
+      payments: input?.payments ?? [
+        {
+          id: 'pay_hold_1',
+          type: 'payment',
+          attributes: {
+            amount,
+            currency,
+            paid_at: 1786676400,
+            status: 'paid',
+          },
+        },
+      ],
+      status: 'paid',
+    },
+    id: input?.sessionId ?? 'cs_hold_1',
+    type: 'checkout_session',
+  };
+}

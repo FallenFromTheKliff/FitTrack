@@ -102,5 +102,11 @@ export function createCommerceCheckoutApi(transport: ApiTransport) {
         "Unable to load checkout status.",
       ).then(mapCommerceCheckoutAttempt);
     },
+    reconcileHold(holdId: string) {
+      return unwrapResponse<CommerceCheckoutApiRecord>(
+        transport.post(`/payments/checkout-holds/${holdId}/reconcile`),
+        "Unable to verify checkout status with PayMongo.",
+      ).then(mapCommerceCheckoutAttempt);
+    },
   };
 }

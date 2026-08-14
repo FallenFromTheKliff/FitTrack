@@ -9,6 +9,7 @@ describe('AmenityService', () => {
 
   const repo = {
     listActiveAmenities: jest.fn(),
+    listBookableAmenities: jest.fn(),
     listArchivedAmenities: jest.fn(),
     findActiveAmenityByIdOrThrow: jest.fn(),
     findAmenityByIdOrThrow: jest.fn(),
@@ -148,6 +149,25 @@ describe('AmenityService', () => {
     await service.getAmenityById('amenity-1');
 
     expect(repo.findActiveAmenityByIdOrThrow).toHaveBeenCalledWith('amenity-1');
+  });
+
+  it('lists only repository-approved bookable amenities for booking surfaces', async () => {
+    repo.listBookableAmenities.mockResolvedValue([{ id: 'bookable-venue' }]);
+
+    await expect(service.listAmenities()).resolves.toEqual([
+      { id: 'bookable-venue' },
+    ]);
+    expect(repo.listBookableAmenities).toHaveBeenCalledTimes(1);
+  });
+
+  it('lists all active venues for admin and staff operational surfaces', async () => {
+    repo.listActiveAmenities.mockResolvedValue([
+      { id: 'bookable-venue' },
+      { id: 'maintenance-venue' },
+    ]);
+
+    await expect(service.listOperationalAmenities()).resolves.toHaveLength(2);
+    expect(repo.listActiveAmenities).toHaveBeenCalledTimes(1);
   });
 
   it('lists archived amenities through the repository', async () => {

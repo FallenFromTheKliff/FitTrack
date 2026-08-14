@@ -95,6 +95,7 @@ import {
   type AchievementReviewStatus,
 } from "@/data/progress/milestones";
 import styles from "./gamification.module.css";
+import { getCanonicalSeasonStandingRank } from "./ranking-governance";
 
 export const dynamic = "force-dynamic";
 const legacyGovernanceQueueEnabled = false;
@@ -2685,10 +2686,7 @@ function SeasonPerformanceTable({
       key: "rank",
       heading: "Overall rank",
       render: (row) => {
-        const rowIndex = rows.indexOf(row);
-        const displayRank =
-          row.rankPosition ??
-          (meta.page - 1) * meta.limit + (rowIndex >= 0 ? rowIndex : 0) + 1;
+        const displayRank = getCanonicalSeasonStandingRank(row);
 
         return (
           <FitText

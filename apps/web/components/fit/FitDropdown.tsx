@@ -130,6 +130,12 @@ export default function FitDropdown({
         <DropdownMenu.Content
           sideOffset={8}
           align="start"
+          onKeyDownCapture={(event) => {
+            if (event.key !== "Escape") return;
+            event.preventDefault();
+            event.stopPropagation();
+            setOpen(false);
+          }}
           className={cn("fit-dropdown-content", fontClass)}
           data-animate={canAnimate ? "true" : "false"}
           style={{

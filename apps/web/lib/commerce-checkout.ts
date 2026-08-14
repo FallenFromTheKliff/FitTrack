@@ -16,6 +16,35 @@ export type StoredCommerceCheckoutHold = {
   kind?: string | null;
 };
 
+export type CheckoutReturnAction = {
+  href: string;
+  label: string;
+};
+
+export function selectLatestCheckoutAttempt<T extends { state?: string }>(
+  reconciledAttempt: T | null | undefined,
+  polledAttempt: T | null | undefined,
+): T | null | undefined {
+  return reconciledAttempt?.state === "pending"
+    ? (polledAttempt ?? reconciledAttempt)
+    : (reconciledAttempt ?? polledAttempt);
+}
+
+export function resolveCompletedCheckoutReturnAction(
+  baseAction: CheckoutReturnAction,
+  state: string | null | undefined,
+  attempt?: { bookingId?: string | null; kind?: string | null } | null,
+): CheckoutReturnAction {
+  if (
+    state === "succeeded" &&
+    (attempt?.kind === "venue" || Boolean(attempt?.bookingId))
+  ) {
+    return { href: "/bookings", label: "Return to Bookings" };
+  }
+
+  return baseAction;
+}
+
 export function createClientIdempotencyKey() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
@@ -78,4 +107,31 @@ export function clearCommerceCheckoutHold(expectedHoldId?: string | null) {
   if (!expectedHoldId || storedHold?.holdId === expectedHoldId) {
     window.localStorage.removeItem(COMMERCE_CHECKOUT_HOLD_STORAGE_KEY);
   }
+}
+
+type CheckoutHistoryTarget = Pick<
+  Window,
+  "addEventListener" | "removeEventListener"
+> & {
+  history: Pick<History, "pushState" | "replaceState">;
+  location: Pick<Location, "hash" | "pathname" | "search">;
+};
+
+export function installCompletedCheckoutHistoryGuard(
+  target: CheckoutHistoryTarget = window,
+) {
+  const terminalUrl = `${target.location.pathname}${target.location.search}${target.location.hash}`;
+  const terminalState = { fittrackCompletedCheckout: true };
+
+  target.history.replaceState(terminalState, "", terminalUrl);
+  target.history.pushState(terminalState, "", terminalUrl);
+
+  const keepCheckoutTerminal = () => {
+    target.history.pushState(terminalState, "", terminalUrl);
+  };
+  target.addEventListener("popstate", keepCheckoutTerminal);
+
+  return () => {
+    target.removeEventListener("popstate", keepCheckoutTerminal);
+  };
 }

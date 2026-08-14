@@ -358,6 +358,11 @@ export class StaffService {
         certifications: splitDelimitedList(coach.certification),
         yearsExperience: null,
         hourlyRate: Number(coach.hourly_rate),
+        monthlyOfferActive: coach.monthly_offer_active,
+        monthlyOfferDescription: coach.monthly_offer_description,
+        monthlyRate: Number(coach.monthly_rate),
+        monthlySessionCount: coach.monthly_session_count,
+        monthlySessionDurationMinutes: coach.monthly_session_duration_minutes,
         scheduleType: coach.schedule_type,
         isActive:
           coach.user?.status === UserStatus.active &&

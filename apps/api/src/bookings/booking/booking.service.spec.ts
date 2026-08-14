@@ -6,10 +6,11 @@ import {
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import {
+  BookingStatus,
+  EquipmentStatus,
   PayableType,
   PaymentProvider,
   PaymentStage,
-  PaymentStatus,
   Prisma,
   UserRole,
 } from '@prisma/client';
@@ -18,7 +19,6 @@ import { AuditAction } from '../../audit/audit.service';
 import { CoachService } from '../../coaching/coach/coach.service';
 
 import { PaymentRepository } from '../../membership/payment/payment.repository';
-import { PAYMENT_COMPLETED_EVENT } from '../../membership/payment/events/payment-completed.event';
 import { PaymongoCheckoutService } from '../../membership/payment/paymongo-checkout.service';
 import { MembershipCardService } from '../../membership/card/card.service';
 import { SubscriptionService } from '../../membership/subscription/subscription.service';
@@ -34,6 +34,20 @@ function findSlot(
   startsAt: string,
 ) {
   return slots.find((slot) => slot.starts_at === startsAt);
+}
+
+async function expectHttpDetail(
+  request: Promise<unknown>,
+  expected: string,
+): Promise<void> {
+  try {
+    await request;
+    throw new Error('Expected the request to reject.');
+  } catch (error) {
+    if (!(error instanceof HttpException)) throw error;
+    const response = error.getResponse() as { detail?: string };
+    expect(response.detail).toContain(expected);
+  }
 }
 
 describe('BookingService', () => {
@@ -55,6 +69,8 @@ describe('BookingService', () => {
     completeBookingBalance: jest.fn(),
     markBookingCompleted: jest.fn(),
     markConfirmedBookingNoShow: jest.fn(),
+    rescheduleBookingForMaintenance: jest.fn(),
+    cancelBookingForMaintenance: jest.fn(),
   };
 
   const amenityRepository = {
@@ -337,7 +353,9 @@ describe('BookingService', () => {
       payment_id: 'payment-membership-1',
       status: 'held',
     });
-    expect(bookingRepository.createPendingBookingWithPayment).not.toHaveBeenCalled();
+    expect(
+      bookingRepository.createPendingBookingWithPayment,
+    ).not.toHaveBeenCalled();
     expect(
       membershipCardService.hasActiveMembershipCardAccess,
     ).toHaveBeenCalledWith('member-1');
@@ -382,6 +400,140 @@ describe('BookingService', () => {
     ).rejects.toMatchObject({ status: 410 });
     expect(bookingRepository.confirmBookingDownpayment).not.toHaveBeenCalled();
     expect(paymentRepository.updatePayment).not.toHaveBeenCalled();
+  });
+
+  it('reschedules a maintenance booking through the atomic repository path and emits a customer update', async () => {
+    const startsAt = new Date();
+    startsAt.setUTCDate(startsAt.getUTCDate() + 7);
+    startsAt.setUTCHours(1, 0, 0, 0);
+    const endsAt = new Date(startsAt.getTime() + 60 * 60 * 1000);
+    bookingRepository.rescheduleBookingForMaintenance.mockResolvedValue({
+      booking: {
+        amenity_id: 'amenity-2',
+        id: 'booking-1',
+        starts_at: startsAt,
+        user_id: 'member-1',
+      },
+      previousAmenityId: 'amenity-1',
+      previousEndsAt: new Date('2099-03-23T11:00:00.000Z'),
+      previousStartsAt: new Date('2099-03-23T10:00:00.000Z'),
+    });
+
+    await service.rescheduleBookingForMaintenance('booking-1', 'staff-1', {
+      amenity_id: 'amenity-2',
+      ends_at: endsAt.toISOString(),
+      note: 'Court maintenance.',
+      starts_at: startsAt.toISOString(),
+    });
+
+    expect(
+      bookingRepository.rescheduleBookingForMaintenance,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorUserId: 'staff-1',
+        amenityId: 'amenity-2',
+        bookingId: 'booking-1',
+      }),
+    );
+    expect(eventEmitter.emit).toHaveBeenCalledWith(
+      'booking.rescheduled',
+      expect.objectContaining({ bookingId: 'booking-1', userId: 'member-1' }),
+    );
+  });
+
+  it('records venue-maintenance cancellation without the customer cancellation window', async () => {
+    bookingRepository.cancelBookingForMaintenance.mockResolvedValue({
+      amenity_id: 'amenity-1',
+      id: 'booking-1',
+      status: BookingStatus.cancelled,
+      user_id: 'member-1',
+    });
+
+    await service.cancelBookingForMaintenance(
+      'booking-1',
+      'staff-1',
+      'No replacement available.',
+    );
+
+    expect(bookingRepository.cancelBookingForMaintenance).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorUserId: 'staff-1',
+        bookingId: 'booking-1',
+        note: 'No replacement available.',
+      }),
+    );
+    expect(eventEmitter.emit).toHaveBeenCalledWith(
+      BOOKING_CANCELLED_EVENT,
+      expect.objectContaining({ bookingId: 'booking-1', userId: 'member-1' }),
+    );
+  });
+
+  it('rejects availability and member checkout for a venue under maintenance', async () => {
+    amenityRepository.findActiveAmenityByIdOrThrow.mockResolvedValue({
+      id: 'maintenance-venue',
+      capacity: 1,
+      hourly_rate: new Prisma.Decimal('800'),
+      is_active: true,
+      is_mapped: true,
+      is_reservable: true,
+      requires_subscription: false,
+      status: EquipmentStatus.maintenance,
+    });
+
+    await expectHttpDetail(
+      service.getAvailability({
+        amenity_id: 'maintenance-venue',
+        date: '2026-09-24',
+      }),
+      'under maintenance',
+    );
+
+    await expectHttpDetail(
+      service.createBooking(
+        'member-1',
+        {
+          amenity_id: 'maintenance-venue',
+          starts_at: '2026-09-24T10:00:00.000Z',
+          ends_at: '2026-09-24T11:00:00.000Z',
+          provider: PaymentProvider.paymongo,
+        },
+        '2d36dc38-74c9-4f7e-a7d0-fd4102a4e8b0',
+      ),
+      'under maintenance',
+    );
+    expect(commerceCheckoutService.createVenueCheckout).not.toHaveBeenCalled();
+  });
+
+  it('rejects a staff full-cash request for a venue under maintenance', async () => {
+    amenityRepository.findActiveAmenityByIdOrThrow.mockResolvedValue({
+      id: 'maintenance-venue',
+      capacity: 1,
+      hourly_rate: new Prisma.Decimal('800'),
+      is_active: true,
+      is_mapped: true,
+      is_reservable: true,
+      requires_subscription: false,
+      status: EquipmentStatus.maintenance,
+    });
+
+    await expectHttpDetail(
+      service.createStaffManualBooking(
+        'member-1',
+        {
+          amenity_id: 'maintenance-venue',
+          member_id: 'member-1',
+          starts_at: '2026-09-24T10:00:00.000Z',
+          ends_at: '2026-09-24T11:00:00.000Z',
+          payment_stage: 'full' as never,
+        },
+        'staff-1',
+        '3d36dc38-74c9-4f7e-a7d0-fd4102a4e8b0',
+      ),
+      'under maintenance',
+    );
+    expect(
+      bookingRepository.createConfirmedManualBooking,
+    ).not.toHaveBeenCalled();
   });
 
   it('retires pending booking rejection with HTTP 410', async () => {
@@ -533,8 +685,12 @@ describe('BookingService', () => {
         userId: 'member-1',
       }),
     );
-    expect(bookingRepository.createPendingBookingWithPayment).not.toHaveBeenCalled();
-    expect(paymongoCheckoutService.createCheckoutSession).not.toHaveBeenCalled();
+    expect(
+      bookingRepository.createPendingBookingWithPayment,
+    ).not.toHaveBeenCalled();
+    expect(
+      paymongoCheckoutService.createCheckoutSession,
+    ).not.toHaveBeenCalled();
     expect(result).toMatchObject({
       hold_id: 'hold-venue-1',
       kind: 'venue',
@@ -543,7 +699,7 @@ describe('BookingService', () => {
   });
 
   it('rejects staff manual venue downpayments', async () => {
-    await expect(
+    await expectHttpDetail(
       service.createStaffManualBooking(
         'member-1',
         {
@@ -556,15 +712,20 @@ describe('BookingService', () => {
         'staff-1',
         '6d36dc38-74c9-4f7e-a7d0-fd4102a4e8b0',
       ),
-    ).rejects.toMatchObject({
-      response: { detail: expect.stringContaining('full cash payment') },
-    });
-    expect(bookingRepository.createPendingBookingWithPayment).not.toHaveBeenCalled();
+      'full cash payment',
+    );
+    expect(
+      bookingRepository.createPendingBookingWithPayment,
+    ).not.toHaveBeenCalled();
   });
 
   it('requires member self-service bookings to use the full venue checkout hold', async () => {
     amenityRepository.findActiveAmenityByIdOrThrow.mockResolvedValue({
       id: 'amenity-1',
+      is_active: true,
+      is_mapped: true,
+      is_reservable: true,
+      status: 'available',
       name: 'Main Court',
       hourly_rate: new Prisma.Decimal('800'),
       requires_subscription: false,
@@ -598,7 +759,9 @@ describe('BookingService', () => {
         userId: 'member-1',
       }),
     );
-    expect(bookingRepository.createPendingBookingWithPayment).not.toHaveBeenCalled();
+    expect(
+      bookingRepository.createPendingBookingWithPayment,
+    ).not.toHaveBeenCalled();
     expect(result.checkout_url).toBe('https://checkout.paymongo.com/member-1');
   });
 
@@ -617,7 +780,7 @@ describe('BookingService', () => {
       ),
     ).rejects.toBeInstanceOf(ForbiddenException);
 
-    await expect(
+    await expectHttpDetail(
       service.createBooking(
         'member-1',
         {
@@ -630,10 +793,11 @@ describe('BookingService', () => {
         'ad36dc38-74c9-4f7e-a7d0-fd4102a4e8b0',
         UserRole.member,
       ),
-    ).rejects.toMatchObject({
-      response: { detail: expect.stringContaining('full payment') },
-    });
-    expect(amenityRepository.findActiveAmenityByIdOrThrow).not.toHaveBeenCalled();
+      'full payment',
+    );
+    expect(
+      amenityRepository.findActiveAmenityByIdOrThrow,
+    ).not.toHaveBeenCalled();
   });
 
   it('keeps admin and staff self-service bookings on the same full PayMongo contract', async () => {
@@ -652,7 +816,7 @@ describe('BookingService', () => {
         ),
       ).rejects.toBeInstanceOf(ForbiddenException);
 
-      await expect(
+      await expectHttpDetail(
         service.createBooking(
           'member-1',
           {
@@ -665,12 +829,13 @@ describe('BookingService', () => {
           'cd36dc38-74c9-4f7e-a7d0-fd4102a4e8b0',
           role,
         ),
-      ).rejects.toMatchObject({
-        response: { detail: expect.stringContaining('full payment') },
-      });
+        'full payment',
+      );
     }
 
-    expect(amenityRepository.findActiveAmenityByIdOrThrow).not.toHaveBeenCalled();
+    expect(
+      amenityRepository.findActiveAmenityByIdOrThrow,
+    ).not.toHaveBeenCalled();
   });
 
   it('cancels a pending self-service booking when PayMongo reports payment failure', async () => {
@@ -711,7 +876,7 @@ describe('BookingService', () => {
   });
 
   it('rejects member booking dates beyond the one-year horizon and half-hour windows', async () => {
-    await expect(
+    await expectHttpDetail(
       service.createBooking(
         'member-1',
         {
@@ -723,11 +888,10 @@ describe('BookingService', () => {
         'bd36dc38-74c9-4f7e-a7d0-fd4102a4e8b0',
         UserRole.member,
       ),
-    ).rejects.toMatchObject({
-      response: { detail: expect.stringContaining('one calendar year') },
-    });
+      'one calendar year',
+    );
 
-    await expect(
+    await expectHttpDetail(
       service.createBooking(
         'member-1',
         {
@@ -739,9 +903,8 @@ describe('BookingService', () => {
         'cd36dc38-74c9-4f7e-a7d0-fd4102a4e8b0',
         UserRole.member,
       ),
-    ).rejects.toMatchObject({
-      response: { detail: expect.stringContaining('hourly slot') },
-    });
+      'hourly slot',
+    );
   });
 
   it('creates staff manual full-cash venue bookings as confirmed payments', async () => {
@@ -797,7 +960,7 @@ describe('BookingService', () => {
     });
   });
 
-it('keeps PayMongo venue-booking initiation on the full-payment path', async () => {
+  it('keeps PayMongo venue-booking initiation on the full-payment path', async () => {
     amenityRepository.findActiveAmenityByIdOrThrow.mockResolvedValue({
       id: 'amenity-1',
       name: 'Basketball Court',
@@ -831,11 +994,15 @@ it('keeps PayMongo venue-booking initiation on the full-payment path', async () 
         idempotencyKey: '9fdd9dc8-11b8-47d2-b4d9-f0c3cc2f38ab',
       }),
     );
-    expect(bookingRepository.createPendingBookingWithPayment).not.toHaveBeenCalled();
-    expect(paymongoCheckoutService.createCheckoutSession).not.toHaveBeenCalled();
+    expect(
+      bookingRepository.createPendingBookingWithPayment,
+    ).not.toHaveBeenCalled();
+    expect(
+      paymongoCheckoutService.createCheckoutSession,
+    ).not.toHaveBeenCalled();
   });
 
-it('rejects cash self-service booking initiation', async () => {
+  it('rejects cash self-service booking initiation', async () => {
     paymentRepository.findPaymentByIdempotencyKey.mockResolvedValue(null);
     amenityRepository.findActiveAmenityByIdOrThrow.mockResolvedValue({
       id: 'amenity-1',
@@ -861,7 +1028,9 @@ it('rejects cash self-service booking initiation', async () => {
         status: 403,
       },
     });
-    expect(bookingRepository.createPendingBookingWithPayment).not.toHaveBeenCalled();
+    expect(
+      bookingRepository.createPendingBookingWithPayment,
+    ).not.toHaveBeenCalled();
   });
 
   it('returns the existing booking checkout when the same idempotency key is retried', async () => {
@@ -902,10 +1071,12 @@ it('rejects cash self-service booking initiation', async () => {
     expect(
       bookingRepository.createPendingBookingWithPayment,
     ).not.toHaveBeenCalled();
-    expect(commerceCheckoutService.createVenueCheckout).toHaveBeenCalledTimes(1);
+    expect(commerceCheckoutService.createVenueCheckout).toHaveBeenCalledTimes(
+      1,
+    );
   });
 
-it('rejects cash self-service retries even when an idempotency key exists', async () => {
+  it('rejects cash self-service retries even when an idempotency key exists', async () => {
     await expect(
       service.createBooking(
         'member-1',
@@ -1026,8 +1197,12 @@ it('rejects cash self-service retries even when an idempotency key exists', asyn
         provider: PaymentProvider.paymongo,
       }),
     ).rejects.toMatchObject({ status: 410 });
-    expect(bookingRepository.createBalancePendingPayment).not.toHaveBeenCalled();
-    expect(paymongoCheckoutService.createCheckoutSession).not.toHaveBeenCalled();
+    expect(
+      bookingRepository.createBalancePendingPayment,
+    ).not.toHaveBeenCalled();
+    expect(
+      paymongoCheckoutService.createCheckoutSession,
+    ).not.toHaveBeenCalled();
   });
 
   it('retires existing cash balance retries with HTTP 410', async () => {
@@ -1038,7 +1213,9 @@ it('rejects cash self-service retries even when an idempotency key exists', asyn
         reference_no: 'OR-123',
       }),
     ).rejects.toMatchObject({ status: 410 });
-    expect(bookingRepository.createBalancePendingPayment).not.toHaveBeenCalled();
+    expect(
+      bookingRepository.createBalancePendingPayment,
+    ).not.toHaveBeenCalled();
   });
 
   it('settles balance_pending bookings on shared balance payment completion', async () => {

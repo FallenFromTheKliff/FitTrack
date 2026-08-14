@@ -161,9 +161,7 @@ export class RecurringCoachingPlanService {
       throw this.buildActiveEntitlementConflict();
     }
 
-    const { endDate, startDate } = this.getEnrollmentMonthBounds(
-      dto.start_date,
-    );
+    const { endDate, startDate } = this.getMonthlyPeriod(dto.start_date);
     return this.commerceCheckoutService.createMonthlyCheckout({
       amount: offer.monthlyRate,
       coachId: dto.coach_id,
@@ -215,9 +213,7 @@ export class RecurringCoachingPlanService {
     ) {
       throw this.buildActiveEntitlementConflict();
     }
-    const { endDate, startDate } = this.getEnrollmentMonthBounds(
-      dto.start_date,
-    );
+    const { endDate, startDate } = this.getMonthlyPeriod(dto.start_date);
     return this.repo.createStaffCashEnrollment({
       actorId: actor.sub,
       amount: offer.monthlyRate,
@@ -1910,33 +1906,10 @@ export class RecurringCoachingPlanService {
     }
   }
 
-  private getEnrollmentMonthBounds(startDateInput?: string) {
-    const requestedDate = startDateInput
+  private getMonthlyPeriod(startDateInput?: string) {
+    const startDate = startDateInput
       ? this.toDateOnlyValue(this.parseDateOnly(startDateInput))
       : this.getCurrentGymDateOnly();
-    const monthStart = this.toMonthStart(requestedDate);
-    const currentMonthStart = this.toMonthStart(this.getCurrentGymDateOnly());
-
-    if (monthStart.getTime() < currentMonthStart.getTime()) {
-      throw new HttpException(
-        {
-          type: 'BUSINESS_RULE_VIOLATION',
-          title: 'Invalid Enrollment Month',
-          status: 422,
-          detail: 'The purchased coaching month must be current or future.',
-        },
-        HttpStatus.UNPROCESSABLE_ENTITY,
-      );
-    }
-
-    return {
-      startDate: monthStart,
-      endDate: this.addDays(this.addMonths(monthStart, 1), -1),
-    };
-  }
-
-  private getMonthlyPeriod(startDateInput: string) {
-    const startDate = this.toDateOnlyValue(this.parseDateOnly(startDateInput));
     const today = this.getCurrentGymDateOnly();
     if (startDate.getTime() < today.getTime()) {
       throw new HttpException(
@@ -1952,7 +1925,7 @@ export class RecurringCoachingPlanService {
 
     return {
       startDate,
-      endDate: this.addDays(this.addMonths(startDate, 1), -1),
+      endDate: this.addDays(this.addCalendarMonthsClamped(startDate, 1), -1),
     };
   }
 
@@ -2714,6 +2687,26 @@ export class RecurringCoachingPlanService {
         value.getUTCFullYear(),
         value.getUTCMonth() + months,
         value.getUTCDate(),
+      ),
+    );
+  }
+
+  private addCalendarMonthsClamped(value: Date, months: number): Date {
+    const targetMonthStart = new Date(
+      Date.UTC(value.getUTCFullYear(), value.getUTCMonth() + months, 1),
+    );
+    const targetMonthEnd = new Date(
+      Date.UTC(
+        targetMonthStart.getUTCFullYear(),
+        targetMonthStart.getUTCMonth() + 1,
+        0,
+      ),
+    );
+    return new Date(
+      Date.UTC(
+        targetMonthStart.getUTCFullYear(),
+        targetMonthStart.getUTCMonth(),
+        Math.min(value.getUTCDate(), targetMonthEnd.getUTCDate()),
       ),
     );
   }
