@@ -1,0 +1,20 @@
+# ninja log v6
+73	217	8084138007732856	CMakeFiles/rnskia.dir/cpp/rnskia-android/AHardwareBufferUtils.cpp.o	1d2424fe8483e262
+193	480	8084138008941230	CMakeFiles/rnskia.dir/C_/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/@shopif_b76e8d191a057cbe1823d097381fb57a/node_modules/@shopify/react-native-skia/cpp/api/third_party/base64.cpp.o	293e6779ee4d777a
+52	4415	8084138007522844	CMakeFiles/rnskia.dir/cpp/rnskia-android/gl/Error.cpp.o	976f3f9c30f15375
+121	4527	8084138008215759	CMakeFiles/rnskia.dir/C_/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/@shopif_b76e8d191a057cbe1823d097381fb57a/node_modules/@shopify/react-native-skia/cpp/jsi/RuntimeAwareCache.cpp.o	3d59b175f4f9225f
+135	4849	8084138008352112	CMakeFiles/rnskia.dir/C_/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/@shopif_b76e8d191a057cbe1823d097381fb57a/node_modules/@shopify/react-native-skia/cpp/jsi/JsiPromises.cpp.o	206698625cfdc18d
+169	5047	8084138008690058	CMakeFiles/rnskia.dir/C_/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/@shopif_b76e8d191a057cbe1823d097381fb57a/node_modules/@shopify/react-native-skia/cpp/api/third_party/CSSColorParser.cpp.o	860abaaca09a6dd8
+107	5441	8084138008075739	CMakeFiles/rnskia.dir/C_/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/@shopif_b76e8d191a057cbe1823d097381fb57a/node_modules/@shopify/react-native-skia/cpp/jsi/RuntimeLifecycleMonitor.cpp.o	4a68f8f20952a55
+489	5464	8084138011892669	CMakeFiles/rnskia.dir/C_/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/@shopif_b76e8d191a057cbe1823d097381fb57a/node_modules/@shopify/react-native-skia/cpp/api/JsiSkDispatcher.cpp.o	c30a921523a71128
+84	6913	8084138007848666	CMakeFiles/rnskia.dir/cpp/rnskia-android/RNSkAndroidVideo.cpp.o	d64548fc039c07cb
+42	7042	8084138007422837	CMakeFiles/rnskia.dir/cpp/jni/JniPlatformContext.cpp.o	4adb3b003b25ad7d
+95	7138	8084138007965742	CMakeFiles/rnskia.dir/C_/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/@shopif_b76e8d191a057cbe1823d097381fb57a/node_modules/@shopify/react-native-skia/cpp/jsi/JsiHostObject.cpp.o	58b83f4902dbc2d0
+4528	8208	8084138052275438	CMakeFiles/rnskia.dir/cpp/rnskia-android/GrAHardwareBufferUtils.cpp.o	4d62aac4b7f64557
+242	8311	8084138009426361	CMakeFiles/rnskia.dir/C_/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/@shopif_b76e8d191a057cbe1823d097381fb57a/node_modules/@shopify/react-native-skia/cpp/api/third_party/SkottieUtils.cpp.o	63c97b941ea54abc
+31	8590	8084138007317689	CMakeFiles/rnskia.dir/cpp/jni/JniSkiaManager.cpp.o	ee6c84d70b2f5de2
+63	9323	8084138007632856	CMakeFiles/rnskia.dir/cpp/rnskia-android/RNSkOpenGLCanvasProvider.cpp.o	51616241e9124b12
+4431	9643	8084138051322680	CMakeFiles/rnskia.dir/cpp/rnskia-android/OpenGLWindowContext.cpp.o	d0af735394748304
+17	10350	8084138007174332	CMakeFiles/rnskia.dir/cpp/jni/JniLoad.cpp.o	e5a936f3caa22dd6
+157	28351	8084138008571563	CMakeFiles/rnskia.dir/C_/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/@shopif_b76e8d191a057cbe1823d097381fb57a/node_modules/@shopify/react-native-skia/cpp/rnskia/RNSkManager.cpp.o	69c4476bce8526f1
+28353	29117	8084138290535545	C:/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/@shopif_b76e8d191a057cbe1823d097381fb57a/node_modules/@shopify/react-native-skia/android/build/intermediates/cxx/Debug/6x1v111w/obj/x86/librnskia.so	356e09b17b575b5e

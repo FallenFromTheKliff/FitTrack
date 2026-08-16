@@ -1,0 +1,11 @@
+# ninja log v6
+12	54	8084143821866082	C:/FitTrack_rebuilt_20260330_212527/.cxx/rnwc/RelWithDebInfo/3e4d716f/x86/CMakeFiles/cmake.verify_globs	9072c74019e3b82a
+91	3158	8084143822652287	CMakeFiles/rnworklets.dir/C_/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/react-n_0a5b26fb9324ca51cf9fb215afc6b9d8/node_modules/react-native-worklets-core/cpp/dispatch/WKTDispatchQueue.cpp.o	e317bee4e19c3a5c
+81	3186	8084143822562297	CMakeFiles/rnworklets.dir/C_/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/react-n_0a5b26fb9324ca51cf9fb215afc6b9d8/node_modules/react-native-worklets-core/cpp/base/WKTRuntimeLifecycleMonitor.cpp.o	d829351dac6233b9
+72	4221	8084143822462857	CMakeFiles/rnworklets.dir/C_/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/react-n_0a5b26fb9324ca51cf9fb215afc6b9d8/node_modules/react-native-worklets-core/cpp/base/WKTJsiHostObject.cpp.o	bf8db75dfc342de8
+121	4618	8084143822954594	CMakeFiles/rnworklets.dir/cpp-adapter.cpp.o	97c2d3ed0853541b
+100	5918	8084143822744614	CMakeFiles/rnworklets.dir/C_/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/react-n_0a5b26fb9324ca51cf9fb215afc6b9d8/node_modules/react-native-worklets-core/cpp/wrappers/WKTJsiPromiseWrapper.cpp.o	1bf7ff6da825a4c3
+57	5956	8084143822312840	CMakeFiles/rnworklets.dir/C_/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/react-n_0a5b26fb9324ca51cf9fb215afc6b9d8/node_modules/react-native-worklets-core/cpp/WKTJsiWorkletApi.cpp.o	35bc4bec0385f02
+111	7237	8084143822854605	CMakeFiles/rnworklets.dir/C_/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/react-n_0a5b26fb9324ca51cf9fb215afc6b9d8/node_modules/react-native-worklets-core/cpp/wrappers/WKTJsiWrapper.cpp.o	e7eee312a6b2fa09
+64	10562	8084143822382834	CMakeFiles/rnworklets.dir/C_/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/react-n_0a5b26fb9324ca51cf9fb215afc6b9d8/node_modules/react-native-worklets-core/cpp/WKTJsiWorkletContext.cpp.o	eb7ca47dd4c9449a
+10562	10745	8084143927361823	C:/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/react-n_0a5b26fb9324ca51cf9fb215afc6b9d8/node_modules/react-native-worklets-core/android/build/intermediates/cxx/RelWithDebInfo/3e4d716f/obj/x86/librnworklets.so	bf02cc404723dc9a

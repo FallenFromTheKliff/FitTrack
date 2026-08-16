@@ -21,16 +21,20 @@ function pathExists(target) {
 function printHelp() {
   console.log(
     [
-      'Build a FitTrack iOS IPA using local EAS build.',
+      'Build a FitTrack iOS IPA using EAS.',
+      'Defaults to remote cloud EAS build.',
       '',
       'Usage:',
       '  pnpm --dir apps/mobile run ios:ipa',
       '  pnpm --dir apps/mobile run ios:ipa -- --profile development',
       '  pnpm --dir apps/mobile run ios:ipa -- --install',
+      '  pnpm --dir apps/mobile run ios:ipa -- --local',
       '  pnpm run install:mobile:ipa',
       '  pnpm --dir apps/mobile run ios:ipa -- --install-only',
       '',
       'Commands:',
+      '  --local                                    Force local iOS build (macOS + Xcode required).',
+      '  --remote                                   Force remote cloud iOS build.',
       '  --install                                  Install the IPA after a successful build (macOS + USB device required).',
       '  --install-only                             Install the latest/selected IPA without rebuilding.',
       '  --file <path>                              IPA file to install when using --install-only.',
@@ -49,6 +53,7 @@ function printHelp() {
 function parseOptions(argv) {
   const options = {
     build: true,
+    buildMode: 'remote',
     profile: defaultProfile,
     outputDir: artifactRoot,
     output: null,
@@ -66,6 +71,16 @@ function parseOptions(argv) {
 
     if (arg === '--help' || arg === '-h') {
       options.help = true;
+      continue;
+    }
+
+    if (arg === '--local') {
+      options.buildMode = 'local';
+      continue;
+    }
+
+    if (arg === '--remote') {
+      options.buildMode = 'remote';
       continue;
     }
 
@@ -241,8 +256,17 @@ function resolveEasCommand() {
     };
   }
 
+  if (process.platform === 'win32') {
+    return {
+      command: 'cmd',
+      args: ['/d', '/s', '/c', 'npx', '--yes', 'eas'],
+      fallback: true,
+      usesNpx: true,
+    };
+  }
+
   return {
-    command: process.platform === 'win32' ? 'npx' : 'npx',
+    command: 'npx',
     args: ['--yes', 'eas'],
     fallback: true,
     usesNpx: true,
@@ -257,13 +281,42 @@ function runCommand(command, args, env = process.env) {
     windowsHide: true,
   });
 
-  if (result.status !== 0) {
+  if (result.error) {
     return {
       status: result.status ?? 1,
+      error: result.error,
+      signal: result.signal,
     };
   }
 
-  return { status: 0 };
+  if (result.status !== 0) {
+    return {
+      status: result.status ?? 1,
+      signal: result.signal,
+    };
+  }
+
+  return { status: 0, signal: result.signal };
+}
+
+function formatCommand(command, args) {
+  return [command, ...args].join(' ');
+}
+
+function getBuildEnv(runner) {
+  if (runner.usesNpx && process.env.NPM_CONFIG_OFFLINE === 'true') {
+    console.log(
+      '[fittrack-mobile-ipa] npm is configured as offline; overriding to allow EAS bootstrap on first run.',
+    );
+  }
+
+  return {
+    ...process.env,
+    EXPO_NO_METRO_WORKSPACE_ROOT: process.env.EXPO_NO_METRO_WORKSPACE_ROOT || '1',
+    ...(runner.usesNpx && process.env.NPM_CONFIG_OFFLINE === 'true'
+      ? { NPM_CONFIG_OFFLINE: 'false' }
+      : {}),
+  };
 }
 
 function runCommandCaptureJson(command, args, env = process.env) {
@@ -409,6 +462,7 @@ function runInstall(ipaPath, options) {
 }
 
 function runBuild(options, outputPath) {
+  const useLocalBuild = options.buildMode === 'local';
   const outputDirectory = path.dirname(outputPath);
 
   const runner = resolveEasCommand();
@@ -419,12 +473,20 @@ function runBuild(options, outputPath) {
     'ios',
     '--profile',
     options.profile,
-    '--local',
+    ...(useLocalBuild ? ['--local'] : []),
     '--non-interactive',
     '--output',
     outputPath,
     ...options.extraArgs,
   ];
+
+  if (options.buildMode === 'local' && process.platform !== 'darwin') {
+    throw new Error('Local iOS build requires macOS because local iOS builds depend on Xcode.');
+  }
+
+  if (options.buildMode !== 'local' && options.buildMode !== 'remote') {
+    throw new Error('Unknown build mode. Use --local or --remote.');
+  }
 
   if (options.dryRun) {
     console.log('[fittrack-mobile-ipa] Dry run build command:');
@@ -434,17 +496,20 @@ function runBuild(options, outputPath) {
 
   fs.mkdirSync(outputDirectory, { recursive: true });
 
-  if (process.platform !== 'darwin') {
-    throw new Error('IPA build requires macOS because local iOS builds depend on Xcode.');
-  }
-
   const result = runCommand(runner.command, buildArgs, {
-    ...process.env,
-    EXPO_NO_METRO_WORKSPACE_ROOT: process.env.EXPO_NO_METRO_WORKSPACE_ROOT || '1',
+    ...getBuildEnv(runner),
   });
 
   if (result.status !== 0) {
-    throw new Error('eas build failed.');
+    const reason = result.error ? ` ${result.error.message}` : '';
+    const signal = result.signal ? ` Signal: ${result.signal}.` : '';
+    const command = formatCommand(runner.command, buildArgs);
+    const hint = runner.usesNpx
+      ? ' If this failed before any remote build started, this usually means EAS CLI could not be downloaded.'
+      : '';
+    throw new Error(
+      `eas build command failed with exit code ${result.status}.${reason} Command: ${command}.${signal}${hint}`,
+    );
   }
 
   return { outputPath, status: 0, built: true };

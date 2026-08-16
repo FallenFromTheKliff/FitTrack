@@ -1,3 +1,0 @@
-C:/FitTrack/.cxx/rnskia/RelWithDebInfo/105v4g2n/armeabi-v7a/CMakeFiles/rnskia.dir
-C:/FitTrack/.cxx/rnskia/RelWithDebInfo/105v4g2n/armeabi-v7a/CMakeFiles/edit_cache.dir
-C:/FitTrack/.cxx/rnskia/RelWithDebInfo/105v4g2n/armeabi-v7a/CMakeFiles/rebuild_cache.dir

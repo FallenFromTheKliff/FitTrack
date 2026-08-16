@@ -1,0 +1,1 @@
+C:\FitTrack_rebuilt_20260330_212527\node_modules\.pnpm\@shopif_b76e8d191a057cbe1823d097381fb57a\node_modules\@shopify\react-native-skia\android\build\intermediates\cxx\Debug\6x1v111w\obj\x86

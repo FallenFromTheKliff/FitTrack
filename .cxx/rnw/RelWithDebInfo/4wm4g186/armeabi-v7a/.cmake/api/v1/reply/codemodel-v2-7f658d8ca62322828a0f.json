@@ -1,0 +1,60 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"jsonFile" : "directory-.-RelWithDebInfo-d0094a50bb2071803777.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.13"
+					},
+					"projectIndex" : 0,
+					"source" : ".",
+					"targetIndexes" : 
+					[
+						0
+					]
+				}
+			],
+			"name" : "RelWithDebInfo",
+			"projects" : 
+			[
+				{
+					"directoryIndexes" : 
+					[
+						0
+					],
+					"name" : "Worklets",
+					"targetIndexes" : 
+					[
+						0
+					]
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 0,
+					"id" : "worklets::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-worklets-RelWithDebInfo-7d6a6faf7382f388465c.json",
+					"name" : "worklets",
+					"projectIndex" : 0
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "C:/FitTrack_rebuilt_20260330_212527/.cxx/rnw/RelWithDebInfo/4wm4g186/armeabi-v7a",
+		"source" : "C:/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/react-n_cc5dcfc983295b0eda6c7c8194f36099/node_modules/react-native-worklets/android"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 3
+	}
+}

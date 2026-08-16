@@ -1,0 +1,9 @@
+{
+  "enabled": true,
+  "prefabPath": "C:\\Users\\HOUSTON\\.gradle\\caches\\modules-2\\files-2.1\\com.google.prefab\\cli\\2.1.0\\aa32fec809c44fa531f01dcfb739b5b3304d3050\\cli-2.1.0-all.jar",
+  "packages": [
+    "C:\\Users\\HOUSTON\\.gradle\\caches\\9.0.0\\transforms\\5e07a7917399250df5d3c6fa58687b7f\\transformed\\react-android-0.83.4-release\\prefab",
+    "C:\\Users\\HOUSTON\\.gradle\\caches\\9.0.0\\transforms\\49ded6a95e2e1ac4b365819611b55b49\\transformed\\fbjni-0.7.0\\prefab",
+    "C:\\FitTrack_rebuilt_20260330_212527\\node_modules\\.pnpm\\react-n_cc5dcfc983295b0eda6c7c8194f36099\\node_modules\\react-native-worklets\\android\\build\\intermediates\\prefab_package\\release\\prefab"
+  ]
+}

@@ -1,1 +1,0 @@
-C:\FitTrack\node_modules\.pnpm\@shopif_9f54f29e0dd6ab84bc624d91ca47a3da\node_modules\@shopify\react-native-skia\android\build\intermediates\cxx\RelWithDebInfo\105v4g2n\obj\x86_64

@@ -1,3 +1,0 @@
-C:/FitTrack/.cxx/rnwc/RelWithDebInfo/3jr1c2n4/x86_64/CMakeFiles/rnworklets.dir
-C:/FitTrack/.cxx/rnwc/RelWithDebInfo/3jr1c2n4/x86_64/CMakeFiles/edit_cache.dir
-C:/FitTrack/.cxx/rnwc/RelWithDebInfo/3jr1c2n4/x86_64/CMakeFiles/rebuild_cache.dir

@@ -1,0 +1,1 @@
+C:\FitTrack_rebuilt_20260330_212527\node_modules\.pnpm\react-n_63f064b4e31d2df5fa803ca65c59c176\node_modules\react-native-reanimated\android\build\intermediates\cxx\RelWithDebInfo\2sf2w4m2\obj\x86

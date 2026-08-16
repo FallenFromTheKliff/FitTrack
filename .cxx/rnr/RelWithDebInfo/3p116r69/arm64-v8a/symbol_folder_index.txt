@@ -1,1 +1,0 @@
-C:\FitTrack\node_modules\.pnpm\react-n_aa2e1944190f02c3cd28344d3d15ff2c\node_modules\react-native-reanimated\android\build\intermediates\cxx\RelWithDebInfo\3p116r69\obj\arm64-v8a
