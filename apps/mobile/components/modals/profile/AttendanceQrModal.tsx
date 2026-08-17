@@ -374,7 +374,7 @@ export default function AttendanceQrModal({
                 <AnimatedFitText style={{ fontSize: 13, lineHeight: 19, color: colors.textMuted }}>
                   {attendanceQr?.reason ??
                     errorMessage ??
-                    "This account does not currently have access to attendance QR check-in."}
+                    "FitTrack could not generate a live attendance QR right now."}
                 </AnimatedFitText>
                 <FitButton
                   label="Refresh Status"

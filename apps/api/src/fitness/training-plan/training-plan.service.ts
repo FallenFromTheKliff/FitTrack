@@ -541,10 +541,14 @@ export class TrainingPlanService {
 
       seenDays.add(dayKey);
 
-      const currentWeekDayCount = (daysPerWeek.get(day.weekNumber) ?? 0) + 1;
-      daysPerWeek.set(day.weekNumber, currentWeekDayCount);
+      const isConfiguredWorkoutDay =
+        day.isRestDay !== true && day.exercises.length > 0;
+      const currentWeekWorkoutDayCount =
+        (daysPerWeek.get(day.weekNumber) ?? 0) +
+        (isConfiguredWorkoutDay ? 1 : 0);
+      daysPerWeek.set(day.weekNumber, currentWeekWorkoutDayCount);
 
-      if (currentWeekDayCount > daysPerWeekTarget) {
+      if (currentWeekWorkoutDayCount > daysPerWeekTarget) {
         throw this.buildValidationException(
           'Too Many Schedule Days',
           'schedule cannot contain more than days_per_week entries within the same week.',

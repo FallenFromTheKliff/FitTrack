@@ -751,7 +751,9 @@ export class AuthService {
       typeof user.qr_code_token === 'string' &&
       user.qr_code_token.trim() !== '';
     const attendanceQrReady =
-      qrCodeReady && user.membership_card?.status === 'active';
+      user.role === UserRole.member &&
+      user.status === UserStatus.active &&
+      qrCodeReady;
 
     return {
       access_token: accessToken,

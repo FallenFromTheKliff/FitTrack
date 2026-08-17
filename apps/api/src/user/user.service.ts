@@ -12,6 +12,8 @@ import {
   AccountDeletionRequestStatus,
   AuthProvider,
   Prisma,
+  UserRole,
+  UserStatus,
 } from '@prisma/client';
 
 import { FilesService } from '../files/files.service';
@@ -247,9 +249,11 @@ export class UserService {
     const hasQrCodeToken =
       typeof user.qr_code_token === 'string' &&
       user.qr_code_token.trim() !== '';
-    const hasActiveMembershipCard = user.membership_card?.status === 'active';
     const qrCodeReady = hasQrCodeToken;
-    const attendanceQrReady = hasActiveMembershipCard && hasQrCodeToken;
+    const attendanceQrReady =
+      user.role === UserRole.member &&
+      user.status === UserStatus.active &&
+      hasQrCodeToken;
 
     return {
       ...user,
@@ -670,16 +674,6 @@ export class UserService {
       );
     }
 
-    if (user.membership_card?.status !== 'active') {
-      return this.buildBlockedAttendanceQrResponse(
-        user.membership_card?.status === 'pending_verification'
-          ? 'Your membership card is still pending verification.'
-          : user.membership_card?.status === 'revoked'
-            ? 'Your membership card access is revoked right now.'
-            : 'Attendance QR unlocks once this account has an active membership card.',
-      );
-    }
-
     return null;
   }
 
@@ -721,7 +715,7 @@ export class AttendanceService {
           type: 'NOT_FOUND',
           title: 'Invalid QR',
           status: 404,
-          detail: 'QR code not found or membership access is inactive.',
+          detail: 'QR code not found or this account cannot be checked in.',
         },
         HttpStatus.NOT_FOUND,
       );

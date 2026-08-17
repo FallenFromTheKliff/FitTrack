@@ -135,7 +135,7 @@ export function getDirectoryRoleLabel(roleName?: string | null) {
 }
 
 export function getScanReadinessLabel(member: MemberRecord) {
-  if (member.attendanceQrReady || member.qrCodeReady) return "QR available";
+  if (member.attendanceQrReady) return "QR available";
   return "QR not issued";
 }
 

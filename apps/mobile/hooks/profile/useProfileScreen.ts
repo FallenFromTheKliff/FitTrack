@@ -372,31 +372,30 @@ export function useProfileScreen() {
         return "No active membership card is linked to this account yet.";
     }
   }, [membershipCardStatus]);
-  const hasQrCodeToken = user?.qrCodeReady ?? false;
-  const attendanceQrReady = user?.attendanceQrReady ?? false;
+  const attendanceQrReady = Boolean(
+    attendanceQrQuery.data?.ready && attendanceQrQuery.data?.qrValue,
+  );
+  const attendanceQrReason =
+    attendanceQrQuery.data?.reason ??
+    (attendanceQrQuery.error instanceof Error
+      ? attendanceQrQuery.error.message
+      : null);
   const qrCodeStatusLabel = attendanceQrReady
     ? "Ready"
-    : membershipCardStatus === "revoked" || hasQrCodeToken
-        ? "Locked"
-        : hasMemberCardAccess
-          ? "Preparing"
-          : "Unavailable";
+    : attendanceQrQuery.isFetching
+      ? "Loading"
+      : attendanceQrReason
+        ? "Unavailable"
+        : "Available";
   const qrCodeStatusColor = attendanceQrReady
     ? colors.success
-    : membershipCardStatus === "revoked" || hasQrCodeToken
-        ? colors.warning
-        : hasMemberCardAccess
-          ? colors.brand
-          : colors.textMuted;
+    : attendanceQrReason
+      ? colors.warning
+      : colors.brand;
   const qrCodeSubtitle = attendanceQrReady
     ? "Open your rotating attendance QR for front-desk check-ins."
-    : membershipCardStatus === "revoked"
-        ? "Your membership card is revoked, so attendance QR access is locked."
-        : hasMemberCardAccess
-          ? "Your member card is active. Open the modal to load the live rotating QR."
-          : hasQrCodeToken
-            ? "This account already has a QR assigned, but attendance scans unlock only with an active membership card."
-            : "Attendance QR becomes available once this account has an active membership card.";
+    : attendanceQrReason ??
+      "Open to generate the live rotating QR used for front-desk check-ins.";
   const attendanceQrCountdownLabel = formatAttendanceQrCountdown(attendanceQrCountdownMs);
   const attendanceQrRefreshLabel = attendanceQrRefreshCooldownMs > 0
     ? `Refresh in ${formatShortCountdown(attendanceQrRefreshCooldownMs)}`
@@ -820,7 +819,7 @@ export function useProfileScreen() {
       }
       showMessage(
         checkoutAttemptPersisted
-          ? "PayMongo could not open. Your checkout is saved; tap Pay Online to retry it."
+          ? "PayMongo could not open. Your checkout is saved; reopen Membership Card Purchase to retry it."
           : error instanceof Error
           ? error.message
           : "Unable to open PayMongo checkout. No membership access was granted."

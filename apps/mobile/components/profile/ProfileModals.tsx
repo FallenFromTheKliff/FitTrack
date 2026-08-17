@@ -111,7 +111,7 @@ export default function ProfileModals({ controller }: ProfileModalsProps) {
         <ConfirmModal
           isVisible={controller.membershipPurchaseConfirmVisible}
           title="Review membership card purchase"
-          message={`Permanent ${controller.membershipCardPriceLabel} membership card.\n\n${FITTRACK_PAYMENT_POLICY_SUMMARY}\n\nMember access and Attendance QR unlock only after PayMongo confirms the payment.`}
+          message={`Permanent ${controller.membershipCardPriceLabel} membership card.\n\n${FITTRACK_PAYMENT_POLICY_SUMMARY}\n\nMember-only app features unlock only after PayMongo confirms the payment.`}
           yesLabel="ACCEPT & CONTINUE"
           noLabel="CANCEL"
           isDestructive={false}

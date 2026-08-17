@@ -13,6 +13,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Test, TestingModule } from '@nestjs/testing';
 
 import { FilesService } from '../files/files.service';
+import { ActivityLevelService } from './activity-level.service';
 import { AttendanceService, UserService } from './user.service';
 import { UserRepository } from './user.repository';
 
@@ -237,7 +238,7 @@ describe('UserService', () => {
   });
 
   it.each(['pending_verification', 'revoked'] as const)(
-    'keeps the account QR token available but blocks attendance QR when the membership card is %s',
+    'keeps attendance QR available when the membership card is %s',
     async (membershipCardStatus) => {
       repo.findUserAggregateOrThrow.mockResolvedValue({
         id: 'user-1',
@@ -266,11 +267,33 @@ describe('UserService', () => {
       await expect(service.getMyProfile('user-1')).resolves.toEqual(
         expect.objectContaining({
           qrCodeReady: true,
-          attendanceQrReady: false,
+          attendanceQrReady: true,
         }),
       );
     },
   );
+
+  it('makes attendance QR available for an active member without a membership card', async () => {
+    repo.findUserAggregateOrThrow.mockResolvedValue({
+      id: 'user-1',
+      role: UserRole.member,
+      status: UserStatus.active,
+      email_verified_at: null,
+      phone_verified_at: null,
+      qr_code_token: 'qr-token',
+      auth_identities: [],
+      profile: { phone: null },
+      membership_card: null,
+      notification_prefs: {},
+    });
+
+    await expect(service.getMyProfile('user-1')).resolves.toEqual(
+      expect.objectContaining({
+        qrCodeReady: true,
+        attendanceQrReady: true,
+      }),
+    );
+  });
 
   it('returns the latest deletion request status for a member', async () => {
     repo.findUserByIdOrThrow.mockResolvedValue({ id: 'user-1' });
@@ -506,7 +529,7 @@ describe('UserService', () => {
     });
   });
 
-  it('returns a rotating attendance QR payload for active members', async () => {
+  it('returns a rotating attendance QR payload for active members without a card', async () => {
     jest.useFakeTimers().setSystemTime(new Date('2026-04-13T12:00:00.000Z'));
     repo.findUserAggregateOrThrow.mockResolvedValue({
       id: 'user-1',
@@ -519,9 +542,7 @@ describe('UserService', () => {
       email_verified_at: null,
       phone_verified_at: null,
       auth_identities: [],
-      membership_card: {
-        status: 'active',
-      },
+      membership_card: null,
       notification_prefs: {},
       profile: {
         phone: null,
@@ -554,9 +575,7 @@ describe('UserService', () => {
         email_verified_at: null,
         phone_verified_at: null,
         auth_identities: [],
-        membership_card: {
-          status: 'active',
-        },
+        membership_card: null,
         notification_prefs: {},
         profile: {
           phone: null,
@@ -573,9 +592,7 @@ describe('UserService', () => {
         email_verified_at: null,
         phone_verified_at: null,
         auth_identities: [],
-        membership_card: {
-          status: 'active',
-        },
+        membership_card: null,
         notification_prefs: {},
         profile: {
           phone: null,
@@ -635,6 +652,10 @@ describe('AttendanceService', () => {
         AttendanceService,
         { provide: UserRepository, useValue: repo },
         { provide: EventEmitter2, useValue: eventEmitter },
+        {
+          provide: ActivityLevelService,
+          useValue: { recalculateForUser: jest.fn() },
+        },
       ],
     }).compile();
 
@@ -646,7 +667,7 @@ describe('AttendanceService', () => {
     jest.useRealTimers();
   });
 
-  it('rejects scans when the QR token is invalid or membership access is inactive', async () => {
+  it('rejects scans when the QR token is invalid or the account is ineligible', async () => {
     repo.findActiveUserByQrTokenOrThrow.mockRejectedValue(
       new NotFoundException('Invalid QR'),
     );
@@ -656,12 +677,13 @@ describe('AttendanceService', () => {
     ).rejects.toThrow(NotFoundException);
   });
 
-  it('creates an attendance log when the member can check in', async () => {
+  it('creates an attendance log when an active member without a card scans', async () => {
     repo.findActiveUserByQrTokenOrThrow.mockResolvedValue({
       id: 'user-1',
       role: UserRole.member,
       status: 'active',
       qr_code_token: 'seed-qr-token',
+      membership_card: null,
     });
     repo.findLatestDeletionRequest.mockResolvedValue(null);
     repo.findOpenAttendanceToday.mockResolvedValue(null);

@@ -309,7 +309,7 @@ describe('TrainingPlanService', () => {
       title: 'PPL with recovery',
       goal: FitnessGoal.maintenance,
       duration_weeks: 1,
-      days_per_week: 2,
+      days_per_week: 1,
       schedule: [
         {
           week_number: 1,
@@ -369,6 +369,36 @@ describe('TrainingPlanService', () => {
     expect(repo.createPlan).not.toHaveBeenCalled();
   });
 
+  it('still rejects more configured workout days than the weekly target', async () => {
+    repo.findActiveExercisesByIds.mockResolvedValue([{ id: 'exercise-1' }]);
+
+    await expect(
+      service.createPlan('user-1', UserRole.member, {
+        title: 'Too many training days',
+        goal: FitnessGoal.maintenance,
+        duration_weeks: 1,
+        days_per_week: 1,
+        schedule: [
+          {
+            week_number: 1,
+            day_of_week: 1,
+            is_rest_day: false,
+            exercises: [{ exercise_id: 'exercise-1', sets: 3 }],
+          },
+          {
+            week_number: 1,
+            day_of_week: 3,
+            is_rest_day: false,
+            exercises: [{ exercise_id: 'exercise-1', sets: 3 }],
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ title: 'Too Many Schedule Days' }),
+    });
+    expect(repo.createPlan).not.toHaveBeenCalled();
+  });
+
   it('updates an existing plan with a legacy rest row and retains explicit rest state', async () => {
     const existingPlan = makePlan({
       schedule_days: [
@@ -395,7 +425,7 @@ describe('TrainingPlanService', () => {
       title: 'PPL with recovery',
       goal: FitnessGoal.maintenance,
       duration_weeks: 1,
-      days_per_week: 2,
+      days_per_week: 1,
       schedule: [
         {
           week_number: 1,

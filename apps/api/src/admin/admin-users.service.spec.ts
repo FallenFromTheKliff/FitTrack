@@ -174,7 +174,7 @@ describe('AdminUsersService', () => {
           verifiedAt: '2026-03-03T01:00:00.000Z',
         },
         qrCodeReady: true,
-        attendanceQrReady: true,
+        attendanceQrReady: false,
         updatedAt: '2026-03-04T00:00:00.000Z',
         profile: {
           firstName: 'Ava',
@@ -300,7 +300,7 @@ describe('AdminUsersService', () => {
     );
   });
 
-  it('keeps QR unavailable when the membership card is pending or revoked', async () => {
+  it('keeps attendance QR available when the membership card is pending or revoked', async () => {
     prisma.user.findMany.mockResolvedValue(
       ['pending_verification', 'revoked'].map((status, index) => ({
         id: `member-${index + 1}`,
@@ -350,8 +350,8 @@ describe('AdminUsersService', () => {
     expect(result).toHaveLength(2);
     expect(result.map((member) => member.qrCodeReady)).toEqual([true, true]);
     expect(result.map((member) => member.attendanceQrReady)).toEqual([
-      false,
-      false,
+      true,
+      true,
     ]);
     expect(result.map((member) => member.membershipCard?.status)).toEqual([
       'pending_verification',

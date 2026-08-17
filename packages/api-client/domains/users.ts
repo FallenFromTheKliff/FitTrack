@@ -183,10 +183,7 @@ function normalizeUserProfileResponse(profile: UserProfileResponse): UserProfile
     privacyAcceptedAt: profile.privacyAcceptedAt ?? profile.privacy_accepted_at ?? null,
     profile: normalizeProfile(profile.profile),
     qrCodeReady: profile.qrCodeReady ?? hasQrCodeToken(qrCodeToken),
-    attendanceQrReady: profile.attendanceQrReady ?? (
-      membershipCard?.status === "active" &&
-      hasQrCodeToken(qrCodeToken)
-    ),
+    attendanceQrReady: profile.attendanceQrReady ?? hasQrCodeToken(qrCodeToken),
     qrCodeToken,
     role: normalizedRole
   };

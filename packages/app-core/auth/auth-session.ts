@@ -123,12 +123,7 @@ function resolveQrCodeReady(payload: ApiMembershipShape, qrCodeToken: string | n
 }
 
 function resolveAttendanceQrReady(payload: ApiMembershipShape, qrCodeToken: string | null) {
-  const membershipCard = resolveMembershipCard(payload);
-
-  return payload.attendanceQrReady ?? (
-    membershipCard?.status === "active" &&
-    hasQrCodeToken(qrCodeToken)
-  );
+  return payload.attendanceQrReady ?? hasQrCodeToken(qrCodeToken);
 }
 
 function resolveMembershipAccess(membershipCard: AuthUser["membershipCard"]): AuthUser["membershipAccess"] {

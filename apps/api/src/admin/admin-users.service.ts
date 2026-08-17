@@ -163,14 +163,12 @@ function isQrCodeReady(qrCodeToken: string | null) {
 
 function isAttendanceQrReady(
   role: UserRole,
+  status: UserStatus,
   qrCodeToken: string | null,
-  card: {
-    status: 'active' | 'pending_verification' | 'revoked';
-  } | null,
 ) {
   return (
     role === UserRole.member &&
-    card?.status === 'active' &&
+    status === UserStatus.active &&
     isQrCodeReady(qrCodeToken)
   );
 }
@@ -257,8 +255,8 @@ export class AdminUsersService {
         qrCodeReady: isQrCodeReady(user.qr_code_token),
         attendanceQrReady: isAttendanceQrReady(
           user.role,
+          user.status,
           user.qr_code_token,
-          user.membership_card,
         ),
         updatedAt: user.updated_at.toISOString(),
         profile: user.profile

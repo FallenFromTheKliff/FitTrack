@@ -38,9 +38,6 @@ export default function MemberProfileSections({ colors, controller, styles }: Me
       ? "Your membership access is revoked. Ask the front desk to restore it; the one-time card payment stays on record and does not need to be paid again."
       : `Permanent ${controller.membershipCardPriceLabel} membership card. Buy once to unlock member-only app access.`;
   const gamificationMessage = `${controller.memberAccessSummary} Fitness progress, badges, and achievement history unlock once this account has an active membership card.`;
-  const onlinePurchaseLabel = controller.isMembershipCardPurchasePending && controller.membershipCardPurchaseProvider === "paymongo"
-    ? "Starting..."
-    : "Pay Online";
 
   return (
     <>
@@ -174,30 +171,17 @@ export default function MemberProfileSections({ colors, controller, styles }: Me
               subtitle={membershipCardActionSubtitle}
               trailingLabel={controller.canPurchaseMembershipCard ? controller.membershipCardPriceLabel : undefined}
               trailingLabelColor={controller.canPurchaseMembershipCard ? controller.memberAccessColor : undefined}
-              noChevron
+              onPress={controller.canPurchaseMembershipCard
+                ? () => controller.setMembershipPurchaseConfirmVisible(true)
+                : undefined}
             />
-            {controller.canPurchaseMembershipCard ? (
-              <View style={{ gap: 10, marginTop: 12 }}>
-                <FitText style={{ fontSize: 11.5, lineHeight: 17, opacity: 0.76 }}>
-                  Secure PayMongo checkout. Member access activates after payment confirmation.
-                </FitText>
-                <FitButton
-                  label={onlinePurchaseLabel}
-                  variant="primary"
-                  onPress={() => controller.setMembershipPurchaseConfirmVisible(true)}
-                  disabled={controller.isMembershipCardPurchasePending}
-                />
-                <FitText style={{ fontSize: 12, lineHeight: 18, opacity: 0.78 }}>
-                  Complete the secure PayMongo checkout to activate your card.
-                </FitText>
-              </View>
-            ) : (
+            {!controller.canPurchaseMembershipCard ? (
               <FitText style={{ fontSize: 12, lineHeight: 18, opacity: 0.78, marginTop: 12 }}>
                 {controller.memberAccessLabel === "Revoked"
                   ? "This card was already purchased. Staff can restore membership access from the Account Module; no new checkout is required."
                   : "Membership-card checkout is unavailable for this account right now. Try again later."}
               </FitText>
-            )}
+            ) : null}
           </>
         ) : null}
       </FitSection>

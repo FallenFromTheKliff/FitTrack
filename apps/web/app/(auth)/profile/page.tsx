@@ -184,22 +184,12 @@ function MemberProfileBody() {
   const hasQrCodeToken = user?.qrCodeReady ?? false;
   const qrCodeStatusLabel = attendanceQrReady
     ? "Ready"
-    : membershipCardStatus === "pending_verification"
-      ? "Pending"
-      : membershipCardStatus === "revoked" || hasQrCodeToken
-        ? "Locked"
-        : hasMemberCardAccess
-          ? "Preparing"
-          : "Unavailable";
+    : hasQrCodeToken
+      ? "Preparing"
+      : "Available";
   const qrCodeSubtitle = attendanceQrReady
     ? "Open the mobile app for the rotating attendance QR used by front-desk check-ins."
-    : membershipCardStatus === "pending_verification"
-      ? "Attendance scans unlock as soon as staff verifies your member card."
-      : membershipCardStatus === "revoked"
-        ? "Your membership card is revoked, so attendance QR access is locked."
-        : hasMemberCardAccess
-          ? "Your member card is active. Mobile keeps the live rotating QR."
-          : "Attendance QR becomes available once this account has an active membership card.";
+    : "Open the mobile app to generate the live rotating attendance QR.";
   const bmi = user?.weightKg && user.heightCm ? calcBMI(user.weightKg, user.heightCm) : null;
   const healthSnapshot = bmi
     ? `BMI ${bmi.bmi}`
@@ -401,7 +391,7 @@ function MemberProfileBody() {
             label="Attendance QR"
             subtitle={qrCodeSubtitle}
             trailingLabel={qrCodeStatusLabel}
-            trailingTone={attendanceQrReady ? "success" : membershipCardStatus === "pending_verification" ? "warning" : "muted"}
+            trailingTone={attendanceQrReady ? "success" : "brand"}
           />
           {!hasMemberCardAccess ? (
             <MemberCard
