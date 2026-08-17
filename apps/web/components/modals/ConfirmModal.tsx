@@ -24,6 +24,7 @@ type Props = {
   isDanger?: boolean;
   children?: ReactNode;
   confirmDisabled?: boolean;
+  hideCancel?: boolean;
 };
 
 function getLoadingTitle(
@@ -51,6 +52,7 @@ export default function ConfirmModal({
   isDanger = false,
   children,
   confirmDisabled = false,
+  hideCancel = false,
 }: Props) {
   const { colors } = useTheme();
   const [visible, setVisible] = useState(false);
@@ -234,12 +236,14 @@ export default function ConfirmModal({
               marginTop: 16,
             }}
           >
-            <FitButton
-              variant="ghost"
-              label={cancelLabel}
-              onClick={onCancel}
-              style={{ flex: 1 }}
-            />
+            {!hideCancel ? (
+              <FitButton
+                variant="ghost"
+                label={cancelLabel}
+                onClick={onCancel}
+                style={{ flex: 1 }}
+              />
+            ) : null}
             <FitButton
               variant={isDanger ? "danger" : "positive"}
               label={confirmLabel}

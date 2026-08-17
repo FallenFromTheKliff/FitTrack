@@ -19,7 +19,7 @@ import type {
   CoachAvailabilityResponse,
   VenueAvailabilityRecord,
 } from "@fittrack/api-client";
-import { isVenueBookable } from "@fittrack/api-client";
+import { ApiClientError, isVenueBookable } from "@fittrack/api-client";
 import { formatBookingDate } from "@fittrack/utils";
 import { isPaymongoCheckoutEnabled, WEEKDAY_NAMES } from "@fittrack/app-config";
 import type { CoachProfileRecord, VenueRecord } from "@fittrack/types";
@@ -36,7 +36,7 @@ import { FitPagination, FitSelect } from "@/components/fit";
 import FitSearch from "@/components/fit/FitSearch";
 import { FitText, FitTextArea } from "@/components/fit/FitText";
 import MemberInspectorPanel from "@/components/accounts/MemberInspectorPanel";
-import { CalendarModal, FitModal } from "@/components/modals";
+import { CalendarModal, ConfirmModal, FitModal } from "@/components/modals";
 import {
   EmptyState,
   MemberOnlyScreen,
@@ -80,6 +80,12 @@ type PaymentConfirmationState = {
   message: string;
   title: string;
 };
+type BookingCancellationConfirmation = {
+  bookingId: string;
+  bookingTitle: string;
+  phase: "confirm" | "reminder";
+  error?: string;
+};
 type ThemeColors = ReturnType<typeof useTheme>["colors"];
 
 const BOOKING_MODE_OPTIONS: ReadonlyArray<{ icon: LucideIcon; label: string; value: BookingMode }> = [
@@ -102,6 +108,18 @@ const ONE_TIME_DURATION_OPTIONS = [30, 45, 60, 90] as const;
 
 function isVisibleProductBooking(status?: string | null) {
   return PRODUCT_BOOKING_STATUSES.has((status ?? "").toLowerCase());
+}
+
+function getBookingCancellationErrorMessage(error: unknown) {
+  if (error instanceof ApiClientError && error.message.trim()) {
+    return error.message;
+  }
+
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+
+  return "Unable to cancel this venue booking. Please try again.";
 }
 
 const REQUEST_TIME_OPTIONS = Array.from({ length: 16 }, (_, index) => {
@@ -4145,6 +4163,7 @@ export default function BookingsPage() {
   const [requestModalOpen, setRequestModalOpen] = useState(false);
   const [bookingActionsOpen, setBookingActionsOpen] = useState(false);
   const [bookingPanelMode, setBookingPanelMode] = useState<BookingPanelMode>("details");
+  const [cancelConfirmation, setCancelConfirmation] = useState<BookingCancellationConfirmation | null>(null);
   const [isCompactBookingLayout, setIsCompactBookingLayout] = useState(false);
   const [mobileComposerOpen, setMobileComposerOpen] = useState(false);
   const [mobileBookingDetailsOpen, setMobileBookingDetailsOpen] = useState(false);
@@ -4374,10 +4393,10 @@ export default function BookingsPage() {
     if (!selected) return;
 
     if (activeSection === "bookings") {
-      void data.cancelBookingMutation.mutateAsync({
+      setCancelConfirmation({
         bookingId: selected.id,
-        cancelReason: "Cancelled from the member web portal.",
-        userId: user?.id,
+        bookingTitle: selected.detailTitle ?? selected.resourceName,
+        phase: "confirm",
       });
       return;
     }
@@ -4387,6 +4406,29 @@ export default function BookingsPage() {
       cancelReason: "Cancelled from the member web portal.",
       userId: user?.id,
     });
+  };
+
+  const confirmSelectedBookingCancellation = async () => {
+    if (!cancelConfirmation) return;
+
+    try {
+      await data.cancelBookingMutation.mutateAsync({
+        bookingId: cancelConfirmation.bookingId,
+        cancelReason: "Cancelled from the member web portal.",
+        userId: user?.id,
+      });
+      setCancelConfirmation(null);
+    } catch (error) {
+      setCancelConfirmation((current) =>
+        current && current.bookingId === cancelConfirmation.bookingId
+          ? {
+              ...current,
+              error: getBookingCancellationErrorMessage(error),
+              phase: "reminder",
+            }
+          : current,
+      );
+    }
   };
 
   const handleCreateReservation = async (input: ReservationSubmitInput) => {
@@ -4852,6 +4894,35 @@ export default function BookingsPage() {
         venues={data.venuesQuery.data ?? []}
         venuesError={data.venuesQuery.isError ? "Unable to load reservable venues." : null}
         venuesLoading={data.venuesQuery.isPending}
+      />
+      <ConfirmModal
+        isOpen={Boolean(cancelConfirmation)}
+        title={
+          cancelConfirmation?.phase === "reminder"
+            ? "Venue booking reminder"
+            : "Cancel venue booking?"
+        }
+        message={
+          cancelConfirmation?.phase === "reminder"
+            ? `${cancelConfirmation.error ?? "This venue booking cannot be cancelled yet."} Your booking remains active.`
+            : `Cancel ${cancelConfirmation?.bookingTitle ?? "this venue booking"}? This action cannot be undone.`
+        }
+        confirmLabel={cancelConfirmation?.phase === "reminder" ? "CLOSE" : "CANCEL BOOKING"}
+        loadingLabel="CANCELLING"
+        hideCancel={cancelConfirmation?.phase === "reminder"}
+        isDanger={cancelConfirmation?.phase !== "reminder"}
+        isLoading={
+          cancelConfirmation?.phase !== "reminder" &&
+          data.cancelBookingMutation.isPending
+        }
+        onConfirm={() => {
+          if (cancelConfirmation?.phase === "reminder") {
+            setCancelConfirmation(null);
+            return;
+          }
+          void confirmSelectedBookingCancellation();
+        }}
+        onCancel={() => setCancelConfirmation(null)}
       />
       <BookingsPageStyles colors={colors} />
     </MemberOnlyScreen>

@@ -800,7 +800,7 @@ export class BookingService {
       );
     }
 
-    assertBookingCancellationWindow(booking.starts_at);
+    assertBookingCancellationWindow(booking.starts_at, 1);
 
     const cancelledAt = new Date();
     await this.bookingRepository.cancelBooking(bookingId, cancelledAt);
@@ -1634,8 +1634,24 @@ function toGymDateKey(value: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-function assertBookingCancellationWindow(startsAt: Date): void {
-  if (toGymDateKey(new Date()) < toGymDateKey(startsAt)) {
+function addGymCalendarDays(dateKey: string, days: number): string {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  const shifted = new Date(Date.UTC(year, month - 1, day + days));
+  const shiftedYear = shifted.getUTCFullYear();
+  const shiftedMonth = `${shifted.getUTCMonth() + 1}`.padStart(2, '0');
+  const shiftedDay = `${shifted.getUTCDate()}`.padStart(2, '0');
+  return `${shiftedYear}-${shiftedMonth}-${shiftedDay}`;
+}
+
+function assertBookingCancellationWindow(
+  startsAt: Date,
+  minimumDaysAhead = 2,
+): void {
+  const earliestCancellableDate = addGymCalendarDays(
+    toGymDateKey(new Date()),
+    minimumDaysAhead,
+  );
+  if (toGymDateKey(startsAt) >= earliestCancellableDate) {
     return;
   }
 
@@ -1645,7 +1661,9 @@ function assertBookingCancellationWindow(startsAt: Date): void {
       title: 'Booking Cannot Be Cancelled',
       status: 422,
       detail:
-        'Venue bookings can only be cancelled until the day before the booking date.',
+        minimumDaysAhead === 2
+          ? 'Venue bookings can only be cancelled starting two calendar days before the booking date.'
+          : 'Venue bookings can only be cancelled until the day before the booking date.',
     },
     HttpStatus.UNPROCESSABLE_ENTITY,
   );

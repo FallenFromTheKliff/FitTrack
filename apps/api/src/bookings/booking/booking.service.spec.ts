@@ -1328,6 +1328,48 @@ describe('BookingService', () => {
     );
   });
 
+  it('blocks today and tomorrow but allows cancellation two Manila calendar days ahead', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-14T15:00:00.000Z'));
+
+    try {
+      const booking = {
+        id: 'booking-1',
+        amenity_id: 'amenity-1',
+        status: 'confirmed',
+        cancelled_at: null,
+        starts_at: new Date('2026-08-14T02:00:00.000Z'),
+      };
+      bookingRepository.findBookingByIdAndAssertOwnership.mockResolvedValue(booking);
+      bookingRepository.cancelBooking.mockResolvedValue({
+        id: 'booking-1',
+        status: 'cancelled',
+      });
+
+      await expect(
+        service.cancelBooking('booking-1', 'member-1'),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          detail: expect.stringContaining('two calendar days'),
+        }),
+      });
+
+      booking.starts_at = new Date('2026-08-15T02:00:00.000Z');
+      await expect(
+        service.cancelBooking('booking-1', 'member-1'),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          detail: expect.stringContaining('two calendar days'),
+        }),
+      });
+
+      booking.starts_at = new Date('2026-08-16T02:00:00.000Z');
+      await expect(service.cancelBooking('booking-1', 'member-1')).resolves.toBeUndefined();
+      expect(bookingRepository.cancelBooking).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('rejects staff venue cancellation on the booking date', async () => {
     bookingRepository.findBookingWithAmenityByIdOrThrow.mockResolvedValue({
       id: 'booking-1',
