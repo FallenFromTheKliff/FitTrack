@@ -5,7 +5,6 @@ import { validateSync } from 'class-validator';
 import {
   ActivityLevel,
   ChatContext,
-  ChatRole,
   FitnessGoal,
   Gender,
   NutritionUnit,
@@ -299,15 +298,10 @@ export class AiService {
           response.params,
         );
 
-      await this.aiChatMessageRepository.createMessage({
+      await this.aiChatMessageRepository.createMessagePair({
         sessionId: resolved.session.id,
-        role: ChatRole.user,
-        content: dto.message,
-      });
-      await this.aiChatMessageRepository.createMessage({
-        sessionId: resolved.session.id,
-        role: ChatRole.assistant,
-        content: response.content,
+        userContent: dto.message,
+        assistantContent: response.content,
         actionTriggered,
       });
 
@@ -321,7 +315,7 @@ export class AiService {
         },
       );
 
-      await this.aiInteractionLogRepository.createInteractionLog({
+      await this.recordChatInteraction({
         userId,
         sessionId: resolved.session.id,
         interactionType: 'chat',
@@ -341,7 +335,7 @@ export class AiService {
         action_result: actionResult,
       };
     } catch (error) {
-      await this.aiInteractionLogRepository.createInteractionLog({
+      await this.recordChatInteraction({
         userId,
         sessionId: resolved.session.id,
         interactionType: 'chat',
@@ -351,6 +345,16 @@ export class AiService {
       });
 
       throw error;
+    }
+  }
+
+  private async recordChatInteraction(
+    input: Parameters<AiInteractionLogRepository['createInteractionLog']>[0],
+  ): Promise<void> {
+    try {
+      await this.aiInteractionLogRepository.createInteractionLog(input);
+    } catch {
+      // Logging must never turn a completed chat exchange into a failed request.
     }
   }
 

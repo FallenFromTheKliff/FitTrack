@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import ssl
@@ -540,11 +541,13 @@ class OpenRouterAssistantProvider:
 
     def _read_request_timeout_seconds(self) -> float:
         raw_value = os.getenv("OPENROUTER_ASSISTANT_TIMEOUT_SECONDS")
-        if not raw_value:
+        if not raw_value or not raw_value.strip():
             return self._DEFAULT_REQUEST_TIMEOUT_SECONDS
         try:
-            parsed = float(raw_value)
+            parsed = float(raw_value.strip())
         except ValueError:
+            return self._DEFAULT_REQUEST_TIMEOUT_SECONDS
+        if not math.isfinite(parsed):
             return self._DEFAULT_REQUEST_TIMEOUT_SECONDS
         return min(55.0, max(5.0, parsed))
 

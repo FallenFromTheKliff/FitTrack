@@ -17,6 +17,10 @@ describe('AiChatMessageRepository', () => {
   const prisma = {
     aiChatSession,
     aiChatMessage,
+    $transaction: jest.fn(
+      (callback: (tx: { aiChatMessage: typeof aiChatMessage }) => unknown) =>
+        Promise.resolve(callback({ aiChatMessage })),
+    ),
   };
 
   let repo: AiChatMessageRepository;
@@ -88,6 +92,42 @@ describe('AiChatMessageRepository', () => {
         action_triggered: 'LOG_NUTRITION',
       },
       include: undefined,
+    });
+  });
+
+  it('creates a user and assistant exchange atomically', async () => {
+    aiChatMessage.create
+      .mockResolvedValueOnce({ id: 'message-user' })
+      .mockResolvedValueOnce({ id: 'message-assistant' });
+
+    await expect(
+      repo.createMessagePair({
+        sessionId: 'session-1',
+        userContent: 'Please log my lunch.',
+        assistantContent: 'I logged your lunch.',
+        actionTriggered: 'LOG_NUTRITION',
+      }),
+    ).resolves.toEqual([
+      { id: 'message-user' },
+      { id: 'message-assistant' },
+    ]);
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(aiChatMessage.create).toHaveBeenNthCalledWith(1, {
+      data: {
+        session: { connect: { id: 'session-1' } },
+        role: ChatRole.user,
+        content: 'Please log my lunch.',
+        action_triggered: null,
+      },
+    });
+    expect(aiChatMessage.create).toHaveBeenNthCalledWith(2, {
+      data: {
+        session: { connect: { id: 'session-1' } },
+        role: ChatRole.assistant,
+        content: 'I logged your lunch.',
+        action_triggered: 'LOG_NUTRITION',
+      },
     });
   });
 

@@ -957,6 +957,12 @@ def test_openrouter_timeout_is_configurable_and_bounded(
     monkeypatch.setenv("OPENROUTER_ASSISTANT_TIMEOUT_SECONDS", "not-a-number")
     assert provider._read_request_timeout_seconds() == 25
 
+    monkeypatch.setenv("OPENROUTER_ASSISTANT_TIMEOUT_SECONDS", "NaN")
+    assert provider._read_request_timeout_seconds() == 25
+
+    monkeypatch.setenv("OPENROUTER_ASSISTANT_TIMEOUT_SECONDS", "Infinity")
+    assert provider._read_request_timeout_seconds() == 25
+
 
 def test_openrouter_ssl_context_ignores_optional_keylog_path(
     monkeypatch: pytest.MonkeyPatch,

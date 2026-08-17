@@ -17,6 +17,13 @@ export interface CreateAiChatMessageInput {
   actionTriggered?: string | null;
 }
 
+export interface CreateAiChatMessagePairInput {
+  sessionId: string;
+  userContent: string;
+  assistantContent: string;
+  actionTriggered?: string | null;
+}
+
 @Injectable()
 export class AiChatMessageRepository extends BaseRepository {
   constructor(prisma: PrismaService) {
@@ -46,14 +53,48 @@ export class AiChatMessageRepository extends BaseRepository {
   }
 
   createMessage(input: CreateAiChatMessageInput): Promise<AiChatMessageRecord> {
-    const data: Prisma.AiChatMessageCreateInput = {
+    return this.create<AiChatMessageRecord>(
+      this.prisma.aiChatMessage,
+      this.buildCreateInput(input),
+    );
+  }
+
+  async createMessagePair(
+    input: CreateAiChatMessagePairInput,
+  ): Promise<[AiChatMessageRecord, AiChatMessageRecord]> {
+    return this.transaction(async (tx) => {
+      const userMessage = await tx.aiChatMessage.create({
+        data: this.buildCreateInput({
+          sessionId: input.sessionId,
+          role: ChatRole.user,
+          content: input.userContent,
+        }),
+      });
+      const assistantMessage = await tx.aiChatMessage.create({
+        data: this.buildCreateInput({
+          sessionId: input.sessionId,
+          role: ChatRole.assistant,
+          content: input.assistantContent,
+          actionTriggered: input.actionTriggered,
+        }),
+      });
+
+      return [
+        userMessage as AiChatMessageRecord,
+        assistantMessage as AiChatMessageRecord,
+      ];
+    });
+  }
+
+  private buildCreateInput(
+    input: CreateAiChatMessageInput,
+  ): Prisma.AiChatMessageCreateInput {
+    return {
       session: { connect: { id: input.sessionId } },
       role: input.role,
       content: input.content,
       action_triggered: input.actionTriggered ?? null,
     };
-
-    return this.create<AiChatMessageRecord>(this.prisma.aiChatMessage, data);
   }
 
   async listRecentMessagesBySessionId(

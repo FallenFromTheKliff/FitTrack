@@ -43,11 +43,14 @@ export default function ChatPanel({
   const { colors, onBrandTextColor } = useTheme();
   const s = chatbotStyles(colors);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const sendLockRef = useRef(false);
   const [keyboardOffset, setKeyboardOffset] = useState(0);
 
   const scrollToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, []);
+
+  const canSend = !disabled && !isLoading && !isReadOnly && !!input.trim();
 
   useEffect(() => {
     scrollToBottom();
@@ -89,18 +92,29 @@ export default function ChatPanel({
     };
   }, []);
 
+  const handleSend = useCallback(() => {
+    if (!canSend || sendLockRef.current) return;
+
+    sendLockRef.current = true;
+    Promise.resolve()
+      .then(onSend)
+      .catch(() => undefined)
+      .finally(() => {
+        sendLockRef.current = false;
+      });
+  }, [canSend, onSend]);
+
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent) => {
       if (isReadOnly) return;
       if (event.key === "Enter" && !event.shiftKey) {
         event.preventDefault();
-        onSend();
+        handleSend();
       }
     },
-    [isReadOnly, onSend],
+    [handleSend, isReadOnly],
   );
 
-  const canSend = !disabled && !isLoading && !isReadOnly && !!input.trim();
   const keyboardAwarePanelStyle = {
     display: "flex",
     flexDirection: "column",
@@ -247,7 +261,7 @@ export default function ChatPanel({
           iconOnly
           icon={ArrowUp}
           iconSize={18}
-          onClick={onSend}
+          onClick={handleSend}
           style={s.sendBtn}
           aria-label="Send message"
           disabled={!canSend}

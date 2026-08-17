@@ -79,6 +79,7 @@ describe('AiService', () => {
 
   const aiChatMessageRepository = {
     createMessage: jest.fn(),
+    createMessagePair: jest.fn(),
     listRecentMessagesBySessionId: jest.fn(),
     listOwnedSessionMessages: jest.fn(),
   };
@@ -305,9 +306,10 @@ describe('AiService', () => {
       token_count: 88,
       model_used: 'fittrack-llama',
     });
-    aiChatMessageRepository.createMessage.mockResolvedValue({
-      id: 'message-1',
-    });
+    aiChatMessageRepository.createMessagePair.mockResolvedValue([
+      { id: 'message-user' },
+      { id: 'message-assistant' },
+    ]);
     aiChatSessionRepository.updateSessionById.mockResolvedValue({
       id: 'session-1',
     });
@@ -362,15 +364,10 @@ describe('AiService', () => {
         }),
       }),
     );
-    expect(aiChatMessageRepository.createMessage).toHaveBeenNthCalledWith(1, {
+    expect(aiChatMessageRepository.createMessagePair).toHaveBeenCalledWith({
       sessionId: 'session-1',
-      role: ChatRole.user,
-      content: 'I want help with meal planning.',
-    });
-    expect(aiChatMessageRepository.createMessage).toHaveBeenNthCalledWith(2, {
-      sessionId: 'session-1',
-      role: ChatRole.assistant,
-      content: 'Let us start by reviewing what you ate today.',
+      userContent: 'I want help with meal planning.',
+      assistantContent: 'Let us start by reviewing what you ate today.',
       actionTriggered: null,
     });
     expect(aiChatSessionRepository.updateSessionById).toHaveBeenCalledWith(
@@ -1257,7 +1254,57 @@ describe('AiService', () => {
         error: 'The AI chat service rejected the chat request.',
       }),
     );
-    expect(aiChatMessageRepository.createMessage).not.toHaveBeenCalled();
+    expect(aiChatMessageRepository.createMessagePair).not.toHaveBeenCalled();
+  });
+
+  it('returns the chat response when interaction logging is unavailable', async () => {
+    userService.getMyProfile.mockResolvedValue({
+      profile: {
+        date_of_birth: new Date('1998-03-26'),
+        gender: 'male',
+        weight_kg: { toNumber: () => 78 },
+        height_cm: { toNumber: () => 175 },
+        activity_level: 'moderate',
+        fitness_goal: FitnessGoal.cutting,
+      },
+    });
+    aiChatSessionRepository.findOwnedActiveSessionByContext.mockResolvedValue({
+      id: 'session-1',
+      user_id: 'user-1',
+      context_type: ChatContext.general,
+      title: 'Macros',
+      is_active: true,
+      last_activity_at: new Date(),
+      created_at: new Date('2026-03-27T05:00:00.000Z'),
+      updated_at: new Date('2026-03-27T05:00:00.000Z'),
+    });
+    aiChatMessageRepository.listRecentMessagesBySessionId.mockResolvedValue([]);
+    aiClient.chat.mockResolvedValue({
+      content: 'Here is a practical next step.',
+      action: 'NONE',
+      params: null,
+      token_count: 12,
+      model_used: 'fittrack-llama',
+    });
+    aiChatMessageRepository.createMessagePair.mockResolvedValue([]);
+    aiChatSessionRepository.updateSessionById.mockResolvedValue({
+      id: 'session-1',
+    });
+    aiInteractionLogRepository.createInteractionLog.mockRejectedValue(
+      new Error('audit store unavailable'),
+    );
+
+    await expect(
+      service.chat('user-1', { message: 'What should I do next?' }),
+    ).resolves.toEqual({
+      session_id: 'session-1',
+      reply: 'Here is a practical next step.',
+      action_triggered: null,
+      action_result: null,
+    });
+
+    expect(aiChatMessageRepository.createMessagePair).toHaveBeenCalled();
+    expect(aiInteractionLogRepository.createInteractionLog).toHaveBeenCalled();
   });
 
   it('rejects generation when the user profile is missing required context', async () => {
