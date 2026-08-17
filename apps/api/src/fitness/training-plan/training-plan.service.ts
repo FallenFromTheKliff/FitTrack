@@ -350,10 +350,29 @@ export class TrainingPlanService {
     return this.toDetailResponse(created);
   }
 
-  async deletePlan(userId: string, planId: string): Promise<void> {
+  async deletePlan(
+    userId: string,
+    userRole: UserRole,
+    planId: string,
+  ): Promise<void> {
     const plan = await this.repo.findPlanByIdOrThrow(planId);
-    this.assertPlanOwner(plan, userId);
-    this.assertPlanIsOwnerMutable(plan);
+    const isOwner = plan.user_id === userId;
+    const isManagingCoach =
+      !isOwner &&
+      userRole === UserRole.coach &&
+      plan.source === PlanSource.coach_assigned &&
+      plan.coach_id === userId;
+
+    if (isManagingCoach) {
+      await this.relationshipService.assertCoachClientAccess(
+        userId,
+        plan.user_id,
+      );
+    } else {
+      this.assertPlanOwner(plan, userId);
+      this.assertPlanIsOwnerMutable(plan);
+    }
+
     await this.repo.deletePlanById(planId);
   }
 

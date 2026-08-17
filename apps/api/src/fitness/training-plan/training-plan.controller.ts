@@ -197,7 +197,7 @@ export class TrainingPlanController {
   @Delete('plans/:id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Delete a training plan you own.' })
+  @ApiOperation({ summary: 'Delete an owned or coach-assigned training plan.' })
   @ApiResponse({ status: 200, description: 'Training plan deleted.' })
   @ApiResponse({ status: 403, description: 'Forbidden.' })
   @ApiResponse({ status: 404, description: 'Training plan not found.' })
@@ -205,7 +205,7 @@ export class TrainingPlanController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: JwtPayload,
   ) {
-    await this.trainingPlanService.deletePlan(user.sub, id);
+    await this.trainingPlanService.deletePlan(user.sub, user.role, id);
     return { message: 'Training plan deleted.' };
   }
 

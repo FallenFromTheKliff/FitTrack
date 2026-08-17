@@ -12,6 +12,7 @@ import type {
 import { isWorkoutRestDay } from "@fittrack/app-core";
 import {
   assignFitnessPlanMutationOptions,
+  activateFitnessPlanMutationOptions,
   createFitnessPlanMutationOptions,
   deleteFitnessPlanMutationOptions,
   fitnessClientPlansQueryOptions,
@@ -38,17 +39,31 @@ import {
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 const MAX_PLAN_WEEKS = MAX_WORKOUT_RECURRENCE_WEEKS;
-const GOAL: FitnessGoal = "maintenance";
+const GOAL_OPTIONS: Array<{ label: string; value: FitnessGoal }> = [
+  { label: "Bulking", value: "bulking" },
+  { label: "Cutting", value: "cutting" },
+  { label: "Maintenance", value: "maintenance" },
+  { label: "Sport-specific", value: "sport_specific" },
+];
+
+const GOAL_LABELS: Record<FitnessGoal, string> = {
+  bulking: "Bulking",
+  cutting: "Cutting",
+  maintenance: "Maintenance",
+  sport_specific: "Sport-specific",
+};
 
 type ProgramConfirmation =
   | {
       kind: "create" | "update";
       title: string;
+      goal: FitnessGoal;
       weeks: number;
       workoutDays: number;
       restDays: number;
     }
   | { kind: "delete"; planId: string; title: string }
+  | { kind: "activate"; planId: string; title: string }
   | null;
 
 type DraftExercise = WorkoutDraftExercise;
@@ -95,6 +110,7 @@ function toPlanInput(
   title: string,
   durationWeeks: number,
   draftWeeks: DraftWeeks,
+  goal: FitnessGoal,
 ): CreateTrainingPlanInput {
   const schedule = Object.entries(draftWeeks)
     .flatMap(([weekNumber, days]) =>
@@ -124,7 +140,7 @@ function toPlanInput(
       ...Object.values(draftWeeks).map((days) => Object.keys(days).length),
     ),
     durationWeeks: Math.max(1, Math.min(MAX_PLAN_WEEKS, durationWeeks)),
-    goal: GOAL,
+    goal,
     schedule,
     title: title.trim(),
   };
@@ -182,6 +198,7 @@ export function CoachClientWorkoutPrograms({
   const [editorOpen, setEditorOpen] = useState(false);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [title, setTitle] = useState("Client weekly split");
+  const [goal, setGoal] = useState<FitnessGoal>("maintenance");
   const [durationWeeks, setDurationWeeks] = useState(1);
   const [recurrenceMode, setRecurrenceMode] =
     useState<WorkoutRecurrenceMode>("this_week");
@@ -213,6 +230,9 @@ export function CoachClientWorkoutPrograms({
     ...fitnessPlanDetailQueryOptions(webApiClient, selectedPlanId ?? undefined),
     enabled: editorOpen && Boolean(selectedPlanId),
   });
+  const activateMutation = useMutation(
+    activateFitnessPlanMutationOptions(webApiClient, queryClient),
+  );
   const createMutation = useMutation(
     createFitnessPlanMutationOptions(webApiClient, queryClient),
   );
@@ -275,6 +295,7 @@ export function CoachClientWorkoutPrograms({
       .slice(0, 18);
   }, [exerciseSearch, exercises]);
   const isSaving =
+    activateMutation.isPending ||
     createMutation.isPending ||
     updateMutation.isPending ||
     assignMutation.isPending ||
@@ -292,6 +313,7 @@ export function CoachClientWorkoutPrograms({
     const firstWeek = Math.min(...availableWeeks);
     const firstDay = Math.min(...Object.keys(nextWeeks[firstWeek] ?? {}).map(Number));
     setTitle(detailQuery.data.title);
+    setGoal(detailQuery.data.goal);
     setDurationWeeks(Math.max(1, Math.min(MAX_PLAN_WEEKS, detailQuery.data.durationWeeks)));
     setRecurrenceMode(
       canRepeatThroughPaidPeriod && detailQuery.data.durationWeeks > 1
@@ -310,6 +332,7 @@ export function CoachClientWorkoutPrograms({
     hydratedPlanIdRef.current = null;
     setEditorOpen(false);
     setSelectedPlanId(null);
+    setGoal("maintenance");
     setDraftWeeks(createInitialDraftWeeks());
     setDurationWeeks(1);
     setRecurrenceMode("this_week");
@@ -325,6 +348,7 @@ export function CoachClientWorkoutPrograms({
     hydratedPlanIdRef.current = null;
     setSelectedPlanId(null);
     setTitle("Client weekly split");
+    setGoal("maintenance");
     setDurationWeeks(1);
     setRecurrenceMode("this_week");
     setDraftWeeks(createInitialDraftWeeks());
@@ -341,6 +365,7 @@ export function CoachClientWorkoutPrograms({
     if (!canManage) return;
     hydratedPlanIdRef.current = null;
     setSelectedPlanId(planId);
+    setGoal("maintenance");
     setEditorError("");
     setActionError("");
     setMessage("");
@@ -493,7 +518,7 @@ export function CoachClientWorkoutPrograms({
 
   const validateProgramDraft = () => {
     setEditorError("");
-    const input = toPlanInput(title, durationWeeks, draftWeeks);
+    const input = toPlanInput(title, durationWeeks, draftWeeks, goal);
 
     if (!input.title) {
       setEditorError("Give this program a clear name.");
@@ -520,6 +545,7 @@ export function CoachClientWorkoutPrograms({
     if (!input) return;
     setConfirmation({
       kind: selectedPlanId ? "update" : "create",
+      goal: input.goal,
       restDays: draftSummary.restDays,
       title: input.title,
       weeks: durationWeeks,
@@ -593,6 +619,26 @@ export function CoachClientWorkoutPrograms({
     }
   };
 
+  const activateProgram = async (planId: string) => {
+    if (!canManage || !submitGuard.tryAcquire()) return;
+    setActionError("");
+    try {
+      await activateMutation.mutateAsync({ planId, userId: coachUserId });
+      await plansQuery.refetch();
+      setConfirmation(null);
+      setMessage("Client program activated.");
+    } catch (error) {
+      setConfirmation(null);
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : "Unable to activate this client program.",
+      );
+    } finally {
+      submitGuard.release();
+    }
+  };
+
   const input = fieldStyle(colors);
   const isLoading = plansQuery.isLoading || exercisesQuery.isLoading;
 
@@ -638,11 +684,24 @@ export function CoachClientWorkoutPrograms({
                   {plan.title}
                 </FitText>
                 <FitText excludeGlobalScale style={{ color: colors.textMuted, fontSize: 10.5 }}>
-                  {plan.daysPerWeek} day split - {plan.durationWeeks} weeks - {plan.isActive ? "Active" : "Inactive"}
+                  {GOAL_LABELS[plan.goal]} - {plan.daysPerWeek} day split - {plan.durationWeeks} weeks - {plan.isActive ? "Active" : "Inactive"}
                 </FitText>
               </div>
               {canManage ? (
                 <div style={{ display: "flex", flexShrink: 0, gap: 5 }}>
+                  {!plan.isActive ? (
+                    <FitButton
+                      label="SET ACTIVE"
+                      onClick={() => {
+                        setActionError("");
+                        setMessage("");
+                        setConfirmation({ kind: "activate", planId: plan.id, title: plan.title });
+                      }}
+                      style={{ minHeight: 32, paddingInline: 8 }}
+                      textStyle={{ fontSize: 9, fontWeight: 850 }}
+                      variant="chip"
+                    />
+                  ) : null}
                   <FitButton
                     aria-label={`Edit ${plan.title}`}
                     icon={Pencil}
@@ -658,6 +717,11 @@ export function CoachClientWorkoutPrograms({
                     iconOnly
                     label={`Delete ${plan.title}`}
                     onClick={() => {
+                      if (plan.isActive) {
+                        setMessage("");
+                        setActionError("Set another client program active before deleting this one.");
+                        return;
+                      }
                       setActionError("");
                       setMessage("");
                       setConfirmation({ kind: "delete", planId: plan.id, title: plan.title });
@@ -737,6 +801,23 @@ export function CoachClientWorkoutPrograms({
               placeholder="Strength foundation"
               style={input}
               value={title}
+            />
+          </label>
+
+          <label style={{ display: "grid", gap: 5 }}>
+            <FitText as="span" excludeGlobalScale style={{ color: colors.textMuted, fontSize: 10, fontWeight: 850, letterSpacing: "0.04em" }}>
+              PROGRAM GOAL
+            </FitText>
+            <FitSelect
+              aria-label="Program goal"
+              compact
+              fullWidth
+              onChange={(event) => {
+                setGoal(event.target.value as FitnessGoal);
+                setEditorError("");
+              }}
+              options={GOAL_OPTIONS}
+              value={goal}
             />
           </label>
 
@@ -1044,13 +1125,31 @@ export function CoachClientWorkoutPrograms({
             <FitButton disabled={isSaving} label="CANCEL" onClick={() => setConfirmation(null)} variant="ghost" />
             <FitButton
               disabled={isSaving}
-              label={confirmation?.kind === "delete" ? "DELETE PROGRAM" : confirmation?.kind === "update" ? "CONFIRM UPDATE" : "CONFIRM CREATE"}
+              label={
+                confirmation?.kind === "activate"
+                  ? "SET ACTIVE"
+                  : confirmation?.kind === "delete"
+                    ? "DELETE PROGRAM"
+                    : confirmation?.kind === "update"
+                      ? "CONFIRM UPDATE"
+                      : "CONFIRM CREATE"
+              }
               loading={isSaving}
-              loadingLabel={confirmation?.kind === "delete" ? "DELETING..." : "SAVING..."}
+              loadingLabel={
+                confirmation?.kind === "activate"
+                  ? "ACTIVATING..."
+                  : confirmation?.kind === "delete"
+                    ? "DELETING..."
+                    : "SAVING..."
+              }
               onClick={() => {
                 if (!confirmation) return;
                 if (confirmation.kind === "delete") {
                   void deleteProgram(confirmation.planId);
+                  return;
+                }
+                if (confirmation.kind === "activate") {
+                  void activateProgram(confirmation.planId);
                   return;
                 }
                 void saveProgram();
@@ -1063,30 +1162,53 @@ export function CoachClientWorkoutPrograms({
         isOpen={Boolean(confirmation)}
         maxWidth={500}
         onClose={() => { if (!isSaving) setConfirmation(null); }}
-        subtitle={confirmation?.kind === "delete" ? "This removes the client-specific program only." : "Review the workout structure before it is assigned."}
-        title={confirmation?.kind === "delete" ? "Delete client program?" : confirmation?.kind === "update" ? "Update client program?" : "Create client program?"}
+        subtitle={
+          confirmation?.kind === "activate"
+            ? "The current active client program will become inactive."
+            : confirmation?.kind === "delete"
+              ? "This removes the client-specific program only."
+              : "Review the workout structure before it is assigned."
+        }
+        title={
+          confirmation?.kind === "activate"
+            ? "Set active client program?"
+            : confirmation?.kind === "delete"
+              ? "Delete client program?"
+              : confirmation?.kind === "update"
+                ? "Update client program?"
+                : "Create client program?"
+        }
       >
         {confirmation ? (
           <div style={{ display: "grid", gap: 9 }}>
             <FitText excludeGlobalScale style={{ color: colors.textPrimary, fontSize: 13, fontWeight: 850 }}>
               {confirmation.title}
             </FitText>
-            {confirmation.kind === "delete" ? (
+            {confirmation.kind === "activate" ? (
+              <FitText excludeGlobalScale style={{ color: colors.textSecondary, fontSize: 11, lineHeight: 1.45 }}>
+                Set <strong>{confirmation.title}</strong> as the client&apos;s active program. Their current active plan will become inactive.
+              </FitText>
+            ) : confirmation.kind === "delete" ? (
               <FitText excludeGlobalScale style={{ color: colors.danger, fontSize: 11, lineHeight: 1.45 }}>
                 This cannot be undone. Paid coaching sessions and appointments are not deleted.
               </FitText>
             ) : (
-              <div style={{ display: "grid", gap: 6, gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
-                {[
-                  { label: "WEEKS", value: confirmation.weeks },
-                  { label: "WORKOUT DAYS", value: confirmation.workoutDays },
-                  { label: "REST DAYS", value: confirmation.restDays },
-                ].map((item) => (
-                  <div key={item.label} style={{ backgroundColor: colors.surfaceRaised, border: `1px solid ${colors.border}`, borderRadius: 8, display: "grid", gap: 3, padding: 10 }}>
-                    <FitText excludeGlobalScale style={{ color: colors.textMuted, fontSize: 9, fontWeight: 850 }}>{item.label}</FitText>
-                    <FitText excludeGlobalScale style={{ color: colors.textPrimary, fontSize: 15, fontWeight: 900 }}>{item.value}</FitText>
-                  </div>
-                ))}
+              <div style={{ display: "grid", gap: 8 }}>
+                <FitText excludeGlobalScale style={{ color: colors.textSecondary, fontSize: 11 }}>
+                  Goal: <strong>{GOAL_LABELS[confirmation.goal]}</strong>
+                </FitText>
+                <div style={{ display: "grid", gap: 6, gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+                  {[
+                    { label: "WEEKS", value: confirmation.weeks },
+                    { label: "WORKOUT DAYS", value: confirmation.workoutDays },
+                    { label: "REST DAYS", value: confirmation.restDays },
+                  ].map((item) => (
+                    <div key={item.label} style={{ backgroundColor: colors.surfaceRaised, border: `1px solid ${colors.border}`, borderRadius: 8, display: "grid", gap: 3, padding: 10 }}>
+                      <FitText excludeGlobalScale style={{ color: colors.textMuted, fontSize: 9, fontWeight: 850 }}>{item.label}</FitText>
+                      <FitText excludeGlobalScale style={{ color: colors.textPrimary, fontSize: 15, fontWeight: 900 }}>{item.value}</FitText>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>

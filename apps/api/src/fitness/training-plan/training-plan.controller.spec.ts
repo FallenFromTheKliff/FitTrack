@@ -103,10 +103,14 @@ describe('TrainingPlanController', () => {
     trainingPlanService.deletePlan.mockResolvedValue(undefined);
 
     await expect(
-      controller.deletePlan('plan-1', { sub: 'user-1' } as never),
+      controller.deletePlan(
+        'plan-1',
+        { role: UserRole.member, sub: 'user-1' } as never,
+      ),
     ).resolves.toEqual({ message: 'Training plan deleted.' });
     expect(trainingPlanService.deletePlan).toHaveBeenCalledWith(
       'user-1',
+      UserRole.member,
       'plan-1',
     );
   });

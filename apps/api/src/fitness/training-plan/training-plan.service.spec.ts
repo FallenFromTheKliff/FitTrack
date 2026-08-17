@@ -791,7 +791,7 @@ describe('TrainingPlanService', () => {
     repo.findPlanByIdOrThrow.mockResolvedValue(makePlan());
     repo.deletePlanById.mockResolvedValue(undefined);
 
-    await service.deletePlan('user-1', 'plan-1');
+    await service.deletePlan('user-1', UserRole.member, 'plan-1');
 
     expect(repo.deletePlanById).toHaveBeenCalledWith('plan-1');
   });
@@ -814,10 +814,29 @@ describe('TrainingPlanService', () => {
       }),
     );
 
-    await expect(service.deletePlan('user-1', 'plan-1')).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+    await expect(
+      service.deletePlan('user-1', UserRole.member, 'plan-1'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
     expect(repo.deletePlanById).not.toHaveBeenCalled();
+  });
+
+  it('allows the assigning coach to delete a plan for an active client', async () => {
+    repo.findPlanByIdOrThrow.mockResolvedValue(
+      makePlan({
+        user_id: 'member-1',
+        coach_id: 'coach-user-1',
+        source: PlanSource.coach_assigned,
+      }),
+    );
+    repo.deletePlanById.mockResolvedValue(undefined);
+
+    await service.deletePlan('coach-user-1', UserRole.coach, 'plan-1');
+
+    expect(relationshipService.assertCoachClientAccess).toHaveBeenCalledWith(
+      'coach-user-1',
+      'member-1',
+    );
+    expect(repo.deletePlanById).toHaveBeenCalledWith('plan-1');
   });
 
   it('returns a low-confidence baseline when no complete history exists', async () => {
