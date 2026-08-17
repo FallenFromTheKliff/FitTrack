@@ -290,6 +290,76 @@ describe('CoachingCommerceService', () => {
     });
   });
 
+  it('marks membership-card PayMongo returns as mobile when requested', async () => {
+    const idempotencyKey = 'attempt-card-mobile-1';
+    const createdHold = makeHold({
+      id: 'hold-card-mobile-1',
+      idempotency_key: idempotencyKey,
+      kind: CommerceCheckoutHoldKind.membership_card,
+      payment: {
+        ...makeHold().payment,
+        gateway_metadata: null,
+        id: 'payment-card-mobile-1',
+        idempotency_key: idempotencyKey,
+        payable_id: 'hold-card-mobile-1',
+      },
+      payment_id: 'payment-card-mobile-1',
+    });
+    const tx = {
+      $executeRaw: jest.fn(),
+      membershipCard: {
+        findFirst: jest.fn().mockResolvedValue(null),
+      },
+      commerceCheckoutHold: {
+        create: jest.fn().mockResolvedValue(createdHold),
+        findUniqueOrThrow: jest.fn().mockResolvedValue(createdHold),
+        update: jest.fn().mockResolvedValue(createdHold),
+      },
+      payment: {
+        create: jest.fn().mockResolvedValue(createdHold.payment),
+      },
+    };
+    commerceCheckoutHold.findUnique.mockResolvedValue(null);
+    prisma.$transaction.mockImplementation(
+      (callback: (value: unknown) => unknown) => callback(tx),
+    );
+    paymongoCheckoutService.createCheckoutSession.mockResolvedValue({
+      checkoutUrl: 'https://checkout.paymongo.com/card-mobile-1',
+      gatewayMetadata: {
+        checkout_url: 'https://checkout.paymongo.com/card-mobile-1',
+      },
+      providerRef: 'cs-card-mobile-1',
+    });
+    payment.update.mockResolvedValue({
+      ...createdHold.payment,
+      gateway_metadata: {
+        checkout_url: 'https://checkout.paymongo.com/card-mobile-1',
+      },
+    });
+
+    await service.createMembershipCardCheckout({
+      amount: new Prisma.Decimal('400'),
+      idempotencyKey,
+      returnTarget: 'mobile',
+      userId: 'member-1',
+    });
+
+    expect(paymongoCheckoutService.createCheckoutSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cancelQuery: {
+          client: 'mobile',
+          flow: 'membership-card',
+          hold_id: 'hold-card-mobile-1',
+        },
+        successQuery: {
+          client: 'mobile',
+          flow: 'membership-card',
+          hold_id: 'hold-card-mobile-1',
+        },
+      }),
+    );
+  });
+
   it('expires an old hold before creating a new one-time attempt', async () => {
     const expired = makeHold({
       expires_at: new Date('2020-01-01T00:00:00.000Z'),

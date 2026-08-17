@@ -4,6 +4,7 @@ import TimeAvailabilityModal from "@/components/modals/profile/TimeAvailabilityM
 import NoticeModal from "@/components/modals/shared/NoticeModal";
 import { TIME_SLOTS } from "@/data/bookings";
 import { type ProfileScreenController } from "@/hooks/profile/useProfileScreen";
+import { FITTRACK_PAYMENT_POLICY_SUMMARY } from "@fittrack/app-config";
 import { to12HourLabel } from "@fittrack/utils";
 
 type ProfileModalsProps = {
@@ -104,6 +105,21 @@ export default function ProfileModals({ controller }: ProfileModalsProps) {
           message={controller.membershipPaymentConfirmation.message}
           buttonLabel="Stay on Profile"
           onClose={() => controller.setMembershipPaymentConfirmation(null)}
+        />
+      ) : null}
+      {controller.isMember && controller.membershipPurchaseConfirmVisible ? (
+        <ConfirmModal
+          isVisible={controller.membershipPurchaseConfirmVisible}
+          title="Review membership card purchase"
+          message={`Permanent ${controller.membershipCardPriceLabel} membership card.\n\n${FITTRACK_PAYMENT_POLICY_SUMMARY}\n\nMember access and Attendance QR unlock only after PayMongo confirms the payment.`}
+          yesLabel="ACCEPT & CONTINUE"
+          noLabel="CANCEL"
+          isDestructive={false}
+          isLoading={controller.isMembershipCardPurchasePending}
+          loadingLabel="OPENING CHECKOUT..."
+          loadingTitle="Opening checkout"
+          onYes={controller.handlePurchaseMembershipCard}
+          onNo={() => controller.setMembershipPurchaseConfirmVisible(false)}
         />
       ) : null}
       {controller.isCoach ? (

@@ -184,7 +184,8 @@ function mapOperationsDashboard(
 
 function toPurchaseMembershipCardRequest(payload: PurchaseMembershipCardInput) {
   return {
-    provider: payload.provider
+    provider: payload.provider,
+    ...(payload.returnTarget ? { return_target: payload.returnTarget } : {})
   };
 }
 

@@ -301,12 +301,33 @@ function resolveMembershipCardContent(variant: PaymentReturnVariant): PaymentRet
     };
 }
 
+function resolveMobileMembershipCardContent(
+  variant: PaymentReturnVariant,
+): PaymentReturnContent {
+  const base = resolveMembershipCardContent(variant);
+  return {
+    ...base,
+    body:
+      variant === "success"
+        ? "PayMongo returned you to FitTrack. Reopen the mobile app so it can verify the payment with your authenticated account before activating access."
+        : "The PayMongo checkout was not completed. Reopen the mobile app to keep membership access unchanged and retry later if needed.",
+    footerNote:
+      "This public page never activates membership access. The FitTrack mobile app must verify the checkout hold after you return.",
+    heroSubtitle:
+      "The browser redirect is only a handoff. Final membership status belongs to the authenticated FitTrack app.",
+    primaryActionHref: "#",
+    primaryActionLabel: "OPEN FITTRACK APP",
+  };
+}
+
 export function PaymentReturnPage({ variant }: { variant: PaymentReturnVariant }) {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const [storedHold, setStoredHold] = useState<StoredCommerceCheckoutHold | null>(null);
   const reconcileAttemptedHoldId = useRef<string | null>(null);
+  const mobileDeepLinkAttemptRef = useRef<string | null>(null);
   const queryHoldId = searchParams.get("hold_id") ?? searchParams.get("checkout_hold_id");
+  const isMobileReturn = searchParams.get("client") === "mobile";
 
   useEffect(() => {
     setStoredHold(readCommerceCheckoutHold());
@@ -331,6 +352,7 @@ export function PaymentReturnPage({ variant }: { variant: PaymentReturnVariant }
   const holdQuery = useQuery({
     enabled:
       variant === "success" &&
+      !isMobileReturn &&
       Boolean(holdId) &&
       isReconcileSuccess,
     queryFn: () => webApiClient.commerceCheckout.getHoldStatus(holdId!),
@@ -341,6 +363,7 @@ export function PaymentReturnPage({ variant }: { variant: PaymentReturnVariant }
 
   useEffect(() => {
     if (
+      isMobileReturn ||
       variant !== "success" ||
       !holdId ||
       reconcileAttemptedHoldId.current === holdId
@@ -350,29 +373,31 @@ export function PaymentReturnPage({ variant }: { variant: PaymentReturnVariant }
 
     reconcileAttemptedHoldId.current = holdId;
     reconcileHold(holdId);
-  }, [holdId, reconcileHold, variant]);
+  }, [holdId, isMobileReturn, reconcileHold, variant]);
 
   const latestAttempt = selectLatestCheckoutAttempt(
     reconciledAttempt,
     holdQuery.data,
   );
 
-  const checkoutState: CheckoutHoldState | null | undefined =
-    isReconcileError
+  const checkoutState: CheckoutHoldState | null | undefined = isMobileReturn
+    ? null
+    : isReconcileError
       ? "error"
       : isReconciling
         ? "pending"
         : holdQuery.isError
-      ? holdQuery.isFetching
-        ? "retry"
-        : "error"
-      : latestAttempt?.state === "pending" &&
-          (latestAttempt.expiresAt ?? matchingStoredHold?.expiresAt) &&
-          Date.parse(latestAttempt.expiresAt ?? matchingStoredHold?.expiresAt ?? "") <= Date.now()
-        ? "expired"
-        : latestAttempt?.state ?? (holdQuery.isFetching ? "pending" : undefined);
+          ? holdQuery.isFetching
+            ? "retry"
+            : "error"
+          : latestAttempt?.state === "pending" &&
+              (latestAttempt.expiresAt ?? matchingStoredHold?.expiresAt) &&
+              Date.parse(latestAttempt.expiresAt ?? matchingStoredHold?.expiresAt ?? "") <= Date.now()
+            ? "expired"
+            : latestAttempt?.state ?? (holdQuery.isFetching ? "pending" : undefined);
 
   useEffect(() => {
+    if (isMobileReturn) return;
     if (variant === "cancel") {
       clearCommerceCheckoutHold(holdId);
       return;
@@ -382,22 +407,25 @@ export function PaymentReturnPage({ variant }: { variant: PaymentReturnVariant }
       clearCommerceCheckoutHold(holdId);
       void queryClient.invalidateQueries();
     }
-  }, [checkoutState, holdId, queryClient, variant]);
+  }, [checkoutState, holdId, isMobileReturn, queryClient, variant]);
 
   useEffect(() => {
-    if (checkoutState !== "succeeded") return;
+    if (isMobileReturn || checkoutState !== "succeeded") return;
     return installCompletedCheckoutHistoryGuard();
-  }, [checkoutState]);
+  }, [checkoutState, isMobileReturn]);
 
   const baseContent = useMemo(() => {
     const flow = searchParams.get("flow");
 
+    if (isMobileReturn && flow === "membership-card") {
+      return resolveMobileMembershipCardContent(variant);
+    }
     if (flow === "membership-card") {
       return resolveMembershipCardContent(variant);
     }
 
     return resolveGenericContent(variant);
-  }, [searchParams, variant]);
+  }, [isMobileReturn, searchParams, variant]);
   const content = useMemo(
     () =>
       resolveCheckoutHoldContent(
@@ -407,14 +435,43 @@ export function PaymentReturnPage({ variant }: { variant: PaymentReturnVariant }
       ),
     [baseContent, checkoutState, holdId],
   );
-  const primaryAction = resolveCompletedCheckoutReturnAction(
-    {
-      href: content.primaryActionHref,
-      label: content.primaryActionLabel,
-    },
-    checkoutState,
-    latestAttempt,
-  );
+  const mobileDeepLink = isMobileReturn
+    ? `fittrack://profile?checkout_result=${variant}&hold_id=${encodeURIComponent(holdId ?? "")}`
+    : null;
+  const openMobileApp = () => {
+    if (!mobileDeepLink || typeof window === "undefined") return;
+    window.location.assign(mobileDeepLink);
+  };
+
+  useEffect(() => {
+    if (!isMobileReturn || !mobileDeepLink) return;
+    if (mobileDeepLinkAttemptRef.current === mobileDeepLink) return;
+    mobileDeepLinkAttemptRef.current = mobileDeepLink;
+    try {
+      window.location.assign(mobileDeepLink);
+    } catch {
+      // The visible OPEN FITTRACK APP action remains as the fallback.
+    }
+  }, [isMobileReturn, mobileDeepLink]);
+
+  const primaryAction: {
+    href?: string;
+    label: string;
+    onClick?: () => void;
+  } = isMobileReturn
+    ? {
+        href: undefined,
+        label: "OPEN FITTRACK APP",
+        onClick: openMobileApp,
+      }
+    : resolveCompletedCheckoutReturnAction(
+        {
+          href: content.primaryActionHref,
+          label: content.primaryActionLabel,
+        },
+        checkoutState,
+        latestAttempt,
+      );
 
   return (
     <AuthStatusPage
@@ -425,8 +482,12 @@ export function PaymentReturnPage({ variant }: { variant: PaymentReturnVariant }
       detailItems={content.detailItems}
       footerNote={content.footerNote}
       heroAccent={content.heroAccent}
-      heroCalloutBody="If you started this in the member app, reopen the original FitTrack screen after the redirect and refresh there. The server-side payment status remains the source of truth."
-      heroCalloutTitle="After the browser return"
+      heroCalloutBody={
+        isMobileReturn
+          ? "Use OPEN FITTRACK APP to return to the authenticated mobile payment check."
+          : "If you started this in the member app, reopen the original FitTrack screen after the redirect and refresh there. The server-side payment status remains the source of truth."
+      }
+      heroCalloutTitle={isMobileReturn ? "Return to mobile" : "After the browser return"}
       heroStats={content.heroStats}
       heroSubtitle={content.heroSubtitle}
       heroTitle={content.heroTitle}
@@ -436,10 +497,11 @@ export function PaymentReturnPage({ variant }: { variant: PaymentReturnVariant }
         href: primaryAction.href,
         icon: ArrowLeft,
         label: primaryAction.label,
+        onClick: primaryAction.onClick,
         replace: checkoutState === "succeeded",
       }}
       secondaryAction={
-        checkoutState === "error" && holdId
+        !isMobileReturn && checkoutState === "error" && holdId
           ? {
               label: isReconciling
                 ? "Verifying payment..."

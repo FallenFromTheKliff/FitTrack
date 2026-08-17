@@ -77,6 +77,7 @@ export class MembershipCardService {
     return this.commerceCheckoutService.createMembershipCardCheckout({
       amount: price,
       idempotencyKey: normalizedIdempotencyKey,
+      returnTarget: dto.return_target ?? 'web',
       userId,
     });
   }

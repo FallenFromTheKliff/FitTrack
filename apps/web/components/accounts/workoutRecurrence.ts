@@ -27,6 +27,36 @@ export type WorkoutDraftWeeks = Record<
   Record<number, WorkoutDraftDay>
 >;
 
+export function isConfiguredWorkoutDay(day: WorkoutDraftDay) {
+  return !isWorkoutRestDay(day) && day.exercises.length > 0;
+}
+
+export function countConfiguredWorkoutDays(
+  days: Record<number, WorkoutDraftDay>,
+) {
+  return Object.values(days).filter(isConfiguredWorkoutDay).length;
+}
+
+export function countConfiguredWorkoutDaysPerWeek(
+  weeks: WorkoutDraftWeeks,
+) {
+  return Math.max(
+    0,
+    ...Object.values(weeks).map((days) => countConfiguredWorkoutDays(days)),
+  );
+}
+
+export function setWorkoutDayExercises(
+  day: WorkoutDraftDay,
+  exercises: WorkoutDraftExercise[],
+): WorkoutDraftDay {
+  return {
+    ...day,
+    exercises,
+    isRestDay: exercises.length === 0,
+  };
+}
+
 function toGymDateParts(value: Date) {
   const parts = new Intl.DateTimeFormat("en-US", {
     day: "2-digit",

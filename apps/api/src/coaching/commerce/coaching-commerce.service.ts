@@ -109,6 +109,7 @@ export type SubscriptionCheckoutInput = {
 export type MembershipCardCheckoutInput = {
   amount: Prisma.Decimal;
   idempotencyKey: string;
+  returnTarget?: 'web' | 'mobile';
   userId: string;
 };
 
@@ -414,7 +415,10 @@ export class CoachingCommerceService {
     const idempotencyKey = this.normalizeIdempotencyKey(input.idempotencyKey);
     const existing = await this.findHoldByIdempotencyKey(idempotencyKey);
     if (existing) {
-      return this.resumeOrReturnExisting(existing, 'membership card');
+      return this.resumeOrReturnExisting(existing, 'membership card', {
+        flow: 'membership-card',
+        client: input.returnTarget ?? 'web',
+      });
     }
 
     const expiresAt = new Date(
@@ -452,13 +456,19 @@ export class CoachingCommerceService {
       ) {
         const duplicate = await this.findHoldByIdempotencyKey(idempotencyKey);
         if (duplicate) {
-          return this.resumeOrReturnExisting(duplicate, 'membership card');
+          return this.resumeOrReturnExisting(duplicate, 'membership card', {
+            flow: 'membership-card',
+            client: input.returnTarget ?? 'web',
+          });
         }
       }
       throw error;
     }
 
-    return this.startPaymongoCheckout(created, 'Membership card');
+    return this.startPaymongoCheckout(created, 'Membership card', {
+      flow: 'membership-card',
+      client: input.returnTarget ?? 'web',
+    });
   }
 
   async expireHolds(now = new Date()): Promise<number> {
@@ -539,6 +549,7 @@ export class CoachingCommerceService {
   private async startPaymongoCheckout(
     hold: CheckoutHoldWithPayment,
     description: string,
+    extraReturnQuery: Record<string, string> = {},
   ): Promise<CoachingCheckoutResponse> {
     if (!hold.payment) {
       throw new ConflictException({
@@ -557,7 +568,7 @@ export class CoachingCommerceService {
       const checkout = await this.paymongoCheckoutService.createCheckoutSession(
         {
           amount: Math.round(Number(hold.payment.amount) * 100),
-          cancelQuery: { hold_id: hold.id },
+          cancelQuery: { hold_id: hold.id, ...extraReturnQuery },
           description,
           idempotencyKey: hold.payment.idempotency_key,
           metadata: {
@@ -566,7 +577,7 @@ export class CoachingCommerceService {
             kind: hold.kind,
             payment_id: hold.payment.id,
           },
-          successQuery: { hold_id: hold.id },
+          successQuery: { hold_id: hold.id, ...extraReturnQuery },
         },
       );
       const payment = await this.prisma.payment.update({
@@ -698,13 +709,14 @@ export class CoachingCommerceService {
   private resumeOrReturnExisting(
     hold: CheckoutHoldWithPayment,
     description: string,
+    extraReturnQuery: Record<string, string> = {},
   ): Promise<CoachingCheckoutResponse> {
     if (
       hold.status === CommerceCheckoutHoldStatus.held &&
       hold.payment?.status === PaymentStatus.pending &&
       !checkoutUrlFromMetadata(hold.payment.gateway_metadata)
     ) {
-      return this.startPaymongoCheckout(hold, description);
+      return this.startPaymongoCheckout(hold, description, extraReturnQuery);
     }
 
     return Promise.resolve(this.toResponse(hold));

@@ -76,9 +76,36 @@ describe('MembershipCardService', () => {
     ).toHaveBeenCalledWith({
       amount: new Prisma.Decimal('400'),
       idempotencyKey: '44444444-4444-4444-8444-444444444444',
+      returnTarget: 'web',
       userId: 'member-1',
     });
     expect(result).toEqual(checkout);
+  });
+
+  it('passes the mobile return target through membership-card checkout creation', async () => {
+    repo.findMembershipOwnerByIdOrThrow.mockResolvedValue({
+      id: 'member-1',
+      role: UserRole.member,
+      deletedAt: null,
+    });
+    repo.findMembershipCardByUserId.mockResolvedValue(null);
+    repo.getMembershipCardPrice.mockResolvedValue(new Prisma.Decimal('400'));
+    commerceCheckoutService.createMembershipCardCheckout.mockResolvedValue({
+      checkout_url: 'https://checkout.paymongo.test/card-mobile',
+    });
+
+    await service.purchase(
+      'member-1',
+      { provider: PaymentProvider.paymongo, return_target: 'mobile' },
+      '55555555-5555-4555-8555-555555555555',
+    );
+
+    expect(commerceCheckoutService.createMembershipCardCheckout).toHaveBeenCalledWith({
+      amount: new Prisma.Decimal('400'),
+      idempotencyKey: '55555555-5555-4555-8555-555555555555',
+      returnTarget: 'mobile',
+      userId: 'member-1',
+    });
   });
 
   it('retires member cash membership-card requests without creating access or payment records', async () => {

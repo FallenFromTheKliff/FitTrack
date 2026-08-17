@@ -1,7 +1,8 @@
-import { Clipboard, Linking, Platform } from "react-native";
+import { AppState, Clipboard, Linking, Platform } from "react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useIsFocused } from "@react-navigation/native";
-import { useRouter } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { mapProfileToAuthUser } from "@fittrack/app-core";
 import { useTimedMessage } from "@fittrack/hooks";
@@ -14,6 +15,7 @@ import type {
   MuscleMasteryRecord,
   FitnessRankingVisibility
 } from "@fittrack/types";
+import type { CommerceCheckoutAttempt } from "@fittrack/api-client";
 import {
   queryKeys,
   attendanceQrQueryOptions,
@@ -227,8 +229,20 @@ type MembershipPaymentConfirmation = {
   title: string;
 };
 
+const MEMBERSHIP_CHECKOUT_ATTEMPT_STORAGE_KEY =
+  "fittrack.mobile.membership-card-checkout.v1";
+
+function normalizeSearchParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
 export function useProfileScreen() {
   const router = useRouter();
+  const { checkout_result: checkoutResultParam, hold_id: holdIdParam } =
+    useLocalSearchParams<{
+      checkout_result?: string | string[];
+      hold_id?: string | string[];
+    }>();
   const { user, updateUser } = useAuth();
   const { colors, resetAppearance } = useTheme();
   const isFocused = useIsFocused();
@@ -259,8 +273,13 @@ export function useProfileScreen() {
   const [availabilityTimeTarget, setAvailabilityTimeTarget] = useState<"start" | "end">("start");
   const [membershipPaymentConfirmation, setMembershipPaymentConfirmation] =
     useState<MembershipPaymentConfirmation | null>(null);
+  const [membershipPurchaseConfirmVisible, setMembershipPurchaseConfirmVisible] =
+    useState(false);
   const [membershipCardPurchaseProvider, setMembershipCardPurchaseProvider] = useState<"paymongo" | null>(null);
   const membershipAttemptIdempotencyKeyRef = useRef<string | null>(null);
+  const membershipPurchaseInFlightRef = useRef(false);
+  const membershipReconcileInFlightRef = useRef(false);
+  const handledMembershipReturnHoldIdRef = useRef<string | null>(null);
   const [rankingPrivacyTarget, setRankingPrivacyTarget] = useState<FitnessRankingVisibility | null>(null);
 
   useEffect(() => {
@@ -463,6 +482,7 @@ export function useProfileScreen() {
     onSucceeded: async () => {
       membershipAttemptIdempotencyKeyRef.current = null;
       setMembershipCardPurchaseProvider(null);
+      await AsyncStorage.removeItem(MEMBERSHIP_CHECKOUT_ATTEMPT_STORAGE_KEY);
       await refreshAuthUserFromProfile();
       showMessage("Membership card activated.");
       setMembershipPaymentConfirmation({
@@ -473,6 +493,7 @@ export function useProfileScreen() {
     onTerminal: async (_, state) => {
       membershipAttemptIdempotencyKeyRef.current = null;
       setMembershipCardPurchaseProvider(null);
+      await AsyncStorage.removeItem(MEMBERSHIP_CHECKOUT_ATTEMPT_STORAGE_KEY);
       showMessage(
         state === "expired"
           ? "Checkout expired. No membership access was granted."
@@ -480,6 +501,121 @@ export function useProfileScreen() {
       );
     },
   });
+  const membershipCheckoutReturnRef = useRef(membershipCheckoutReturn);
+  membershipCheckoutReturnRef.current = membershipCheckoutReturn;
+
+  const resumeStoredMembershipCheckout = useCallback(async () => {
+    if (!isMember || membershipReconcileInFlightRef.current) return;
+
+    const raw = await AsyncStorage.getItem(MEMBERSHIP_CHECKOUT_ATTEMPT_STORAGE_KEY);
+    if (!raw) return;
+
+    try {
+      const parsed = JSON.parse(raw) as Partial<CommerceCheckoutAttempt>;
+      if (
+        parsed.kind !== "membership_card" ||
+        parsed.state !== "pending" ||
+        typeof parsed.holdId !== "string"
+      ) {
+        await AsyncStorage.removeItem(MEMBERSHIP_CHECKOUT_ATTEMPT_STORAGE_KEY);
+        return;
+      }
+
+      const pendingAttempt = parsed as CommerceCheckoutAttempt;
+      membershipReconcileInFlightRef.current = true;
+      membershipCheckoutReturnRef.current.start(pendingAttempt);
+      const next = await mobileApiClient.commerceCheckout.reconcileHold(
+        pendingAttempt.holdId,
+      );
+      if (isMounted.current) membershipCheckoutReturnRef.current.start(next);
+    } catch {
+      // Keep the stored pending attempt for the next app-active retry.
+    } finally {
+      membershipReconcileInFlightRef.current = false;
+    }
+  }, [isMember]);
+
+  useEffect(() => {
+    if (!isFocused || !isMember) return;
+    void resumeStoredMembershipCheckout();
+  }, [isFocused, isMember, resumeStoredMembershipCheckout]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") void resumeStoredMembershipCheckout();
+    });
+
+    return () => subscription.remove();
+  }, [resumeStoredMembershipCheckout]);
+
+  const checkoutResult = normalizeSearchParam(checkoutResultParam);
+  const checkoutHoldId = normalizeSearchParam(holdIdParam);
+
+  useEffect(() => {
+    if (
+      !isFocused ||
+      !isMember ||
+      !checkoutHoldId ||
+      !checkoutResult ||
+      handledMembershipReturnHoldIdRef.current === checkoutHoldId
+    ) {
+      return;
+    }
+
+    handledMembershipReturnHoldIdRef.current = checkoutHoldId;
+    const clearReturnParams = () => router.replace("/(tabs)/profile");
+
+    if (checkoutResult === "cancel") {
+      membershipAttemptIdempotencyKeyRef.current = null;
+      setMembershipCardPurchaseProvider(null);
+      void AsyncStorage.removeItem(MEMBERSHIP_CHECKOUT_ATTEMPT_STORAGE_KEY);
+      membershipCheckoutReturnRef.current.clear();
+      clearReturnParams();
+      showMessage("Checkout was not completed. No membership access was granted.");
+      return;
+    }
+
+    if (checkoutResult !== "success") return;
+
+    if (membershipReconcileInFlightRef.current) {
+      clearReturnParams();
+      return;
+    }
+
+    let disposed = false;
+    membershipReconcileInFlightRef.current = true;
+    void mobileApiClient.commerceCheckout
+      .reconcileHold(checkoutHoldId)
+      .then((next) => {
+        if (disposed) return;
+        void AsyncStorage.setItem(
+          MEMBERSHIP_CHECKOUT_ATTEMPT_STORAGE_KEY,
+          JSON.stringify(next),
+        );
+        membershipCheckoutReturnRef.current.start(next);
+        showMessage("Payment returned. Verifying membership access...");
+      })
+      .catch(() => {
+        if (!disposed) {
+          showMessage("Unable to verify this payment yet. FitTrack will retry it when Profile is active.");
+        }
+      })
+      .finally(() => {
+        membershipReconcileInFlightRef.current = false;
+        if (!disposed) clearReturnParams();
+      });
+
+    return () => {
+      disposed = true;
+    };
+  }, [
+    checkoutHoldId,
+    checkoutResult,
+    isFocused,
+    isMember,
+    router,
+    showMessage,
+  ]);
 
   useEffect(() => {
     if (!isFocused || !isMember || !user?.id) return;
@@ -638,20 +774,28 @@ export function useProfileScreen() {
   }, [attendanceQrQuery.data?.qrValue, attendanceQrQuery.data?.reason, showMessage]);
 
   const handlePurchaseMembershipCard = useCallback(async () => {
-    if (!user?.id || !isMember || purchaseMembershipCardMutation.isPending) return;
+    if (
+      !user?.id ||
+      !isMember ||
+      purchaseMembershipCardMutation.isPending ||
+      membershipPurchaseInFlightRef.current
+    ) return;
 
+    membershipPurchaseInFlightRef.current = true;
     setMembershipCardPurchaseProvider("paymongo");
     const idempotencyKey =
       membershipAttemptIdempotencyKeyRef.current ??
       createCommerceAttemptIdempotencyKey();
     membershipAttemptIdempotencyKeyRef.current = idempotencyKey;
 
-    let checkoutStarted = false;
+    let checkoutAttemptPersisted = false;
+    let checkoutOpened = false;
     try {
       const result = await purchaseMembershipCardMutation.mutateAsync({
         payload: {
           provider: "paymongo",
           idempotencyKey,
+          returnTarget: "mobile",
         },
         userId: user.id
       });
@@ -660,34 +804,37 @@ export function useProfileScreen() {
         throw new Error("PayMongo did not return a checkout link. No membership access was granted.");
       }
 
-      await Linking.openURL(checkoutUrl);
-      checkoutStarted = true;
+      await AsyncStorage.setItem(
+        MEMBERSHIP_CHECKOUT_ATTEMPT_STORAGE_KEY,
+        JSON.stringify(result),
+      );
+      checkoutAttemptPersisted = true;
       membershipCheckoutReturn.start(result);
+      setMembershipPurchaseConfirmVisible(false);
+      await Linking.openURL(checkoutUrl);
+      checkoutOpened = true;
       showMessage("PayMongo checkout opened.");
-
-      setMembershipPaymentConfirmation({
-        title: "Checkout opened",
-        message: `Complete the ${membershipCardPriceLabel} PayMongo checkout. Return to Profile after payment; access activates only after confirmation.`,
-      });
     } catch (error: unknown) {
-      membershipAttemptIdempotencyKeyRef.current = null;
+      if (!checkoutAttemptPersisted) {
+        membershipAttemptIdempotencyKeyRef.current = null;
+      }
       showMessage(
-        error instanceof Error
+        checkoutAttemptPersisted
+          ? "PayMongo could not open. Your checkout is saved; tap Pay Online to retry it."
+          : error instanceof Error
           ? error.message
           : "Unable to open PayMongo checkout. No membership access was granted."
       );
     } finally {
-      if (isMounted.current && !checkoutStarted) {
+      membershipPurchaseInFlightRef.current = false;
+      if (isMounted.current && !checkoutOpened) {
         setMembershipCardPurchaseProvider(null);
       }
     }
   }, [
     isMember,
-    membershipCardPriceLabel,
     membershipCheckoutReturn,
-    membershipAttemptIdempotencyKeyRef,
     purchaseMembershipCardMutation,
-    refreshAuthUserFromProfile,
     showMessage,
     user?.id
   ]);
@@ -879,7 +1026,10 @@ export function useProfileScreen() {
     isCoach,
     isMember,
     isRefreshingAttendanceQr: refreshAttendanceQrMutation.isPending,
-    isMembershipCardPurchasePending: purchaseMembershipCardMutation.isPending,
+    isMembershipCardPurchasePending:
+      purchaseMembershipCardMutation.isPending ||
+      membershipCardPurchaseProvider === "paymongo",
+    membershipPurchaseConfirmVisible,
     isRankingPrivacySaving: updateRankingProfileMutation.isPending,
     isTerminating,
     memberSince,
@@ -910,6 +1060,7 @@ export function useProfileScreen() {
     setIsAvailabilityEditorOpen,
     setIsAvailabilityTimeOpen,
     setMembershipPaymentConfirmation,
+    setMembershipPurchaseConfirmVisible,
     setRankingPrivacyTarget,
     setTerminateVisible,
     statusMessage,

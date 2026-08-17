@@ -20,6 +20,9 @@ import ExerciseRestTimerModal from "@/components/workout/ExerciseRestTimerModal"
 import {
   DAY_NAMES,
   detailToDraft,
+  findEmptyDraftDay,
+  isDraftRestDay,
+  setDraftDayExercises,
   toPlanInput,
   type DraftDays,
   type DraftExercise,
@@ -122,7 +125,7 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
     setTitle("My weekly split");
     setGoal("maintenance");
     setDraftDays({
-      1: { exercises: [], focusLabel: "Monday training" },
+      1: { exercises: [], focusLabel: "Rest", isRestDay: true },
     });
     setActiveDraftDay(1);
     setBuilderOpen(true);
@@ -165,7 +168,8 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
         ...current,
         [dayOfWeek]: {
           exercises: [],
-          focusLabel: `${DAY_NAMES[dayOfWeek]} training`,
+          focusLabel: "Rest",
+          isRestDay: true,
         },
       };
     });
@@ -206,12 +210,12 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
       setBuilderError("Give this plan a clear name.");
       return;
     }
-    const emptyDay = input.schedule.find((day) => day.exercises.length === 0);
-    if (input.schedule.length === 0 || emptyDay) {
-      if (emptyDay) setActiveDraftDay(emptyDay.dayOfWeek);
+    const emptyDay = findEmptyDraftDay(draftDays);
+    if (input.schedule.length === 0 || emptyDay !== null) {
+      if (emptyDay !== null) setActiveDraftDay(emptyDay);
       setBuilderError(
-        emptyDay
-          ? `Add at least one exercise to ${DAY_NAMES[emptyDay.dayOfWeek]}.`
+        emptyDay !== null
+          ? `Add at least one exercise to ${DAY_NAMES[emptyDay]}.`
           : "Select at least one training day.",
       );
       return;
@@ -683,7 +687,13 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
               </FitText>
               <View style={{ flexDirection: "row", gap: 5 }}>
                 {DAY_NAMES.map((day, dayOfWeek) => {
-                  const selected = Boolean(draftDays[dayOfWeek]);
+                  const draftDay = draftDays[dayOfWeek];
+                  const selected = Boolean(draftDay);
+                  const configured = Boolean(
+                    draftDay &&
+                      !isDraftRestDay(draftDay) &&
+                      draftDay.exercises.length > 0,
+                  );
                   const active = activeDraftDay === dayOfWeek;
                   return (
                     <Pressable
@@ -701,14 +711,22 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
                       }}
                       style={{
                         alignItems: "center",
-                        backgroundColor: active
-                          ? `${colors.brand}24`
-                          : selected
-                            ? `${colors.brand}12`
-                            : colors.surfaceRaised,
-                        borderColor: selected ? colors.brand : colors.border,
+                        backgroundColor: configured
+                          ? `${colors.brand}12`
+                          : colors.surfaceRaised,
+                        borderColor: active
+                          ? configured
+                            ? colors.brand
+                            : colors.textSecondary
+                          : configured
+                            ? colors.brand
+                            : colors.border,
                         borderRadius: 8,
                         borderWidth: 1,
+                        shadowColor: active ? colors.textSecondary : undefined,
+                        shadowOffset: active ? { height: 0, width: 0 } : undefined,
+                        shadowOpacity: active ? 0.55 : 0,
+                        shadowRadius: active ? 2 : 0,
                         flex: 1,
                         minHeight: 38,
                         justifyContent: "center",
@@ -716,7 +734,7 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
                     >
                       <FitText
                         style={{
-                          color: selected ? colors.brand : colors.textMuted,
+                          color: configured ? colors.brand : colors.textMuted,
                           fontSize: 9.5,
                           fontWeight: "900",
                         }}
@@ -796,15 +814,13 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
                             setBuilderError("");
                             setDraftDays((current) => ({
                               ...current,
-                              [activeDraftDay]: {
-                                ...current[activeDraftDay],
-                                exercises: current[
-                                  activeDraftDay
-                                ].exercises.filter(
+                              [activeDraftDay]: setDraftDayExercises(
+                                current[activeDraftDay],
+                                current[activeDraftDay].exercises.filter(
                                   (item) =>
                                     item.exerciseId !== exercise.exerciseId,
                                 ),
-                              },
+                              ),
                             }));
                           }}
                         >
@@ -974,9 +990,9 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
                           setBuilderError("");
                           setDraftDays((current) => ({
                             ...current,
-                            [activeDraftDay]: {
-                              ...current[activeDraftDay],
-                              exercises: [
+                            [activeDraftDay]: setDraftDayExercises(
+                              current[activeDraftDay],
+                              [
                                 ...current[activeDraftDay].exercises,
                                 {
                                   exerciseId: exercise.id,
@@ -987,7 +1003,7 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
                                   sets: 3,
                                 },
                               ],
-                            },
+                            ),
                           }));
                         }}
                         style={{

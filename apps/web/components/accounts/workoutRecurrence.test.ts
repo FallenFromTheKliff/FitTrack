@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  countConfiguredWorkoutDaysPerWeek,
   findEmptyWorkoutDay,
   getRemainingPaidWorkoutWeeks,
   materializeRepeatedWorkoutWeeks,
+  setWorkoutDayExercises,
 } from "./workoutRecurrence";
 
 test("remaining paid workout weeks use the inclusive Manila gym date", () => {
@@ -81,4 +83,48 @@ test("recurrence preserves explicit rest-day state", () => {
   assert.equal(weeks[2][3].isRestDay, true);
   assert.equal(weeks[3][3].isRestDay, true);
   assert.equal(weeks[2][3].exercises.length, 0);
+});
+
+test("workout-day count ignores selected rest days", () => {
+  assert.equal(
+    countConfiguredWorkoutDaysPerWeek({
+      1: {
+        1: {
+          exercises: [
+            {
+              exerciseId: "exercise-1",
+              exerciseName: "Squat",
+              reps: 8,
+              restSeconds: 90,
+              sets: 3,
+            },
+          ],
+          focusLabel: "Lower body",
+          isRestDay: false,
+        },
+        3: { exercises: [], focusLabel: "Rest", isRestDay: true },
+      },
+      2: { 2: { exercises: [], focusLabel: "Rest", isRestDay: true } },
+    }),
+    1,
+  );
+});
+
+test("exercise edits promote and demote a day automatically", () => {
+  const restDay = { exercises: [], focusLabel: "Rest", isRestDay: true };
+  const exercise = {
+    exerciseId: "exercise-1",
+    exerciseName: "Squat",
+    reps: 8,
+    restSeconds: 90,
+    sets: 3,
+  };
+
+  const workoutDay = setWorkoutDayExercises(restDay, [exercise]);
+  assert.equal(workoutDay.isRestDay, false);
+  assert.equal(workoutDay.exercises.length, 1);
+
+  const returnedToRest = setWorkoutDayExercises(workoutDay, []);
+  assert.equal(returnedToRest.isRestDay, true);
+  assert.equal(returnedToRest.exercises.length, 0);
 });

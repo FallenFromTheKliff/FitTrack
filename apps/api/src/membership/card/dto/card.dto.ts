@@ -6,7 +6,7 @@ import {
   MembershipCardStatus,
   PaymentProvider,
 } from '@prisma/client';
-import { IsEnum, IsIn } from 'class-validator';
+import { IsEnum, IsIn, IsOptional } from 'class-validator';
 
 import { PaymentResponseDTO } from '../../payment/dto/payment.dto';
 
@@ -16,6 +16,11 @@ export class StartMembershipCardPurchaseDTO {
     message: 'provider must be paymongo for membership-card checkout',
   })
   provider: PaymentProvider;
+
+  @ApiPropertyOptional({ enum: ['web', 'mobile'], default: 'web' })
+  @IsOptional()
+  @IsIn(['web', 'mobile'])
+  return_target?: 'web' | 'mobile';
 }
 
 export class MembershipCardResponseDTO {

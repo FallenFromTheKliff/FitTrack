@@ -17,7 +17,6 @@ import { FitButton, FitCard, FitSection, FitText } from "@/components/fit";
 import PremiumFeatureGate from "@/components/membership/PremiumFeatureGate";
 import { type ProfileScreenController } from "@/hooks/profile/useProfileScreen";
 import type { FitnessRankingVisibility } from "@fittrack/types";
-import { FITTRACK_PAYMENT_POLICY_SUMMARY } from "@fittrack/app-config";
 
 type MemberProfileSectionsProps = {
   colors: {
@@ -180,13 +179,12 @@ export default function MemberProfileSections({ colors, controller, styles }: Me
             {controller.canPurchaseMembershipCard ? (
               <View style={{ gap: 10, marginTop: 12 }}>
                 <FitText style={{ fontSize: 11.5, lineHeight: 17, opacity: 0.76 }}>
-                  By continuing, you accept the active payment policy.{" "}
-                  {FITTRACK_PAYMENT_POLICY_SUMMARY}
+                  Secure PayMongo checkout. Member access activates after payment confirmation.
                 </FitText>
                 <FitButton
                   label={onlinePurchaseLabel}
                   variant="primary"
-                  onPress={() => void controller.handlePurchaseMembershipCard()}
+                  onPress={() => controller.setMembershipPurchaseConfirmVisible(true)}
                   disabled={controller.isMembershipCardPurchasePending}
                 />
                 <FitText style={{ fontSize: 12, lineHeight: 18, opacity: 0.78 }}>

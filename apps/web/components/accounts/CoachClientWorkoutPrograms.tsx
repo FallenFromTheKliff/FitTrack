@@ -31,6 +31,8 @@ import {
   materializeRepeatedWorkoutWeeks,
   MAX_WORKOUT_RECURRENCE_WEEKS,
   findEmptyWorkoutDay,
+  countConfiguredWorkoutDaysPerWeek,
+  setWorkoutDayExercises,
   setWorkoutDayKind,
   type WorkoutDraftDay,
   type WorkoutDraftExercise,
@@ -71,17 +73,17 @@ type DraftDay = WorkoutDraftDay;
 type DraftWeeks = WorkoutDraftWeeks;
 type WorkoutRecurrenceMode = "remaining_paid_period" | "this_week";
 
-function createEmptyDay(dayOfWeek: number): DraftDay {
+function createEmptyDay(): DraftDay {
   return {
     exercises: [],
-    focusLabel: `${DAY_NAMES[dayOfWeek]} training`,
-    isRestDay: false,
+    focusLabel: "Rest",
+    isRestDay: true,
   };
 }
 
 function createInitialDraftWeeks(): DraftWeeks {
   const dayOfWeek = new Date().getDay();
-  return { 1: { [dayOfWeek]: createEmptyDay(dayOfWeek) } };
+  return { 1: { [dayOfWeek]: createEmptyDay() } };
 }
 
 function detailToDraftWeeks(plan: TrainingPlanDetailRecord): DraftWeeks {
@@ -90,16 +92,20 @@ function detailToDraftWeeks(plan: TrainingPlanDetailRecord): DraftWeeks {
   for (const day of plan.scheduleDays) {
     const week = day.weekNumber || 1;
     weeks[week] ??= {};
+    const exercises = day.exercises.map((exercise) => ({
+      exerciseId: exercise.exerciseId,
+      exerciseName: exercise.exerciseName,
+      reps: exercise.reps ?? 10,
+      restSeconds: exercise.restSeconds,
+      sets: exercise.sets,
+    }));
     weeks[week][day.dayOfWeek] = {
-      exercises: day.exercises.map((exercise) => ({
-        exerciseId: exercise.exerciseId,
-        exerciseName: exercise.exerciseName,
-        reps: exercise.reps ?? 10,
-        restSeconds: exercise.restSeconds,
-        sets: exercise.sets,
-      })),
+      exercises,
       focusLabel: day.focusLabel ?? `${DAY_NAMES[day.dayOfWeek]} training`,
-      isRestDay: isWorkoutRestDay(day),
+      isRestDay:
+        exercises.length === 0
+          ? day.isRestDay !== false && isWorkoutRestDay(day)
+          : false,
     };
   }
 
@@ -135,10 +141,7 @@ function toPlanInput(
     );
 
   return {
-    daysPerWeek: Math.max(
-      0,
-      ...Object.values(draftWeeks).map((days) => Object.keys(days).length),
-    ),
+    daysPerWeek: countConfiguredWorkoutDaysPerWeek(draftWeeks),
     durationWeeks: Math.max(1, Math.min(MAX_PLAN_WEEKS, durationWeeks)),
     goal,
     schedule,
@@ -389,7 +392,7 @@ export function CoachClientWorkoutPrograms({
       setActiveDay(dayOfWeek);
       return {
         ...current,
-        [activeWeek]: { ...days, [dayOfWeek]: createEmptyDay(dayOfWeek) },
+        [activeWeek]: { ...days, [dayOfWeek]: createEmptyDay() },
       };
     });
   };
@@ -431,19 +434,16 @@ export function CoachClientWorkoutPrograms({
         ...current,
         [activeWeek]: {
           ...days,
-          [activeDay]: {
-            ...day,
-            exercises: [
-              ...day.exercises,
-              {
-                exerciseId: exercise.id,
-                exerciseName: exercise.name,
-                reps: 10,
-                restSeconds: 75,
-                sets: 3,
-              },
-            ],
-          },
+          [activeDay]: setWorkoutDayExercises(day, [
+            ...day.exercises,
+            {
+              exerciseId: exercise.id,
+              exerciseName: exercise.name,
+              reps: 10,
+              restSeconds: 75,
+              sets: 3,
+            },
+          ]),
         },
       };
     });
@@ -486,10 +486,12 @@ export function CoachClientWorkoutPrograms({
         ...current,
         [activeWeek]: {
           ...days,
-          [activeDay]: {
-            ...day,
-            exercises: day.exercises.filter((exercise) => exercise.exerciseId !== exerciseId),
-          },
+          [activeDay]: setWorkoutDayExercises(
+            day,
+            day.exercises.filter(
+              (exercise) => exercise.exerciseId !== exerciseId,
+            ),
+          ),
         },
       };
     });
@@ -877,16 +879,21 @@ export function CoachClientWorkoutPrograms({
                       : "";
                 return (
                   <FitButton
-                    active={activeWeek === week}
+                    active={activeWeek === week && workoutCount > 0}
                     aria-label={`Week ${week}: ${workoutCount} configured workouts, ${restCount} rest days, ${incompleteCount} incomplete days`}
                     key={week}
                     label={`WEEK ${week}${suffix}`}
                     onClick={() => setActiveWeekAndDay(week)}
                     style={{
-                      backgroundColor: activeWeek === week
-                        ? undefined
-                        : `color-mix(in srgb, ${tone} 10%, transparent)`,
-                      borderColor: activeWeek === week ? colors.brand : tone,
+                      backgroundColor: `color-mix(in srgb, ${tone} 10%, transparent)`,
+                      borderColor: activeWeek === week
+                        ? workoutCount > 0
+                          ? colors.brand
+                          : colors.textSecondary
+                        : tone,
+                      boxShadow: activeWeek === week
+                        ? `0 0 0 1px ${workoutCount > 0 ? colors.brand : colors.textSecondary}66`
+                        : undefined,
                       minHeight: 32,
                       minWidth: 64,
                       padding: "6px 9px",
@@ -931,16 +938,21 @@ export function CoachClientWorkoutPrograms({
                       : "";
                 return (
                   <FitButton
-                    active={active}
+                    active={active && state === "workout"}
                     aria-label={`Week ${activeWeek} ${day}: ${state}`}
                     key={day}
                     label={`${day}${suffix}`}
                     onClick={() => (selected ? setActiveDay(dayOfWeek) : toggleDay(dayOfWeek))}
                     style={{
-                      backgroundColor: active
-                        ? undefined
-                        : `color-mix(in srgb, ${tone} 10%, transparent)`,
-                      borderColor: active ? colors.brand : tone,
+                      backgroundColor: `color-mix(in srgb, ${tone} 10%, transparent)`,
+                      borderColor: active
+                        ? state === "workout"
+                          ? colors.brand
+                          : colors.textSecondary
+                        : tone,
+                      boxShadow: active
+                        ? `0 0 0 1px ${state === "workout" ? colors.brand : colors.textSecondary}66`
+                        : undefined,
                       minHeight: 34,
                       minWidth: 0,
                       padding: "6px 3px",

@@ -190,6 +190,7 @@ export type SubscribeToMembershipInput = {
 export type PurchaseMembershipCardInput = {
   idempotencyKey?: string;
   provider: "paymongo";
+  returnTarget?: "web" | "mobile";
 };
 
 export type MembershipCardPurchaseRecord = {
