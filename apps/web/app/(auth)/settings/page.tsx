@@ -209,6 +209,7 @@ function LegalModalContent({
 export default function GymSettingsPage() {
   const { user } = useAuth();
   const [activeModal, setActiveModal] = useState<SettingsModalKey>(null);
+  const canViewGymProfile = user?.role === "ADMIN" || user?.role === "STAFF";
   const fadeIn = useFadeIn();
   const appearanceFade = useFadeIn({ fromY: 8, duration: 180 });
   const notificationsFade = useFadeIn({ fromY: 16, duration: 260 });
@@ -218,13 +219,13 @@ export default function GymSettingsPage() {
   if (user?.role) {
     return (
       <FitSection as="section" heading="" hideHeading bare noPadding className={themeTransition} style={fadeIn}>
-        <div style={appearanceFade}>
-          {user?.role !== "COACH" ? (
+        {canViewGymProfile ? (
+          <div style={appearanceFade}>
             <FitSection heading="Gym Identity & Hours" headingStyle={{ fontSize: 13 }}>
               <GymProfileSection canEdit={user?.role === "ADMIN"} />
             </FitSection>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
         <div style={appearanceFade}>
           <PreferenceLaunchSection onOpen={setActiveModal} />
         </div>
