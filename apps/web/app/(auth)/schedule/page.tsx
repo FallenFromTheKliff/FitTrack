@@ -63,6 +63,7 @@ import {
   OperationsMetricCard,
   OperationsMetricGrid,
   STATUS_OPTIONS,
+  VENUE_STATE_OPTIONS,
   VENUE_STATUS_OPTIONS,
   formatScheduleDay,
 } from "@/components/schedule/SchedulePageShared";
@@ -266,6 +267,7 @@ function GymOperationsPageBody() {
     setVenueEndCalendarOpen,
     setVenueReviewTarget,
     setVenueStartCalendarOpen,
+    setVenueStateFilter,
     setVenueStatusFilter,
     setWeekStart,
     slideStyle,
@@ -282,7 +284,9 @@ function GymOperationsPageBody() {
     venueFilterOptions,
     venueReviewTarget,
     venueStartCalendarOpen,
+    venueStateFilter,
     venueStatusFilter,
+    venueStatusById,
     visibleTimelineDays,
     visibleTimelineHours,
     weekStart,
@@ -309,6 +313,9 @@ function GymOperationsPageBody() {
   const selectedVenueStatusLabel =
     VENUE_STATUS_OPTIONS.find((option) => option.value === venueStatusFilter)
       ?.label ?? "All statuses";
+  const selectedVenueStateLabel =
+    VENUE_STATE_OPTIONS.find((option) => option.value === venueStateFilter)
+      ?.label ?? "All venue states";
   const selectedCoachAppointmentFilterLabel =
     coachOptions.find((option) => option.value === (coachFilterId ?? ""))
       ?.label ?? "All coaches";
@@ -955,6 +962,23 @@ function GymOperationsPageBody() {
                           aria-label={`Venue booking status filter: ${selectedVenueStatusLabel}`}
                         />
                       </OperationsControlField>
+                      <OperationsControlField
+                        label="Venue State"
+                        minWidth={180}
+                      >
+                        <FitSelect
+                          value={venueStateFilter}
+                          onChange={(event) =>
+                            setVenueStateFilter(
+                              event.target.value as typeof venueStateFilter,
+                            )
+                          }
+                          options={VENUE_STATE_OPTIONS}
+                          compact
+                          fullWidth
+                          aria-label={`Venue state filter: ${selectedVenueStateLabel}`}
+                        />
+                      </OperationsControlField>
                       <OperationsControlField label="Start Date" minWidth={160}>
                         <FitButton
                           variant="ghost"
@@ -1027,8 +1051,14 @@ function GymOperationsPageBody() {
                     />
                     <OperationsMetricCard
                       colors={colors}
-                      label="Active Venues"
-                      value={venueBookingSummary.activeVenues}
+                      label="Venues in Results"
+                      value={venueBookingSummary.venuesInResults}
+                    />
+                    <OperationsMetricCard
+                      colors={colors}
+                      label="Maintenance Venues"
+                      value={venueBookingSummary.maintenanceVenues}
+                      tone={colors.warning}
                     />
                   </OperationsMetricGrid>
                   {scheduleLoading ? (
@@ -1047,6 +1077,7 @@ function GymOperationsPageBody() {
                           : `No bookings made in ${selectedVenueFilterLabel}.`
                       }
                       onOpenReview={setVenueReviewTarget}
+                      venueStatusById={venueStatusById}
                     />
                   )}
                 </div>

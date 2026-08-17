@@ -55,6 +55,7 @@ type VenueBookingsTableProps = {
   colors: ThemeColors;
   emptyMessage?: string;
   onOpenReview: (booking: VenueBookingRecord) => void;
+  venueStatusById: ReadonlyMap<string, string | null>;
 };
 
 type CoachIconRailProps = {
@@ -792,6 +793,7 @@ export function VenueBookingsTable({
   colors,
   emptyMessage = "No venue bookings match the current filters.",
   onOpenReview,
+  venueStatusById,
 }: VenueBookingsTableProps) {
   const { settings } = useTheme();
   const canAnimate = settings.animationLevel !== "none";
@@ -868,6 +870,13 @@ export function VenueBookingsTable({
         const venueName = booking.venue?.name ?? `Venue ${booking.venueId}`;
         const start = new Date(booking.startTime);
         const end = new Date(booking.endTime);
+        const isVenueUnderMaintenance =
+          (venueStatusById.get(String(booking.venueId)) ?? "available") ===
+          "maintenance";
+        const needsMaintenanceResolution =
+          isVenueUnderMaintenance &&
+          booking.status === "confirmed" &&
+          start.getTime() > Date.now();
         const venueActionLabel = getVenueBookingActionLabel(
           getVenueBookingPaymentStatus(booking),
         );
@@ -919,17 +928,43 @@ export function VenueBookingsTable({
               </FitText>
             </div>
             <div style={{ minWidth: 0, display: "grid", gap: 2 }}>
-              <FitText
-                excludeGlobalScale
-                style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: colors.textPrimary,
-                  display: "block",
-                }}
-              >
-                {venueName}
-              </FitText>
+              <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 5 }}>
+                <FitText
+                  excludeGlobalScale
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: colors.textPrimary,
+                    display: "block",
+                  }}
+                >
+                  {venueName}
+                </FitText>
+                {isVenueUnderMaintenance ? (
+                  <FitPill
+                    bgOpacity="14"
+                    borderOpacity="35"
+                    color={colors.warning}
+                    fontSize={8}
+                    fontWeight={800}
+                    label="UNDER MAINTENANCE"
+                    mode="status"
+                    style={{ borderRadius: 6 }}
+                  />
+                ) : null}
+                {needsMaintenanceResolution ? (
+                  <FitPill
+                    bgOpacity="14"
+                    borderOpacity="35"
+                    color={colors.warning}
+                    fontSize={8}
+                    fontWeight={800}
+                    label="NEEDS RESOLUTION"
+                    mode="status"
+                    style={{ borderRadius: 6 }}
+                  />
+                ) : null}
+              </div>
               <FitText excludeGlobalScale style={{ fontSize: 10.5, color: colors.textMuted, display: "block" }}>
                 {booking.purpose?.trim() || "General venue use"}
               </FitText>

@@ -22,6 +22,7 @@ export type ScheduleSurfaceTab =
   | "venue-bookings";
 export type ScheduleRangeMode = "weekly" | "daily";
 export type CoachVisibilityScope = "all" | "hidden" | "visible";
+export type VenueStateFilter = "all" | "available" | "maintenance";
 export type RecurringPlanActionMode = "single" | "future" | "cancel";
 export type RecurringPlanFormState = {
   coachId: string;
@@ -81,6 +82,15 @@ export const VENUE_STATUS_OPTIONS = [
   { label: "Completed", value: "completed" },
   { label: "Cancelled", value: "cancelled" },
   { label: "No show", value: "no_show" },
+];
+
+export const VENUE_STATE_OPTIONS: Array<{
+  label: string;
+  value: VenueStateFilter;
+}> = [
+  { label: "All venue states", value: "all" },
+  { label: "Available", value: "available" },
+  { label: "Maintenance", value: "maintenance" },
 ];
 
 export const COACH_VISIBILITY_SCOPE_OPTIONS = [

@@ -19,7 +19,10 @@ import type {
   CoachAvailabilityResponse,
   VenueAvailabilityRecord,
 } from "@fittrack/api-client";
-import { ApiClientError, isVenueBookable } from "@fittrack/api-client";
+import {
+  ApiClientError,
+  getVenueBookingBlockReason,
+} from "@fittrack/api-client";
 import { formatBookingDate } from "@fittrack/utils";
 import { isPaymongoCheckoutEnabled, WEEKDAY_NAMES } from "@fittrack/app-config";
 import type { CoachProfileRecord, VenueRecord } from "@fittrack/types";
@@ -1763,6 +1766,7 @@ function BookingInspectorContent({
   setReviewComment,
   setReviewRating,
   submitPending,
+  venueUnderMaintenance = false,
 }: {
   activeSection: BookingSection;
   booking: MemberBookingItem | null;
@@ -1776,6 +1780,7 @@ function BookingInspectorContent({
   setReviewComment: (value: string) => void;
   setReviewRating: (value: number) => void;
   submitPending: boolean;
+  venueUnderMaintenance?: boolean;
 }) {
   const { colors } = useTheme();
 
@@ -1801,6 +1806,28 @@ function BookingInspectorContent({
         />
         <BookingCompactStatCard label="Total price" value={getBookingAmountLabel(booking)} tone="brand" />
       </div>
+
+      {activeSection === "bookings" && venueUnderMaintenance ? (
+        <div
+          style={{
+            backgroundColor: `${colors.warning}12`,
+            border: `1px solid ${colors.warning}45`,
+            borderRadius: 8,
+            padding: "10px 12px",
+          }}
+        >
+          <FitText
+            style={{
+              color: colors.warning,
+              fontSize: 12,
+              fontWeight: 700,
+              lineHeight: 1.45,
+            }}
+          >
+            This venue is currently under maintenance. Your booking remains confirmed until staff reschedules or resolves it.
+          </FitText>
+        </div>
+      ) : null}
 
       {mode === "details" ? (
         <div
@@ -3012,12 +3039,21 @@ function MemberReservationModal({
   const [timeTarget, setTimeTarget] = useState<"start" | "end">("start");
   const [touchedFields, setTouchedFields] = useState<Partial<Record<VenueValidationField, boolean>>>({});
   const [venuePickerOpen, setVenuePickerOpen] = useState(false);
-  const reservableVenues = useMemo(
-    () => venues.filter(isVenueBookable),
+  const pickerVenues = useMemo(
+    () =>
+      venues.filter(
+        (venue) =>
+          venue.isActive !== false &&
+          venue.isMapped !== false &&
+          venue.isReservable === true,
+      ),
     [venues],
   );
   const selectedVenue =
-    reservableVenues.find((venue) => String(venue.id) === selectedVenueId) ?? null;
+    pickerVenues.find((venue) => String(venue.id) === selectedVenueId) ?? null;
+  const selectedVenueBlockReason = selectedVenue
+    ? getVenueBookingBlockReason(selectedVenue)
+    : null;
   const minimumHours = Math.max(1, Number(selectedVenue?.minimumHours ?? 1));
   const venueAvailabilityQuery = useQuery({
     ...venueAvailabilityQueryOptions<VenueAvailabilityRecord>(
@@ -3025,7 +3061,11 @@ function MemberReservationModal({
       selectedVenue?.id,
       reservationDate,
     ),
-    enabled: isOpen && !!selectedVenue && !!reservationDate,
+    enabled:
+      isOpen &&
+      !!selectedVenue &&
+      !selectedVenueBlockReason &&
+      !!reservationDate,
     staleTime: 15_000,
   });
   const liveVenueSlots = useMemo(
@@ -3121,15 +3161,23 @@ function MemberReservationModal({
     availableCoachAddOns.find((coach) => String(coach.id) === selectedCoachId) ?? null;
   const venuePickerOptions = useMemo<BookingPickerOption[]>(
     () =>
-      reservableVenues.map((venue) => ({
-        searchText: venue.name,
-        subtitle: venue.hourlyRate
-          ? `${formatMoney(venue.hourlyRate)} per hour`
-          : "No checkout rate is configured",
-        title: venue.name,
-        value: String(venue.id),
-      })),
-    [reservableVenues],
+      pickerVenues.map((venue) => {
+        const blockReason = getVenueBookingBlockReason(venue);
+        return {
+          disabled: Boolean(blockReason),
+          searchText: venue.name,
+          subtitle:
+            venue.status === "maintenance"
+              ? "Under maintenance — unavailable for new bookings"
+              : blockReason ??
+                (venue.hourlyRate
+                  ? `${formatMoney(venue.hourlyRate)} per hour`
+                  : "No checkout rate is configured"),
+          title: venue.name,
+          value: String(venue.id),
+        };
+      }),
+    [pickerVenues],
   );
   const coachPickerOptions = useMemo<BookingPickerOption[]>(
     () => [
@@ -3206,6 +3254,7 @@ function MemberReservationModal({
           : `${startSlotOptions.length} live start time${startSlotOptions.length === 1 ? "" : "s"} available. End times stop at the first unavailable slot.`;
   const canSubmit =
     Boolean(selectedVenue && reservationDate && startTime && endTime) &&
+    !selectedVenueBlockReason &&
     durationHours >= minimumHours &&
     isFutureGymStart(reservationDate, startTime) &&
     !venueAvailabilityQuery.isPending &&
@@ -3218,7 +3267,9 @@ function MemberReservationModal({
     !isSubmitting;
   const shouldShowValidation = (field: VenueValidationField) => reviewAttempted || touchedFields[field] === true;
   const venueValidationMessage = shouldShowValidation("venue")
-    ? submitFieldErrors.venue ?? (!selectedVenue ? "Choose a reservable venue." : null)
+    ? submitFieldErrors.venue ??
+      (selectedVenueBlockReason ??
+        (!selectedVenue ? "Choose a reservable venue." : null))
     : null;
   const dateValidationMessage = shouldShowValidation("date")
     ? submitFieldErrors.date ??
@@ -3459,7 +3510,7 @@ function MemberReservationModal({
               </div>
             </div>
 
-            {!venuesLoading && !venuesError && reservableVenues.length === 0 ? (
+            {!venuesLoading && !venuesError && pickerVenues.length === 0 ? (
               <div
                 style={{
                   border: `1px dashed ${colors.border}`,
@@ -4272,6 +4323,15 @@ export default function BookingsPage() {
     [filtered, normalizedBookingPage],
   );
   const selected = filtered.find((booking) => booking.id === selectedBooking?.id) ?? filtered[0] ?? null;
+  const selectedVenueUnderMaintenance = Boolean(
+    activeSection === "bookings" &&
+      selected &&
+      data.venuesQuery.data?.some(
+        (venue) =>
+          String(venue.id) === String(selected.resourceId) &&
+          venue.status === "maintenance",
+      ),
+  );
   const isLoading = data.bookingsQuery.isPending || data.appointmentsQuery.isPending;
   const canReviewCoach =
     activeSection === "appointments" &&
@@ -4744,6 +4804,7 @@ export default function BookingsPage() {
                 setReviewComment={setReviewComment}
                 setReviewRating={setReviewRating}
                 submitPending={data.submitCoachReviewMutation.isPending}
+                venueUnderMaintenance={selectedVenueUnderMaintenance}
               />
             </MemberInspectorPanel>
           </div>
@@ -4871,6 +4932,7 @@ export default function BookingsPage() {
           setReviewComment={setReviewComment}
           setReviewRating={setReviewRating}
           submitPending={data.submitCoachReviewMutation.isPending}
+          venueUnderMaintenance={selectedVenueUnderMaintenance}
         />
       </FitModal>
       <MemberReservationModal

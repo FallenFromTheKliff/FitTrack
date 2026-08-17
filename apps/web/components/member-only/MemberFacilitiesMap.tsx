@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
 import {
   CalendarDays,
+  CircleAlert,
   Grid2X2,
   Map,
   RefreshCcw,
@@ -139,8 +140,16 @@ export function MemberFacilitiesMap({
   );
   const activeFloorConfig = FACILITY_FLOOR_MAP[activeFloor];
   const activeFloorLabel = activeFloorConfig.label;
-  const reservableCount = venues.filter((venue) => venue.isReservable).length;
-  const supportCount = Math.max(venues.length - reservableCount, 0);
+  const reservableCount = venues.filter(
+    (venue) => venue.isReservable && venue.status !== "maintenance",
+  ).length;
+  const maintenanceCount = venues.filter(
+    (venue) => venue.status === "maintenance",
+  ).length;
+  const supportCount = Math.max(
+    venues.length - reservableCount - maintenanceCount,
+    0,
+  );
   const renderedFloorImageUrl = hidePlaceholderAssetUrl(buildRenderableAssetUrl({
     apiBaseUrl: WEB_API_BASE_URL,
     assetUrl: floorImageUrl,
@@ -157,7 +166,7 @@ export function MemberFacilitiesMap({
         label: venues.length > 0 ? "Live floor data" : "Floor data",
         meta: isLoading
           ? "Reading the live venue catalog"
-          : `${reservableCount} reservable zone${reservableCount === 1 ? "" : "s"} | ${supportCount} support area${supportCount === 1 ? "" : "s"}`,
+          : `${reservableCount} reservable zone${reservableCount === 1 ? "" : "s"} | ${maintenanceCount} under maintenance | ${supportCount} support area${supportCount === 1 ? "" : "s"}`,
         tone: venues.length > 0 ? "success" : "warning",
         value: isLoading
           ? "Loading floor"
@@ -173,19 +182,50 @@ export function MemberFacilitiesMap({
         value: renderedFloorImageUrl ? "Image available" : "Canvas layout",
       },
     ],
-    [isLoading, renderedFloorImageUrl, reservableCount, supportCount, venues.length],
+    [
+      isLoading,
+      maintenanceCount,
+      renderedFloorImageUrl,
+      reservableCount,
+      supportCount,
+      venues.length,
+    ],
   );
 
   const selectedVenueRows = useMemo<DetailRow[]>(() => {
     if (!selectedVenue) return [];
+    const isUnderMaintenance = selectedVenue.status === "maintenance";
 
     return [
+      ...(isUnderMaintenance
+        ? [
+            {
+              icon: CircleAlert,
+              label: "Venue status",
+              meta: "Unavailable for new bookings",
+              tone: "warning" as const,
+              value: "Under maintenance",
+            },
+          ]
+        : []),
       {
         icon: UsersRound,
         label: "Capacity",
-        meta: selectedVenue.isReservable ? "Reservable member zone" : "Shared facility area",
-        tone: selectedVenue.isReservable ? "success" : "brand",
-        value: selectedVenue.capacity ? `${selectedVenue.capacity} slots` : "Capacity pending",
+        meta: isUnderMaintenance
+          ? "Unavailable for new bookings"
+          : selectedVenue.isReservable
+            ? "Reservable member zone"
+            : "Shared facility area",
+        tone: isUnderMaintenance
+          ? "warning"
+          : selectedVenue.isReservable
+            ? "success"
+            : "brand",
+        value: isUnderMaintenance
+          ? "Under maintenance"
+          : selectedVenue.capacity
+            ? `${selectedVenue.capacity} slots`
+            : "Capacity pending",
       },
       {
         icon: CalendarDays,
@@ -195,8 +235,16 @@ export function MemberFacilitiesMap({
           : selectedVenue.isReservable
             ? "Rate pending"
             : "No reservation required",
-        tone: selectedVenue.isReservable ? "success" : "muted",
-        value: selectedVenue.isReservable ? "Reservations enabled" : "Open facility access",
+        tone: isUnderMaintenance
+          ? "warning"
+          : selectedVenue.isReservable
+            ? "success"
+            : "muted",
+        value: isUnderMaintenance
+          ? "Unavailable for new bookings"
+          : selectedVenue.isReservable
+            ? "Reservations enabled"
+            : "Open facility access",
       },
     ];
   }, [selectedVenue]);
@@ -428,7 +476,11 @@ export function MemberFacilitiesMap({
                         <span className="member-only-facility-zone-copy">
                           <span className="member-only-facility-zone-title">{venue.name}</span>
                           <span className="member-only-facility-zone-meta">
-                            {venue.isReservable ? "Reservable" : "Shared"} |{" "}
+                            {venue.status === "maintenance"
+                              ? "Under maintenance"
+                              : venue.isReservable
+                                ? "Reservable"
+                                : "Shared"} |{" "}
                             {venue.capacity ? `${venue.capacity} slots` : "Capacity pending"}
                           </span>
                         </span>

@@ -94,6 +94,7 @@ import {
   type RecurringPlanFormState,
   type ScheduleRangeMode,
   type ScheduleSurfaceTab,
+  type VenueStateFilter,
 } from "./SchedulePageShared";
 import {
   addDays,
@@ -300,6 +301,8 @@ function useGymOperationsPageState() {
   const [appointmentMemberSearch, setAppointmentMemberSearch] = useState("");
   const [venueFilterId, setVenueFilterId] = useState("all");
   const [venueStatusFilter, setVenueStatusFilter] = useState("all");
+  const [venueStateFilter, setVenueStateFilter] =
+    useState<VenueStateFilter>("all");
   const [venueStartCalendarOpen, setVenueStartCalendarOpen] = useState(false);
   const [venueEndCalendarOpen, setVenueEndCalendarOpen] = useState(false);
   const [availabilityEditorCoachId, setAvailabilityEditorCoachId] = useState<
@@ -1214,6 +1217,17 @@ function useGymOperationsPageState() {
     [venues],
   );
 
+  const venueStatusById = useMemo(
+    () =>
+      new Map(
+        venues.map((venue) => [
+          String(venue.id),
+          venue.status ?? "available",
+        ]),
+      ),
+    [venues],
+  );
+
   const venueFilterOptions = useMemo(
     () => [{ label: "All venues", value: "all" }, ...venueOptions],
     [venueOptions],
@@ -1292,6 +1306,14 @@ function useGymOperationsPageState() {
         ) {
           return false;
         }
+        const venueState =
+          venueStatusById.get(String(booking.venueId)) ?? "available";
+        if (
+          venueStateFilter !== "all" &&
+          venueState !== venueStateFilter
+        ) {
+          return false;
+        }
         const bookingDate = booking.startTime.slice(0, 10);
         if (
           bookingDateRange.startDate &&
@@ -1312,7 +1334,9 @@ function useGymOperationsPageState() {
       bookingDateRange.startDate,
       rawBookings,
       venueFilterId,
+      venueStatusById,
       venueStatusFilter,
+      venueStateFilter,
     ],
   );
 
@@ -1322,11 +1346,20 @@ function useGymOperationsPageState() {
       confirmed: filteredVenueBookings.filter(
         (booking) => booking.status === "confirmed",
       ).length,
-      activeVenues: new Set(
+      venuesInResults: new Set(
         filteredVenueBookings.map((booking) => booking.venueId),
       ).size,
+      maintenanceVenues: new Set(
+        filteredVenueBookings
+          .filter(
+            (booking) =>
+              (venueStatusById.get(String(booking.venueId)) ?? "available") ===
+              "maintenance",
+          )
+          .map((booking) => booking.venueId),
+      ).size,
     }),
-    [filteredVenueBookings],
+    [filteredVenueBookings, venueStatusById],
   );
 
   const toggleRecurringActionDay = (day: number) => {
@@ -2229,6 +2262,7 @@ function useGymOperationsPageState() {
     setVenueEndCalendarOpen,
     setVenueReviewTarget,
     setVenueStartCalendarOpen,
+    setVenueStateFilter,
     setVenueStatusFilter,
     setWeekStart,
     slideStyle,
@@ -2246,7 +2280,9 @@ function useGymOperationsPageState() {
     venueFilterOptions,
     venueReviewTarget,
     venueStartCalendarOpen,
+    venueStateFilter,
     venueStatusFilter,
+    venueStatusById,
     visibleTimelineDays,
     visibleTimelineHours,
     weekStart,
