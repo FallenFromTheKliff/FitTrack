@@ -3149,22 +3149,36 @@ function MemberReservationModal({
     }
     return options;
   }, [liveVenueSlots, minimumHours, startTime]);
-  const availableCoachAddOns = useMemo(
-    () =>
-      coaches.filter((coach) =>
-        coachCoversReservationWindow(coach, reservationDate, startTime, endTime),
-      ),
-    [coaches, endTime, reservationDate, startTime],
-  );
   const isFilteringCoachWindow = Boolean(reservationDate && startTime && endTime);
+  const coachWindowAvailability = useMemo(
+    () =>
+      coaches.map((coach) => ({
+        coach,
+        isAvailableForWindow: !isFilteringCoachWindow
+          ? true
+          : coachCoversReservationWindow(coach, reservationDate, startTime, endTime),
+      })),
+    [coaches, endTime, isFilteringCoachWindow, reservationDate, startTime],
+  );
+  const availableCoachAddOns = useMemo(
+    () => coachWindowAvailability.filter((entry) => entry.isAvailableForWindow).map((entry) => entry.coach),
+    [coachWindowAvailability],
+  );
   const selectedCoach =
-    availableCoachAddOns.find((coach) => String(coach.id) === selectedCoachId) ?? null;
+    coaches.find((coach) => String(coach.id) === selectedCoachId) ?? null;
+  const selectedCoachCoversWindow = useMemo(
+    () =>
+      !selectedCoach || !isFilteringCoachWindow
+        ? true
+        : coachCoversReservationWindow(selectedCoach, reservationDate, startTime, endTime),
+    [reservationDate, selectedCoach, startTime, endTime, isFilteringCoachWindow],
+  );
   useEffect(() => {
-    if (!isFilteringCoachWindow) return;
-    if (selectedCoachId && !selectedCoach) {
+    if (!isFilteringCoachWindow || !selectedCoachId) return;
+    if (!selectedCoachCoversWindow) {
       setSelectedCoachId("");
     }
-  }, [isFilteringCoachWindow, selectedCoach, selectedCoachId]);
+  }, [isFilteringCoachWindow, selectedCoachCoversWindow, selectedCoachId]);
   const venuePickerOptions = useMemo<BookingPickerOption[]>(
     () =>
       pickerVenues.map((venue) => {
@@ -3193,16 +3207,17 @@ function MemberReservationModal({
         title: "No coach add-on",
         value: "",
       },
-      ...availableCoachAddOns.map((coach) => ({
+      ...coachWindowAvailability.map(({ coach, isAvailableForWindow }) => ({
+        disabled: isFilteringCoachWindow && !isAvailableForWindow,
         searchText: [getCoachName(coach), ...(coach.specialties ?? [])].join(" "),
-        subtitle: coach.hourlyRate
+        subtitle: `${coach.hourlyRate
           ? `${getCoachSpecialtySummary(coach)} · ${formatMoney(coach.hourlyRate)} per hour`
-          : `${getCoachSpecialtySummary(coach)} · Rate pending`,
+          : `${getCoachSpecialtySummary(coach)} · Rate pending`}${isFilteringCoachWindow && !isAvailableForWindow ? " · Unavailable for selected time" : ""}`,
         title: getCoachName(coach),
         value: String(coach.id),
       })),
     ],
-    [availableCoachAddOns],
+    [coachWindowAvailability, isFilteringCoachWindow],
   );
   const durationHours = getReservationDurationHours(startTime, endTime);
   const venueRate = Number(selectedVenue?.hourlyRate ?? 0);
@@ -3257,7 +3272,7 @@ function MemberReservationModal({
     hasContinuousRange &&
     hasValidPricing &&
     canUsePaymongo &&
-    (!selectedCoachId || !!selectedCoach) &&
+    (!selectedCoachId || (selectedCoach != null && !isFilteringCoachWindow ? true : selectedCoachCoversWindow)) &&
     !hasActiveOverlap &&
     !isSubmitting;
   const shouldShowValidation = (field: VenueValidationField) => reviewAttempted || touchedFields[field] === true;
@@ -3320,7 +3335,7 @@ function MemberReservationModal({
     : null;
   const coachValidationMessage = shouldShowValidation("coach")
     ? submitFieldErrors.coach ??
-      (selectedCoachId && startTime && endTime && !selectedCoach
+      (selectedCoachId && isFilteringCoachWindow && selectedCoach !== null && !selectedCoachCoversWindow
         ? "The selected coach does not cover this exact venue window. Choose another coach, correct the time range, or remove the add-on."
         : null)
     : null;
@@ -3571,13 +3586,17 @@ function MemberReservationModal({
                   </FitButton>
                   <InlineValidationMessage message={coachValidationMessage} />
                   <MemberText variant="muted">
-                    {!startTime || !endTime
-                      ? "Choose a continuous venue window first. Coach options appear only when their schedule covers it."
-                      : coachesLoading
-                        ? "Loading coaches..."
-                        : availableCoachAddOns.length === 0
-                        ? "No coach currently covers this exact venue window. You can continue without an add-on."
-                        : `${availableCoachAddOns.length} coach${availableCoachAddOns.length === 1 ? "" : "es"} cover this exact window. The selected coach ID is preserved through checkout.`}
+                    {coachesLoading
+                      ? "Loading coaches..."
+                      : coachesError
+                        ? "Coach list unavailable."
+                        : isFilteringCoachWindow
+                          ? availableCoachAddOns.length === 0
+                            ? "No coach add-ons cover this exact venue window. You can continue without an add-on."
+                            : `${availableCoachAddOns.length} coach${availableCoachAddOns.length === 1 ? "" : "es"} cover this exact window.`
+                          : coaches.length === 0
+                            ? "No active coaches are currently available."
+                            : "All active coaches are shown. Coaches that do not cover the selected window are disabled once a window is chosen."}
                   </MemberText>
                 </div>
 
@@ -3746,11 +3765,13 @@ function MemberReservationModal({
       />
       <SearchableBookingPickerModal
         emptyMessage={
-          startTime && endTime
-            ? coachesLoading
-              ? "Loading coach add-ons..."
-              : "No coach add-ons cover this exact venue window."
-            : "Choose the venue date and time first to see matching coaches."
+          coachesLoading
+            ? "Loading coach add-ons..."
+            : coaches.length === 0
+              ? "No active coaches are currently available."
+              : isFilteringCoachWindow && availableCoachAddOns.length === 0
+                ? "No coach add-ons cover this exact venue window."
+                : "Coach add-on options are available."
         }
         errorMessage={coachesError}
         isLoading={coachesLoading}
@@ -3765,7 +3786,7 @@ function MemberReservationModal({
         options={coachPickerOptions}
         searchPlaceholder="Search coaches or specialties"
         selectedValue={selectedCoachId}
-        subtitle="Optional coaches are filtered to the exact venue window."
+        subtitle="All active coaches are shown. Coaches that do not cover the selected venue window are disabled."
         title="Coach Add-on"
       />
       <CalendarModal

@@ -17,7 +17,7 @@ import {
 } from 'class-validator';
 import { CoachScheduleType } from '@prisma/client';
 
-import { TrimString } from '../../../common/validators';
+import { IsPhilippineMobileNumber, TrimString } from '../../../common/validators';
 import { PaginationDTO } from '../../../user/dto/user-dto';
 
 export class UpdateCoachProfileDTO {
@@ -41,11 +41,7 @@ export class UpdateCoachProfileDTO {
 
   @ApiPropertyOptional({ example: '+639171234567' })
   @IsOptional()
-  @TrimString()
-  @IsString({ message: 'contact_phone must be a string' })
-  @MaxLength(40, {
-    message: 'contact_phone must not exceed 40 characters',
-  })
+  @IsPhilippineMobileNumber('contact_phone')
   contact_phone?: string | null;
 
   @ApiPropertyOptional({ example: 'Strength and conditioning' })
@@ -211,11 +207,7 @@ export class CreateStandaloneCoachDTO {
 
   @ApiPropertyOptional({ example: '+639171234567' })
   @IsOptional()
-  @TrimString()
-  @IsString({ message: 'contact_phone must be a string' })
-  @MaxLength(40, {
-    message: 'contact_phone must not exceed 40 characters',
-  })
+  @IsPhilippineMobileNumber('contact_phone')
   contact_phone?: string;
 
   @ApiPropertyOptional({ example: 'Strength and conditioning' })

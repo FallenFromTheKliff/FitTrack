@@ -16,11 +16,11 @@ export type FieldConfig = {
   type:
     | "text"
     | "email"
-    | "tel"
     | "time"
     | "password"
     | "date"
     | "number"
+    | "tel"
     | "select"
     | "multi-select"
     | "radio"
@@ -306,6 +306,7 @@ export default function DetailsModal({
               name={field.name}
               autoComplete="off"
               type={field.type}
+              inputMode={field.type === "tel" ? "tel" : undefined}
               placeholder={field.placeholder}
               value={formData[field.name] ?? ""}
               onChange={(e) => handleChange(field.name, e.target.value)}

@@ -30,7 +30,6 @@ import {
   isVenueBookable,
   resolveAmenityId,
   type BookingCheckoutResponse,
-  CoachAvailabilityResponse,
   VenueBookingRecord,
   VenueAvailabilityRecord,
 } from "@fittrack/api-client";
@@ -39,7 +38,6 @@ import type { CoachProfileRecord } from "@fittrack/types";
 import {
   activeCoachesQueryOptions,
   bookingsQueryOptions,
-  coachAvailabilityQueryOptions,
   createBookingMutationOptions,
   venueAvailabilityQueryOptions,
   venuesQueryOptions,
@@ -486,13 +484,28 @@ export default function ReservationModal({
     [coaches, selectedCoachId],
   );
   const isCoachWindowSelected = Boolean(date && startTime && endTime);
+  const coachWindowAvailability = useMemo(
+    () =>
+      coaches.map((coach) => ({
+        coach,
+        isAvailableForWindow: !isCoachWindowSelected
+          ? true
+          : coachCoversReservationWindow(coach, date, startTime, endTime),
+      })),
+    [coaches, date, endTime, isCoachWindowSelected, startTime],
+  );
   const availableCoachAddOns = useMemo(
     () =>
-      coaches.filter((coach) =>
-        coachCoversReservationWindow(coach, date, startTime, endTime),
-      ),
-    [coaches, date, endTime, startTime],
+      coachWindowAvailability
+        .filter((entry) => entry.isAvailableForWindow)
+        .map((entry) => entry.coach),
+    [coachWindowAvailability],
   );
+  const selectedCoachCoversWindow = useMemo(() => {
+    if (!selectedCoach) return true;
+    if (!isCoachWindowSelected) return true;
+    return coachCoversReservationWindow(selectedCoach, date, startTime, endTime);
+  }, [date, endTime, isCoachWindowSelected, selectedCoach, startTime]);
   const venuePickerOptions = useMemo<BookingPickerOption[]>(
     () =>
       bookableVenues.map(({ venue, presentation }) => ({
@@ -510,15 +523,22 @@ export default function ReservationModal({
         id: "none",
         title: "No coach add-on",
       },
-      ...availableCoachAddOns.map((coach) => ({
+      ...coachWindowAvailability.map(({ coach, isAvailableForWindow }) => ({
         detail: coach.bio?.trim() || "No coach bio has been added yet.",
+        disabled: isCoachWindowSelected && !isAvailableForWindow,
         id: String(coach.id),
-        keywords: [coach.contactEmail, ...(coach.specialties ?? [])].filter(Boolean) as string[],
-        subtitle: `${coach.specialties?.[0] ?? "General Coaching"} · ${getCoachPriceLabel(coach)} · ${getCoachRatingLabel(coach)}`,
+        keywords: [coach.contactEmail, ...(coach.specialties ?? [])].filter(
+          Boolean,
+        ) as string[],
+        subtitle:
+          `${coach.specialties?.[0] ?? "General Coaching"} · ${getCoachPriceLabel(coach)} · ${getCoachRatingLabel(coach)}` +
+          (isCoachWindowSelected && !isAvailableForWindow
+            ? " · Unavailable for selected time"
+            : ""),
         title: getCoachName(coach),
       })),
     ],
-    [availableCoachAddOns],
+    [coachWindowAvailability, isCoachWindowSelected],
   );
   const fallbackCoachAvailabilityDates = useMemo(
     () => getUpcomingAvailableDates(coaches),
@@ -609,18 +629,6 @@ export default function ReservationModal({
       enabled: isVisible && !!user?.id,
       staleTime: 30_000,
     });
-  const {
-    data: coachAvailability,
-    isLoading: coachAvailabilityLoading,
-    error: coachAvailabilityError,
-  } = useQuery({
-    ...coachAvailabilityQueryOptions<CoachAvailabilityResponse>(
-      mobileApiClient,
-      selectedCoach ? String(selectedCoach.id) : undefined,
-    ),
-    enabled: isVisible && !!selectedCoach,
-  });
-
   const backdropStyle = useAnimatedStyle(() => ({
     backgroundColor: ic.value.overlay,
   }));
@@ -656,13 +664,10 @@ export default function ReservationModal({
 
   useEffect(() => {
     if (!isCoachWindowSelected || !selectedCoachId) return;
-    const stillAvailable = availableCoachAddOns.some(
-      (coach) => String(coach.id) === selectedCoachId,
-    );
-    if (!stillAvailable) {
+    if (!selectedCoachCoversWindow) {
       setSelectedCoachId(null);
     }
-  }, [availableCoachAddOns, isCoachWindowSelected, selectedCoachId]);
+  }, [isCoachWindowSelected, selectedCoachCoversWindow, selectedCoachId]);
 
   const basePrice = useMemo(
     () => selectedVenuePresentation?.price ?? 0,
@@ -872,24 +877,12 @@ export default function ReservationModal({
   }, [date, endTime, existingBookings, startTime]);
 
   const coachMatchesWindow = useMemo(() => {
-    if (!selectedCoach) return true;
-    if (!date || !startTime || !endTime) return true;
-    if (!coachAvailability?.availability) return false;
-    const startMinutes = timeToMinutes(startTime);
-    const endMinutes = timeToMinutes(endTime);
-    return coachAvailability.availability.some(
-      (slot) =>
-        slot.isAvailable &&
-        matchesDay(date, slot.dayOfWeek) &&
-        timeValueToMinutes(slot.startTime) <= startMinutes &&
-        timeValueToMinutes(slot.endTime) >= endMinutes,
-    );
+    return selectedCoachCoversWindow;
   }, [
-    coachAvailability?.availability,
-    date,
-    endTime,
-    selectedCoach,
     startTime,
+    selectedCoachCoversWindow,
+    endTime,
+    date,
   ]);
 
   const coachStatusMessage = useMemo(() => {
@@ -899,21 +892,11 @@ export default function ReservationModal({
     if (!startTime || !endTime) {
       return "Pick the reservation time first to validate this coach against the selected window.";
     }
-    if (coachAvailabilityLoading) {
-      return "Checking this coach against the selected reservation window.";
-    }
-    if (coachAvailabilityError) {
-      return coachAvailabilityError instanceof Error
-        ? coachAvailabilityError.message
-        : "Unable to load coach availability right now.";
-    }
     if (!coachMatchesWindow) {
       return "This coach does not currently cover the selected reservation window.";
     }
     return `${getCoachName(selectedCoach)} is available for the selected reservation window.`;
   }, [
-    coachAvailabilityError,
-    coachAvailabilityLoading,
     coachMatchesWindow,
     endTime,
     selectedCoach,
@@ -1307,7 +1290,7 @@ export default function ReservationModal({
               ) : coachesError ? (
                 <FitText style={s.unavailableText}>Unable to load coach profiles. Open the picker to retry.</FitText>
               ) : !startTime || !endTime ? (
-                <FitText style={s.validationHint}>Choose the venue time first to see coaches who cover that exact window.</FitText>
+                <FitText style={s.validationHint}>Choose the reservation time first to validate coach availability.</FitText>
               ) : availableCoachAddOns.length === 0 ? (
                 <FitText style={s.validationHint}>No coach add-ons cover this exact date and time.</FitText>
               ) : null}
@@ -1535,7 +1518,7 @@ export default function ReservationModal({
       <SearchableBookingPickerModal
         isVisible={isCoachPickerOpen}
         title="Coach Add-on"
-        subtitle="Optional coaches are filtered to the selected venue window."
+        subtitle="All active coaches are shown. Coaches that do not cover the selected window are disabled."
         searchPlaceholder="Search coaches or specialties"
         options={coachAddOnPickerOptions}
         selectedId={selectedCoachId ?? "none"}

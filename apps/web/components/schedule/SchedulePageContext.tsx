@@ -54,7 +54,11 @@ import {
   updateStaffCoachProfileMutationOptions,
   operationalVenuesQueryOptions,
 } from "@fittrack/query";
-import { coachProfileSchema } from "@fittrack/validators";
+import {
+  coachProfileSchema,
+  isSupportedAuthPhilippineMobileNumber,
+  normalizeAuthPhilippineMobileNumber,
+} from "@fittrack/validators";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -1782,6 +1786,9 @@ function useGymOperationsPageState() {
     const monthlySessionDurationMinutes = Number(
       data.monthlySessionDurationMinutes ?? 60,
     );
+    const normalizedContactPhone = normalizeAuthPhilippineMobileNumber(
+      data.contactPhone?.trim() || "",
+    );
     if (
       !isCoach &&
       monthlyOfferActive &&
@@ -1799,6 +1806,30 @@ function useGymOperationsPageState() {
       );
       return;
     }
+    if (
+      normalizedContactPhone &&
+      !isSupportedAuthPhilippineMobileNumber(normalizedContactPhone)
+    ) {
+      showFeedback(
+        "Contact phone must be a valid PH mobile number (+639XXXXXXXXX, 09XXXXXXXXX, or 639XXXXXXXXX).",
+        "danger",
+      );
+      return;
+    }
+
+    const monthlyOfferPayload = isCoach
+      ? {}
+      : monthlyOfferActive
+        ? {
+            monthlyOfferActive,
+            monthlyOfferDescription: data.monthlyOfferDescription?.trim() || null,
+            monthlyRate,
+            monthlySessionCount,
+            monthlySessionDurationMinutes,
+          }
+        : {
+            monthlyOfferActive: false,
+          };
 
     try {
       const scheduleTypeValue: "full_time" | "part_time" =
@@ -1808,21 +1839,12 @@ function useGymOperationsPageState() {
         specialties: parsed.data.specialties,
         certifications: parsed.data.certifications,
         contactEmail: data.contactEmail?.trim() || null,
-        contactPhone: data.contactPhone?.trim() || null,
+        contactPhone: normalizedContactPhone || null,
         displayName,
         hourlyRate: parsed.data.hourlyRate,
         isAvailableForBooking:
           (data.isAvailableForBooking ?? "active") === "active",
-        ...(!isCoach
-          ? {
-              monthlyOfferActive,
-              monthlyOfferDescription:
-                data.monthlyOfferDescription?.trim() || null,
-              monthlyRate,
-              monthlySessionCount,
-              monthlySessionDurationMinutes,
-            }
-          : {}),
+        ...monthlyOfferPayload,
         ...(isAdmin
           ? {
               scheduleType: scheduleTypeValue,

@@ -2127,12 +2127,19 @@ export function GymOperationsCreateCoachModal({
                   >
                     +63
                   </FitText>
-                  <FitTextInput
+                <FitTextInput
                     id="coach-create-phone"
                     type="tel"
                     inputMode="numeric"
                     value={contactPhone}
-                    onChange={(event) => setContactPhone(event.target.value)}
+                    onChange={(event) =>
+                      setContactPhone(
+                        event.target.value
+                          .replace(/\D/g, "")
+                          .slice(0, 10),
+                      )
+                    }
+                    maxLength={10}
                     placeholder="9171234567"
                     aria-label="Coach account phone digits"
                     style={{

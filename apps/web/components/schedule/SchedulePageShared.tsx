@@ -220,8 +220,11 @@ export const COACH_PROFILE_FIELDS: FieldConfig[] = [
   {
     name: "contactPhone",
     label: "Contact Phone",
-    type: "text",
+    type: "tel",
     placeholder: "+639171234567",
+    pattern: "^(\\+63|09|639)\\d{9}$",
+    hint: "Use a supported Philippine mobile format (09XXXXXXXXX, 639XXXXXXXXX, or +639XXXXXXXXX).",
+    maxLength: 13,
   },
   {
     name: "bio",
