@@ -30,7 +30,7 @@ import {
 } from 'class-validator';
 
 import { TrimString } from '../../../common/validators';
-import { CommerceCheckoutReturnInputDTO } from '../commerce/dto/checkout-return.dto';
+import { CommerceCheckoutReturnInputDTO } from '../../commerce/dto/checkout-return.dto';
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 

@@ -30,7 +30,7 @@ import {
 
 import { TrimString } from '../../../common/validators';
 import { DateRangeDTO } from '../../../user/dto/user-dto';
-import { CommerceCheckoutReturnInputDTO } from '../commerce/dto/checkout-return.dto';
+import { CommerceCheckoutReturnInputDTO } from '../../commerce/dto/checkout-return.dto';
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 export enum CoachAppointmentBookingMode {

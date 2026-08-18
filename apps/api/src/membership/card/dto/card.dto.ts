@@ -9,7 +9,7 @@ import {
 import { IsIn } from 'class-validator';
 
 import { PaymentResponseDTO } from '../../payment/dto/payment.dto';
-import { CommerceCheckoutReturnInputDTO } from '../../coaching/commerce/dto/checkout-return.dto';
+import { CommerceCheckoutReturnInputDTO } from '../../../coaching/commerce/dto/checkout-return.dto';
 
 export class StartMembershipCardPurchaseDTO extends CommerceCheckoutReturnInputDTO {
   @ApiProperty({ enum: [PaymentProvider.paymongo], example: PaymentProvider.paymongo })

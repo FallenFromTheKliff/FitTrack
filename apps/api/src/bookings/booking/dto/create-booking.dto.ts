@@ -15,7 +15,7 @@ import {
 } from 'class-validator';
 
 import { IsOnOrAfter, TrimString } from '../../../common/validators';
-import { CommerceCheckoutReturnInputDTO } from '../../coaching/commerce/dto/checkout-return.dto';
+import { CommerceCheckoutReturnInputDTO } from '../../../coaching/commerce/dto/checkout-return.dto';
 
 export enum CreateBookingPaymentStage {
   full = 'full',
