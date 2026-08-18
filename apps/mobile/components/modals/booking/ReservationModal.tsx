@@ -904,24 +904,6 @@ export default function ReservationModal({
     startTime,
   ]);
 
-  const canConfirm =
-    !!date &&
-    !!selectedBookableVenue &&
-    !venuesLoading &&
-    !venuesError &&
-    !!startTime &&
-    !!endTime &&
-    reservationHours > 0 &&
-    !isSelectedStartInPast &&
-    !availabilityLoading &&
-    !availabilityError &&
-    !existingBookingsLoading &&
-    !hasConflict &&
-    !hasMemberTimeOverlap &&
-    hasValidPricing &&
-    canUsePaymongo &&
-    coachMatchesWindow;
-
   const handleReset = () => {
     setDate(getGymTodayString());
     setStartTime("");
@@ -1054,15 +1036,58 @@ export default function ReservationModal({
 
   const handleConfirm = () => {
     setReviewAttempted(true);
-    if (!canConfirm || !selectedBookableVenue) return;
+    if (!date || !startTime || !endTime) {
+      setApiError("Please choose a reservation date, start time, and end time.");
+      return;
+    }
 
-    const venueName = selectedVenuePresentation?.name ?? "your venue";
-    const scheduleLabel = `${formatBookingDate(date)} at ${startTime} - ${endTime}`;
+    if (!selectedBookableVenue) {
+      setVenueFieldError("A venue is required before confirming this reservation.");
+      return;
+    }
 
-    if (!hasValidPricing) {
+    if (reservationHours <= 0 || !hasValidPricing) {
       setApiError("This venue does not have a valid checkout price yet.");
       return;
     }
+
+    if (isSelectedStartInPast) {
+      setApiError("Same-day reservations must use a future start time.");
+      return;
+    }
+
+    if (availabilityLoading) {
+      setApiError("Checking venue availability. Please wait...");
+      return;
+    }
+
+    if (availabilityError) {
+      setApiError("Unable to verify venue availability. Please try again.");
+      return;
+    }
+
+    if (existingBookingsLoading) {
+      setApiError("Checking existing bookings. Please wait...");
+      return;
+    }
+
+    if (hasConflict) {
+      setApiError("The selected time overlaps an active booking.");
+      return;
+    }
+
+    if (hasMemberTimeOverlap) {
+      setApiError("You already have a booking in this time window.");
+      return;
+    }
+
+    if (selectedCoach && !coachMatchesWindow) {
+      setApiError("Selected coach is not available for the selected reservation window.");
+      return;
+    }
+
+    const venueName = selectedVenuePresentation?.name ?? "your venue";
+    const scheduleLabel = `${formatBookingDate(date)} at ${startTime} - ${endTime}`;
 
     if (!canUsePaymongo) {
       setIsPaymongoNoticeOpen(true);

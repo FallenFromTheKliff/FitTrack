@@ -54,7 +54,11 @@ export class CommerceCheckoutReturnInputDTO {
     message: 'return_url must not exceed 2048 characters',
   })
   @IsUrl(
-    { protocols: ['http', 'https'], require_protocol: true, allow_localhost: true },
+    {
+      protocols: ['http', 'https'],
+      require_protocol: true,
+      require_tld: false,
+    },
     {
       message:
         'return_url must be a valid absolute URL with an http or https protocol',
