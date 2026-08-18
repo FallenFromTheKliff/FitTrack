@@ -94,8 +94,14 @@ export function isPostUploadGraphqlTimeout(output) {
   const hasGraphqlMarker = /graphql/i.test(text);
   const hasTimeoutMarker =
     /(?:operation\s+timed\s+out|timed\s*out|timeout|timed_out)/i.test(text);
+  const hasBuildLogStreamFailureMarker = /failed\s+to\s+(?:stream|retrieve)\s+(?:build\s+)?logs?/i.test(
+    text,
+  );
 
-  return hasRailwayTransportMarker && hasGraphqlMarker && hasTimeoutMarker;
+  return (
+    (hasRailwayTransportMarker && hasGraphqlMarker && hasTimeoutMarker) ||
+    hasBuildLogStreamFailureMarker
+  );
 }
 
 export function parseDeploymentList(output) {
@@ -695,14 +701,14 @@ async function deployService({
   if (!isPostUploadGraphqlTimeout(output)) {
     fail(
       `Railway up for ${service} failed with exit code ${upResult.status}; ` +
-        'the failure was not the bounded post-upload GraphQL timeout recovery case. ' +
+        'the failure was not the bounded post-upload recovery case. ' +
         'Deployment stopped.',
     );
   }
 
   console.log(
-    `[railway-deploy] Railway up for ${service} reported a post-upload GraphQL ` +
-      'timeout; verifying the uploaded deployment before continuing.',
+    `[railway-deploy] Railway up for ${service} reported a post-upload connectivity ` +
+      'issue; verifying the uploaded deployment before continuing.',
   );
   const currentDeployments = requireDeployments(
     service,
