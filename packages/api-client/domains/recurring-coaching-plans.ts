@@ -4,6 +4,7 @@ import {
   mapCommerceCheckoutAttempt,
   type CommerceCheckoutApiRecord,
   type CommerceCheckoutAttempt,
+  type CommerceCheckoutReturnInput,
 } from "./commerce-checkout";
 
 function createIdempotencyKey() {
@@ -58,7 +59,7 @@ export type RecurringCoachingPlanInput = {
   trainingPlanId?: string;
 };
 
-export type RecurringCoachingEnrollmentInput = {
+export type RecurringCoachingEnrollmentInput = CommerceCheckoutReturnInput & {
   coachId: string;
   idempotencyKey?: string;
   startDate?: string;
@@ -563,6 +564,10 @@ export function createRecurringCoachingPlansApi(transport: ApiTransport) {
           "/bookings/recurring-coaching-plans/enroll",
           {
             coach_id: input.coachId,
+            ...(input.returnTarget
+              ? { return_target: input.returnTarget }
+              : {}),
+            ...(input.returnUrl ? { return_url: input.returnUrl } : {}),
             ...(input.startDate ? { start_date: input.startDate } : {}),
           },
           {

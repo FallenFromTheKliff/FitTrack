@@ -30,6 +30,7 @@ import {
 
 import { TrimString } from '../../../common/validators';
 import { DateRangeDTO } from '../../../user/dto/user-dto';
+import { CommerceCheckoutReturnInputDTO } from '../commerce/dto/checkout-return.dto';
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 export enum CoachAppointmentBookingMode {
@@ -105,7 +106,7 @@ export class CoachAvailabilitySlotResponseDTO {
   start_at: string;
 }
 
-export class CreateAppointmentDTO {
+export class CreateAppointmentDTO extends CommerceCheckoutReturnInputDTO {
   @ApiProperty({ example: '22222222-2222-4222-8222-222222222222' })
   @IsUUID('all', { message: 'coach_id must be a valid UUID' })
   coach_id: string;

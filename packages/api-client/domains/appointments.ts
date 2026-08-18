@@ -4,6 +4,7 @@ import {
   mapCommerceCheckoutAttempt,
   type CommerceCheckoutApiRecord,
   type CommerceCheckoutAttempt,
+  type CommerceCheckoutReturnInput,
 } from "./commerce-checkout";
 
 export type AppointmentCoachSummary = {
@@ -73,7 +74,7 @@ export type CoachScheduleRecord = {
   } | null;
 };
 
-export type CreateAppointmentPayload = {
+export type CreateAppointmentPayload = CommerceCheckoutReturnInput & {
   bookingMode?: "pack" | "recurring" | "single";
   coachId: string;
   duration: number;
@@ -252,12 +253,16 @@ export function createAppointmentsApi(transport: ApiTransport) {
       return unwrapResponse<CommerceCheckoutApiRecord>(
         transport.post(
           "/coaching/appointments",
-          {
+      {
           coach_id: payload.coachId,
           duration_minutes: payload.duration,
           ...(payload.bookingMode
             ? { booking_mode: payload.bookingMode }
             : {}),
+          ...(payload.returnTarget
+            ? { return_target: payload.returnTarget }
+            : {}),
+          ...(payload.returnUrl ? { return_url: payload.returnUrl } : {}),
           ...(payload.notes ? { member_notes: payload.notes } : {}),
           ...(payload.sessionCount !== undefined
             ? { session_count: payload.sessionCount }

@@ -24,6 +24,7 @@ import {
 } from '@prisma/client';
 
 import { TrimString } from '../../../common/validators';
+import { CommerceCheckoutReturnInputDTO } from '../../../coaching/commerce/dto/checkout-return.dto';
 
 export class PaginationDTO {
   @ApiPropertyOptional({ default: 1 })
@@ -148,7 +149,7 @@ export class CancelSubscriptionDTO {
   reason?: string;
 }
 
-export class CreateSubscriptionDTO {
+export class CreateSubscriptionDTO extends CommerceCheckoutReturnInputDTO {
   @ApiProperty({ example: '3f27a1c4-2c31-4e67-9a56-53d9d0c7d4c1' })
   @IsUUID('4', { message: 'plan_id must be a valid UUID' })
   plan_id: string;

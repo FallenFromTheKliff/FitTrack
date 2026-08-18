@@ -182,15 +182,18 @@ export type UpdateMembershipCatalogSettingsInput = {
 };
 
 export type SubscribeToMembershipInput = {
+  returnTarget?: "web" | "expo_web" | "mobile";
+  returnUrl?: string;
   idempotencyKey?: string;
   planId: string;
   provider: "paymongo";
 };
 
 export type PurchaseMembershipCardInput = {
+  returnTarget?: "web" | "expo_web" | "mobile";
+  returnUrl?: string;
   idempotencyKey?: string;
   provider: "paymongo";
-  returnTarget?: "web" | "mobile";
 };
 
 export type MembershipCardPurchaseRecord = {

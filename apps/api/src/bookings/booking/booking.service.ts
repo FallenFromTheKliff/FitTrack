@@ -412,6 +412,8 @@ export class BookingService {
         amount: amounts.totalAmount,
         coachId: dto.coach_id,
         endsAt: schedule.endsAt,
+        returnTarget: dto.return_target,
+        returnUrl: dto.return_url,
         idempotencyKey: normalizedIdempotencyKey,
         memberNotes: dto.notes,
         startsAt: schedule.startsAt,

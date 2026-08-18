@@ -91,7 +91,9 @@ function toReviewFilterParams(filters?: MembershipPaymentReviewFilters) {
 function toSubscribeRequest(payload: SubscribeToMembershipInput) {
   return {
     plan_id: payload.planId,
-    provider: payload.provider
+    provider: payload.provider,
+    ...(payload.returnTarget ? { return_target: payload.returnTarget } : {}),
+    ...(payload.returnUrl ? { return_url: payload.returnUrl } : {}),
   };
 }
 
@@ -185,7 +187,8 @@ function mapOperationsDashboard(
 function toPurchaseMembershipCardRequest(payload: PurchaseMembershipCardInput) {
   return {
     provider: payload.provider,
-    ...(payload.returnTarget ? { return_target: payload.returnTarget } : {})
+    ...(payload.returnTarget ? { return_target: payload.returnTarget } : {}),
+    ...(payload.returnUrl ? { return_url: payload.returnUrl } : {}),
   };
 }
 

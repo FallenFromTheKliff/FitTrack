@@ -30,6 +30,7 @@ import {
 } from 'class-validator';
 
 import { TrimString } from '../../../common/validators';
+import { CommerceCheckoutReturnInputDTO } from '../commerce/dto/checkout-return.dto';
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -200,7 +201,7 @@ export class RecurringCoachingPlanBaseDTO {
   schedule_items?: RecurringCoachingScheduleItemDTO[];
 }
 
-export class EnrollRecurringCoachingPlanDTO {
+export class EnrollRecurringCoachingPlanDTO extends CommerceCheckoutReturnInputDTO {
   @ApiProperty({ example: '22222222-2222-4222-8222-222222222222' })
   @IsUUID('all', { message: 'coach_id must be a valid UUID' })
   coach_id: string;

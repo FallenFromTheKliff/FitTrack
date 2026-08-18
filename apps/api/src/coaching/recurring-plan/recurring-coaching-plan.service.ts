@@ -167,6 +167,8 @@ export class RecurringCoachingPlanService {
       coachId: dto.coach_id,
       durationMinutes: offer.durationMinutes,
       endDate,
+      returnTarget: dto.return_target,
+      returnUrl: dto.return_url,
       idempotencyKey: idempotencyKey ?? '',
       sessionCount: offer.sessionCount,
       startDate,

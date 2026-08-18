@@ -249,6 +249,8 @@ export class AppointmentService {
       idempotencyKey: idempotencyKey ?? '',
       memberNotes: this.formatMemberAppointmentNotes(dto),
       scheduledAt,
+      returnTarget: dto.return_target,
+      returnUrl: dto.return_url,
       userId,
     });
   }

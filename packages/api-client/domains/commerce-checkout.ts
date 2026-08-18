@@ -8,6 +8,20 @@ export type CommerceCheckoutKind =
   | "subscription"
   | "membership_card";
 
+export type CommerceCheckoutReturnTarget = "web" | "expo_web" | "mobile";
+
+export type CommerceCheckoutFlow =
+  | "membership-card"
+  | "membership-subscription"
+  | "coach-single"
+  | "coach-monthly"
+  | "venue-booking";
+
+export type CommerceCheckoutReturnInput = {
+  returnTarget?: CommerceCheckoutReturnTarget;
+  returnUrl?: string;
+};
+
 export type CommerceCheckoutHoldState =
   | "pending"
   | "succeeded"

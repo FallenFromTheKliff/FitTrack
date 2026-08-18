@@ -147,6 +147,8 @@ describe('CoachingCommerceService', () => {
       coachId: 'coach-1',
       durationMinutes: 60,
       idempotencyKey: 'attempt-1',
+      returnTarget: 'expo_web',
+      returnUrl: 'https://local.expo.app/checkout-return',
       scheduledAt: new Date('2099-04-01T08:00:00.000Z'),
       userId: 'member-1',
     };
@@ -161,8 +163,18 @@ describe('CoachingCommerceService', () => {
       expect.objectContaining({
         amount: 120000,
         idempotencyKey: 'attempt-1',
-        cancelQuery: { hold_id: 'hold-1' },
-        successQuery: { hold_id: 'hold-1' },
+        cancelQuery: {
+          client: 'expo_web',
+          flow: 'coach-single',
+          hold_id: 'hold-1',
+          return_url: 'https://local.expo.app/checkout-return',
+        },
+        successQuery: {
+          client: 'expo_web',
+          flow: 'coach-single',
+          hold_id: 'hold-1',
+          return_url: 'https://local.expo.app/checkout-return',
+        },
         metadata: expect.objectContaining({
           coaching_checkout_hold_id: 'hold-1',
           hold_id: 'hold-1',
@@ -272,13 +284,21 @@ describe('CoachingCommerceService', () => {
     });
     expect(paymongoCheckoutService.createCheckoutSession).toHaveBeenCalledWith(
       expect.objectContaining({
-        cancelQuery: { hold_id: 'hold-monthly-2' },
+        cancelQuery: {
+          client: 'web',
+          flow: 'coach-monthly',
+          hold_id: 'hold-monthly-2',
+        },
         idempotencyKey,
         metadata: expect.objectContaining({
           hold_id: 'hold-monthly-2',
           payment_id: 'payment-monthly-2',
         }),
-        successQuery: { hold_id: 'hold-monthly-2' },
+        successQuery: {
+          client: 'web',
+          flow: 'coach-monthly',
+          hold_id: 'hold-monthly-2',
+        },
       }),
     );
     expect(tx.commerceCheckoutHold.create).toHaveBeenCalledWith({
@@ -355,6 +375,74 @@ describe('CoachingCommerceService', () => {
           client: 'mobile',
           flow: 'membership-card',
           hold_id: 'hold-card-mobile-1',
+        },
+      }),
+    );
+  });
+
+  it('uses membership subscription return context and persists hold_id/client/flow', async () => {
+    const idempotencyKey = 'attempt-subscription-1';
+    const createdHold = makeHold({
+      id: 'hold-subscription-1',
+      idempotency_key: idempotencyKey,
+      kind: CommerceCheckoutHoldKind.subscription,
+      payment: {
+        ...makeHold().payment,
+        amount: new Prisma.Decimal('12000'),
+        gateway_metadata: null,
+        id: 'payment-subscription-1',
+        idempotency_key: idempotencyKey,
+        payable_id: 'hold-subscription-1',
+      },
+      payment_id: 'payment-subscription-1',
+    });
+    const tx = {
+      $executeRaw: jest.fn(),
+      commerceCheckoutHold: {
+        create: jest.fn().mockResolvedValue(createdHold),
+        findUniqueOrThrow: jest.fn().mockResolvedValue(createdHold),
+        update: jest.fn().mockResolvedValue(createdHold),
+      },
+      payment: {
+        create: jest.fn().mockResolvedValue(createdHold.payment),
+      },
+    };
+    commerceCheckoutHold.findUnique.mockResolvedValue(null);
+    prisma.$transaction.mockImplementation(
+      (callback: (value: unknown) => unknown) => callback(tx),
+    );
+    paymongoCheckoutService.createCheckoutSession.mockResolvedValue({
+      checkoutUrl: 'https://checkout.paymongo.com/subscription-1',
+      gatewayMetadata: {
+        checkout_url: 'https://checkout.paymongo.com/subscription-1',
+      },
+      providerRef: 'cs-subscription-1',
+    });
+    payment.update.mockResolvedValue({
+      ...createdHold.payment,
+      gateway_metadata: {
+        checkout_url: 'https://checkout.paymongo.com/subscription-1',
+      },
+    });
+
+    await service.createSubscriptionCheckout({
+      amount: new Prisma.Decimal('12000'),
+      idempotencyKey,
+      planId: 'plan-1',
+      userId: 'member-1',
+    });
+
+    expect(paymongoCheckoutService.createCheckoutSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cancelQuery: {
+          client: 'web',
+          flow: 'membership-subscription',
+          hold_id: 'hold-subscription-1',
+        },
+        successQuery: {
+          client: 'web',
+          flow: 'membership-subscription',
+          hold_id: 'hold-subscription-1',
         },
       }),
     );
@@ -561,6 +649,20 @@ describe('CoachingCommerceService', () => {
     expect(
       tx.commerceCheckoutHold.findMany.mock.invocationCallOrder[0],
     ).toBeLessThan(tx.commerceCheckoutHold.create.mock.invocationCallOrder[0]);
+    expect(paymongoCheckoutService.createCheckoutSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cancelQuery: {
+          client: 'web',
+          flow: 'venue-booking',
+          hold_id: 'hold-venue-coach-1',
+        },
+        successQuery: {
+          client: 'web',
+          flow: 'venue-booking',
+          hold_id: 'hold-venue-coach-1',
+        },
+      }),
+    );
   });
 
   it('serializes venue coach holds and rejects an exact live-hold overlap', async () => {

@@ -10,6 +10,7 @@ import {
   mapCommerceCheckoutAttempt,
   type CommerceCheckoutApiRecord,
   type CommerceCheckoutAttempt,
+  type CommerceCheckoutReturnInput,
 } from "./commerce-checkout";
 
 export type BookingVenueSummary = {
@@ -117,7 +118,7 @@ export type AmenityBookingApiRecord = {
   user_id?: string;
 };
 
-export type CreateBookingPayload = {
+export type CreateBookingPayload = CommerceCheckoutReturnInput & {
   coachId?: string;
   durationHours: number;
   idempotencyKey?: string;
@@ -375,15 +376,19 @@ export function createBookingsApi(transport: ApiTransport) {
       return unwrapResponse<BookingCheckoutApiResponse>(
         transport.post(
           "/bookings/amenity",
-          {
-            amenity_id: amenityId,
-            coach_id: payload.coachId,
-            ends_at: endsAt.toISOString(),
-            notes: payload.purpose,
-            payment_stage: payload.paymentStage ?? "full",
-            provider: payload.provider ?? "paymongo",
-            starts_at: startsAt.toISOString(),
-          },
+      {
+        amenity_id: amenityId,
+        coach_id: payload.coachId,
+        ends_at: endsAt.toISOString(),
+        ...(payload.returnTarget
+          ? { return_target: payload.returnTarget }
+          : {}),
+        ...(payload.returnUrl ? { return_url: payload.returnUrl } : {}),
+        notes: payload.purpose,
+        payment_stage: payload.paymentStage ?? "full",
+        provider: payload.provider ?? "paymongo",
+        starts_at: startsAt.toISOString(),
+      },
           {
             headers: {
               "Idempotency-Key":

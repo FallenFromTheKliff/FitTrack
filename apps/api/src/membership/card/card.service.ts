@@ -76,8 +76,9 @@ export class MembershipCardService {
     const price = await this.repo.getMembershipCardPrice();
     return this.commerceCheckoutService.createMembershipCardCheckout({
       amount: price,
+      returnTarget: dto.return_target,
+      returnUrl: dto.return_url,
       idempotencyKey: normalizedIdempotencyKey,
-      returnTarget: dto.return_target ?? 'web',
       userId,
     });
   }

@@ -188,6 +188,8 @@ export class SubscriptionService {
 
     return this.commerceCheckoutService.createSubscriptionCheckout({
       amount: plan.price,
+      returnTarget: dto.return_target,
+      returnUrl: dto.return_url,
       idempotencyKey: normalizedIdempotencyKey,
       planId: plan.id,
       userId,

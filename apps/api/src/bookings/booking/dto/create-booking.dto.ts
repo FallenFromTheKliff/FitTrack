@@ -15,12 +15,13 @@ import {
 } from 'class-validator';
 
 import { IsOnOrAfter, TrimString } from '../../../common/validators';
+import { CommerceCheckoutReturnInputDTO } from '../../coaching/commerce/dto/checkout-return.dto';
 
 export enum CreateBookingPaymentStage {
   full = 'full',
 }
 
-export class CreateBookingDTO {
+export class CreateBookingDTO extends CommerceCheckoutReturnInputDTO {
   @ApiProperty({
     example: '7e9f96f7-8efe-5598-a978-5cd6ecf73a06',
     description:

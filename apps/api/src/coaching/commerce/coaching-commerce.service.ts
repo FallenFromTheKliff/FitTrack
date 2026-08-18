@@ -28,6 +28,10 @@ import {
 } from '../../membership/payment/paymongo-checkout.service';
 import { lockAndAssertVenueCoachWindow } from './venue-coach-scheduling';
 import { getAmenityBookingBlockReason } from '../../bookings/amenity/amenity-reservability';
+import {
+  CommerceCheckoutFlow,
+  CommerceCheckoutReturnTarget,
+} from './dto/checkout-return.dto';
 
 const CHECKOUT_HOLD_TTL_MINUTES = 15;
 
@@ -73,7 +77,7 @@ export type OneTimeCheckoutInput = {
   memberNotes?: string;
   scheduledAt: Date;
   userId: string;
-};
+} & CommerceCheckoutReturnInput;
 
 export type MonthlyCheckoutInput = {
   amount: Prisma.Decimal;
@@ -86,7 +90,7 @@ export type MonthlyCheckoutInput = {
   sessionCount: number;
   startDate: Date;
   userId: string;
-};
+} & CommerceCheckoutReturnInput;
 
 export type VenueCheckoutInput = {
   amenityId: string;
@@ -97,20 +101,24 @@ export type VenueCheckoutInput = {
   memberNotes?: string;
   startsAt: Date;
   userId: string;
-};
+} & CommerceCheckoutReturnInput;
 
 export type SubscriptionCheckoutInput = {
   amount: Prisma.Decimal;
   idempotencyKey: string;
   planId: string;
   userId: string;
-};
+} & CommerceCheckoutReturnInput;
 
 export type MembershipCardCheckoutInput = {
   amount: Prisma.Decimal;
   idempotencyKey: string;
-  returnTarget?: 'web' | 'mobile';
   userId: string;
+} & CommerceCheckoutReturnInput;
+
+type CommerceCheckoutReturnInput = {
+  returnTarget?: CommerceCheckoutReturnTarget;
+  returnUrl?: string;
 };
 
 type CheckoutHoldWithPayment = Prisma.CommerceCheckoutHoldGetPayload<{
@@ -144,6 +152,7 @@ export class CoachingCommerceService {
   async createOneTimeCheckout(
     input: OneTimeCheckoutInput,
   ): Promise<CoachingCheckoutResponse> {
+    const returnQuery = this.buildCheckoutReturnQuery(input, 'coach-single');
     const idempotencyKey = this.normalizeIdempotencyKey(input.idempotencyKey);
     const existing = await this.findHoldByIdempotencyKey(idempotencyKey);
     if (existing) {
@@ -156,7 +165,7 @@ export class CoachingCommerceService {
 
       const refreshed = await this.findHoldByIdempotencyKey(idempotencyKey);
       if (refreshed) {
-        return this.resumeOrReturnExisting(refreshed, 'one-time coaching');
+        return this.resumeOrReturnExisting(refreshed, 'one-time coaching', returnQuery);
       }
     }
 
@@ -215,7 +224,7 @@ export class CoachingCommerceService {
       ) {
         const duplicate = await this.findHoldByIdempotencyKey(idempotencyKey);
         if (duplicate) {
-          return this.resumeOrReturnExisting(duplicate, 'one-time coaching');
+          return this.resumeOrReturnExisting(duplicate, 'one-time coaching', returnQuery);
         }
       }
       throw error;
@@ -224,12 +233,14 @@ export class CoachingCommerceService {
     return this.startPaymongoCheckout(
       created,
       `One-time coaching appointment`,
+      returnQuery,
     );
   }
 
   async createMonthlyCheckout(
     input: MonthlyCheckoutInput,
   ): Promise<CoachingCheckoutResponse> {
+    const returnQuery = this.buildCheckoutReturnQuery(input, 'coach-monthly');
     const idempotencyKey = this.normalizeIdempotencyKey(input.idempotencyKey);
     const existing = await this.findHoldByIdempotencyKey(idempotencyKey);
     if (existing) {
@@ -241,7 +252,11 @@ export class CoachingCommerceService {
       }
       const refreshed = await this.findHoldByIdempotencyKey(idempotencyKey);
       if (refreshed) {
-        return this.resumeOrReturnExisting(refreshed, 'monthly coaching');
+        return this.resumeOrReturnExisting(
+          refreshed,
+          'monthly coaching',
+          returnQuery,
+        );
       }
     }
 
@@ -297,22 +312,31 @@ export class CoachingCommerceService {
       ) {
         const duplicate = await this.findHoldByIdempotencyKey(idempotencyKey);
         if (duplicate) {
-          return this.resumeOrReturnExisting(duplicate, 'monthly coaching');
+          return this.resumeOrReturnExisting(
+            duplicate,
+            'monthly coaching',
+            returnQuery,
+          );
         }
       }
       throw error;
     }
 
-    return this.startPaymongoCheckout(created, `Monthly coaching enrollment`);
+    return this.startPaymongoCheckout(
+      created,
+      `Monthly coaching enrollment`,
+      returnQuery,
+    );
   }
 
   async createVenueCheckout(
     input: VenueCheckoutInput,
   ): Promise<CoachingCheckoutResponse> {
+    const returnQuery = this.buildCheckoutReturnQuery(input, 'venue-booking');
     const idempotencyKey = this.normalizeIdempotencyKey(input.idempotencyKey);
     const existing = await this.findHoldByIdempotencyKey(idempotencyKey);
     if (existing) {
-      return this.resumeOrReturnExisting(existing, 'venue booking');
+      return this.resumeOrReturnExisting(existing, 'venue booking', returnQuery);
     }
 
     const expiresAt = new Date(
@@ -356,22 +380,31 @@ export class CoachingCommerceService {
       ) {
         const duplicate = await this.findHoldByIdempotencyKey(idempotencyKey);
         if (duplicate) {
-          return this.resumeOrReturnExisting(duplicate, 'venue booking');
+          return this.resumeOrReturnExisting(duplicate, 'venue booking', returnQuery);
         }
       }
       throw error;
     }
 
-    return this.startPaymongoCheckout(created, 'Venue booking');
+    return this.startPaymongoCheckout(
+      created,
+      'Venue booking',
+      returnQuery,
+    );
   }
 
   async createSubscriptionCheckout(
     input: SubscriptionCheckoutInput,
   ): Promise<CoachingCheckoutResponse> {
+    const returnQuery = this.buildCheckoutReturnQuery(input, 'membership-subscription');
     const idempotencyKey = this.normalizeIdempotencyKey(input.idempotencyKey);
     const existing = await this.findHoldByIdempotencyKey(idempotencyKey);
     if (existing) {
-      return this.resumeOrReturnExisting(existing, 'membership subscription');
+      return this.resumeOrReturnExisting(
+        existing,
+        'membership subscription',
+        returnQuery,
+      );
     }
 
     const expiresAt = new Date(
@@ -400,25 +433,28 @@ export class CoachingCommerceService {
           return this.resumeOrReturnExisting(
             duplicate,
             'membership subscription',
+            returnQuery,
           );
         }
       }
       throw error;
     }
 
-    return this.startPaymongoCheckout(created, 'Membership subscription');
+    return this.startPaymongoCheckout(
+      created,
+      'Membership subscription',
+      returnQuery,
+    );
   }
 
   async createMembershipCardCheckout(
     input: MembershipCardCheckoutInput,
   ): Promise<CoachingCheckoutResponse> {
+    const returnQuery = this.buildCheckoutReturnQuery(input, 'membership-card');
     const idempotencyKey = this.normalizeIdempotencyKey(input.idempotencyKey);
     const existing = await this.findHoldByIdempotencyKey(idempotencyKey);
     if (existing) {
-      return this.resumeOrReturnExisting(existing, 'membership card', {
-        flow: 'membership-card',
-        client: input.returnTarget ?? 'web',
-      });
+      return this.resumeOrReturnExisting(existing, 'membership card', returnQuery);
     }
 
     const expiresAt = new Date(
@@ -456,19 +492,25 @@ export class CoachingCommerceService {
       ) {
         const duplicate = await this.findHoldByIdempotencyKey(idempotencyKey);
         if (duplicate) {
-          return this.resumeOrReturnExisting(duplicate, 'membership card', {
-            flow: 'membership-card',
-            client: input.returnTarget ?? 'web',
-          });
+          return this.resumeOrReturnExisting(duplicate, 'membership card', returnQuery);
         }
       }
       throw error;
     }
 
-    return this.startPaymongoCheckout(created, 'Membership card', {
-      flow: 'membership-card',
-      client: input.returnTarget ?? 'web',
-    });
+    return this.startPaymongoCheckout(created, 'Membership card', returnQuery);
+  }
+
+  private buildCheckoutReturnQuery(
+    input: CommerceCheckoutReturnInput,
+    flow: CommerceCheckoutFlow,
+  ): Record<string, string> {
+    const client = input.returnTarget ?? 'web';
+    return {
+      client,
+      flow,
+      ...(input.returnUrl ? { return_url: input.returnUrl } : {}),
+    };
   }
 
   async expireHolds(now = new Date()): Promise<number> {
