@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useMemo, useCallback, useEffect, useRef, useState } from "react";
 import {
   Modal,
   Pressable,
@@ -86,6 +86,7 @@ import {
   getTodayString,
 } from "@/data/bookings";
 import { mobileApiClient } from "@/lib/api-client";
+import { resolveCheckoutReturnInput } from "@/hooks/commerce/useCommerceCheckoutReturn";
 import { toMobileBookings } from "@/utils/venueBookings";
 import { CoachClientPaidSchedule } from "@/components/bookings/CoachClientPaidSchedule";
 import { CoachClientWorkoutPrograms } from "@/components/bookings/CoachClientWorkoutPrograms";
@@ -171,6 +172,55 @@ type PendingCoachAction = {
   booking: DetailBooking;
   workType: "appointment" | "venue_work";
 };
+type MobileBookingReturnFlow =
+  | "coach-single"
+  | "coach-monthly"
+  | "venue-booking";
+type CheckoutReturnFlow =
+  | MobileBookingReturnFlow
+  | "membership-card"
+  | "membership-subscription";
+
+const BOOKING_RETURN_FLOWS: ReadonlySet<MobileBookingReturnFlow> = new Set([
+  "coach-single",
+  "coach-monthly",
+  "venue-booking",
+]);
+
+function parseCheckoutReturnFlow(
+  value?: string | string[],
+): CheckoutReturnFlow | null {
+  const valueString = Array.isArray(value) ? value[0] : value;
+  if (
+    valueString === "coach-single" ||
+    valueString === "coach-monthly" ||
+    valueString === "venue-booking" ||
+    valueString === "membership-card" ||
+    valueString === "membership-subscription"
+  ) {
+    return valueString;
+  }
+  return null;
+}
+
+function toHourMinuteIndex(value?: string) {
+  const normalized = (value ?? "").trim();
+  const match = normalized.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!match) return 0;
+  let hour = Number(match[1]);
+  const minute = Number(match[2]);
+  const period = match[3].toUpperCase();
+  if (Number.isNaN(hour) || Number.isNaN(minute)) return 0;
+  if (period === "AM" && hour === 12) hour = 0;
+  if (period === "PM" && hour !== 12) hour += 12;
+  return hour * 60 + minute;
+}
+
+function parseStartMinute(booking: DetailBooking) {
+  return toHourMinuteIndex(
+    booking.startTime || booking.time?.split(" - ")[0]?.trim(),
+  );
+}
 
 function formatStatusLabel(status: string) {
   const explicitLabels: Record<string, string> = {
@@ -397,9 +447,18 @@ export default function BookingsScreen() {
   const params = useLocalSearchParams<{
     coachView?: string | string[];
     openReservation?: string;
+    checkout_result?: string | string[];
+    hold_id?: string | string[];
+    checkout_flow?: string | string[];
   }>();
   const isFrozen = user?.status === "frozen";
   const queryClient = useQueryClient();
+  const checkoutHoldHandledRef = useRef<string | null>(null);
+  const checkoutResult = getSearchParamValue(params.checkout_result);
+  const checkoutHoldId = getSearchParamValue(params.hold_id);
+  const checkoutFlow = parseCheckoutReturnFlow(params.checkout_flow);
+  const isBookingCheckoutFlow =
+    checkoutFlow !== null && BOOKING_RETURN_FLOWS.has(checkoutFlow);
 
   const recurringPlansQuery = useQuery({
     ...recurringCoachingPlansQueryOptions(mobileApiClient),
@@ -437,6 +496,8 @@ export default function BookingsScreen() {
   );
   const [clientDetailTab, setClientDetailTab] =
     useState<CoachClientDetailTab>("overview");
+  const [checkoutResultNotice, setCheckoutResultNotice] =
+    useState<PaymentConfirmationState | null>(null);
   const lastMonthlyPlanForClient =
     useMemo<RecurringCoachingPlanRecord | null>(() => {
       if (!clientDetail?.id) return null;
@@ -1035,6 +1096,151 @@ export default function BookingsScreen() {
     user?.id,
   ]);
 
+  const clearCheckoutReturnParams = useCallback(() => {
+    const nextParams: Record<string, string> = {};
+    const coachView = getSearchParamValue(params.coachView);
+    if (coachView) nextParams.coachView = coachView;
+    if (params.openReservation === "true") nextParams.openReservation = "true";
+
+    router.replace({
+      pathname: "/(tabs)/bookings",
+      params: nextParams,
+    });
+  }, [params.coachView, params.openReservation, router]);
+
+  useEffect(() => {
+    if (!isFocused || !isUserRole || checkoutResult !== "success") return;
+    if (!checkoutHoldId || !checkoutFlow || !isBookingCheckoutFlow) {
+      return;
+    }
+    if (checkoutHoldHandledRef.current === checkoutHoldId) return;
+    checkoutHoldHandledRef.current = checkoutHoldId;
+
+    const handleCheckoutReturn = async () => {
+      if (checkoutResult !== "success") return;
+      if (checkoutFlow === "coach-monthly") {
+        try {
+          const attempt =
+            await mobileApiClient.commerceCheckout.reconcileHold(checkoutHoldId);
+          await Promise.all([
+            recurringPlansQuery.refetch(),
+            refetchAppointments(),
+          ]);
+          if (attempt.state === "succeeded") {
+            setCheckoutResultNotice({
+              title: "Checkout completed",
+              message: "PayMongo confirmed your booking. Your monthly coaching is now active.",
+            });
+          } else {
+            setCheckoutResultNotice({
+              title: "Checkout still processing",
+              message: "Payment is still being processed. Your bookings will update when backend confirms.",
+            });
+          }
+        } catch {
+          setCheckoutResultNotice({
+            title: "Checkout verification failed",
+            message:
+              "We could not verify this payment yet. Your booking list will stay in source-of-truth mode.",
+          });
+        } finally {
+          clearCheckoutReturnParams();
+        }
+        return;
+      }
+
+      if (checkoutFlow === "coach-single") {
+        try {
+          const attempt =
+            await mobileApiClient.commerceCheckout.reconcileHold(checkoutHoldId);
+          await refetchAppointments();
+          if (attempt.state === "succeeded") {
+            setCheckoutResultNotice({
+              title: "Checkout completed",
+              message: "PayMongo confirmed your booking. Your session is now booked.",
+            });
+          } else {
+            setCheckoutResultNotice({
+              title: "Checkout still processing",
+              message: "Payment is still being processed. Your bookings will update when backend confirms.",
+            });
+          }
+        } catch {
+          setCheckoutResultNotice({
+            title: "Checkout verification failed",
+            message:
+              "We could not verify this payment yet. Your booking list will stay in source-of-truth mode.",
+          });
+        } finally {
+          clearCheckoutReturnParams();
+        }
+        return;
+      }
+
+      if (checkoutFlow === "venue-booking") {
+        try {
+          const attempt =
+            await mobileApiClient.commerceCheckout.reconcileHold(checkoutHoldId);
+          await refetch();
+          if (attempt.state === "succeeded") {
+            setCheckoutResultNotice({
+              title: "Checkout completed",
+              message:
+                "PayMongo confirmed your reservation. It will appear when the booking updates.",
+            });
+          } else {
+            setCheckoutResultNotice({
+              title: "Checkout still processing",
+              message: "Payment is still being processed. Your reservations will update when backend confirms.",
+            });
+          }
+        } catch {
+          setCheckoutResultNotice({
+            title: "Checkout verification failed",
+            message:
+              "We could not verify this payment yet. Your reservation list will stay in source-of-truth mode.",
+          });
+        } finally {
+          clearCheckoutReturnParams();
+        }
+      }
+    };
+
+    void handleCheckoutReturn();
+  }, [
+    clearCheckoutReturnParams,
+    checkoutFlow,
+    checkoutHoldId,
+    checkoutResult,
+    recurringPlansQuery.refetch,
+    isFocused,
+    isUserRole,
+    refetch,
+    refetchAppointments,
+  ]);
+
+  useEffect(() => {
+    if (!isFocused || !isUserRole || checkoutResult !== "cancel") return;
+    if (!checkoutHoldId || !checkoutFlow || !isBookingCheckoutFlow) {
+      return;
+    }
+    if (checkoutHoldHandledRef.current === `${checkoutHoldId}:cancel`) return;
+    checkoutHoldHandledRef.current = `${checkoutHoldId}:cancel`;
+
+    clearCheckoutReturnParams();
+    setCheckoutResultNotice({
+      title: "Checkout cancelled",
+      message: "The payment was not completed. Your booking remains unchanged.",
+    });
+  }, [
+    checkoutFlow,
+    checkoutHoldId,
+    checkoutResult,
+    clearCheckoutReturnParams,
+    isFocused,
+    isUserRole,
+  ]);
+
   useFocusEffect(
     useCallback(() => {
       if (params.openReservation === "true" && !isFrozen && isUserRole)
@@ -1542,6 +1748,16 @@ export default function BookingsScreen() {
     return result;
   }, [activeItems, debouncedSearchQuery, endDate, startDate, statusFilter]);
 
+  const filteredNewestFirst = useMemo(() => {
+    const sorted = [...filtered];
+    sorted.sort((left, right) => {
+      const byDate = right.date.localeCompare(left.date);
+      if (byDate !== 0) return byDate;
+      return parseStartMinute(right) - parseStartMinute(left);
+    });
+    return sorted;
+  }, [filtered]);
+
   const coachSessionsForClientSummary = useMemo(() => {
     let result = appointmentsWithTimeline;
     if (statusFilter !== "all") {
@@ -1715,21 +1931,21 @@ export default function BookingsScreen() {
 
   const bookingTotalPages = Math.max(
     1,
-    Math.ceil(filtered.length / BOOKINGS_PAGE_SIZE),
+    Math.ceil(filteredNewestFirst.length / BOOKINGS_PAGE_SIZE),
   );
   const safeBookingPage = Math.min(bookingPage, bookingTotalPages);
   const pagedBookings = useMemo(() => {
     const start = (safeBookingPage - 1) * BOOKINGS_PAGE_SIZE;
-    return filtered.slice(start, start + BOOKINGS_PAGE_SIZE);
-  }, [filtered, safeBookingPage]);
-  const grouped = groupItemsByDate(pagedBookings, "asc");
+    return filteredNewestFirst.slice(start, start + BOOKINGS_PAGE_SIZE);
+  }, [filteredNewestFirst, safeBookingPage]);
+  const grouped = groupItemsByDate(pagedBookings, "desc");
   const bookingCountByDate = useMemo(() => {
     const counts = new Map<string, number>();
-    filtered.forEach((booking) => {
+    filteredNewestFirst.forEach((booking) => {
       counts.set(booking.date, (counts.get(booking.date) ?? 0) + 1);
     });
     return counts;
-  }, [filtered]);
+  }, [filteredNewestFirst]);
   const isEmpty =
     !isLoading &&
     (activeSection === "clients" && isCoachRole
@@ -3001,6 +3217,13 @@ export default function BookingsScreen() {
         onClose={() => setCancellationFailure(null)}
       />
       <NoticeModal
+        isVisible={checkoutResultNotice != null}
+        title={checkoutResultNotice?.title ?? "Checkout result"}
+        message={checkoutResultNotice?.message ?? ""}
+        buttonLabel="Continue"
+        onClose={() => setCheckoutResultNotice(null)}
+      />
+      <NoticeModal
         isVisible={coachActionFailure != null}
         title={coachActionFailure?.title ?? "Session update unavailable"}
         message={coachActionFailure?.message ?? ""}
@@ -3097,6 +3320,7 @@ export default function BookingsScreen() {
           onMonthlySubmit={async ({ coachId, idempotencyKey, startDate }) => {
             const checkout =
               await mobileApiClient.recurringCoachingPlans.enroll({
+                ...resolveCheckoutReturnInput("bookings"),
                 coachId,
                 idempotencyKey,
                 startDate,

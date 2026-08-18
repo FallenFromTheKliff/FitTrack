@@ -46,6 +46,7 @@ import { mobileApiClient } from "@/lib/api-client";
 import type { TimeSlot } from "@/components/modals";
 import {
   createCommerceAttemptIdempotencyKey,
+  resolveCheckoutReturnInput,
   useCommerceCheckoutReturn,
 } from "@/hooks/commerce/useCommerceCheckoutReturn";
 
@@ -790,11 +791,11 @@ export function useProfileScreen() {
     let checkoutAttemptPersisted = false;
     let checkoutOpened = false;
     try {
-      const result = await purchaseMembershipCardMutation.mutateAsync({
+    const result = await purchaseMembershipCardMutation.mutateAsync({
         payload: {
           provider: "paymongo",
           idempotencyKey,
-          returnTarget: "mobile",
+          ...resolveCheckoutReturnInput("profile"),
         },
         userId: user.id
       });

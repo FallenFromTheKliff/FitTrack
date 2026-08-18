@@ -7,6 +7,21 @@ import type {
 
 import { mobileApiClient } from "@/lib/api-client";
 
+type CheckoutReturnRoute = "bookings" | "profile";
+
+export function resolveCheckoutReturnInput(route: CheckoutReturnRoute) {
+  if (typeof window === "undefined") {
+    return {
+      returnTarget: "mobile" as const,
+    };
+  }
+
+  return {
+    returnTarget: "expo_web" as const,
+    returnUrl: new URL(`/${route}`, window.location.origin).toString(),
+  };
+}
+
 type CheckoutTerminalState = Exclude<
   CommerceCheckoutHoldState,
   "pending"

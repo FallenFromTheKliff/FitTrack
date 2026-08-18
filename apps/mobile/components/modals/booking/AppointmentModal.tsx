@@ -40,6 +40,7 @@ import { makeAppointmentModalStyles } from "@/styles/modals/AppointmentStyles";
 import { usePremiumFitnessAccess } from "@/hooks/membership/usePremiumFitnessAccess";
 import {
   createCommerceAttemptIdempotencyKey,
+  resolveCheckoutReturnInput,
   useCommerceCheckoutReturn,
 } from "@/hooks/commerce/useCommerceCheckoutReturn";
 
@@ -841,6 +842,7 @@ export default function AppointmentModal({
     try {
       checkoutAttempt = await createAppointmentMutation.mutateAsync({
         payload: {
+          ...resolveCheckoutReturnInput("bookings"),
           coachId: String(selectedCoach.id),
           scheduledAt: toGymWallClockIso(selectedDate, selectedSlot.startTime),
           duration: selectedDuration,
@@ -978,6 +980,7 @@ export default function AppointmentModal({
         coach: selectedCoach,
         coachId: String(selectedCoach.id),
         durationMinutes: monthlyOffer.durationMinutes ?? 0,
+        ...resolveCheckoutReturnInput("bookings"),
         mode: "monthly",
         monthlyOfferDescription: monthlyOffer.description,
         monthlyRate: monthlyOffer.rate ?? 0,

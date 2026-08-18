@@ -51,6 +51,7 @@ import { useThemeTransitionAnim } from "@/hooks/animations/core/useThemeTransiti
 import { useLoadingText } from "@fittrack/hooks";
 import {
   createCommerceAttemptIdempotencyKey,
+  resolveCheckoutReturnInput,
   useCommerceCheckoutReturn,
 } from "@/hooks/commerce/useCommerceCheckoutReturn";
 import { makeReservationModalStyles } from "@/styles/modals/ReservationStyles";
@@ -960,12 +961,33 @@ export default function ReservationModal({
   };
 
   const submitReservation = async () => {
-    if (!canConfirm || !selectedBookableVenue) return;
-    setApiError("");
-    if (!canUsePaymongo) {
-      setIsPaymongoNoticeOpen(true);
+    if (!selectedBookableVenue) return;
+    if (!date || !startTime || !endTime) {
+      setReviewAttempted(true);
+      setApiError("Please choose a reservation date, start time, and end time.");
       return;
     }
+    if (reservationHours <= 0 || !hasValidPricing) {
+      setApiError("This venue does not have a valid checkout price yet.");
+      return;
+    }
+    if (isSelectedStartInPast) {
+      setApiError("Same-day reservations must use a future start time.");
+      return;
+    }
+    if (!canUsePaymongo) {
+      setApiError("PayMongo checkout is currently unavailable.");
+      return;
+    }
+    if (hasConflict) {
+      setApiError("The selected time overlaps an active booking.");
+      return;
+    }
+    if (hasMemberTimeOverlap) {
+      setApiError("You already have a booking in this time window.");
+      return;
+    }
+    setApiError("");
     const startMinutes = timeToMinutes(startTime);
     const isoStart = toGymWallClockIso(date, startMinutes);
     const purpose =
@@ -980,6 +1002,7 @@ export default function ReservationModal({
       const result: BookingCheckoutResponse =
         await createBookingMutation.mutateAsync({
         payload: {
+          ...resolveCheckoutReturnInput("bookings"),
           coachId: selectedCoach ? String(selectedCoach.id) : undefined,
           paymentStage,
           provider: paymentProvider,

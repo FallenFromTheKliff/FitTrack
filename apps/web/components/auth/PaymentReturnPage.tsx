@@ -51,6 +51,88 @@ type CheckoutHoldState =
   | "error"
   | "retry";
 
+type CommerceCheckoutReturnClient = "web" | "expo_web" | "mobile";
+type CommerceCheckoutReturnFlow =
+  | "coach-single"
+  | "coach-monthly"
+  | "venue-booking"
+  | "membership-card"
+  | "membership-subscription";
+
+const BOOKING_RETURN_FLOWS = new Set([
+  "coach-single",
+  "coach-monthly",
+  "venue-booking",
+]);
+const PROFILE_RETURN_FLOWS = new Set(["membership-card", "membership-subscription"]);
+
+function isBookingCheckoutFlow(
+  flow: string | null | undefined,
+): flow is "coach-single" | "coach-monthly" | "venue-booking" {
+  return Boolean(flow && BOOKING_RETURN_FLOWS.has(flow));
+}
+
+function parseCheckoutFlow(
+  flow: string | null | undefined,
+): CommerceCheckoutReturnFlow | null {
+  if (
+    flow === "coach-single" ||
+    flow === "coach-monthly" ||
+    flow === "venue-booking" ||
+    flow === "membership-card" ||
+    flow === "membership-subscription"
+  ) {
+    return flow;
+  }
+
+  return null;
+}
+
+function parseCheckoutClient(
+  client: string | null | undefined,
+): CommerceCheckoutReturnClient {
+  if (client === "mobile" || client === "expo_web") return client;
+  return "web";
+}
+
+function isValidHttpOrHttpsUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function resolveMobileReturnUrl(
+  flow: CommerceCheckoutReturnFlow | null,
+  result: "cancel" | "success",
+  holdId: string | null,
+) {
+  const isBooking = isBookingCheckoutFlow(flow);
+  const route = isBooking ? "bookings" : "profile";
+  const params = new URLSearchParams({
+    checkout_result: result,
+  });
+  if (holdId) params.set("hold_id", holdId);
+  if (flow) params.set("checkout_flow", flow);
+  return `fittrack://${route}?${params.toString()}`;
+}
+
+function resolveExpoWebReturnUrl(
+  returnUrl: string | null,
+  flow: CommerceCheckoutReturnFlow | null,
+  result: "cancel" | "success",
+  holdId: string | null,
+) {
+  if (!returnUrl || !isValidHttpOrHttpsUrl(returnUrl)) return null;
+  const next = new URL(returnUrl);
+  next.searchParams.set("checkout_result", result);
+  if (holdId) next.searchParams.set("hold_id", holdId);
+  if (flow) next.searchParams.set("checkout_flow", flow);
+  return next.toString();
+}
+
 function resolveCheckoutHoldContent(
   baseContent: PaymentReturnContent,
   state: CheckoutHoldState | null | undefined,
@@ -325,9 +407,15 @@ export function PaymentReturnPage({ variant }: { variant: PaymentReturnVariant }
   const queryClient = useQueryClient();
   const [storedHold, setStoredHold] = useState<StoredCommerceCheckoutHold | null>(null);
   const reconcileAttemptedHoldId = useRef<string | null>(null);
-  const mobileDeepLinkAttemptRef = useRef<string | null>(null);
-  const queryHoldId = searchParams.get("hold_id") ?? searchParams.get("checkout_hold_id");
-  const isMobileReturn = searchParams.get("client") === "mobile";
+  const returnUrlAttemptedRef = useRef<string | null>(null);
+  const queryHoldId =
+    searchParams.get("hold_id") ?? searchParams.get("checkout_hold_id");
+  const returnClient = parseCheckoutClient(searchParams.get("client"));
+  const flow = parseCheckoutFlow(searchParams.get("flow"));
+  const isMobileReturn = returnClient === "mobile";
+  const isExpoWebReturn = returnClient === "expo_web";
+  const isProfileFlow = flow !== null && PROFILE_RETURN_FLOWS.has(flow);
+  const returnUrl = searchParams.get("return_url");
 
   useEffect(() => {
     setStoredHold(readCommerceCheckoutHold());
@@ -353,17 +441,19 @@ export function PaymentReturnPage({ variant }: { variant: PaymentReturnVariant }
     enabled:
       variant === "success" &&
       !isMobileReturn &&
+      !isExpoWebReturn &&
       Boolean(holdId) &&
       isReconcileSuccess,
     queryFn: () => webApiClient.commerceCheckout.getHoldStatus(holdId!),
     queryKey: ["commerce-checkout-return", holdId],
     refetchInterval: (query) => (query.state.data?.state === "pending" ? 2000 : false),
-    retry: 2
+    retry: 2,
   });
 
   useEffect(() => {
     if (
       isMobileReturn ||
+      isExpoWebReturn ||
       variant !== "success" ||
       !holdId ||
       reconcileAttemptedHoldId.current === holdId
@@ -373,14 +463,15 @@ export function PaymentReturnPage({ variant }: { variant: PaymentReturnVariant }
 
     reconcileAttemptedHoldId.current = holdId;
     reconcileHold(holdId);
-  }, [holdId, isMobileReturn, reconcileHold, variant]);
+  }, [holdId, isMobileReturn, isExpoWebReturn, reconcileHold, variant]);
 
   const latestAttempt = selectLatestCheckoutAttempt(
     reconciledAttempt,
     holdQuery.data,
   );
 
-  const checkoutState: CheckoutHoldState | null | undefined = isMobileReturn
+  const checkoutState: CheckoutHoldState | null | undefined = isMobileReturn ||
+    isExpoWebReturn
     ? null
     : isReconcileError
       ? "error"
@@ -397,7 +488,7 @@ export function PaymentReturnPage({ variant }: { variant: PaymentReturnVariant }
             : latestAttempt?.state ?? (holdQuery.isFetching ? "pending" : undefined);
 
   useEffect(() => {
-    if (isMobileReturn) return;
+    if (isMobileReturn || isExpoWebReturn) return;
     if (variant === "cancel") {
       clearCommerceCheckoutHold(holdId);
       return;
@@ -407,25 +498,23 @@ export function PaymentReturnPage({ variant }: { variant: PaymentReturnVariant }
       clearCommerceCheckoutHold(holdId);
       void queryClient.invalidateQueries();
     }
-  }, [checkoutState, holdId, isMobileReturn, queryClient, variant]);
+  }, [checkoutState, holdId, isMobileReturn, isExpoWebReturn, queryClient, variant]);
 
   useEffect(() => {
-    if (isMobileReturn || checkoutState !== "succeeded") return;
+    if (isMobileReturn || isExpoWebReturn || checkoutState !== "succeeded") return;
     return installCompletedCheckoutHistoryGuard();
-  }, [checkoutState, isMobileReturn]);
+  }, [checkoutState, isMobileReturn, isExpoWebReturn]);
 
   const baseContent = useMemo(() => {
-    const flow = searchParams.get("flow");
-
-    if (isMobileReturn && flow === "membership-card") {
+    if (isProfileFlow && isMobileReturn) {
       return resolveMobileMembershipCardContent(variant);
     }
-    if (flow === "membership-card") {
+    if (isProfileFlow) {
       return resolveMembershipCardContent(variant);
     }
-
     return resolveGenericContent(variant);
-  }, [isMobileReturn, searchParams, variant]);
+  }, [isMobileReturn, isProfileFlow, variant]);
+
   const content = useMemo(
     () =>
       resolveCheckoutHoldContent(
@@ -435,24 +524,41 @@ export function PaymentReturnPage({ variant }: { variant: PaymentReturnVariant }
       ),
     [baseContent, checkoutState, holdId],
   );
-  const mobileDeepLink = isMobileReturn
-    ? `fittrack://profile?checkout_result=${variant}&hold_id=${encodeURIComponent(holdId ?? "")}`
+  const mobileReturnUrl = isMobileReturn
+    ? resolveMobileReturnUrl(flow, variant, holdId)
     : null;
+  const expoReturnUrl = isExpoWebReturn
+    ? resolveExpoWebReturnUrl(returnUrl, flow, variant, holdId)
+    : null;
+  const expoReturnFallback = isExpoWebReturn ? (expoReturnUrl ?? "/dashboard") : "/";
+
   const openMobileApp = () => {
-    if (!mobileDeepLink || typeof window === "undefined") return;
-    window.location.assign(mobileDeepLink);
+    if (!mobileReturnUrl || typeof window === "undefined") return;
+    window.location.assign(mobileReturnUrl);
+  };
+
+  const openExpoWeb = () => {
+    if (!expoReturnUrl || typeof window === "undefined") return;
+    window.location.assign(expoReturnUrl);
   };
 
   useEffect(() => {
-    if (!isMobileReturn || !mobileDeepLink) return;
-    if (mobileDeepLinkAttemptRef.current === mobileDeepLink) return;
-    mobileDeepLinkAttemptRef.current = mobileDeepLink;
+    if (!isMobileReturn && !isExpoWebReturn) return;
+    const nextReturnUrl = isMobileReturn ? mobileReturnUrl : expoReturnUrl;
+    if (!nextReturnUrl) return;
+    if (returnUrlAttemptedRef.current === nextReturnUrl) return;
+    returnUrlAttemptedRef.current = nextReturnUrl;
     try {
-      window.location.assign(mobileDeepLink);
+      window.location.assign(nextReturnUrl);
     } catch {
-      // The visible OPEN FITTRACK APP action remains as the fallback.
+      // The visible action remains as fallback.
     }
-  }, [isMobileReturn, mobileDeepLink]);
+  }, [
+    isExpoWebReturn,
+    isMobileReturn,
+    mobileReturnUrl,
+    expoReturnUrl,
+  ]);
 
   const primaryAction: {
     href?: string;
@@ -464,14 +570,46 @@ export function PaymentReturnPage({ variant }: { variant: PaymentReturnVariant }
         label: "OPEN FITTRACK APP",
         onClick: openMobileApp,
       }
-    : resolveCompletedCheckoutReturnAction(
-        {
-          href: content.primaryActionHref,
-          label: content.primaryActionLabel,
+    : isExpoWebReturn
+      ? {
+          href: expoReturnFallback,
+          label: "RETURN TO FITTRACK",
+          onClick: isExpoWebReturn ? openExpoWeb : undefined,
+        }
+      : resolveCompletedCheckoutReturnAction(
+          {
+            href: content.primaryActionHref,
+            label: content.primaryActionLabel,
+          },
+          checkoutState,
+          latestAttempt,
+        );
+
+  const heroCalloutBody = isMobileReturn
+    ? "Use OPEN FITTRACK APP to return to the authenticated mobile payment check."
+    : isExpoWebReturn
+      ? "Returning to your Expo session to continue the checkout result flow."
+      : "If you started this in the member app, reopen the original FitTrack screen after the redirect and refresh there. The server-side payment status remains the source of truth.";
+  const heroCalloutTitle = isMobileReturn
+    ? "Return to mobile"
+    : isExpoWebReturn
+      ? "Return to Expo"
+      : "After the browser return";
+  const replacePrimaryAction = isMobileReturn || isExpoWebReturn
+    ? true
+    : checkoutState === "succeeded";
+  const secondaryAction = !isMobileReturn && !isExpoWebReturn && checkoutState === "error" && holdId
+    ? {
+        label: isReconciling
+          ? "Verifying payment..."
+          : "Retry payment verification",
+        onClick: () => {
+          resetReconcile();
+          reconcileHold(holdId);
         },
-        checkoutState,
-        latestAttempt,
-      );
+        variant: "ghost",
+      }
+    : undefined;
 
   return (
     <AuthStatusPage
@@ -482,12 +620,8 @@ export function PaymentReturnPage({ variant }: { variant: PaymentReturnVariant }
       detailItems={content.detailItems}
       footerNote={content.footerNote}
       heroAccent={content.heroAccent}
-      heroCalloutBody={
-        isMobileReturn
-          ? "Use OPEN FITTRACK APP to return to the authenticated mobile payment check."
-          : "If you started this in the member app, reopen the original FitTrack screen after the redirect and refresh there. The server-side payment status remains the source of truth."
-      }
-      heroCalloutTitle={isMobileReturn ? "Return to mobile" : "After the browser return"}
+      heroCalloutBody={heroCalloutBody}
+      heroCalloutTitle={heroCalloutTitle}
       heroStats={content.heroStats}
       heroSubtitle={content.heroSubtitle}
       heroTitle={content.heroTitle}
@@ -498,22 +632,9 @@ export function PaymentReturnPage({ variant }: { variant: PaymentReturnVariant }
         icon: ArrowLeft,
         label: primaryAction.label,
         onClick: primaryAction.onClick,
-        replace: checkoutState === "succeeded",
+        replace: replacePrimaryAction,
       }}
-      secondaryAction={
-        !isMobileReturn && checkoutState === "error" && holdId
-          ? {
-              label: isReconciling
-                ? "Verifying payment..."
-                : "Retry payment verification",
-              onClick: () => {
-                resetReconcile();
-                reconcileHold(holdId);
-              },
-              variant: "ghost",
-            }
-          : undefined
-      }
+      secondaryAction={secondaryAction}
       title={content.title}
       tone={content.tone}
     />
