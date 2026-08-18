@@ -1116,6 +1116,7 @@ export class GamificationRepository extends BaseRepository {
         ...(input.excludeSeasonId
           ? { id: { not: input.excludeSeasonId } }
           : {}),
+        status: { not: SeasonStatus.archived },
         starts_at: { lt: input.endsAt },
         ends_at: { gt: input.startsAt },
       },
@@ -2150,7 +2151,6 @@ export class GamificationRepository extends BaseRepository {
           'Season end must be in the future when activated.',
         );
       }
-
       await tx.userProgressionProfile.updateMany({
         data: {
           active_season_id: input.seasonId,
@@ -2200,9 +2200,15 @@ export class GamificationRepository extends BaseRepository {
               activated_at: now,
               archived_at: null,
               closed_at: null,
+              starts_at: season.starts_at > now ? now : season.starts_at,
             }
           : {}),
-        ...(input.status === SeasonStatus.closed ? { closed_at: now } : {}),
+        ...(input.status === SeasonStatus.closed
+          ? {
+              closed_at: now,
+              ends_at: season.ends_at > now ? now : season.ends_at,
+            }
+          : {}),
         ...(input.status === SeasonStatus.archived
           ? { archived_at: now }
           : {}),

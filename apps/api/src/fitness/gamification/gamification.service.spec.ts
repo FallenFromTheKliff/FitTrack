@@ -1646,6 +1646,43 @@ describe('GamificationService', () => {
     });
   });
 
+  it('forwards an active status change to the repository', async () => {
+    repo.getSeasonById.mockResolvedValue({
+      id: 'season-1',
+      status: 'draft',
+    });
+    repo.updateSeasonStatus.mockResolvedValue({
+      seasonId: 'season-1',
+      title: 'Spring 2026',
+      status: 'active',
+      autoStartNext: true,
+      activatedAt: new Date('2026-04-01T00:00:00.000Z'),
+      closedAt: null,
+      archivedAt: null,
+    });
+
+    await expect(
+      service.adminUpdateSeasonStatus('admin-1', 'season-1', {
+        status: 'active',
+        rationale: 'Manual launch for schedule.',
+      }),
+    ).resolves.toEqual({
+      season_id: 'season-1',
+      title: 'Spring 2026',
+      status: 'active',
+      auto_start_next: true,
+      activated_at: '2026-04-01T00:00:00.000Z',
+      closed_at: null,
+      archived_at: null,
+    });
+    expect(repo.updateSeasonStatus).toHaveBeenCalledWith({
+      actorUserId: 'admin-1',
+      rationale: 'Manual launch for schedule.',
+      seasonId: 'season-1',
+      status: 'active',
+    });
+  });
+
   it('rejects unsafe season lifecycle jumps', async () => {
     repo.getSeasonById.mockResolvedValue({
       id: 'season-1',

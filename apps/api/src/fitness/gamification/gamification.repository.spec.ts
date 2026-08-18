@@ -20,7 +20,9 @@ describe('GamificationRepository', () => {
   const seasonalStanding = {
     findMany: jest.fn(),
     count: jest.fn(),
+    createMany: jest.fn(),
     upsert: jest.fn(),
+    update: jest.fn(),
   };
 
   const seasonalMuscleStanding = {
@@ -46,10 +48,14 @@ describe('GamificationRepository', () => {
   const userProgressionProfile = {
     findMany: jest.fn(),
     findUnique: jest.fn(),
+    updateMany: jest.fn(),
     upsert: jest.fn(),
   };
 
-  const user = { findFirst: jest.fn() };
+  const user = {
+    findFirst: jest.fn(),
+    findMany: jest.fn(),
+  };
   const progressionSourceEvent = {
     count: jest.fn(),
     create: jest.fn(),
@@ -110,18 +116,38 @@ describe('GamificationRepository', () => {
     );
   };
 
+  const runSeasonLifecycleTransaction = () => {
+    prisma.$transaction.mockImplementation(async (work) =>
+      work({
+        seasonDefinition,
+        seasonalMuscleStanding,
+        seasonalStanding,
+        progressionGrantLedger,
+        rankingProfile,
+        userProgressionProfile,
+        user,
+      } as never),
+    );
+  };
+
   const mockExistingSeasonInterval = (
     existingStartsAt: Date,
     existingEndsAt: Date,
+    existingStatus = 'active',
   ) => {
     seasonDefinition.findFirst.mockImplementation(({ where }) => {
+      if (where.status?.not === 'archived' && existingStatus === 'archived') {
+        return Promise.resolve(null);
+      }
       const candidateStartsAt = where.ends_at.gt as Date;
       const candidateEndsAt = where.starts_at.lt as Date;
       const overlaps =
         existingStartsAt < candidateEndsAt &&
         existingEndsAt > candidateStartsAt;
 
-      return Promise.resolve(overlaps ? { id: 'existing-season' } : null);
+      return Promise.resolve(
+        overlaps ? { id: 'existing-season', status: existingStatus } : null,
+      );
     });
   };
 
@@ -262,6 +288,7 @@ describe('GamificationRepository', () => {
 
     expect(seasonDefinition.findFirst).toHaveBeenCalledWith({
       where: {
+        status: { not: 'archived' },
         id: { not: 'draft-season' },
         starts_at: {
           lt: new Date('2026-01-20T00:00:00.000Z'),
@@ -272,6 +299,190 @@ describe('GamificationRepository', () => {
       },
       select: { id: true },
     });
+  });
+
+  it('ignores archived seasons when checking new season creation', async () => {
+    runSeasonTransaction();
+    mockExistingSeasonInterval(
+      new Date('2026-01-10T00:00:00.000Z'),
+      new Date('2026-01-20T00:00:00.000Z'),
+      'archived',
+    );
+    seasonDefinition.create.mockResolvedValue({ id: 'created-season' });
+
+    await expect(
+      repo.createSeason({
+        autoStartNext: false,
+        description: null,
+        endsAt: new Date('2026-01-15T00:00:00.000Z'),
+        rulesVersion: 'v1',
+        startsAt: new Date('2026-01-12T00:00:00.000Z'),
+        title: 'After Archived Window',
+      }),
+    ).resolves.toEqual({ id: 'created-season' });
+  });
+
+  it('starts a future draft season immediately when manually activated', async () => {
+    const now = new Date('2026-01-15T10:00:00.000Z');
+    jest.useFakeTimers();
+    jest.setSystemTime(now);
+    try {
+      runSeasonLifecycleTransaction();
+      user.findMany.mockResolvedValue([]);
+      seasonDefinition.findUniqueOrThrow.mockResolvedValue({
+        auto_start_next: false,
+        description: null,
+        ends_at: new Date('2026-01-30T00:00:00.000Z'),
+        id: 'season-future',
+        rules_version: 'v1',
+        starts_at: new Date('2026-01-20T00:00:00.000Z'),
+        status: 'draft',
+        title: 'Future Draft',
+      });
+      seasonDefinition.findFirst.mockResolvedValue(null);
+      seasonalStanding.createMany.mockResolvedValue([]);
+      seasonDefinition.update.mockResolvedValue({
+        auto_start_next: false,
+        archived_at: null,
+        closed_at: null,
+        ends_at: new Date('2026-01-30T00:00:00.000Z'),
+        id: 'season-future',
+        rules_version: 'v1',
+        starts_at: now,
+        status: 'active',
+        title: 'Future Draft',
+      });
+
+      await expect(
+        repo.updateSeasonStatus({
+          actorUserId: 'admin-1',
+          rationale: 'Manual start test.',
+          seasonId: 'season-future',
+          status: 'active',
+        }),
+      ).resolves.toMatchObject({
+        status: 'active',
+        seasonId: 'season-future',
+      });
+
+      expect(seasonDefinition.update).toHaveBeenCalledWith({
+        where: { id: 'season-future' },
+        data: expect.objectContaining({
+          status: 'active',
+          activated_at: now,
+          starts_at: now,
+          archived_at: null,
+          closed_at: null,
+        }),
+      });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('prevents creating a second active season during manual activation', async () => {
+    runSeasonLifecycleTransaction();
+    user.findMany.mockResolvedValue([]);
+    seasonDefinition.findUniqueOrThrow.mockResolvedValue({
+      auto_start_next: false,
+      description: null,
+      ends_at: new Date('2026-01-30T00:00:00.000Z'),
+      id: 'season-draft-blocked',
+      rules_version: 'v1',
+      starts_at: new Date('2026-01-10T00:00:00.000Z'),
+      status: 'draft',
+      title: 'Second Active Candidate',
+    });
+    seasonDefinition.findFirst.mockResolvedValue({ id: 'season-existing-active' });
+
+    await expect(
+      repo.updateSeasonStatus({
+        actorUserId: 'admin-1',
+        rationale: 'Blocked active start.',
+        seasonId: 'season-draft-blocked',
+        status: 'active',
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(seasonDefinition.update).not.toHaveBeenCalled();
+  });
+
+  it('shortens an active season when it is closed before its configured end', async () => {
+    const now = new Date('2026-01-18T10:00:00.000Z');
+    jest.useFakeTimers();
+    jest.setSystemTime(now);
+    try {
+      runSeasonLifecycleTransaction();
+      user.findMany.mockResolvedValue([]);
+      progressionGrantLedger.groupBy.mockResolvedValue([]);
+      rankingProfile.findMany.mockResolvedValue([]);
+      seasonalMuscleStanding.findMany.mockResolvedValue([]);
+      seasonalStanding.findMany.mockResolvedValue([]);
+      seasonalStanding.update.mockResolvedValue({});
+      userProgressionProfile.updateMany.mockResolvedValue({});
+      seasonalMuscleStanding.deleteMany.mockResolvedValue({});
+      seasonDefinition.findUniqueOrThrow.mockResolvedValue({
+        auto_start_next: false,
+        closed_at: null,
+        description: null,
+        ends_at: new Date('2026-01-25T00:00:00.000Z'),
+        id: 'season-active-early-close',
+        rules_version: 'v1',
+        starts_at: new Date('2026-01-10T00:00:00.000Z'),
+        status: 'active',
+        title: 'Active Season',
+      });
+      seasonDefinition.update.mockResolvedValue({
+        auto_start_next: false,
+        closed_at: now,
+        ends_at: now,
+        id: 'season-active-early-close',
+        status: 'closed',
+        title: 'Active Season',
+      });
+
+      await expect(
+        repo.updateSeasonStatus({
+          actorUserId: 'admin-1',
+          rationale: 'Closed before scheduled end.',
+          seasonId: 'season-active-early-close',
+          status: 'closed',
+        }),
+      ).resolves.toMatchObject({
+        seasonId: 'season-active-early-close',
+        status: 'closed',
+      });
+
+      expect(seasonDefinition.update).toHaveBeenCalledWith({
+        where: { id: 'season-active-early-close' },
+        data: expect.objectContaining({
+          status: 'closed',
+          closed_at: now,
+          ends_at: now,
+        }),
+      });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('allows a new season immediately after an early-closed season', async () => {
+    runSeasonTransaction();
+    mockExistingSeasonInterval(
+      new Date('2026-01-10T00:00:00.000Z'),
+      new Date('2026-01-18T10:00:00.000Z'),
+    );
+    seasonDefinition.create.mockResolvedValue({ id: 'created-season' });
+
+    await expect(
+      repo.createSeason({
+        autoStartNext: false,
+        description: null,
+        endsAt: new Date('2026-01-20T00:00:00.000Z'),
+        rulesVersion: 'v1',
+        startsAt: new Date('2026-01-18T10:00:01.000Z'),
+        title: 'Next Season After Close',
+      }),
+    ).resolves.toEqual({ id: 'created-season' });
   });
 
   it('orders Overall by total EXP with non-null competition ties', async () => {
