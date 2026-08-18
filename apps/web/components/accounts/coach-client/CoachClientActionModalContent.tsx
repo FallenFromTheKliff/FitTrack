@@ -54,11 +54,12 @@ function WorkspaceState({ workspace }: Props) {
 function SessionCard({ appointment }: { appointment: CoachClientWorkspace["clientAppointments"][number] }) {
   const { colors } = useTheme();
   const completed = appointment.status === "completed";
+  const sessionTypeLabel = appointment.sourceLabel ?? (appointment.recurringPlanId ? "Monthly plan" : "One session");
   return (
     <div style={{ alignItems: "center", backgroundColor: colors.surfaceRaised, border: `1px solid ${colors.border}`, borderRadius: 8, display: "grid", gap: 8, gridTemplateColumns: "minmax(0, 1fr) auto", padding: "9px 10px" }}>
       <div style={{ display: "grid", gap: 3, minWidth: 0 }}>
         <FitText style={{ color: colors.textPrimary, fontSize: 11, fontWeight: 800 }}>{formatCoachScheduleDate(appointment.scheduledAt)}</FitText>
-        <FitText style={{ color: colors.textMuted, fontSize: 9.75 }}>{appointment.duration} min{appointment.recurringPlanId ? " - Monthly plan" : " - One session"}</FitText>
+        <FitText style={{ color: colors.textMuted, fontSize: 9.75 }}>{appointment.duration} min - {sessionTypeLabel}</FitText>
       </div>
       <FitPill mode="status" label={formatCoachStatusLabel(appointment.status)} color={completed ? colors.success : colors.brand} fontSize={9} style={{ borderRadius: 6 }} />
     </div>

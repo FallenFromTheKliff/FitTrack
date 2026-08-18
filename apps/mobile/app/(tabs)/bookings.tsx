@@ -2569,10 +2569,18 @@ export default function BookingsScreen() {
 
                 {clientDetailTab === "schedule" && user?.id ? (
                   <CoachClientPaidSchedule
-                    activeMonthlyPlan={lastMonthlyPlanForClient}
-                    canManage={Boolean(lastMonthlyPlanForClient)}
-                    coachUserId={user.id}
-                    onRescheduled={() => void recurringPlansQuery.refetch()}
+                    sessions={clientDetailSessions}
+                    relationshipLabel={
+                      lastMonthlyPlanForClient
+                        ? "Active monthly plan"
+                        : hasActivePaidOneSession
+                          ? "Paid one-session relationship"
+                          : "No active paid relationship"
+                    }
+                    onOpenSessionReport={(sessionId) => {
+                      setSelectedClientFeedbackAppointmentId(sessionId);
+                      setClientDetailTab("feedback");
+                    }}
                   />
                 ) : null}
 

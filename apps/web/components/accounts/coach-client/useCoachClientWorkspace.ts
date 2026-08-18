@@ -9,20 +9,20 @@ import type {
 import {
   coachScheduleQueryOptions,
   coachSelfProfileQueryOptions,
+  coachVenueWorkQueryOptions,
   recurringCoachingPlansQueryOptions,
 } from "@fittrack/query";
 import type { CoachProfileRecord } from "@fittrack/types";
+import { normalizeBookingStatus } from "@fittrack/app-core";
 
 import { useAccountsPage } from "@/components/accounts/AccountsPageContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { webApiClient } from "@/lib/api-client";
 
-import { isPaidSession } from "../PaidSessionSchedule";
-
 export type CoachClientWorkspace = {
   activeMonthlyPlan: RecurringCoachingPlanRecord | null;
-  clientAppointments: CoachAppointmentScheduleRecord[];
-  completedAppointments: CoachAppointmentScheduleRecord[];
+  clientAppointments: CoachClientWorkspaceSession[];
+  completedAppointments: CoachClientWorkspaceSession[];
   coachProfile: CoachProfileRecord | null;
   coachUserId: string;
   hasActivePaidMonthlySession: boolean;
@@ -32,10 +32,24 @@ export type CoachClientWorkspace = {
   isLoading: boolean;
   isCoachClient: boolean;
   memberId: string;
-  nextSession: CoachAppointmentScheduleRecord | null;
+  nextSession: CoachClientWorkspaceSession | null;
   requesterUserId: string;
-  upcomingSessions: CoachAppointmentScheduleRecord[];
+  upcomingSessions: CoachClientWorkspaceSession[];
 };
+
+type WorkspaceSessionSource = "appointment" | "venue_coaching";
+
+export type CoachClientWorkspaceSession = CoachAppointmentScheduleRecord & {
+  source: WorkspaceSessionSource;
+  sourceLabel: string;
+};
+
+const VISIBLE_SESSION_STATUSES = new Set([
+  "confirmed",
+  "completed",
+  "cancelled",
+  "no_show",
+]);
 
 function dateAtEndOfDay(value: string) {
   const normalized = value.includes("T") ? value : `${value}T23:59:59.999`;
@@ -76,22 +90,84 @@ export function useCoachClientWorkspace(memberId?: string): CoachClientWorkspace
     enabled: isCoachClient,
     staleTime: 30_000,
   });
+  const coachVenueWorkQuery = useQuery({
+    ...coachVenueWorkQueryOptions(webApiClient, user?.id, { limit: 100, page: 1 }),
+    enabled: isCoachClient,
+    staleTime: 30_000,
+  });
+
+  const paidRecurringPlanIds = useMemo(() => {
+    const now = Date.now();
+    const ids = new Set<string>();
+    for (const plan of recurringPlansQuery.data ?? []) {
+      if (isCurrentPaidCycle(plan, now)) ids.add(plan.id);
+    }
+    return ids;
+  }, [recurringPlansQuery.data]);
+
+  const paidAppointmentSessions = useMemo(
+    () =>
+      (scheduleQuery.data ?? [])
+        .filter((appointment) => appointment.userId === memberId)
+        .filter((appointment) => {
+          const status = (appointment.status ?? "").toLowerCase();
+          if (!VISIBLE_SESSION_STATUSES.has(status)) return false;
+          if (appointment.recurringPlanId) {
+            return (
+              paidRecurringPlanIds.has(appointment.recurringPlanId) ||
+              appointment.activePaymentStatus === "completed"
+            );
+          }
+          return appointment.activePaymentStatus === "completed";
+        })
+        .map((appointment) => ({
+          ...appointment,
+          status: (appointment.status ?? "").toLowerCase(),
+          source: "appointment" as const,
+          sourceLabel: appointment.recurringPlanId
+            ? "Monthly coaching"
+            : "One-session coaching",
+        })),
+    [memberId, paidRecurringPlanIds, scheduleQuery.data],
+  );
+
+  const venueCoachWorkSessions = useMemo(
+    () =>
+      (coachVenueWorkQuery.data?.data ?? [])
+        .filter((booking) =>
+          (booking.userId ?? booking.user?.id ?? "") === memberId,
+        )
+        .filter((booking) =>
+          VISIBLE_SESSION_STATUSES.has(normalizeBookingStatus(booking.status)),
+        )
+        .map((booking) => ({
+          activePaymentStatus: null,
+          createdAt:
+            booking.createdAt ?? booking.startTime,
+          duration: Math.max(0, Math.round(booking.durationHours * 60)),
+          id: booking.id,
+          recurringPlanId: null,
+          scheduledAt: booking.startTime,
+          source: "venue_coaching" as const,
+          sourceLabel: `Venue coaching (${booking.venue?.name?.trim() || "Venue coaching"})`,
+          status: normalizeBookingStatus(booking.status),
+          updatedAt:
+            booking.createdAt ?? booking.startTime,
+          userId:
+            booking.userId ?? booking.user?.id ?? memberId ?? "",
+        })),
+    [coachVenueWorkQuery.data?.data, memberId],
+  );
 
   const clientAppointments = useMemo(
     () =>
-      (scheduleQuery.data ?? [])
-        .filter(
-          (appointment) =>
-            appointment.userId === memberId &&
-            (appointment.status === "confirmed" ||
-              appointment.status === "completed"),
-        )
+      [...paidAppointmentSessions, ...venueCoachWorkSessions]
         .sort(
           (left, right) =>
             new Date(right.scheduledAt).getTime() -
             new Date(left.scheduledAt).getTime(),
         ),
-    [memberId, scheduleQuery.data],
+    [paidAppointmentSessions, venueCoachWorkSessions],
   );
   const completedAppointments = useMemo(
     () =>
@@ -120,7 +196,7 @@ export function useCoachClientWorkspace(memberId?: string): CoachClientWorkspace
       (recurringPlansQuery.data ?? []).find(
         (plan) => {
           const now = Date.now();
-          const hasUpcomingPlanSession = clientAppointments.some(
+          const hasUpcomingPlanSession = paidAppointmentSessions.some(
             (appointment) =>
               appointment.recurringPlanId === plan.id &&
               appointment.status === "confirmed" &&
@@ -136,34 +212,34 @@ export function useCoachClientWorkspace(memberId?: string): CoachClientWorkspace
           );
         },
       ) ?? null,
-    [clientAppointments, memberId, recurringPlansQuery.data],
+    [memberId, paidAppointmentSessions, recurringPlansQuery.data],
   );
+
   const hasActivePaidOneSession = useMemo(
     () =>
-      clientAppointments.some(
+      paidAppointmentSessions.some(
         (appointment) => {
           const startsAt = new Date(appointment.scheduledAt).getTime();
           const endsAt = startsAt + appointment.duration * 60 * 1000;
           return (
             appointment.status === "confirmed" &&
             !appointment.recurringPlanId &&
-            isPaidSession(appointment) &&
             Number.isFinite(startsAt) &&
             endsAt > Date.now()
           );
         },
       ),
-    [clientAppointments],
+    [paidAppointmentSessions],
   );
   const hasActivePaidMonthlySession = useMemo(
     () =>
-      clientAppointments.some(
+      paidAppointmentSessions.some(
         (appointment) =>
           appointment.status === "confirmed" &&
-          Boolean(appointment.recurringPlanId) &&
+          appointment.recurringPlanId &&
           new Date(appointment.scheduledAt).getTime() >= Date.now(),
       ),
-    [clientAppointments],
+    [paidAppointmentSessions],
   );
   const hasActivePaidRelationship = Boolean(
     activeMonthlyPlan ||
@@ -183,12 +259,14 @@ export function useCoachClientWorkspace(memberId?: string): CoachClientWorkspace
     hasError: Boolean(
       coachProfileQuery.error ||
         recurringPlansQuery.error ||
-        scheduleQuery.error,
+        scheduleQuery.error ||
+        coachVenueWorkQuery.error,
     ),
     isLoading:
       coachProfileQuery.isLoading ||
       recurringPlansQuery.isLoading ||
-      scheduleQuery.isLoading,
+      scheduleQuery.isLoading ||
+      coachVenueWorkQuery.isLoading,
     isCoachClient,
     memberId: memberId ?? "",
     nextSession: upcomingSessions[0] ?? null,
