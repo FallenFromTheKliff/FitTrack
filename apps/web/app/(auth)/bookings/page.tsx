@@ -86,6 +86,7 @@ type PaymentConfirmationState = {
 type BookingCancellationConfirmation = {
   bookingId: string;
   bookingTitle: string;
+  bookingType: "booking" | "coach";
   phase: "confirm" | "reminder";
   error?: string;
 };
@@ -122,7 +123,7 @@ function getBookingCancellationErrorMessage(error: unknown) {
     return error.message;
   }
 
-  return "Unable to cancel this venue booking. Please try again.";
+  return "Unable to cancel this item. Please try again.";
 }
 
 const REQUEST_TIME_OPTIONS = Array.from({ length: 16 }, (_, index) => {
@@ -3155,10 +3156,15 @@ function MemberReservationModal({
       ),
     [coaches, endTime, reservationDate, startTime],
   );
-  const selectedCoachRecord =
-    coaches.find((coach) => String(coach.id) === selectedCoachId) ?? null;
+  const isFilteringCoachWindow = Boolean(reservationDate && startTime && endTime);
   const selectedCoach =
     availableCoachAddOns.find((coach) => String(coach.id) === selectedCoachId) ?? null;
+  useEffect(() => {
+    if (!isFilteringCoachWindow) return;
+    if (selectedCoachId && !selectedCoach) {
+      setSelectedCoachId("");
+    }
+  }, [isFilteringCoachWindow, selectedCoach, selectedCoachId]);
   const venuePickerOptions = useMemo<BookingPickerOption[]>(
     () =>
       pickerVenues.map((venue) => {
@@ -3187,17 +3193,6 @@ function MemberReservationModal({
         title: "No coach add-on",
         value: "",
       },
-      ...(selectedCoachId && !selectedCoach && selectedCoachRecord
-        ? [
-            {
-              disabled: true,
-              searchText: getCoachName(selectedCoachRecord),
-              subtitle: "Unavailable for this exact venue window",
-              title: getCoachName(selectedCoachRecord),
-              value: selectedCoachId,
-            },
-          ]
-        : []),
       ...availableCoachAddOns.map((coach) => ({
         searchText: [getCoachName(coach), ...(coach.specialties ?? [])].join(" "),
         subtitle: coach.hourlyRate
@@ -3207,7 +3202,7 @@ function MemberReservationModal({
         value: String(coach.id),
       })),
     ],
-    [availableCoachAddOns, selectedCoach, selectedCoachId, selectedCoachRecord],
+    [availableCoachAddOns],
   );
   const durationHours = getReservationDurationHours(startTime, endTime);
   const venueRate = Number(selectedVenue?.hourlyRate ?? 0);
@@ -3326,7 +3321,7 @@ function MemberReservationModal({
   const coachValidationMessage = shouldShowValidation("coach")
     ? submitFieldErrors.coach ??
       (selectedCoachId && startTime && endTime && !selectedCoach
-        ? `${selectedCoachRecord ? getCoachName(selectedCoachRecord) : "The selected coach"} does not cover this exact venue window. Choose another coach, correct the time range, or remove the add-on.`
+        ? "The selected coach does not cover this exact venue window. Choose another coach, correct the time range, or remove the add-on."
         : null)
     : null;
   const checkoutValidationMessage = shouldShowValidation("checkout")
@@ -3578,7 +3573,9 @@ function MemberReservationModal({
                   <MemberText variant="muted">
                     {!startTime || !endTime
                       ? "Choose a continuous venue window first. Coach options appear only when their schedule covers it."
-                      : availableCoachAddOns.length === 0
+                      : coachesLoading
+                        ? "Loading coaches..."
+                        : availableCoachAddOns.length === 0
                         ? "No coach currently covers this exact venue window. You can continue without an add-on."
                         : `${availableCoachAddOns.length} coach${availableCoachAddOns.length === 1 ? "" : "es"} cover this exact window. The selected coach ID is preserved through checkout.`}
                   </MemberText>
@@ -3750,7 +3747,9 @@ function MemberReservationModal({
       <SearchableBookingPickerModal
         emptyMessage={
           startTime && endTime
-            ? "No coach add-ons cover this exact venue window."
+            ? coachesLoading
+              ? "Loading coach add-ons..."
+              : "No coach add-ons cover this exact venue window."
             : "Choose the venue date and time first to see matching coaches."
         }
         errorMessage={coachesError}
@@ -4452,31 +4451,33 @@ export default function BookingsPage() {
   const handleCancelSelectedBooking = () => {
     if (!selected) return;
 
-    if (activeSection === "bookings") {
-      setCancelConfirmation({
-        bookingId: selected.id,
-        bookingTitle: selected.detailTitle ?? selected.resourceName,
-        phase: "confirm",
-      });
-      return;
-    }
-
-    void data.cancelAppointmentMutation.mutateAsync({
-      appointmentId: selected.id,
-      cancelReason: "Cancelled from the member web portal.",
-      userId: user?.id,
+    setCancelConfirmation({
+      bookingId: selected.id,
+      bookingTitle: selected.detailTitle ?? selected.resourceName,
+      bookingType: activeSection === "bookings" ? "booking" : "coach",
+      phase: "confirm",
     });
   };
 
   const confirmSelectedBookingCancellation = async () => {
     if (!cancelConfirmation) return;
+    const mutationPayload = {
+      cancelReason: "Cancelled from the member web portal.",
+      userId: user?.id,
+    };
 
     try {
-      await data.cancelBookingMutation.mutateAsync({
-        bookingId: cancelConfirmation.bookingId,
-        cancelReason: "Cancelled from the member web portal.",
-        userId: user?.id,
+      if (cancelConfirmation.bookingType === "booking") {
+        await data.cancelBookingMutation.mutateAsync({
+          bookingId: cancelConfirmation.bookingId,
+          ...mutationPayload,
+        });
+      } else {
+        await data.cancelAppointmentMutation.mutateAsync({
+        appointmentId: cancelConfirmation.bookingId,
+        ...mutationPayload,
       });
+      }
       setCancelConfirmation(null);
     } catch (error) {
       setCancelConfirmation((current) =>
@@ -4961,21 +4962,27 @@ export default function BookingsPage() {
         isOpen={Boolean(cancelConfirmation)}
         title={
           cancelConfirmation?.phase === "reminder"
-            ? "Venue booking reminder"
-            : "Cancel venue booking?"
+            ? `${cancelConfirmation?.bookingType === "booking" ? "Venue booking" : "Coaching appointment"} reminder`
+            : `Cancel ${cancelConfirmation?.bookingType === "booking" ? "venue booking" : "coaching appointment"}?`
         }
         message={
           cancelConfirmation?.phase === "reminder"
-            ? `${cancelConfirmation.error ?? "This venue booking cannot be cancelled yet."} Your booking remains active.`
-            : `Cancel ${cancelConfirmation?.bookingTitle ?? "this venue booking"}? This action cannot be undone.`
+            ? `${cancelConfirmation.error ?? "This booking cannot be cancelled yet."} Your booking remains active.`
+            : `Cancel ${cancelConfirmation?.bookingTitle ?? "this item"}? This action cannot be undone.`
         }
-        confirmLabel={cancelConfirmation?.phase === "reminder" ? "CLOSE" : "CANCEL BOOKING"}
+        confirmLabel={
+          cancelConfirmation?.phase === "reminder"
+            ? "CLOSE"
+            : `CANCEL ${cancelConfirmation?.bookingType === "booking" ? "BOOKING" : "APPOINTMENT"}`
+        }
         loadingLabel="CANCELLING"
         hideCancel={cancelConfirmation?.phase === "reminder"}
         isDanger={cancelConfirmation?.phase !== "reminder"}
         isLoading={
           cancelConfirmation?.phase !== "reminder" &&
-          data.cancelBookingMutation.isPending
+          (cancelConfirmation?.bookingType === "booking"
+            ? data.cancelBookingMutation.isPending
+            : data.cancelAppointmentMutation.isPending)
         }
         onConfirm={() => {
           if (cancelConfirmation?.phase === "reminder") {

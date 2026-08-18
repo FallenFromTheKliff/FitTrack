@@ -263,11 +263,7 @@ function coachCoversReservationWindow(
 ) {
   const slots = coach.availability ?? [];
   if (!slots.length) return false;
-  if (!selectedStartTime || !selectedEndTime) {
-    return slots.some(
-      (slot) => slot.isAvailable && matchesDay(selectedDate, slot.dayOfWeek),
-    );
-  }
+  if (!selectedDate || !selectedStartTime || !selectedEndTime) return false;
 
   const startMinutes = timeToMinutes(selectedStartTime);
   const endMinutes = timeToMinutes(selectedEndTime);
@@ -489,6 +485,7 @@ export default function ReservationModal({
     () => coaches.find((coach) => String(coach.id) === selectedCoachId) ?? null,
     [coaches, selectedCoachId],
   );
+  const isCoachWindowSelected = Boolean(date && startTime && endTime);
   const availableCoachAddOns = useMemo(
     () =>
       coaches.filter((coach) =>
@@ -658,15 +655,14 @@ export default function ReservationModal({
   }, [selectedBookableVenue, selectedVenue, venuesError, venuesLoading]);
 
   useEffect(() => {
-    if (
-      selectedCoachId &&
-      !availableCoachAddOns.some(
-        (coach) => String(coach.id) === selectedCoachId,
-      )
-    ) {
+    if (!isCoachWindowSelected || !selectedCoachId) return;
+    const stillAvailable = availableCoachAddOns.some(
+      (coach) => String(coach.id) === selectedCoachId,
+    );
+    if (!stillAvailable) {
       setSelectedCoachId(null);
     }
-  }, [availableCoachAddOns, selectedCoachId]);
+  }, [availableCoachAddOns, isCoachWindowSelected, selectedCoachId]);
 
   const basePrice = useMemo(
     () => selectedVenuePresentation?.price ?? 0,
