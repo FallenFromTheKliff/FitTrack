@@ -78,6 +78,16 @@ const COACH_SPECIALIZATIONS = [
   'Body Recomposition',
   'Endurance Conditioning',
 ] as const;
+const COACH_AVAILABILITY_PATTERNS: ReadonlyArray<{
+  endTime: string;
+  startTime: string;
+  days: number[];
+}> = [
+  { days: [1, 2, 3, 4, 5], startTime: '06:00:00', endTime: '14:00:00' },
+  { days: [1, 2, 3, 4, 5], startTime: '14:00:00', endTime: '22:00:00' },
+  { days: [2, 3, 4, 5, 6], startTime: '08:00:00', endTime: '16:00:00' },
+  { days: [0, 2, 3, 4, 5, 6], startTime: '16:00:00', endTime: '22:00:00' },
+];
 
 function coachProfileIdFor(coachKey: string) {
   return seedId(`coach-profile:${coachKey}`);
@@ -253,16 +263,17 @@ async function seedCoachProfiles(ctx: DynamicSeedContext) {
     skipDuplicates: true,
   });
 
-  const availabilityRows = ctx.state.coachAccountKeys.flatMap((coachKey) =>
-    [1, 2, 3, 4, 6].map((dayOfWeek, slotIndex) => ({
+  const availabilityRows = ctx.state.coachAccountKeys.flatMap((coachKey, coachIndex) => {
+    const pattern = COACH_AVAILABILITY_PATTERNS[coachIndex % COACH_AVAILABILITY_PATTERNS.length];
+    return pattern.days.map((dayOfWeek) => ({
       id: seedId(`coach-availability:${coachKey}:${dayOfWeek}`),
       coach_id: ctx.state.coachProfileIds[coachKey],
       day_of_week: dayOfWeek,
-      end_time: fixedTime(slotIndex % 2 === 0 ? '18:00:00' : '20:00:00'),
+      end_time: fixedTime(pattern.endTime),
       is_active: true,
-      start_time: fixedTime(slotIndex % 2 === 0 ? '14:00:00' : '17:00:00'),
-    })),
-  );
+      start_time: fixedTime(pattern.startTime),
+    }));
+  });
 
   await ctx.prisma.coachAvailabilitySlot.createMany({
     data: availabilityRows,
