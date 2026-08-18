@@ -1103,6 +1103,8 @@ export class GamificationRepository extends BaseRepository {
       startsAt: Date;
     },
   ): Promise<void> {
+    const now = new Date();
+
     if (
       Number.isNaN(input.startsAt.getTime()) ||
       Number.isNaN(input.endsAt.getTime()) ||
@@ -1116,9 +1118,30 @@ export class GamificationRepository extends BaseRepository {
         ...(input.excludeSeasonId
           ? { id: { not: input.excludeSeasonId } }
           : {}),
-        status: { not: SeasonStatus.archived },
-        starts_at: { lt: input.endsAt },
-        ends_at: { gt: input.startsAt },
+        archived_at: null,
+        OR: [
+          {
+            status: SeasonStatus.draft,
+            starts_at: { lt: input.endsAt },
+            ends_at: { gt: input.startsAt },
+          },
+          {
+            status: SeasonStatus.closed,
+            starts_at: { lt: input.endsAt },
+            OR: [
+              {
+                closed_at: null,
+                ends_at: {
+                  gt: input.startsAt,
+                  lte: now,
+                },
+              },
+              {
+                closed_at: { gt: input.startsAt },
+              },
+            ],
+          },
+        ],
       },
       select: { id: true },
     });
@@ -1162,7 +1185,6 @@ export class GamificationRepository extends BaseRepository {
   }
 
   async getAdminOverview(): Promise<AdminGamificationOverviewRecord> {
-    const now = new Date();
     const [
       activeSeason,
       openCaseCount,
@@ -1181,8 +1203,6 @@ export class GamificationRepository extends BaseRepository {
       this.prisma.seasonDefinition.findFirst({
         where: {
           status: SeasonStatus.active,
-          starts_at: { lte: now },
-          ends_at: { gte: now },
         },
         orderBy: [{ starts_at: 'desc' }, { updated_at: 'desc' }],
         include: {
@@ -2137,6 +2157,8 @@ export class GamificationRepository extends BaseRepository {
         where: {
           id: { not: input.seasonId },
           status: SeasonStatus.active,
+          starts_at: { lte: now },
+          ends_at: { gte: now },
         },
         select: { id: true },
       });

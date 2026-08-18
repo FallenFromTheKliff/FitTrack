@@ -133,21 +133,62 @@ describe('GamificationRepository', () => {
   const mockExistingSeasonInterval = (
     existingStartsAt: Date,
     existingEndsAt: Date,
-    existingStatus = 'active',
+    existingStatus = 'draft',
   ) => {
     seasonDefinition.findFirst.mockImplementation(({ where }) => {
-      if (where.status?.not === 'archived' && existingStatus === 'archived') {
+      const orConditions = Array.isArray(where.OR) ? where.OR : [];
+      const candidateStartsAt =
+        (where.ends_at?.gt as Date) ??
+        (orConditions.find((condition: any) => condition.ends_at?.gt)?.ends_at
+          .gt as Date) ??
+        null;
+      const candidateEndsAt =
+        (where.starts_at?.lt as Date) ??
+        (orConditions.find((condition: any) => condition.starts_at?.lt)
+          ?.starts_at.lt as Date) ??
+        null;
+      if (!candidateStartsAt || !candidateEndsAt) {
         return Promise.resolve(null);
       }
-      const candidateStartsAt = where.ends_at.gt as Date;
-      const candidateEndsAt = where.starts_at.lt as Date;
+
       const overlaps =
         existingStartsAt < candidateEndsAt &&
         existingEndsAt > candidateStartsAt;
+      if (!overlaps) {
+        return Promise.resolve(null);
+      }
 
-      return Promise.resolve(
-        overlaps ? { id: 'existing-season', status: existingStatus } : null,
-      );
+      if (where.status?.not === 'archived') {
+        if (existingStatus === 'archived') {
+          return Promise.resolve(null);
+        }
+      }
+
+      if (where.status?.in) {
+        if (!where.status.in.includes(existingStatus)) {
+          return Promise.resolve(null);
+        }
+      }
+
+      if (Array.isArray(where.OR)) {
+        const hasMatchingOr = where.OR.some((condition: any) => {
+          if (condition.status === 'active') {
+            return false;
+          }
+          if (condition.status === 'draft') {
+            return existingStatus === 'draft';
+          }
+          if (condition.status === 'closed') {
+            return existingStatus === 'closed';
+          }
+          return false;
+        });
+        if (!hasMatchingOr) {
+          return Promise.resolve(null);
+        }
+      }
+
+      return Promise.resolve({ id: 'existing-season', status: existingStatus });
     });
   };
 
@@ -286,16 +327,38 @@ describe('GamificationRepository', () => {
       repo.updateDraftSeason({ seasonId: 'draft-season' }),
     ).resolves.toEqual({ id: 'draft-season' });
 
-    expect(seasonDefinition.findFirst).toHaveBeenCalledWith({
+      expect(seasonDefinition.findFirst).toHaveBeenCalledWith({
       where: {
-        status: { not: 'archived' },
         id: { not: 'draft-season' },
-        starts_at: {
-          lt: new Date('2026-01-20T00:00:00.000Z'),
-        },
-        ends_at: {
-          gt: new Date('2026-01-10T00:00:00.000Z'),
-        },
+        archived_at: null,
+        OR: [
+          {
+            status: 'draft',
+            starts_at: {
+              lt: new Date('2026-01-20T00:00:00.000Z'),
+            },
+            ends_at: {
+              gt: new Date('2026-01-10T00:00:00.000Z'),
+            },
+          },
+          {
+            status: 'closed',
+            starts_at: {
+              lt: new Date('2026-01-20T00:00:00.000Z'),
+            },
+            OR: [
+              {
+                closed_at: null,
+                ends_at: {
+                  gt: new Date('2026-01-10T00:00:00.000Z'),
+                },
+              },
+              {
+                closed_at: { gt: new Date('2026-01-10T00:00:00.000Z') },
+              },
+            ],
+          },
+        ],
       },
       select: { id: true },
     });
@@ -320,6 +383,34 @@ describe('GamificationRepository', () => {
         title: 'After Archived Window',
       }),
     ).resolves.toEqual({ id: 'created-season' });
+  });
+
+  it('allows creating a season while another season is active', async () => {
+    const now = new Date('2026-01-15T08:00:00.000Z');
+    jest.useFakeTimers();
+    jest.setSystemTime(now);
+    try {
+      runSeasonTransaction();
+      mockExistingSeasonInterval(
+        new Date('2025-12-01T00:00:00.000Z'),
+        new Date('2026-01-30T00:00:00.000Z'),
+        'active',
+      );
+      seasonDefinition.create.mockResolvedValue({ id: 'created-season' });
+
+      await expect(
+        repo.createSeason({
+          autoStartNext: false,
+          description: null,
+          endsAt: new Date('2026-02-01T00:00:00.000Z'),
+          rulesVersion: 'v1',
+          startsAt: new Date('2026-01-20T01:00:00.000Z'),
+          title: 'With Active Season',
+        }),
+      ).resolves.toEqual({ id: 'created-season' });
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('starts a future draft season immediately when manually activated', async () => {
@@ -470,6 +561,7 @@ describe('GamificationRepository', () => {
     mockExistingSeasonInterval(
       new Date('2026-01-10T00:00:00.000Z'),
       new Date('2026-01-18T10:00:00.000Z'),
+      'closed',
     );
     seasonDefinition.create.mockResolvedValue({ id: 'created-season' });
 

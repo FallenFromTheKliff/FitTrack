@@ -969,12 +969,19 @@ function AdminGamificationPage() {
   ]);
 
   const overview = overviewQuery.data;
+  const activeSeason = useMemo(
+    () =>
+      overview?.activeSeason ??
+      seasonsQuery.data?.find((season) => season.status === "active") ??
+      null,
+    [overview?.activeSeason, seasonsQuery.data],
+  );
   const activeSeasonActions = useMemo(
     () =>
-      overview?.activeSeason
-        ? getSeasonNextActions(overview.activeSeason.status)
+      activeSeason
+        ? getSeasonNextActions(activeSeason.status)
         : [],
-    [overview?.activeSeason],
+    [activeSeason],
   );
   const panelStyle = {
     border: `1px solid ${colors.border}`,
@@ -1179,7 +1186,6 @@ function AdminGamificationPage() {
     createSeasonMutation.mutate(payload, {
       onSuccess: () => {
         setSeasonEditId(null);
-        setSeasonManagerOpen(false);
         setSeasonDraft({
           autoStartNext: true,
           description: "",
@@ -1339,19 +1345,19 @@ function AdminGamificationPage() {
                     fontWeight: 900,
                   }}
                 >
-                  {overview?.activeSeason?.title ?? "No active season"}
+                  {activeSeason?.title ?? "No active season"}
                 </FitText>
-                {overview?.activeSeason ? (
+                {activeSeason ? (
                   <FitPill
                     mode="status"
-                    label={labelize(overview.activeSeason.status)}
+                    label={labelize(activeSeason.status)}
                     color={colors.brand}
                   />
                 ) : null}
               </div>
               <FitText style={muted}>
-                {overview?.activeSeason
-                  ? `${overview.activeSeason.standingCount} standings / ${overview.activeSeason.hiddenCount} hidden / ${overview.activeSeason.disqualifiedCount} disqualified`
+                {activeSeason
+                  ? `${activeSeason.standingCount} standings / ${activeSeason.hiddenCount} hidden / ${activeSeason.disqualifiedCount} disqualified`
                   : "Create or activate a season to begin tracking standings."}
               </FitText>
             </div>
@@ -1393,7 +1399,7 @@ function AdminGamificationPage() {
           </div>
 
           <div style={{ display: "grid", gap: 7, minHeight: 0 }}>
-            {overview?.activeSeason ? (
+            {activeSeason ? (
               <div
                 data-ui="gamification-active-season"
                 className={`gamification-active-season-panel ${styles.activeSeason}`}
@@ -1475,11 +1481,11 @@ function AdminGamificationPage() {
                                 status === "archived" ? Archive : CheckCircle2,
                               confirmLabel: `Move to ${labelize(status)}`,
                               isDanger: status === "archived",
-                              message: `${overview.activeSeason!.title} will move from ${labelize(overview.activeSeason!.status)} to ${labelize(status)}. This affects season availability and admin reporting.`,
+                              message: `${activeSeason!.title} will move from ${labelize(activeSeason!.status)} to ${labelize(status)}. This affects season availability and admin reporting.`,
                               title: "Confirm Season Lifecycle Change?",
                               onConfirm: () => {
                                 seasonMutation.mutate({
-                                  seasonId: overview.activeSeason!.id,
+                                  seasonId: activeSeason!.id,
                                   payload: {
                                     status,
                                     rationale:
@@ -1529,7 +1535,7 @@ function AdminGamificationPage() {
               overflow: "visible",
             }}
           >
-            <MetricGrid overview={overview} />
+            <MetricGrid overview={overview} activeSeason={activeSeason} />
 
             <div style={{ minHeight: 0, overflow: "visible" }}>
               {leaderboardMode === "overall" ? (
@@ -2176,7 +2182,7 @@ function AdminGamificationPage() {
               ?
             </span>
           </div>
-          {overview?.activeSeason ? (
+          {activeSeason ? (
             <section
               style={{
                 alignItems: "center",
@@ -2195,11 +2201,11 @@ function AdminGamificationPage() {
                   Active season
                 </FitText>
                 <FitText style={{ fontSize: 15, fontWeight: 850 }}>
-                  {overview.activeSeason.title}
+                  {activeSeason.title}
                 </FitText>
                 <FitText style={muted}>
-                  {formatSeasonRemaining(overview.activeSeason.endsAt, seasonClock)}
-                  {" · "}Auto-closes {formatDateTime(overview.activeSeason.endsAt)}
+                  {formatSeasonRemaining(activeSeason.endsAt, seasonClock)}
+                  {" · "}Auto-closes {formatDateTime(activeSeason.endsAt)}
                 </FitText>
               </div>
               <FitButton
@@ -2211,11 +2217,11 @@ function AdminGamificationPage() {
                   setConfirmationState({
                     confirmIcon: CheckCircle2,
                     confirmLabel: "Close season",
-                    message: `${overview.activeSeason!.title} will stop immediately. Its final standings will remain available in season history.`,
+                    message: `${activeSeason!.title} will stop immediately. Its final standings will remain available in season history.`,
                     title: "Close Active Season?",
                     onConfirm: () => {
                       seasonMutation.mutate({
-                        seasonId: overview.activeSeason!.id,
+                        seasonId: activeSeason.id,
                         payload: {
                           status: "closed",
                           rationale:
@@ -2445,8 +2451,8 @@ function AdminGamificationPage() {
                         <FitButton
                           variant="ghost"
                           icon={CheckCircle2}
-                          label={overview?.activeSeason ? "Active season running" : "Force start"}
-                          disabled={Boolean(overview?.activeSeason) || seasonMutationPending}
+                          label={activeSeason ? "Active season running" : "Force start"}
+                          disabled={Boolean(activeSeason) || seasonMutationPending}
                           loading={seasonMutationPending}
                           onClick={() =>
                             seasonMutation.mutate({
@@ -4113,8 +4119,10 @@ function MilestoneManagementPanel({
 
 function MetricGrid({
   overview,
+  activeSeason,
 }: {
   overview: AdminGamificationOverviewRecord | undefined;
+  activeSeason: AdminGamificationSeasonSummaryRecord | null;
 }) {
   const { colors } = useTheme();
   const metrics = [
@@ -4130,7 +4138,7 @@ function MetricGrid({
     },
     {
       label: "Season standings",
-      value: overview?.activeSeason?.standingCount ?? 0,
+      value: activeSeason?.standingCount ?? 0,
       icon: CheckCircle2,
     },
     {
