@@ -105,7 +105,7 @@ type Props = {
 
 type CoachRecord = CoachProfileRecord;
 
-type AppointmentStep = "coach" | "date" | "time";
+type AppointmentStep = "coach" | "time";
 type AppointmentPlanMode = "single" | "monthly";
 type AppointmentConfirmationState = {
   message: string;
@@ -393,8 +393,7 @@ export default function AppointmentModal({
     return attemptIdempotencyKeyRef.current;
   };
   const [step, setStep] = useState<AppointmentStep>("coach");
-  const [planMode, setPlanMode] =
-    useState<AppointmentPlanMode | null>(null);
+  const [planMode, setPlanMode] = useState<AppointmentPlanMode>("single");
   const [selectedCoachId, setSelectedCoachId] = useState<string | null>(null);
   const [selectedDuration, setSelectedDuration] = useState(60);
   const [selectedDate, setSelectedDate] = useState(getGymTodayString());
@@ -469,7 +468,7 @@ export default function AppointmentModal({
     refetch: refetchCoaches,
   } = useQuery({
     ...activeCoachesQueryOptions<CoachRecord>(mobileApiClient),
-    enabled: isVisible && planMode !== null,
+    enabled: isVisible,
   });
 
   const coachSpecialtyOptions = useMemo(
@@ -777,7 +776,7 @@ export default function AppointmentModal({
   const resetFormState = () => {
     setStep("coach");
     setSelectedCoachId(null);
-    setPlanMode(null);
+    setPlanMode("single");
     setSelectedDate(getGymTodayString());
     setMonthlyStartDate(getGymTodayString());
     setSelectedDuration(60);
@@ -816,20 +815,10 @@ export default function AppointmentModal({
     setErrorText("");
   };
 
-  const goToDateStep = () => {
+  const goToScheduleStep = () => {
     if (planMode !== "single") return;
     if (!selectedCoach) {
       setErrorText("Select a coach to continue.");
-      return;
-    }
-    setErrorText("");
-    setStep("date");
-  };
-
-  const goToTimeStep = () => {
-    if (planMode !== "single") return;
-    if (!selectedDate) {
-      setErrorText("Select a date to continue.");
       return;
     }
     setErrorText("");
@@ -1069,12 +1058,8 @@ export default function AppointmentModal({
                     {step === "coach"
                       ? planMode === "monthly"
                         ? "Choose a monthly offer"
-                        : planMode === "single"
-                          ? "Duration and coach"
-                          : "Choose how you want to train"
-                      : step === "date"
-                        ? "Step 2 of 4 - Choose a date"
-                        : "Step 3 of 4 - Choose an available time"}
+                        : "Duration and coach"
+                      : "Choose a date and available time"}
                   </FitText>
                 </View>
               </Animated.View>
@@ -1118,8 +1103,6 @@ export default function AppointmentModal({
                         );
                       })}
                     </View>
-                    {planMode !== null ? (
-                      <>
                     {planMode === "single" ? (
                       <View style={s.previewCard}>
                         <FitText style={s.previewSectionTitle}>
@@ -1183,108 +1166,75 @@ export default function AppointmentModal({
                         <FitText style={s.errorText}>{errorText}</FitText>
                       ) : null}
                     </View>
-                    <View style={s.previewCard}>
-                      <FitText style={s.previewTitle}>
-                        {selectedCoach
-                          ? `Coach review: ${getCoachName(selectedCoach)}`
-                          : "Coach review required"}
-                      </FitText>
-                      <FitText style={s.previewSubtitle}>
-                        {selectedCoach
-                          ? selectedCoach.bio?.trim() ||
-                            "This coach profile still needs a fuller bio from staff."
-                          : "Review the coach profile and the live slot summary before continuing to time selection."}
-                      </FitText>
-                      <View style={s.previewSection}>
-                        <FitText style={s.previewSectionTitle}>
-                          SPECIALTIES
+                    {selectedCoach ? (
+                      <View style={s.previewCard}>
+                        <FitText style={s.previewTitle}>
+                          {`Coach review: ${getCoachName(selectedCoach)}`}
                         </FitText>
-                        <FitText style={s.previewPlainText}>
-                          {selectedCoach?.specialties?.length
-                            ? selectedCoach.specialties.join(", ")
-                            : "No specialties listed yet."}
+                        <FitText style={s.previewSubtitle}>
+                          {selectedCoach.bio?.trim() || ""}
                         </FitText>
-                      </View>
-                      <View style={s.previewSection}>
-                        <FitText style={s.previewSectionTitle}>
-                          CERTIFICATIONS
-                        </FitText>
-                        <FitText style={s.previewPlainText}>
-                          {selectedCoach?.certifications?.length
-                            ? selectedCoach.certifications.join(", ")
-                            : "No certifications listed yet."}
-                        </FitText>
-                      </View>
-                      {planMode === "single" ? (
                         <View style={s.previewSection}>
                           <FitText style={s.previewSectionTitle}>
-                            LIVE SLOT CHECK
+                            SPECIALTIES
                           </FitText>
                           <FitText style={s.previewPlainText}>
-                            {availabilityStatusMessage}
+                            {selectedCoach?.specialties?.length
+                              ? selectedCoach.specialties.join(", ")
+                              : "No specialties listed yet."}
                           </FitText>
                         </View>
-                      ) : monthlyOffer.isAvailable ? (
                         <View style={s.previewSection}>
                           <FitText style={s.previewSectionTitle}>
-                            MONTHLY OFFER
+                            CERTIFICATIONS
                           </FitText>
                           <FitText style={s.previewPlainText}>
-                            {formatCurrency(monthlyOffer.rate ?? 0)} |{" "}
-                            {monthlyOffer.sessionCount} sessions |{" "}
-                            {formatDurationLabel(monthlyOffer.durationMinutes)} each
+                            {selectedCoach?.certifications?.length
+                              ? selectedCoach.certifications.join(", ")
+                              : "No certifications listed yet."}
                           </FitText>
-                          <FitText style={s.helperText}>
-                            Full PayMongo payment activates this monthly coaching allocation.
-                          </FitText>
-                          <FitText style={[s.previewSectionTitle, { marginTop: 10 }]}>START DATE</FitText>
-                          <Pressable
-                            accessibilityRole="button"
-                            accessibilityLabel={`Monthly coaching start date ${formatBookingDate(monthlyStartDate)}`}
-                            style={[s.fieldBtn, { borderColor: monthlyStartDate ? colors.brand : colors.fieldBorder }]}
-                            onPress={() => setIsCalOpen(true)}
-                          >
-                            <CalendarDays size={16} color={colors.brand} strokeWidth={2} />
-                            <FitText style={[s.fieldBtnText, { color: colors.textPrimary }]}>
-                              {formatBookingDate(monthlyStartDate)}
+                        </View>
+                        {planMode === "single" ? (
+                          <View style={s.previewSection}>
+                            <FitText style={s.previewSectionTitle}>
+                              LIVE SLOT CHECK
                             </FitText>
-                          </Pressable>
-                          <FitText style={hasActivePlan || isPlanAccessLoading ? s.helperText : s.errorText}>
-                            {isPlanAccessLoading ? "Checking active membership..." : membershipAccessSummary}
-                          </FitText>
-                        </View>
-                      ) : null}
-                    </View>
-                    </>
-                  ) : null}
-                  </View>
-                ) : step === "date" ? (
-                  <View style={{ gap: 12 }}>
-                    <View style={s.previewCard}>
-                      <FitText style={s.previewSectionTitle}>
-                        DATE
-                      </FitText>
-                      <FitText style={s.previewTitle}>
-                        {selectedDuration}-minute session with {selectedCoach ? getCoachName(selectedCoach) : "your coach"}
-                      </FitText>
-                      <FitText style={s.helperText}>
-                        Pick a date first. The next step will load canonical available times for that date and duration.
-                      </FitText>
-                    </View>
-                    <Pressable
-                      style={[s.fieldBtn, { borderColor: colors.brand }]}
-                      onPress={() => setIsCalOpen(true)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Select appointment date. Current date ${formatBookingDate(selectedDate)}`}
-                    >
-                      <CalendarDays size={16} color={colors.brand} strokeWidth={2} />
-                      <FitText style={[s.fieldBtnText, { color: colors.textPrimary }]}>
-                        {formatBookingDate(selectedDate)}
-                      </FitText>
-                    </Pressable>
-                    <FitText style={s.helperText}>
-                      {availabilityStatusMessage}
-                    </FitText>
+                            <FitText style={s.previewPlainText}>
+                              {availabilityStatusMessage}
+                            </FitText>
+                          </View>
+                        ) : (
+                          <View style={s.previewSection}>
+                            <FitText style={s.previewSectionTitle}>
+                              MONTHLY OFFER
+                            </FitText>
+                            <FitText style={s.previewPlainText}>
+                              {monthlyOffer.isAvailable
+                                ? `${formatCurrency(monthlyOffer.rate ?? 0)} | ${monthlyOffer.sessionCount} sessions | ${formatDurationLabel(monthlyOffer.durationMinutes)} each`
+                                : "Monthly offer unavailable"}
+                            </FitText>
+                            <FitText style={s.helperText}>
+                              Full PayMongo payment activates this monthly coaching allocation.
+                            </FitText>
+                            <FitText style={[s.previewSectionTitle, { marginTop: 10 }]}>START DATE</FitText>
+                            <Pressable
+                              accessibilityRole="button"
+                              accessibilityLabel={`Monthly coaching start date ${formatBookingDate(monthlyStartDate)}`}
+                              style={[s.fieldBtn, { borderColor: monthlyStartDate ? colors.brand : colors.fieldBorder }]}
+                              onPress={() => setIsCalOpen(true)}
+                            >
+                              <CalendarDays size={16} color={colors.brand} strokeWidth={2} />
+                              <FitText style={[s.fieldBtnText, { color: colors.textPrimary }]}>
+                                {formatBookingDate(monthlyStartDate)}
+                              </FitText>
+                            </Pressable>
+                            <FitText style={hasActivePlan || isPlanAccessLoading ? s.helperText : s.errorText}>
+                              {isPlanAccessLoading ? "Checking active membership..." : membershipAccessSummary}
+                            </FitText>
+                          </View>
+                        )}
+                      </View>
+                    ) : null}
                   </View>
                 ) : (
                   <View style={{ gap: 12 }}>
@@ -1412,7 +1362,7 @@ export default function AppointmentModal({
                   onPress={
                     step === "coach"
                       ? resetAndClose
-                      : () => setStep(step === "time" ? "date" : "coach")
+                      : () => setStep("coach")
                   }
                   disabled={isBusy}
                   flex={1}
@@ -1422,12 +1372,8 @@ export default function AppointmentModal({
                     step === "coach"
                       ? planMode === "monthly"
                         ? "Confirm & Pay"
-                        : planMode === "single"
-                          ? "Choose date"
-                          : "Select a mode"
-                      : step === "date"
-                        ? "Choose available time"
-                        : isBusy
+                        : "Choose date & time"
+                      : isBusy
                         ? sendingRequestLabel
                         : "Review & pay"
                   }
@@ -1436,20 +1382,16 @@ export default function AppointmentModal({
                     step === "coach"
                       ? planMode === "monthly"
                         ? handleMonthlyConfirm
-                        : goToDateStep
-                      : step === "date"
-                        ? goToTimeStep
-                        : handleConfirm
+                        : goToScheduleStep
+                      : handleConfirm
                   }
                   disabled={
                     step === "time"
                       ? !selectedSlot ||
                         !hasValidCoachRate ||
                         isBusy
-                      : step === "date"
-                        ? !selectedDate || isBusy
-                        : planMode == null ||
-                          !selectedCoach ||
+                      : step === "coach"
+                        ? !selectedCoach ||
                           coachesLoading ||
                           isBusy ||
                           (planMode === "monthly" &&
@@ -1457,6 +1399,7 @@ export default function AppointmentModal({
                               !monthlyStartDate ||
                               !hasActivePlan ||
                               isPlanAccessLoading))
+                        : isBusy
                   }
                   loading={isBusy}
                   flex={2}
