@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { View } from "react-native";
 import type { DetailBooking } from "@fittrack/api-client";
+import { CalendarDays, CheckCircle2, CircleOff } from "lucide-react-native";
 
 import { FitCard, FitText } from "@/components/fit";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -102,10 +103,17 @@ export function CoachClientPaidSchedule({
             const title = `${formatBookingDate(session.date)}${
               session.time ? ` · ${session.time}` : ""
             }`;
+            const statusIcon =
+              session.status === "completed"
+                ? CheckCircle2
+                : session.status === "cancelled" || session.status === "no_show"
+                  ? CircleOff
+                  : CalendarDays;
             return (
               <FitCard
                 key={session.id}
                 label={title}
+                icon={statusIcon}
                 subtitle={resolveSessionSubtitle(session)}
                 trailingLabel={session.time ? session.time : "No time set"}
                 trailingLabelColor={resolveSessionStatusColor(
@@ -140,10 +148,17 @@ export function CoachClientPaidSchedule({
             const title = `${formatBookingDate(session.date)}${
               session.time ? ` · ${session.time}` : ""
             }`;
+            const statusIcon =
+              session.status === "completed"
+                ? CheckCircle2
+                : session.status === "cancelled" || session.status === "no_show"
+                  ? CircleOff
+                  : CalendarDays;
             return (
               <FitCard
                 key={session.id}
                 label={title}
+                icon={statusIcon}
                 subtitle={`${session.status} · ${resolveSessionSubtitle(session)}`}
                 trailingLabel={session.status}
                 trailingLabelColor={resolveSessionStatusColor(

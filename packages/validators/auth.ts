@@ -188,7 +188,7 @@ function buildAuthStrongPasswordSchema(fieldLabel: string) {
     .string({ required_error: `${fieldLabel} is required` })
     .trim()
     .min(1, `${fieldLabel} is required`)
-    .min(10, `${fieldLabel} must be at least 10 characters long`)
+    .min(8, `${fieldLabel} must be at least 8 characters long`)
     .max(64, `${fieldLabel} must not exceed 64 characters`)
     .refine((value) => !/\s/.test(value), {
       message: `${fieldLabel} must not contain spaces`,

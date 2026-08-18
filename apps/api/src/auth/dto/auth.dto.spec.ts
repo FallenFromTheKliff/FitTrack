@@ -31,6 +31,34 @@ describe('Auth DTO validation', () => {
     );
   });
 
+  it('rejects outdated legal versions during registration', async () => {
+    const dto = plainToInstance(RegisterDTO, {
+      accepted_terms: true,
+      legal_version: '2026-07-28',
+      email: 'member@gmail.com',
+      password: 'Password1!',
+      first_name: 'Maria',
+      last_name: 'Santos',
+    });
+
+    expect(extractMessages(await validate(dto))).toContain(
+      'legal_version must match the active policy version',
+    );
+  });
+
+  it('accepts registration with the active legal version', async () => {
+    const dto = plainToInstance(RegisterDTO, {
+      accepted_terms: true,
+      legal_version: '2026-08-13',
+      email: 'member@gmail.com',
+      password: 'Password1!',
+      first_name: 'Maria',
+      last_name: 'Santos',
+    });
+
+    await expect(validate(dto)).resolves.toHaveLength(0);
+  });
+
   it('rejects weak admin passwords that do not contain a symbol', async () => {
     const dto = plainToInstance(AdminCreateUserDTO, {
       email: 'member@fittrack.com',

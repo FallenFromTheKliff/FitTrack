@@ -23,6 +23,8 @@ import {
   TrimString,
 } from '../../common/validators';
 
+const ACTIVE_LEGAL_VERSION = '2026-08-13';
+
 // =============================================================================
 // S2 - Auth DTOs
 // =============================================================================
@@ -39,11 +41,11 @@ export class RegisterDTO {
   accepted_terms: true;
 
   @ApiProperty({
-    example: '2026-07-28',
+    example: ACTIVE_LEGAL_VERSION,
     description: 'Legal policy version reviewed during registration.',
   })
   @IsString({ message: 'legal_version must be a string' })
-  @IsIn(['2026-07-28'], {
+  @IsIn([ACTIVE_LEGAL_VERSION], {
     message: 'legal_version must match the active policy version',
   })
   legal_version: string;
