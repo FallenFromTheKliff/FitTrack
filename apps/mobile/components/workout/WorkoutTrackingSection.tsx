@@ -1,5 +1,5 @@
-import type { RefObject } from "react";
-import { Linking, Platform, View } from "react-native";
+import { useMemo, useState, type RefObject } from "react";
+import { Linking, Platform, View, type LayoutChangeEvent } from "react-native";
 import {
   Circle,
   Cpu,
@@ -19,7 +19,7 @@ import type {
   PoseKeypointRecord,
   PoseMovementContractRecord,
 } from "@fittrack/types";
-import { formatTime } from "@fittrack/utils";
+import { createCoverCropTransform, formatTime } from "@fittrack/utils";
 import FitButton from "@/components/fit/FitButton";
 import FitSection from "@/components/fit/FitSection";
 import { FitText } from "@/components/fit/FitText";
@@ -30,8 +30,12 @@ import type {
 } from "@/components/workout/NativeVisionPoseCamera.types";
 import { PoseGuidanceOverlay } from "@/components/workout/PoseGuidanceOverlay";
 import { makeWorkoutStyles } from "@/styles/shared/ScreenStyles";
+import type { WorkoutCameraRuntimeState } from "@/hooks/workout/useWorkoutLiveController";
+import type { WorkoutCameraTarget } from "@/components/workout/workout-camera-target";
 
 type WorkoutTrackingSectionProps = {
+  cameraRuntimeState: WorkoutCameraRuntimeState;
+  cameraTarget: WorkoutCameraTarget | null;
   cameraActive: boolean;
   cameraRef: RefObject<CameraView | null>;
   calories: number;
@@ -43,10 +47,13 @@ type WorkoutTrackingSectionProps = {
   currentKeypoints: PoseKeypointRecord[] | null;
   currentLoadLabel: string | null;
   currentPhase: string;
+  cameraFrameSize: { height: number; width: number } | null;
   equipmentDetected: boolean;
   equipmentDetectionBoxes: PoseEquipmentDetectionBoxRecord[];
   equipmentDetectionStatusText: string | null;
   equipmentSnapshotActive: boolean;
+  holdProgressSeconds: number;
+  holdValid: boolean;
   guidanceLabel: string | null;
   isFrozen: boolean;
   isCameraSwitching: boolean;
@@ -65,6 +72,7 @@ type WorkoutTrackingSectionProps = {
   onToggleSubjectLock: () => void;
   permissionGranted: boolean;
   reps: number;
+  restRemaining: number;
   seconds: number;
   s: ReturnType<typeof makeWorkoutStyles>;
   subjectLockGestureProgress: number;
@@ -75,10 +83,13 @@ type WorkoutTrackingSectionProps = {
 };
 
 export function WorkoutTrackingSection({
+  cameraRuntimeState,
+  cameraTarget,
   cameraActive,
   cameraRef,
   calories,
   cameraFacing,
+  cameraFrameSize,
   cameraRemountKey,
   colors,
   countdownValue,
@@ -90,6 +101,8 @@ export function WorkoutTrackingSection({
   equipmentDetectionBoxes,
   equipmentDetectionStatusText,
   equipmentSnapshotActive,
+  holdProgressSeconds,
+  holdValid,
   guidanceLabel,
   isFrozen,
   isCameraSwitching,
@@ -108,23 +121,71 @@ export function WorkoutTrackingSection({
   onToggleSubjectLock,
   permissionGranted,
   reps,
+  restRemaining,
   seconds,
   s,
   subjectLockGestureProgress,
   subjectLockReady,
   subjectLockStatusText,
   subjectLocked,
-  trackingDisabledReason
+  trackingDisabledReason,
 }: WorkoutTrackingSectionProps) {
+  const [previewSize, setPreviewSize] = useState({ height: 0, width: 0 });
+  const canStartTarget = cameraRuntimeState === "ready";
   const primaryActionDisabled = isRecording
     ? countdownValue !== null || isCameraSwitching
-    : countdownValue !== null || isCameraSwitching || !isTrackingReady;
+    : countdownValue !== null ||
+      isCameraSwitching ||
+      !isTrackingReady ||
+      !canStartTarget;
   const secondaryActionDisabled = isRecording
     ? countdownValue !== null || isCameraSwitching
-    : countdownValue !== null || isCameraSwitching || !isTrackingReady;
+    : countdownValue !== null ||
+      isCameraSwitching ||
+      !isTrackingReady ||
+      !canStartTarget;
   const cameraFacingLabel = cameraFacing === "front" ? "Front" : "Back";
-  const cameraToggleDisabled = isRecording || countdownValue !== null || isCameraSwitching;
+  const cameraToggleDisabled =
+    isRecording ||
+    cameraRuntimeState === "saving" ||
+    cameraRuntimeState === "rest" ||
+    countdownValue !== null ||
+    isCameraSwitching;
   const isNativePoseRuntime = Platform.OS !== "web";
+  const isStaticHoldTarget =
+    cameraTarget?.targetDurationSeconds != null && cameraTarget.targetReps <= 0;
+  const cameraTransform = useMemo(() => {
+    if (!cameraFrameSize || previewSize.width <= 0 || previewSize.height <= 0) {
+      return null;
+    }
+    return createCoverCropTransform({
+      frameHeight: cameraFrameSize.height,
+      frameWidth: cameraFrameSize.width,
+      mirrorX: cameraFacing === "front",
+      viewportHeight: previewSize.height,
+      viewportWidth: previewSize.width,
+    });
+  }, [cameraFacing, cameraFrameSize, previewSize]);
+  const poseTransform = useMemo(() => {
+    if (!cameraFrameSize || previewSize.width <= 0 || previewSize.height <= 0) {
+      return null;
+    }
+    return createCoverCropTransform({
+      frameHeight: cameraFrameSize.height,
+      frameWidth: cameraFrameSize.width,
+      mirrorX: cameraFacing === "front" && !isNativePoseRuntime,
+      viewportHeight: previewSize.height,
+      viewportWidth: previewSize.width,
+    });
+  }, [cameraFacing, cameraFrameSize, isNativePoseRuntime, previewSize]);
+  const transformedKeypoints = currentKeypoints?.map((keypoint) =>
+    poseTransform
+      ? {
+          ...keypoint,
+          ...poseTransform.point({ x: keypoint.x, y: keypoint.y }),
+        }
+      : keypoint,
+  );
   const SubjectLockIcon = UnlockKeyhole;
   const subjectLockProgressPercent = Math.min(
     100,
@@ -141,10 +202,29 @@ export function WorkoutTrackingSection({
           box.height > 0,
       )
     : [];
+  const equipmentOverlayBoxes = visibleEquipmentBoxes.map((box) => {
+    const fallback = {
+      height: Math.max(0.05, Math.min(1, box.height ?? 0.05)),
+      width: Math.max(0.05, Math.min(1, box.width ?? 0.05)),
+      x: Math.max(0, Math.min(1, box.x ?? 0)),
+      y: Math.max(0, Math.min(1, box.y ?? 0)),
+    };
+    return cameraTransform
+      ? { ...box, ...cameraTransform.rect(fallback) }
+      : { ...box, ...fallback };
+  });
 
   return (
     <FitSection heading="Real-time exercise tracking" cardStyle={{ overflow: "visible" }}>
-      <View style={s.previewInner}>
+      <View
+        onLayout={(event: LayoutChangeEvent) => {
+          const { height, width } = event.nativeEvent.layout;
+          if (height !== previewSize.height || width !== previewSize.width) {
+            setPreviewSize({ height, width });
+          }
+        }}
+        style={s.previewInner}
+      >
         {cameraActive && permissionGranted ? (
           <>
             {isNativePoseRuntime ? (
@@ -153,6 +233,9 @@ export function WorkoutTrackingSection({
                 cameraFacing={cameraFacing}
                 equipmentSnapshotActive={isRecording && equipmentSnapshotActive}
                 isActive={!isCameraSwitching}
+                poseProcessingEnabled={
+                  cameraRuntimeState !== "rest" && cameraRuntimeState !== "saving"
+                }
                 onEquipmentSnapshot={onNativeEquipmentSnapshot}
                 onPoseFrame={onNativePoseFrame}
                 style={s.cameraView}
@@ -170,14 +253,14 @@ export function WorkoutTrackingSection({
               currentAngle={currentAngle}
               currentPhase={currentPhase}
               guidanceLabel={guidanceLabel}
-              keypoints={currentKeypoints}
+              keypoints={transformedKeypoints ?? null}
               lowConfidenceLandmarks={lowConfidenceLandmarks}
               movementContract={movementContract}
             />
             {equipmentDetectionStatusText ? (
               <>
-                {visibleEquipmentBoxes.length > 0 ? (
-                  visibleEquipmentBoxes.map((box, index) => (
+                {equipmentOverlayBoxes.length > 0 ? (
+                  equipmentOverlayBoxes.map((box, index) => (
                     <View
                       key={`${box.label ?? "equipment"}-${index}`}
                       style={{
@@ -325,29 +408,63 @@ export function WorkoutTrackingSection({
             </View>
           </View>
         </View>
-        {cameraActive && permissionGranted && !subjectLocked ? (
+        {cameraTarget ? (
           <View
+            accessibilityLabel={`Camera ${cameraRuntimeState} for ${cameraTarget.exerciseName}, set ${cameraTarget.setNumber} of ${cameraTarget.totalSets}, ${isStaticHoldTarget ? `${holdProgressSeconds.toFixed(1)} of ${cameraTarget.targetDurationSeconds} seconds` : `${reps} of ${cameraTarget.targetReps} reps`}`}
             style={{
-              alignItems: "center",
-              backgroundColor: "rgba(0,0,0,0.62)",
-              borderColor: "rgba(255,255,255,0.24)",
+              backgroundColor: "rgba(0,0,0,0.68)",
+              borderColor:
+                cameraRuntimeState === "tracking"
+                  ? colors.brand
+                  : "rgba(255,255,255,0.2)",
               borderRadius: R.md,
               borderWidth: 1,
-              flexDirection: "row",
-              gap: 6,
               left: 14,
-              paddingHorizontal: 11,
+              maxWidth: "82%",
+              paddingHorizontal: 10,
               paddingVertical: 7,
               position: "absolute",
               top: 56,
               zIndex: 5,
             }}
+          >
+            <FitText
+              numberOfLines={1}
+              style={{ color: "#FFFFFF", fontSize: 12, fontWeight: "900" }}
             >
-              <SubjectLockIcon size={13} color="#FFFFFF" strokeWidth={2.4} />
-              <FitText style={{ color: "#FFFFFF", fontSize: 11, fontWeight: "800", letterSpacing: 0.4 }}>
-                NOT LOCKED
+              {cameraTarget.exerciseName}
+            </FitText>
+            <FitText
+              style={{ color: "rgba(255,255,255,0.8)", fontSize: 10, marginTop: 2 }}
+            >
+              Set {cameraTarget.setNumber}/{cameraTarget.totalSets} · {isStaticHoldTarget
+                ? `${holdProgressSeconds.toFixed(1)} / ${cameraTarget.targetDurationSeconds}s hold${holdValid ? "" : " · form paused"}`
+                : `${reps}/${cameraTarget.targetReps} reps`}
+              {cameraTarget.targetWeightKg != null
+                ? ` · ${cameraTarget.targetWeightKg} kg`
+                : " · Bodyweight"}
+              {` · ${currentPhase}`}
+            </FitText>
+            {cameraRuntimeState === "rest" ? (
+              <FitText
+                style={{ color: colors.brand, fontSize: 10, fontWeight: "900", marginTop: 3 }}
+              >
+                REST {restRemaining > 0 ? `${restRemaining}s` : "COMPLETE"}
               </FitText>
-            </View>
+            ) : cameraRuntimeState === "saving" ? (
+              <FitText
+                style={{ color: colors.warning, fontSize: 10, fontWeight: "900", marginTop: 3 }}
+              >
+                SAVING SET
+              </FitText>
+            ) : cameraRuntimeState === "ready" ? (
+              <FitText
+                style={{ color: colors.success, fontSize: 10, fontWeight: "900", marginTop: 3 }}
+              >
+                READY · reposition, then start
+              </FitText>
+            ) : null}
+          </View>
         ) : null}
         {cameraActive && permissionGranted && !subjectLocked ? (
           <View style={{ position: "absolute", left: 14, right: 14, bottom: 86, zIndex: 4 }}>
@@ -433,8 +550,12 @@ export function WorkoutTrackingSection({
         ) : null}
         <View style={s.previewOverlayTopCenter}>
           <View style={s.repsPill}>
-            <FitText style={s.repsText}>{reps}</FitText>
-            <FitText style={s.repsPillLabel}> reps</FitText>
+            <FitText style={s.repsText}>
+              {isStaticHoldTarget ? holdProgressSeconds.toFixed(1) : reps}
+            </FitText>
+            <FitText style={s.repsPillLabel}>
+              {isStaticHoldTarget ? " sec" : " reps"}
+            </FitText>
           </View>
         </View>
         {cameraActive && permissionGranted ? (
@@ -443,6 +564,7 @@ export function WorkoutTrackingSection({
               icon={isRecording ? StopCircle : Circle}
               iconOnly
               iconSize={22}
+              accessibilityLabel={isRecording ? "Stop recording" : "Start recording"}
               variant={isRecording ? "danger" : "primary"}
               disabled={primaryActionDisabled}
               onPress={isRecording ? onStopRecord : () => { void onStartRecord(); }}
@@ -452,6 +574,7 @@ export function WorkoutTrackingSection({
               icon={isRecording ? Pause : Play}
               iconOnly
               iconSize={22}
+              accessibilityLabel={isRecording ? "Pause recording" : "Resume recording"}
               variant="ghost"
               disabled={secondaryActionDisabled}
               onPress={isRecording ? onPause : () => { void onResumeRecord(); }}

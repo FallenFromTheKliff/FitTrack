@@ -223,22 +223,61 @@ export function MobileWorkoutToday({
 
   const openCameraForCurrentSet = () => {
     if (!activeSession || !effectivePlan || !nextTarget) return;
-    onShowCamera({
-      completeWorkoutAfterSet: completedSets + 1 >= requiredSets,
-      exerciseId: nextTarget.exercise.exerciseId,
-      exerciseName: nextTarget.exercise.exerciseName,
-      planExerciseId: nextTarget.exercise.id,
-      planId: effectivePlan.id,
-      planTitle: effectivePlan.title,
-      restSeconds:
-        nextTarget.exercise.restSecondsBySet?.[nextTarget.setNumber - 1] ??
-        nextTarget.exercise.restSeconds,
-      sessionId: activeSession.id,
-      setNumber: nextTarget.setNumber,
-      targetReps: nextTarget.exercise.reps ?? 0,
-      targetWeightKg: nextTarget.exercise.weightKgTarget ?? null,
-      totalSets: nextTarget.exercise.sets,
-    });
+    const findNextUncompletedTarget = (
+      startExerciseIndex: number,
+      startSetNumber: number,
+    ) => {
+      for (
+        let exerciseIndex = startExerciseIndex;
+        exerciseIndex < orderedExercises.length;
+        exerciseIndex += 1
+      ) {
+        const exercise = orderedExercises[exerciseIndex];
+        const firstSet = exerciseIndex === startExerciseIndex ? startSetNumber : 1;
+        for (let setNumber = firstSet; setNumber <= exercise.sets; setNumber += 1) {
+          if (!completed.has(`${exercise.id}:${setNumber}`)) {
+            return { exercise, setNumber };
+          }
+        }
+      }
+      return null;
+    };
+    const buildTarget = (
+      exercise: (typeof orderedExercises)[number],
+      setNumber: number,
+    ): WorkoutCameraTarget => {
+      const exerciseIndex = orderedExercises.findIndex(
+        (candidate) => candidate.id === exercise.id,
+      );
+      const followingSeed = findNextUncompletedTarget(
+        setNumber < exercise.sets ? exerciseIndex : exerciseIndex + 1,
+        setNumber < exercise.sets ? setNumber + 1 : 1,
+      );
+      const followingTarget = followingSeed
+        ? buildTarget(followingSeed.exercise, followingSeed.setNumber)
+          : null;
+      return {
+        completeWorkoutAfterSet: followingTarget === null,
+        exerciseId: exercise.exerciseId,
+        exerciseName: exercise.exerciseName,
+        nextTarget: followingTarget,
+        planExerciseId: exercise.id,
+        planId: effectivePlan.id,
+        planTitle: effectivePlan.title,
+        restSeconds:
+          exercise.restSecondsBySet?.[setNumber - 1] ?? exercise.restSeconds,
+        sessionId: activeSession.id,
+        setNumber,
+        targetReps: exercise.reps ?? 0,
+        targetDurationSeconds:
+          exercise.durationSeconds != null && exercise.durationSeconds > 0
+            ? exercise.durationSeconds
+            : null,
+        targetWeightKg: exercise.weightKgTarget ?? null,
+        totalSets: exercise.sets,
+      };
+    };
+    onShowCamera(buildTarget(nextTarget.exercise, nextTarget.setNumber));
   };
   const openManualEntry = () => {
     if (!currentExercise || !nextTarget) return;
@@ -410,7 +449,7 @@ export function MobileWorkoutToday({
         </View>
       ) : null}
 
-      {!isLoading && !hasError && effectivePlan ? (
+      {!isLoading && !hasError && effectivePlan && day ? (
         <View
           style={{
             gap: 7,
@@ -879,17 +918,24 @@ export function MobileWorkoutToday({
                 </View>
 
                 {activeSession ? (
+                  (() => {
+                    const hasCameraTarget =
+                      exercise.reps != null ||
+                      (exercise.durationSeconds ?? 0) > 0;
+                    return (
                   <FitButton
                     icon={Camera}
-                    disabled={restRemaining > 0 || exercise.reps == null}
+                    disabled={restRemaining > 0 || !hasCameraTarget}
                     label={
-                      exercise.reps == null
-                        ? "Camera Needs a Rep Target"
+                      !hasCameraTarget
+                        ? "Camera Needs a Rep or Duration Target"
                         : "Track This Set With Camera"
                     }
                     onPress={openCameraForCurrentSet}
                     variant="ghost"
                   />
+                    );
+                  })()
                 ) : null}
               </View>
             );

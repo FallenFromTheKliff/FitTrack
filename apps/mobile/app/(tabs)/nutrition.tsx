@@ -412,13 +412,9 @@ export default function NutritionScreen() {
   const previousTdee = nutritionHistory.data.find((entry) => entry.id !== activeNutrition?.tdee.id) ?? null;
   const targetAdherence = target > 0 ? Math.min((today / target) * 100, 999) : 0;
   const adherenceState = target > 0 ? getRatioState(targetAdherence) : null;
-  const targetStatusLabel = hasGoal
-    ? calorieDelta >= 0
-      ? "In range"
-      : "Over target"
-    : "Needs setup";
-  const targetStatusDetail = hasGoal
-    ? `${Math.min(targetAdherence, 100).toFixed(0)}% of today's target logged.`
+  const targetStatusLabel = target > 0 ? calorieIntakeStatus.label : "Needs setup";
+  const targetStatusDetail = target > 0
+    ? `${Math.min(targetAdherence, 100).toFixed(0)}% of today's target logged · ${calorieBalanceText}.`
     : "Create a nutrition goal before macro comparisons can run.";
   const recalculationDetail = recentTdee
     ? `Last calculated ${formatShortDateTime(recentTdee.calculatedAt)}.`
@@ -522,97 +518,95 @@ export default function NutritionScreen() {
 
   return (
     <Animated.View style={base.screen}>
-      <FeatureHeader
-        icon={UtensilsCrossed}
-        iconMode="none"
-      >
-        <View style={s.headerSummary}>
-          <View style={s.headerTopRow}>
-            <View style={s.headerTitleStack}>
-              <FitText style={[s.headerGoalName, { color: calorieIntakeColor }]}>
-                {hasGoal ? goalLabel.toUpperCase() : "TARGET SETUP"}
-              </FitText>
-              <FitText style={s.headerCaloriesLabel}>TODAY'S CALORIES</FitText>
-            </View>
-            <View
-              style={[
-                s.headerFlameIcon,
-                {
-                  backgroundColor: calorieIntakeColor + "14",
-                  borderColor: calorieIntakeColor + "3D",
-                  borderRadius: 18,
-                  borderWidth: 1,
-                },
-              ]}
-            >
-              <Flame size={30} color={calorieIntakeColor} strokeWidth={2.2} />
-            </View>
-          </View>
-          <FitText style={[s.headerCaloriesValue, { color: calorieIntakeColor }]}>
-            {isNutritionLoading ? "--" : today.toFixed(0)}
-          </FitText>
-          <FitText style={s.headerCaloriesTarget}>
-            {target > 0 ? `/ ${target.toFixed(0)} kcal` : "No active backend target yet"}
-          </FitText>
-          {target > 0 ? (
-            <>
-              <View
-                style={[
-                  s.headerCaloriesBar,
-                  { backgroundColor: calorieIntakeColor + "20" },
-                ]}
-              >
-                <View
-                  style={[
-                    s.headerCaloriesBarFill,
-                    {
-                      backgroundColor: calorieIntakeColor,
-                      width: `${calorieIntakeStatus.progressPercent}%`,
-                    },
-                  ]}
-                />
-              </View>
-              <FitText
-                accessibilityLabel={`Calorie status: ${calorieIntakeStatus.label}. ${calorieBalanceText}.`}
-                accessibilityLiveRegion="polite"
-                style={[s.headerCaloriesRemaining, { color: calorieIntakeColor, opacity: 1 }]}
-              >
-                {calorieIntakeStatus.label} · {calorieBalanceText}
-              </FitText>
-              {!isFrozen ? (
-                <View style={s.headerHintRow}>
-                  <UtensilsCrossed size={14} color={colors.brand} strokeWidth={2} />
-                  <FitText style={s.headerCaloriesHint}>
-                    Use the FAB to update this target.
-                  </FitText>
-                </View>
-              ) : null}
-            </>
-          ) : (
-            <>
-              <FitText style={s.headerCaloriesRemaining}>
-                Save your profile metrics and goal to unlock the live nutrition summary.
-              </FitText>
-              {!isFrozen ? (
-                <View style={s.headerHintRow}>
-                  <UtensilsCrossed size={14} color={colors.brand} strokeWidth={2} />
-                  <FitText style={s.headerCaloriesHint}>
-                    Use the FAB to set your target.
-                  </FitText>
-                </View>
-              ) : null}
-            </>
-          )}
-        </View>
-      </FeatureHeader>
+      <FeatureHeader icon={UtensilsCrossed} iconMode="none" title="Nutrition" />
       <Animated.ScrollView
         style={[base.content, screenStyle]}
-        contentContainerStyle={base.scrollContent}
+        contentContainerStyle={[base.scrollContent, { paddingBottom: 180 }]}
         showsVerticalScrollIndicator={false}
         onScroll={scrollHandler}
         scrollEventThrottle={16}
       >
         <Animated.View style={contentStyle}>
+          <View style={s.caloriesCard}>
+            <View style={s.headerTopRow}>
+              <View style={s.headerTitleStack}>
+                <FitText style={[s.headerGoalName, { color: calorieIntakeColor }]}>
+                  {hasGoal ? goalLabel.toUpperCase() : "TARGET SETUP"}
+                </FitText>
+                <FitText style={s.headerCaloriesLabel}>TODAY'S CALORIES</FitText>
+              </View>
+              <View
+                style={[
+                  s.headerFlameIcon,
+                  {
+                    backgroundColor: calorieIntakeColor + "14",
+                    borderColor: calorieIntakeColor + "3D",
+                    borderRadius: 18,
+                    borderWidth: 1,
+                  },
+                ]}
+              >
+                <Flame size={30} color={calorieIntakeColor} strokeWidth={2.2} />
+              </View>
+            </View>
+            <FitText style={[s.headerCaloriesValue, { color: calorieIntakeColor }]}>
+              {isNutritionLoading ? "--" : today.toFixed(0)}
+            </FitText>
+            <FitText style={s.headerCaloriesTarget}>
+              {target > 0 ? `/ ${target.toFixed(0)} kcal` : "No active backend target yet"}
+            </FitText>
+            {target > 0 ? (
+              <>
+                <View
+                  style={[
+                    s.headerCaloriesBar,
+                    { backgroundColor: calorieIntakeColor + "20" },
+                  ]}
+                >
+                  <View
+                    style={[
+                      s.headerCaloriesBarFill,
+                      {
+                        backgroundColor: calorieIntakeColor,
+                        width: `${calorieIntakeStatus.progressPercent}%`,
+                      },
+                    ]}
+                  />
+                </View>
+                <FitText
+                  accessibilityLabel={`Calorie status: ${calorieIntakeStatus.label}. ${calorieBalanceText}.`}
+                  accessibilityLiveRegion="polite"
+                  style={[s.headerCaloriesRemaining, { color: calorieIntakeColor, opacity: 1 }]}
+                >
+                  {calorieIntakeStatus.label} · {calorieBalanceText}
+                </FitText>
+                {!isFrozen ? (
+                  <View style={s.headerHintRow}>
+                    <UtensilsCrossed size={14} color={colors.brand} strokeWidth={2} />
+                    <FitText style={s.headerCaloriesHint}>
+                      Use the FAB to update this target.
+                    </FitText>
+                  </View>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <FitText style={s.headerCaloriesRemaining}>
+                  {isNutritionLoading
+                    ? "Loading today's live nutrition summary."
+                    : "Save your profile metrics and goal to unlock the live nutrition summary."}
+                </FitText>
+                {!isFrozen ? (
+                  <View style={s.headerHintRow}>
+                    <UtensilsCrossed size={14} color={colors.brand} strokeWidth={2} />
+                    <FitText style={s.headerCaloriesHint}>
+                      Use the FAB to set your target.
+                    </FitText>
+                  </View>
+                ) : null}
+              </>
+            )}
+          </View>
           <FitSection heading="Target Status" bare>
             <View style={s.cardList}>
               <FitCard
@@ -620,7 +614,7 @@ export default function NutritionScreen() {
                 label="Daily Target"
                 subtitle={targetStatusDetail}
                 trailingLabel={targetStatusLabel}
-                trailingLabelColor={targetStatusLabel === "Over target" ? colors.warning : colors.brand}
+                trailingLabelColor={target > 0 ? calorieIntakeColor : colors.warning}
                 hasBorder
                 noChevron
               />

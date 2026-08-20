@@ -17,6 +17,7 @@
     "db:seed:dynamic:railway": "railway run node -r ts-node/register prisma/seed-dynamic.ts --target=railway --mode=additive --users=100",
     "db:backfill:gamification": "node -r ts-node/register prisma/backfill-gamification.ts --dry-run",
     "test:seed:dynamic": "node -r ts-node/register prisma/dynamic-seed/contract.spec.ts",
+    "test:seed:pose-profile": "node -r ts-node/register prisma/dynamic-seed/pose-profile.spec.ts",
     "test:seed:integrity": "node -r ts-node/register prisma/dynamic-seed/integrity.spec.ts",
     "report:seed:integrity": "node -r ts-node/register prisma/dynamic-seed/integrity-report.ts",
     "test:seed:gamification": "node -r ts-node/register prisma/dynamic-seed/gamification-backfill.spec.ts",

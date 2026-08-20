@@ -24,6 +24,7 @@ export type NativeVisionPoseCameraProps = {
   cameraFacing: CameraType;
   equipmentSnapshotActive?: boolean;
   isActive: boolean;
+  poseProcessingEnabled?: boolean;
   onEquipmentSnapshot?: (snapshot: NativeEquipmentSnapshot) => void | Promise<void>;
   onPoseFrame: (frame: NativePoseFrame) => void | Promise<void>;
   style?: StyleProp<ViewStyle>;

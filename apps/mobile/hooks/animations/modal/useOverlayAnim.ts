@@ -11,9 +11,11 @@ export function useOverlayAnim(
 ) {
   const { settings } = useTheme();
   const shouldAnimate = settings.animationLevel === "full";
-  const opacity = useSharedValue(0);
-  const scale = useSharedValue(0.95);
-  const translateY = useSharedValue(24);
+  // Seed the first render from visibility so native Modal content never spends
+  // a frame mounted behind an opacity-zero card before the effect runs.
+  const opacity = useSharedValue(isVisible ? 1 : 0);
+  const scale = useSharedValue(isVisible ? 1 : 0.95);
+  const translateY = useSharedValue(isVisible ? 0 : 24);
 
   useEffect(() => {
     cancelAnimation(opacity);

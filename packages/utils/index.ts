@@ -9,5 +9,7 @@ export * from "./exercise-creation";
 export * from "./number";
 export * from "./password";
 export * from "./pose";
+export * from "./pose-signal-cache";
 export * from "./profile";
 export * from "./coach-session";
+export * from "./camera-transform";

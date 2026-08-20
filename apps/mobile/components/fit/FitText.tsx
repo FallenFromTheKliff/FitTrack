@@ -56,7 +56,7 @@ export function AnimatedFitText({
   );
 }
 
-export function StaticFitText({
+export const StaticFitText = React.memo(function StaticFitText({
   fontKey = "standard",
   style,
   ...props
@@ -64,4 +64,4 @@ export function StaticFitText({
   return (
     <Text {...props} style={[{ fontFamily: FONT_FAMILIES[fontKey] }, style]} />
   );
-}
+});

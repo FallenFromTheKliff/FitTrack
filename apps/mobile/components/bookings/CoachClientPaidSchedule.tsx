@@ -1,9 +1,9 @@
 import { useMemo } from "react";
 import { View } from "react-native";
-import type { DetailBooking } from "@fittrack/api-client";
 import { CalendarDays, CheckCircle2, CircleOff } from "lucide-react-native";
 
 import { FitCard, FitText } from "@/components/fit";
+import type { DetailBooking } from "@/components/modals";
 import { useTheme } from "@/contexts/ThemeContext";
 import { formatBookingDate } from "@fittrack/utils";
 

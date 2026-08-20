@@ -77,6 +77,7 @@ import type {
   PoseConnectionState,
   PoseFrameProcessingResult,
 } from './pose.types';
+import { buildFallbackPoseMovementContract } from '../../../../../packages/utils/pose';
 
 const poseContractConfidenceThreshold = 0.8;
 const defaultPoseTolerance = 12;
@@ -612,205 +613,45 @@ type PoseMovementContractDefaults = {
   spatialRequirements: PoseSpatialRequirementsValue;
 };
 
-const movementContractDefaults: Record<string, PoseMovementContractDefaults> = {
-  bench_press: {
-    degradedConditions: [
-      'left_arm_occluded',
-      'right_arm_occluded',
-      'asymmetry_over_tolerance',
-    ],
-    noCountConditions: [
-      'one_arm_only',
-      'left_right_phase_desync',
-      'bar_path_unavailable',
-    ],
-    phaseOrder: ['setup', 'down', 'up'],
-    primaryJoints: ['left_elbow', 'right_elbow'],
-    repModel: 'bilateral',
-    requiredSides: 'both',
-    secondaryJoints: ['left_shoulder', 'right_shoulder'],
-    spatialRequirements: {
-      body_line_tolerance: 40,
-      body_x_drift_max: 0.08,
-      body_y_travel_min: 0,
-      left_right_symmetry_tolerance: 28,
-      phase_sync_tolerance_ms: 350,
-    },
-  },
-  bicep_curl: {
-    degradedConditions: ['wrist_occluded', 'hip_swing_detected'],
-    noCountConditions: [
-      'equipment_required',
-      'insufficient_elbow_rom',
-      'bilateral_arm_motion_unconfirmed',
-      'curl_grip_unconfirmed',
-      'curl_torso_not_upright',
-      'hip_swing_over_tolerance',
-    ],
-    phaseOrder: ['setup', 'curl', 'extend'],
-    primaryJoints: ['left_elbow', 'right_elbow'],
-    repModel: 'bilateral',
-    requiredSides: 'both',
-    secondaryJoints: ['hip', 'shoulder'],
-    spatialRequirements: {
-      body_line_tolerance: 45,
-      body_x_drift_max: 0.08,
-      body_y_travel_min: 0,
-      left_right_symmetry_tolerance: 60,
-      phase_sync_tolerance_ms: 950,
-    },
-  },
-  dip: {
-    degradedConditions: [
-      'left_arm_occluded',
-      'right_arm_occluded',
-      'phase_desync',
-    ],
-    noCountConditions: [
-      'bilateral_arm_motion_unconfirmed',
-      'body_y_travel_below_min',
-      'left_right_phase_desync',
-    ],
-    phaseOrder: ['setup', 'down', 'up'],
-    primaryJoints: ['left_elbow', 'right_elbow'],
-    repModel: 'bilateral',
-    requiredSides: 'both',
-    secondaryJoints: ['left_shoulder', 'right_shoulder', 'hip'],
-    spatialRequirements: {
-      body_line_tolerance: 38,
-      body_x_drift_max: 0.08,
-      body_y_travel_min: 0.014,
-      left_right_symmetry_tolerance: 38,
-      phase_sync_tolerance_ms: 650,
-    },
-  },
-  plank: {
-    degradedConditions: ['hip_sag', 'shoulder_occluded'],
-    noCountConditions: ['body_line_failure', 'hold_too_short'],
-    phaseOrder: ['setup', 'hold'],
-    primaryJoints: ['left_hip', 'right_hip'],
-    repModel: 'static_hold',
-    requiredSides: 'both',
-    secondaryJoints: ['left_shoulder', 'right_shoulder'],
-    spatialRequirements: {
-      body_line_tolerance: 22,
-      body_x_drift_max: 0.06,
-      body_y_travel_min: 0,
-      left_right_symmetry_tolerance: 35,
-      phase_sync_tolerance_ms: 500,
-    },
-  },
-  push_up: {
-    degradedConditions: [
-      'left_arm_occluded',
-      'right_arm_occluded',
-      'body_line_failure',
-      'phase_desync',
-    ],
-    noCountConditions: [
-      'bilateral_arm_motion_unconfirmed',
-      'push_up_body_not_horizontal',
-      'body_line_failure',
-      'left_right_phase_desync',
-    ],
-    phaseOrder: ['setup', 'down', 'up'],
-    primaryJoints: ['left_elbow', 'right_elbow'],
-    repModel: 'bilateral',
-    requiredSides: 'both',
-    secondaryJoints: ['left_shoulder', 'right_shoulder', 'hip'],
-    spatialRequirements: {
-      body_line_tolerance: 86,
-      body_x_drift_max: 0.22,
-      body_y_travel_min: 0.012,
-      hip_y_travel_min: 0.01,
-      shoulder_hip_travel_min: 0.01,
-      shoulder_y_travel_min: 0.008,
-      torso_slope_max_deg: 92,
-      torso_slope_min_deg: 0,
-      wrist_anchor_drift_max: 0.18,
-      left_right_symmetry_tolerance: 55,
-      phase_sync_tolerance_ms: 650,
-    },
-  },
-  pull_up: {
-    degradedConditions: [
-      'left_arm_occluded',
-      'right_arm_occluded',
-      'bar_unavailable',
-    ],
-    noCountConditions: ['insufficient_elbow_rom', 'body_swing_over_tolerance'],
-    phaseOrder: ['setup', 'pull', 'lower'],
-    primaryJoints: ['left_elbow', 'right_elbow'],
-    repModel: 'bilateral',
-    requiredSides: 'either',
-    secondaryJoints: ['left_shoulder', 'right_shoulder', 'hip'],
-    spatialRequirements: {
-      body_line_tolerance: 45,
-      body_x_drift_max: 0.16,
-      body_y_travel_min: 0,
-      left_right_symmetry_tolerance: 60,
-      phase_sync_tolerance_ms: 700,
-    },
-  },
-  shoulder_press: {
-    degradedConditions: [
-      'left_arm_occluded',
-      'right_arm_occluded',
-      'asymmetry_over_tolerance',
-    ],
-    noCountConditions: [
-      'one_arm_only',
-      'left_right_phase_desync',
-      'lockout_control_failure',
-    ],
-    phaseOrder: ['setup', 'down', 'up'],
-    primaryJoints: ['left_shoulder', 'right_shoulder'],
-    repModel: 'bilateral',
-    requiredSides: 'both',
-    secondaryJoints: ['left_elbow', 'right_elbow'],
-    spatialRequirements: {
-      body_line_tolerance: 32,
-      body_x_drift_max: 0.08,
-      body_y_travel_min: 0,
-      left_right_symmetry_tolerance: 28,
-      phase_sync_tolerance_ms: 350,
-    },
-  },
-  squat: {
-    degradedConditions: [
-      'left_leg_occluded',
-      'right_leg_occluded',
-      'depth_unavailable',
-    ],
-    noCountConditions: [
-      'one_leg_only',
-      'body_y_travel_below_min',
-      'left_right_phase_desync',
-    ],
-    phaseOrder: ['setup', 'down', 'up'],
-    primaryJoints: ['left_knee', 'right_knee'],
-    repModel: 'bilateral',
-    requiredSides: 'both',
-    secondaryJoints: ['left_hip', 'right_hip'],
-    spatialRequirements: {
-      body_line_tolerance: 45,
-      body_x_drift_max: 0.1,
-      body_y_travel_min: 0.02,
-      left_right_symmetry_tolerance: 35,
-      phase_sync_tolerance_ms: 450,
-    },
-  },
-};
-
 function getMovementContractDefaults(
   exerciseName: string,
 ): PoseMovementContractDefaults {
-  const canonicalExercise =
-    toCanonicalPoseExerciseHint(exerciseName) ?? exerciseName;
-  return (
-    movementContractDefaults[canonicalExercise] ??
-    movementContractDefaults.squat
-  );
+  const contract = buildFallbackPoseMovementContract(exerciseName);
+  if (!contract) {
+    return {
+      degradedConditions: [],
+      noCountConditions: [],
+      phaseOrder: [],
+      primaryJoints: [],
+      repModel: 'unknown',
+      requiredSides: 'either',
+      secondaryJoints: [],
+      spatialRequirements: {},
+    };
+  }
+  const spatial = contract.spatialRequirements ?? {};
+  return {
+    degradedConditions: contract.degradedConditions ?? [],
+    noCountConditions: contract.noCountConditions ?? [],
+    phaseOrder: contract.phaseOrder ?? [],
+    primaryJoints: contract.primaryJoints ?? [],
+    repModel: contract.repModel ?? 'unknown',
+    requiredSides: contract.requiredSides ?? 'either',
+    secondaryJoints: contract.secondaryJoints ?? [],
+    spatialRequirements: {
+      body_line_tolerance: spatial.bodyLineTolerance,
+      body_x_drift_max: spatial.bodyXDriftMax,
+      body_y_travel_min: spatial.bodyYTravelMin,
+      hip_y_travel_min: spatial.hipYTravelMin,
+      left_right_symmetry_tolerance: spatial.leftRightSymmetryTolerance,
+      phase_sync_tolerance_ms: spatial.phaseSyncToleranceMs,
+      shoulder_hip_travel_min: spatial.shoulderHipTravelMin,
+      shoulder_y_travel_min: spatial.shoulderYTravelMin,
+      torso_slope_max_deg: spatial.torsoSlopeMaxDeg,
+      torso_slope_min_deg: spatial.torsoSlopeMinDeg,
+      wrist_anchor_drift_max: spatial.wristAnchorDriftMax,
+    },
+  };
 }
 
 function toRepModel(value: unknown, fallback: PoseRepModel): PoseRepModel {
@@ -872,8 +713,9 @@ function toSpatialRequirements(
         getObjectValue(value, 'body_y_travel_min', 'bodyYTravelMin'),
       ) ?? fallback?.body_y_travel_min,
     hip_y_travel_min:
-      toOptionalNumber(getObjectValue(value, 'hip_y_travel_min', 'hipYTravelMin')) ??
-      fallback?.hip_y_travel_min,
+      toOptionalNumber(
+        getObjectValue(value, 'hip_y_travel_min', 'hipYTravelMin'),
+      ) ?? fallback?.hip_y_travel_min,
     shoulder_y_travel_min:
       toOptionalNumber(
         getObjectValue(value, 'shoulder_y_travel_min', 'shoulderYTravelMin'),
@@ -922,6 +764,9 @@ function enrichMovementContract(
   source?: Record<string, unknown> | null,
 ): PoseMovementContractValue {
   const defaults = getMovementContractDefaults(contract.exercise);
+  const canonicalContract = buildFallbackPoseMovementContract(
+    contract.exercise,
+  );
   const spatialSource = isRecord(source?.spatial_requirements)
     ? source.spatial_requirements
     : isRecord(source?.spatialRequirements)
@@ -960,10 +805,78 @@ function enrichMovementContract(
       source?.secondary_joints ?? source?.secondaryJoints,
       contract.secondary_joints ?? defaults.secondaryJoints,
     ),
+    body_orientation: (source?.body_orientation ??
+      source?.bodyOrientation ??
+      contract.body_orientation ??
+      canonicalContract?.bodyOrientation) as
+      | PoseMovementContractValue['body_orientation']
+      | undefined,
+    contract_version: (source?.contract_version ??
+      source?.contractVersion ??
+      contract.contract_version ??
+      canonicalContract?.contractVersion) as string | undefined,
+    partial_rep_policy: (source?.partial_rep_policy ??
+      source?.partialRepPolicy ??
+      contract.partial_rep_policy ??
+      canonicalContract?.partialRepPolicy) as
+      | PoseMovementContractValue['partial_rep_policy']
+      | undefined,
+    hold_duration_seconds:
+      toOptionalNumber(
+        source?.hold_duration_seconds ??
+          source?.holdDurationSeconds ??
+          contract.hold_duration_seconds,
+      ) ?? canonicalContract?.holdDurationSeconds ?? null,
     spatial_requirements: toSpatialRequirements(
       spatialSource,
       contract.spatial_requirements ?? defaults.spatialRequirements,
     ),
+    tracking_requirements: {
+      min_confidence:
+        toOptionalNumber(
+          source?.tracking_requirements &&
+            isRecord(source.tracking_requirements)
+            ? source.tracking_requirements.min_confidence
+            : source?.trackingRequirements &&
+                isRecord(source.trackingRequirements)
+              ? source.trackingRequirements.minConfidence
+              : contract.tracking_requirements?.min_confidence,
+        ) ??
+        canonicalContract?.trackingRequirements?.minConfidence ??
+        0.6,
+      min_reliable_frame_landmarks:
+        toOptionalNumber(
+          source?.tracking_requirements &&
+            isRecord(source.tracking_requirements)
+            ? source.tracking_requirements.min_reliable_frame_landmarks
+            : source?.trackingRequirements &&
+                isRecord(source.trackingRequirements)
+              ? source.trackingRequirements.minReliableFrameLandmarks
+              : contract.tracking_requirements?.min_reliable_frame_landmarks,
+        ) ??
+        canonicalContract?.trackingRequirements?.minReliableFrameLandmarks ??
+        12,
+      required_landmarks: toContractStringArray(
+        source?.tracking_requirements && isRecord(source.tracking_requirements)
+          ? source.tracking_requirements.required_landmarks
+          : source?.trackingRequirements &&
+              isRecord(source.trackingRequirements)
+            ? source.trackingRequirements.requiredLandmarks
+            : contract.tracking_requirements?.required_landmarks,
+        canonicalContract?.trackingRequirements?.requiredLandmarks ?? [],
+      ),
+      required_sides:
+        source?.tracking_requirements &&
+        isRecord(source.tracking_requirements) &&
+        source.tracking_requirements.required_sides
+          ? toRequiredSides(
+              source.tracking_requirements.required_sides,
+              defaults.requiredSides,
+            )
+          : (canonicalContract?.trackingRequirements?.requiredSides ??
+            contract.required_sides ??
+            defaults.requiredSides),
+    },
   };
 }
 
@@ -1050,6 +963,7 @@ function buildMovementContractFromAnalysis(
   if (!value) {
     return null;
   }
+  const extendedValue = value as unknown as Partial<PoseMovementContractValue>;
 
   return enrichMovementContract({
     exercise: value.exercise,
@@ -1065,6 +979,11 @@ function buildMovementContractFromAnalysis(
     spatial_requirements: value.spatial_requirements,
     no_count_conditions: value.no_count_conditions,
     degraded_conditions: value.degraded_conditions,
+    body_orientation: extendedValue.body_orientation,
+    contract_version: extendedValue.contract_version,
+    partial_rep_policy: extendedValue.partial_rep_policy,
+    hold_duration_seconds: extendedValue.hold_duration_seconds,
+    tracking_requirements: extendedValue.tracking_requirements,
   });
 }
 
@@ -1087,9 +1006,13 @@ function toRepRulesJson(
   value: PoseMovementContractValue,
 ): Record<string, unknown> {
   return {
+    body_orientation: value.body_orientation ?? null,
+    contract_version: value.contract_version ?? null,
     degraded_conditions: value.degraded_conditions ?? [],
     no_count_conditions: value.no_count_conditions ?? [],
     phase_order: value.phase_order ?? [],
+    partial_rep_policy: value.partial_rep_policy ?? null,
+    hold_duration_seconds: value.hold_duration_seconds ?? null,
     primary_joints: value.primary_joints ?? [],
     rep_model: value.rep_model ?? 'unknown',
     required_sides: value.required_sides ?? null,
@@ -1097,6 +1020,7 @@ function toRepRulesJson(
     secondary_joints: value.secondary_joints ?? [],
     oscillating_joints: value.oscillating_joints,
     spatial_requirements: value.spatial_requirements ?? null,
+    tracking_requirements: value.tracking_requirements ?? null,
   };
 }
 
@@ -1181,101 +1105,48 @@ function getAveragePoseJointAngle(
 function buildGeneratedMovementContract(
   exerciseName: string,
   signals: PoseAnalyzeSignalsValue,
-): PoseMovementContractValue {
-  const canonicalExercise =
-    toCanonicalPoseExerciseHint(exerciseName) ?? exerciseName;
-  const defaults = {
-    bench_press: {
-      dominantJoint: 'elbow' as const,
-      downAngle: 78,
-      upAngle: 166,
-      tolerance: 12,
-      secondaryCheck: 'bar_path',
-      oscillatingJoints: ['elbow', 'shoulder'],
-    },
-    bicep_curl: {
-      dominantJoint: 'elbow' as const,
-      downAngle: 150,
-      upAngle: 100,
-      tolerance: 22,
-      secondaryCheck: 'hip_stability',
-      oscillatingJoints: ['elbow'],
-    },
-    dip: {
-      dominantJoint: 'elbow' as const,
-      downAngle: 118,
-      upAngle: 150,
-      tolerance: 14,
-      secondaryCheck: 'vertical_body_travel',
-      oscillatingJoints: ['elbow', 'shoulder'],
-    },
-    plank: {
-      dominantJoint: 'hip' as const,
-      downAngle: 165,
-      upAngle: 178,
-      tolerance: 8,
-      secondaryCheck: 'core_alignment',
-      oscillatingJoints: ['hip', 'shoulder'],
-    },
-    push_up: {
-      dominantJoint: 'elbow' as const,
-      downAngle: 140,
-      upAngle: 154,
-      tolerance: 15,
-      secondaryCheck: 'body_line',
-      oscillatingJoints: ['elbow', 'shoulder'],
-    },
-    pull_up: {
-      dominantJoint: 'elbow' as const,
-      downAngle: 138,
-      upAngle: 105,
-      tolerance: 28,
-      secondaryCheck: 'vertical_pull',
-      oscillatingJoints: ['elbow', 'shoulder'],
-    },
-    shoulder_press: {
-      dominantJoint: 'shoulder' as const,
-      downAngle: 72,
-      upAngle: 164,
-      tolerance: 12,
-      secondaryCheck: 'lockout_control',
-      oscillatingJoints: ['shoulder', 'elbow'],
-    },
-    squat: {
-      dominantJoint: 'knee' as const,
-      downAngle: 92,
-      upAngle: 168,
-      tolerance: 12,
-      secondaryCheck: 'hip_depth',
-      oscillatingJoints: ['hip', 'knee'],
-    },
-  } as const;
-  const exerciseDefaults =
-    defaults[canonicalExercise as keyof typeof defaults] ?? defaults.squat;
+): PoseMovementContractValue | null {
+  const canonicalContract = buildFallbackPoseMovementContract(exerciseName);
+  if (!canonicalContract) {
+    // Unsupported classifier labels stay manual-only instead of inheriting a
+    // squat contract by accident.
+    return null;
+  }
+  const canonicalExercise = canonicalContract.exercise;
   const contractDefaults = getMovementContractDefaults(canonicalExercise);
-  const dominantJoint = exerciseDefaults.dominantJoint;
+  const dominantJoint = canonicalContract.dominantJoint;
   const dominantRange = getPoseJointRange(signals, dominantJoint);
   const dominantAverage = getAveragePoseJointAngle(signals, dominantJoint);
   const hasReliableRange = dominantRange >= 18;
+  const baselineDown = canonicalContract.repThresholds.down;
+  const baselineUp = canonicalContract.repThresholds.up;
+  const progressDirection =
+    baselineUp.angle >= baselineDown.angle ? 'increase' : 'decrease';
   const tolerance = Number(
-    Math.max(exerciseDefaults.tolerance, dominantRange / 3).toFixed(3),
+    Math.max(
+      baselineDown.tolerance,
+      baselineUp.tolerance,
+      dominantRange / 3,
+    ).toFixed(3),
   );
-  const observedDown = Number(
-    Math.max(35, dominantAverage - dominantRange / 2).toFixed(3),
-  );
-  const observedUp = Number(
-    Math.min(178, dominantAverage + dominantRange / 2 + 10).toFixed(3),
-  );
+  const observedDown =
+    progressDirection === 'increase'
+      ? Math.max(35, dominantAverage - dominantRange / 2)
+      : Math.min(178, dominantAverage + dominantRange / 2);
+  const observedUp =
+    progressDirection === 'increase'
+      ? Math.min(178, dominantAverage + dominantRange / 2 + 10)
+      : Math.max(35, dominantAverage - dominantRange / 2 - 10);
   const downAngle = Number(
     (hasReliableRange
-      ? (exerciseDefaults.downAngle + observedDown) / 2
-      : exerciseDefaults.downAngle
+      ? (baselineDown.angle + observedDown) / 2
+      : baselineDown.angle
     ).toFixed(3),
   );
   const upAngle = Number(
     (hasReliableRange
-      ? (exerciseDefaults.upAngle + observedUp) / 2
-      : exerciseDefaults.upAngle
+      ? (baselineUp.angle + observedUp) / 2
+      : baselineUp.angle
     ).toFixed(3),
   );
 
@@ -1292,10 +1163,10 @@ function buildGeneratedMovementContract(
         tolerance,
       },
     },
-    secondary_check: exerciseDefaults.secondaryCheck,
+    secondary_check: canonicalContract.secondaryCheck,
     oscillating_joints: Array.from(
       new Set([
-        ...exerciseDefaults.oscillatingJoints,
+        ...canonicalContract.oscillatingJoints,
         ...toOscillatingJoints(signals.temporal.oscillating_joints),
       ]),
     ),

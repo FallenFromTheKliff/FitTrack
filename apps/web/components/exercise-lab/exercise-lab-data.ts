@@ -10,7 +10,6 @@ import type {
 import {
   buildFallbackPoseMovementContract,
   createDefaultExerciseMuscleTargets,
-  createExerciseMovementProfile,
   createGeneratedExerciseRigFromMovementContract,
   DEFAULT_EXERCISE_HAND_SHAPE_PROFILE,
   normalizeExerciseHandShapeProfile,
@@ -78,7 +77,7 @@ export function createExerciseDraft(
         movementContract,
         rig,
       },
-    ) ?? createExerciseMovementProfile({}),
+    ) ?? null,
     handShapeProfile: normalizeExerciseHandShapeProfile(
       candidate?.handShapeProfile ?? DEFAULT_EXERCISE_HAND_SHAPE_PROFILE,
     ),

@@ -9,7 +9,7 @@ import type { AttendanceQrCodeRecord } from "@fittrack/types";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useThemeTransitionAnim } from "@/hooks/animations/core/useThemeTransition";
 import { useOverlayAnim } from "@/hooks/animations/modal/useOverlayAnim";
-import { AnimatedFitText } from "@/components/fit/FitText";
+import { StaticFitText } from "@/components/fit/FitText";
 import FitButton from "@/components/fit/FitButton";
 import FitModalScrollView from "@/components/modals/shared/FitModalScrollView";
 
@@ -137,9 +137,9 @@ function AttendanceQrMatrix({ value }: { value: string }) {
           backgroundColor: "#FFFFFF",
         }}
       >
-        <AnimatedFitText style={{ color: "#111111", fontSize: 13, fontWeight: "700", textAlign: "center" }}>
+        <StaticFitText style={{ color: "#111111", fontSize: 13, fontWeight: "700", textAlign: "center" }}>
           QR renderer unavailable
-        </AnimatedFitText>
+        </StaticFitText>
       </View>
     );
   }
@@ -255,12 +255,12 @@ export default function AttendanceQrModal({
               <QrCode size={18} color={colors.brand} strokeWidth={2} />
             </View>
             <View style={{ flex: 1 }}>
-              <AnimatedFitText style={{ fontSize: 17, fontWeight: "700", color: colors.textPrimary }}>
+              <StaticFitText style={{ fontSize: 17, fontWeight: "700", color: colors.textPrimary }}>
                 Attendance QR
-              </AnimatedFitText>
-              <AnimatedFitText style={{ fontSize: 12, color: colors.textMuted }}>
+              </StaticFitText>
+              <StaticFitText style={{ fontSize: 12, color: colors.textMuted }}>
                 Live member QR for front-desk check-ins and attendance scans.
-              </AnimatedFitText>
+              </StaticFitText>
             </View>
           </View>
 
@@ -270,7 +270,7 @@ export default function AttendanceQrModal({
             contentContainerStyle={{ padding: 18, gap: 16 }}
             resetKey={isVisible}
           >
-            {isLoading && !attendanceQr ? (
+            {isLoading && !isReady ? (
               <View
                 style={{
                   padding: 18,
@@ -281,12 +281,12 @@ export default function AttendanceQrModal({
                   gap: 8,
                 }}
               >
-                <AnimatedFitText style={{ fontSize: 15, fontWeight: "700", color: colors.textPrimary }}>
+                <StaticFitText style={{ fontSize: 15, fontWeight: "700", color: colors.textPrimary }}>
                   Loading your live QR...
-                </AnimatedFitText>
-                <AnimatedFitText style={{ fontSize: 13, color: colors.textMuted }}>
+                </StaticFitText>
+                <StaticFitText style={{ fontSize: 13, color: colors.textMuted }}>
                   FitTrack is preparing the current rotating attendance code for this member account.
-                </AnimatedFitText>
+                </StaticFitText>
               </View>
             ) : isReady ? (
               <>
@@ -303,13 +303,13 @@ export default function AttendanceQrModal({
                 >
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                     <Clock3 size={15} color={colors.brand} strokeWidth={2} />
-                    <AnimatedFitText style={{ fontSize: 13, fontWeight: "700", color: colors.textPrimary }}>
+                    <StaticFitText style={{ fontSize: 13, fontWeight: "700", color: colors.textPrimary }}>
                       {countdownLabel}
-                    </AnimatedFitText>
+                    </StaticFitText>
                   </View>
-                  <AnimatedFitText style={{ fontSize: 12, color: colors.textMuted, lineHeight: 18 }}>
+                  <StaticFitText style={{ fontSize: 12, color: colors.textMuted, lineHeight: 18 }}>
                     Refreshing issues a brand-new QR immediately and invalidates the previous code.
-                  </AnimatedFitText>
+                  </StaticFitText>
                 </View>
                 <View
                   style={{
@@ -321,10 +321,10 @@ export default function AttendanceQrModal({
                     gap: 8,
                   }}
                 >
-                  <AnimatedFitText style={{ fontSize: 11, fontWeight: "800", color: colors.textMuted }}>
+                  <StaticFitText style={{ fontSize: 11, fontWeight: "800", color: colors.textMuted }}>
                     MANUAL CHECK-IN VALUE
-                  </AnimatedFitText>
-                  <AnimatedFitText
+                  </StaticFitText>
+                  <StaticFitText
                     style={{
                       fontSize: 12,
                       lineHeight: 18,
@@ -333,7 +333,7 @@ export default function AttendanceQrModal({
                     }}
                   >
                     {qrValue}
-                  </AnimatedFitText>
+                  </StaticFitText>
                 </View>
                 <View style={{ flexDirection: "row", gap: 10 }}>
                   <FitButton
@@ -354,6 +354,33 @@ export default function AttendanceQrModal({
                   />
                 </View>
               </>
+            ) : errorMessage ? (
+              <View
+                style={{
+                  padding: 18,
+                  borderRadius: 18,
+                  borderWidth: 1,
+                  borderColor: `${colors.danger}44`,
+                  backgroundColor: `${colors.danger}12`,
+                  gap: 10,
+                }}
+              >
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <ShieldX size={16} color={colors.danger} strokeWidth={2} />
+                  <StaticFitText style={{ fontSize: 15, fontWeight: "700", color: colors.textPrimary }}>
+                    QR generation error
+                  </StaticFitText>
+                </View>
+                <StaticFitText style={{ fontSize: 13, lineHeight: 19, color: colors.textMuted }}>
+                  {errorMessage}
+                </StaticFitText>
+                <FitButton
+                  label="Try Again"
+                  variant="ghost"
+                  icon={RefreshCw}
+                  onPress={onRefresh}
+                />
+              </View>
             ) : (
               <View
                 style={{
@@ -367,15 +394,15 @@ export default function AttendanceQrModal({
               >
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                   <ShieldX size={16} color={colors.warning} strokeWidth={2} />
-                  <AnimatedFitText style={{ fontSize: 15, fontWeight: "700", color: colors.textPrimary }}>
+                  <StaticFitText style={{ fontSize: 15, fontWeight: "700", color: colors.textPrimary }}>
                     Attendance QR unavailable
-                  </AnimatedFitText>
+                  </StaticFitText>
                 </View>
-                <AnimatedFitText style={{ fontSize: 13, lineHeight: 19, color: colors.textMuted }}>
+                <StaticFitText style={{ fontSize: 13, lineHeight: 19, color: colors.textMuted }}>
                   {attendanceQr?.reason ??
                     errorMessage ??
                     "FitTrack could not generate a live attendance QR right now."}
-                </AnimatedFitText>
+                </StaticFitText>
                 <FitButton
                   label="Refresh Status"
                   variant="ghost"

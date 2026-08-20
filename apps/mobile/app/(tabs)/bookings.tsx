@@ -187,6 +187,12 @@ const BOOKING_RETURN_FLOWS: ReadonlySet<MobileBookingReturnFlow> = new Set([
   "venue-booking",
 ]);
 
+function isMobileBookingReturnFlow(
+  value: CheckoutReturnFlow | null,
+): value is MobileBookingReturnFlow {
+  return value !== null && BOOKING_RETURN_FLOWS.has(value as MobileBookingReturnFlow);
+}
+
 function parseCheckoutReturnFlow(
   value?: string | string[],
 ): CheckoutReturnFlow | null {
@@ -457,8 +463,7 @@ export default function BookingsScreen() {
   const checkoutResult = getSearchParamValue(params.checkout_result);
   const checkoutHoldId = getSearchParamValue(params.hold_id);
   const checkoutFlow = parseCheckoutReturnFlow(params.checkout_flow);
-  const isBookingCheckoutFlow =
-    checkoutFlow !== null && BOOKING_RETURN_FLOWS.has(checkoutFlow);
+  const isBookingCheckoutFlow = isMobileBookingReturnFlow(checkoutFlow);
 
   const recurringPlansQuery = useQuery({
     ...recurringCoachingPlansQueryOptions(mobileApiClient),

@@ -11,4 +11,7 @@ export type WorkoutCameraTarget = {
   targetReps: number;
   targetWeightKg: number | null;
   totalSets: number;
+  targetDurationSeconds: number | null;
+  /** The next deterministic plan target, used without re-querying the camera route. */
+  nextTarget?: WorkoutCameraTarget | null;
 };

@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Pressable, View, type StyleProp, type ViewStyle } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { CalendarDays, CalendarCheck, RotateCcw } from "lucide-react-native";
@@ -6,7 +6,7 @@ import { CalendarDays, CalendarCheck, RotateCcw } from "lucide-react-native";
 import { useTheme } from "@/contexts/ThemeContext";
 import { usePanelAnim } from "@/hooks/animations/ui/usePanelAnim";
 import { makeFitFilterStyles } from "@/styles/components/FitStyles";
-import { FitText } from "@/components/fit/FitText";
+import { StaticFitText } from "@/components/fit/FitText";
 
 export type FitFilterChipOption = {
   label: string;
@@ -59,19 +59,10 @@ export default function FitFilter({
   const { colors } = useTheme();
   const s = useMemo(() => makeFitFilterStyles(colors), [colors]);
   const everOpenedRef = useRef(false);
+  const [measuredHeight, setMeasuredHeight] = useState(0);
   if (isOpen) everOpenedRef.current = true;
 
-  const dateResetRows = (startDate ? 1 : 0) + (endDate ? 1 : 0);
-  const getChipSectionHeight = (count = 0) =>
-    count > 0 ? 24 + Math.ceil(count / 3) * 40 : 0;
-  const topRowHeight = getChipSectionHeight(topChipOptions?.length);
-  const chipRowHeight = getChipSectionHeight(chipOptions?.length);
-  const dateRowHeight = showDateRange ? 100 + dateResetRows * 26 : 0;
-  const targetHeight =
-    topRowHeight +
-    chipRowHeight +
-    dateRowHeight +
-    (topRowHeight || chipRowHeight || dateRowHeight ? 28 : 0);
+  const targetHeight = measuredHeight;
 
   const { height, opacity } = usePanelAnim({ targetHeight, visible: isOpen });
 
@@ -90,10 +81,18 @@ export default function FitFilter({
       importantForAccessibility={isOpen ? "auto" : "no-hide-descendants"}
     >
       {isOpen ? (
-        <View style={s.filterPanel}>
+        <View
+          style={s.filterPanel}
+          onLayout={(event) => {
+            const nextHeight = Math.ceil(event.nativeEvent.layout.height);
+            setMeasuredHeight((currentHeight) =>
+              currentHeight === nextHeight ? currentHeight : nextHeight,
+            );
+          }}
+        >
           {!!topChipOptions?.length && (
             <View style={s.filterSection}>
-              <FitText style={s.filterLabel}>{topChipLabel}</FitText>
+              <StaticFitText style={s.filterLabel}>{topChipLabel}</StaticFitText>
               <View style={s.filterOptions}>
                 {topChipOptions.map((opt) => {
                   const isActive = activeTopChip === opt.value;
@@ -112,7 +111,7 @@ export default function FitFilter({
                       accessibilityLabel={`${topChipLabel}: ${opt.label}`}
                       accessibilityState={{ selected: isActive }}
                     >
-                      <FitText
+                      <StaticFitText
                         style={[
                           s.filterChipText,
                           isActive && {
@@ -122,7 +121,7 @@ export default function FitFilter({
                         ]}
                       >
                         {opt.label}
-                      </FitText>
+                      </StaticFitText>
                     </Pressable>
                   );
                 })}
@@ -131,7 +130,7 @@ export default function FitFilter({
           )}
           {!!chipOptions?.length && (
             <View style={s.filterSection}>
-              <FitText style={s.filterLabel}>{chipLabel}</FitText>
+              <StaticFitText style={s.filterLabel}>{chipLabel}</StaticFitText>
               <View style={s.filterOptions}>
                 {chipOptions.map((opt) => {
                   const isActive = activeChip === opt.value;
@@ -150,7 +149,7 @@ export default function FitFilter({
                       accessibilityLabel={`Status: ${opt.label}`}
                       accessibilityState={{ selected: isActive }}
                     >
-                      <FitText
+                      <StaticFitText
                         style={[
                           s.filterChipText,
                           isActive && {
@@ -160,7 +159,7 @@ export default function FitFilter({
                         ]}
                       >
                         {opt.label}
-                      </FitText>
+                      </StaticFitText>
                     </Pressable>
                   );
                 })}
@@ -169,7 +168,7 @@ export default function FitFilter({
           )}
           {showDateRange && (
             <View style={s.filterSection}>
-              <FitText style={s.filterLabel}>Date Range</FitText>
+              <StaticFitText style={s.filterLabel}>Date Range</StaticFitText>
               <View style={s.dateRow}>
                 <Pressable
                   style={[
@@ -185,14 +184,14 @@ export default function FitFilter({
                     color={startDate ? colors.brand : colors.textMuted}
                     strokeWidth={2}
                   />
-                  <FitText
+                  <StaticFitText
                     style={[
                       s.datePickerText,
                       startDate && { color: colors.brand },
                     ]}
                   >
                     {startDateLabel}
-                  </FitText>
+                  </StaticFitText>
                 </Pressable>
                 <Pressable
                   style={[
@@ -208,14 +207,14 @@ export default function FitFilter({
                     color={endDate ? colors.brand : colors.textMuted}
                     strokeWidth={2}
                   />
-                  <FitText
+                  <StaticFitText
                     style={[
                       s.datePickerText,
                       endDate && { color: colors.brand },
                     ]}
                   >
                     {endDateLabel}
-                  </FitText>
+                  </StaticFitText>
                 </Pressable>
               </View>
               {startDate ? (
@@ -230,7 +229,7 @@ export default function FitFilter({
                     color={colors.textMuted}
                     strokeWidth={2}
                   />
-                  <FitText style={s.dateResetText}>Reset</FitText>
+                  <StaticFitText style={s.dateResetText}>Reset</StaticFitText>
                 </Pressable>
               ) : null}
               {endDate ? (
@@ -245,7 +244,7 @@ export default function FitFilter({
                     color={colors.textMuted}
                     strokeWidth={2}
                   />
-                  <FitText style={s.dateResetText}>Reset</FitText>
+                  <StaticFitText style={s.dateResetText}>Reset</StaticFitText>
                 </Pressable>
               ) : null}
             </View>

@@ -1,11 +1,13 @@
 import type {
   PoseAngleFrameSignalRecord,
+  PoseBodyOrientation,
   PoseJointName,
   PoseKeypointRecord,
   PoseMovementContractRecord,
   PoseRepAngleDataRecord,
   PoseSequenceFrameRecord,
   PoseSequenceSignalsRecord,
+  PoseTrackingRequirementsRecord,
 } from "@fittrack/types";
 
 type JointIndexes = {
@@ -118,8 +120,10 @@ const POSE_EXERCISE_ALIAS_GROUPS = [
     canonical: "bicep_curl",
     aliases: [
       "dumbbell bicep curl",
+      "dumbbell biceps curl",
       "dumbbell curl",
       "bicep curl",
+      "biceps curl",
       "curl",
       "bicep_curl",
     ],
@@ -136,11 +140,70 @@ const POSE_EXERCISE_ALIAS_GROUPS = [
   },
   {
     canonical: "shoulder_press",
-    aliases: ["shoulder press", "press", "shoulder_press"],
+    aliases: ["shoulder press", "shoulder_press"],
   },
   { canonical: "plank", aliases: ["plank"] },
   { canonical: "bench_press", aliases: ["bench press", "bench_press"] },
 ] as const;
+
+export const POSE_MOVEMENT_CONTRACT_VERSION = "pose_movement_contract_v2";
+
+const POSE_BODY_ORIENTATION_BY_EXERCISE: Record<string, PoseBodyOrientation> = {
+  bench_press: "horizontal",
+  bicep_curl: "upright",
+  dip: "upright",
+  plank: "horizontal",
+  pull_up: "upright",
+  push_up: "horizontal",
+  shoulder_press: "upright",
+  squat: "upright",
+};
+
+const POSE_TRACKING_REQUIREMENTS_BY_EXERCISE: Record<
+  string,
+  PoseTrackingRequirementsRecord
+> = {
+  bench_press: {
+    minConfidence: 0.6,
+    minReliableFrameLandmarks: 12,
+    requiredLandmarks: ["shoulders", "elbows", "wrists", "hips"],
+  },
+  bicep_curl: {
+    minConfidence: 0.6,
+    minReliableFrameLandmarks: 12,
+    requiredLandmarks: ["shoulders", "elbows", "wrists", "hips"],
+  },
+  dip: {
+    minConfidence: 0.6,
+    minReliableFrameLandmarks: 12,
+    requiredLandmarks: ["shoulders", "elbows", "wrists", "hips"],
+  },
+  plank: {
+    minConfidence: 0.6,
+    minReliableFrameLandmarks: 12,
+    requiredLandmarks: ["shoulders", "hips", "ankles"],
+  },
+  pull_up: {
+    minConfidence: 0.55,
+    minReliableFrameLandmarks: 10,
+    requiredLandmarks: ["shoulders", "elbows", "wrists", "hips"],
+  },
+  push_up: {
+    minConfidence: 0.6,
+    minReliableFrameLandmarks: 12,
+    requiredLandmarks: ["shoulders", "elbows", "wrists", "hips", "ankles"],
+  },
+  shoulder_press: {
+    minConfidence: 0.6,
+    minReliableFrameLandmarks: 12,
+    requiredLandmarks: ["shoulders", "elbows", "wrists", "hips"],
+  },
+  squat: {
+    minConfidence: 0.6,
+    minReliableFrameLandmarks: 12,
+    requiredLandmarks: ["shoulders", "hips", "knees", "ankles"],
+  },
+};
 const FALLBACK_POSE_MOVEMENT_CONTRACTS: Record<
   string,
   PoseMovementContractRecord
@@ -241,6 +304,7 @@ const FALLBACK_POSE_MOVEMENT_CONTRACTS: Record<
   plank: {
     dominantJoint: "hip",
     exercise: "plank",
+    holdDurationSeconds: 30,
     oscillatingJoints: ["hip", "shoulder"],
     repThresholds: {
       down: { angle: 165, tolerance: 8 },
@@ -554,13 +618,189 @@ export function toCanonicalPoseExerciseLabel(
     return null;
   }
 
+  let bestMatch: { aliasLength: number; canonical: string } | null = null;
   for (const group of POSE_EXERCISE_ALIAS_GROUPS) {
-    if (group.aliases.some((alias) => normalized.includes(alias))) {
-      return group.canonical;
+    for (const alias of group.aliases) {
+      if (
+        normalized.includes(alias) &&
+        (!bestMatch || alias.length > bestMatch.aliasLength)
+      ) {
+        bestMatch = { aliasLength: alias.length, canonical: group.canonical };
+      }
     }
   }
 
-  return null;
+  return bestMatch?.canonical ?? null;
+}
+
+function cloneTrackingRequirements(
+  requirements: PoseTrackingRequirementsRecord | null | undefined,
+  requiredSides: PoseMovementContractRecord["requiredSides"],
+) {
+  if (!requirements) return undefined;
+  return {
+    minConfidence: Math.max(0, Math.min(1, requirements.minConfidence)),
+    minReliableFrameLandmarks: Math.max(
+      1,
+      Math.round(requirements.minReliableFrameLandmarks),
+    ),
+    requiredLandmarks: [...requirements.requiredLandmarks],
+    ...(requirements.requiredSides ?? requiredSides
+      ? { requiredSides: requirements.requiredSides ?? requiredSides }
+      : {}),
+  } satisfies PoseTrackingRequirementsRecord;
+}
+
+/**
+ * Normalize every auto-rep movement through the same contract shape used by
+ * the mobile engine, the exercise lab, and deterministic seed data.
+ *
+ * The fallback table is intentionally the only source of default biomechanics;
+ * callers may still provide an explicit contract for a custom movement.
+ */
+export function normalizePoseMovementContract(
+  value: unknown,
+  exerciseLabel?: string | null,
+): PoseMovementContractRecord | null {
+  const record =
+    value && typeof value === "object"
+      ? (value as Partial<PoseMovementContractRecord>)
+      : {};
+  const rawExercise =
+    typeof record.exercise === "string" && record.exercise.trim()
+      ? record.exercise
+      : exerciseLabel;
+  const canonical = toCanonicalPoseExerciseLabel(rawExercise);
+  const fallback = canonical
+    ? FALLBACK_POSE_MOVEMENT_CONTRACTS[canonical]
+    : undefined;
+  if (!fallback && !rawExercise) return null;
+
+  const exercise = canonical ?? String(rawExercise).trim();
+  const hasExplicitExercise =
+    typeof record.exercise === "string" && record.exercise.trim().length > 0;
+  const hasValidThreshold = (threshold: unknown) =>
+    !!threshold &&
+    typeof threshold === "object" &&
+    typeof (threshold as { angle?: unknown }).angle === "number" &&
+    Number.isFinite((threshold as { angle: number }).angle) &&
+    typeof (threshold as { tolerance?: unknown }).tolerance === "number" &&
+    Number.isFinite((threshold as { tolerance: number }).tolerance);
+  const hasCompleteCoreContract =
+    typeof record.dominantJoint === "string" &&
+    typeof record.secondaryCheck === "string" &&
+    Array.isArray(record.oscillatingJoints) &&
+    hasValidThreshold(record.repThresholds?.down) &&
+    hasValidThreshold(record.repThresholds?.up);
+  // An explicit but incomplete editor draft must stay incomplete so the
+  // editor validator can block it. Hydrate canonical defaults only for an
+  // omitted contract or a contract that already contains its required core.
+  const fallbackDefaults =
+    !hasExplicitExercise || hasCompleteCoreContract ? fallback : undefined;
+  const fallbackThresholds = fallbackDefaults?.repThresholds;
+  const rawThresholds = record.repThresholds;
+  const normalized = {
+    ...(fallbackDefaults ?? {}),
+    ...record,
+    exercise,
+    contractVersion:
+      record.contractVersion ??
+      fallbackDefaults?.contractVersion ??
+      POSE_MOVEMENT_CONTRACT_VERSION,
+    bodyOrientation:
+      record.bodyOrientation ??
+      fallbackDefaults?.bodyOrientation ??
+      (canonical ? POSE_BODY_ORIENTATION_BY_EXERCISE[canonical] : "any"),
+    trackingRequirements: cloneTrackingRequirements(
+      record.trackingRequirements ??
+        fallbackDefaults?.trackingRequirements ??
+        (canonical ? POSE_TRACKING_REQUIREMENTS_BY_EXERCISE[canonical] : undefined),
+      record.requiredSides ?? fallback?.requiredSides,
+    ),
+    partialRepPolicy:
+      record.partialRepPolicy ??
+      fallbackDefaults?.partialRepPolicy ??
+      "strict_full_rep",
+    holdDurationSeconds:
+      (record.repModel ?? fallbackDefaults?.repModel) === "static_hold"
+        ? Math.max(
+            1,
+            Math.min(
+              3600,
+              Number(
+                record.holdDurationSeconds ??
+                  fallbackDefaults?.holdDurationSeconds ??
+                  30,
+              ) || 30,
+            ),
+          )
+        : record.holdDurationSeconds ?? fallbackDefaults?.holdDurationSeconds ?? null,
+    oscillatingJoints: [
+      ...(record.oscillatingJoints ?? fallbackDefaults?.oscillatingJoints ?? []),
+    ],
+    ...(record.degradedConditions ?? fallbackDefaults?.degradedConditions
+      ? {
+          degradedConditions: [
+            ...(record.degradedConditions ??
+              fallbackDefaults?.degradedConditions ??
+              []),
+          ],
+        }
+      : {}),
+    ...(record.noCountConditions ?? fallbackDefaults?.noCountConditions
+      ? {
+          noCountConditions: [
+            ...(record.noCountConditions ??
+              fallbackDefaults?.noCountConditions ??
+              []),
+          ],
+        }
+      : {}),
+    ...(record.phaseOrder ?? fallbackDefaults?.phaseOrder
+      ? {
+          phaseOrder: [
+            ...(record.phaseOrder ?? fallbackDefaults?.phaseOrder ?? []),
+          ],
+        }
+      : {}),
+    ...(record.primaryJoints ?? fallbackDefaults?.primaryJoints
+      ? {
+          primaryJoints: [
+            ...(record.primaryJoints ?? fallbackDefaults?.primaryJoints ?? []),
+          ],
+        }
+      : {}),
+    ...(record.secondaryJoints ?? fallbackDefaults?.secondaryJoints
+      ? {
+          secondaryJoints: [
+            ...(record.secondaryJoints ?? fallbackDefaults?.secondaryJoints ??
+              []),
+          ],
+        }
+      : {}),
+    ...(record.spatialRequirements ?? fallbackDefaults?.spatialRequirements
+      ? {
+          spatialRequirements: {
+            ...(fallbackDefaults?.spatialRequirements ?? {}),
+            ...(record.spatialRequirements ?? {}),
+          },
+        }
+      : {}),
+    repThresholds: {
+      ...(fallbackThresholds ?? {}),
+      ...(rawThresholds ?? {}),
+      down: {
+        ...(fallbackThresholds?.down ?? {}),
+        ...(rawThresholds?.down ?? {}),
+      },
+      up: {
+        ...(fallbackThresholds?.up ?? {}),
+        ...(rawThresholds?.up ?? {}),
+      },
+    },
+  } as PoseMovementContractRecord;
+
+  return normalized;
 }
 
 export function buildFallbackPoseMovementContract(
@@ -572,21 +812,23 @@ export function buildFallbackPoseMovementContract(
   }
 
   const contract = FALLBACK_POSE_MOVEMENT_CONTRACTS[canonical];
-  return contract ? { ...contract } : null;
+  return contract ? normalizePoseMovementContract(contract, canonical) : null;
 }
 
 export function getPoseJointAngle(
   keypoints: PoseKeypointRecord[],
   joint: PoseJointName,
 ) {
-  return averageJointAngle(keypoints, JOINT_MAP[joint]);
+  const indexes = JOINT_MAP[joint];
+  return indexes ? averageJointAngle(keypoints, indexes) : null;
 }
 
 export function getPoseSideJointAngle(
   keypoints: PoseKeypointRecord[],
   joint: PoseSideJointName,
 ) {
-  return sideJointAngle(keypoints, SIDE_JOINT_MAP[joint]);
+  const indexes = SIDE_JOINT_MAP[joint];
+  return indexes ? sideJointAngle(keypoints, indexes) : null;
 }
 
 export function getPoseMovementContractAngle(

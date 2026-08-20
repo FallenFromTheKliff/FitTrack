@@ -10,15 +10,21 @@ import type {
 } from "@fittrack/types";
 import {
   buildRepAngleData,
+  normalizePoseMovementContract,
   toCanonicalPoseExerciseLabel,
 } from "@fittrack/utils";
 
-export type PoseRepPhase = "primed" | "down" | "up";
+export type PoseRepPhase = "primed" | "down" | "up" | "hold";
 
 export type PoseRepEngineState = {
   currentHighAngle: number | null;
   currentLowAngle: number | null;
   downStreak: number;
+  holdCompleted: boolean;
+  holdInvalidSinceMs: number | null;
+  holdLastValidAtMs: number | null;
+  holdStartedAtMs: number | null;
+  holdValidMs: number;
   lastRepCompletedAtMs: number | null;
   phase: PoseRepPhase;
   peakContractionPending: boolean;
@@ -42,8 +48,6 @@ const MIN_REP_TRAVEL = 18;
 const BICEP_CURL_MIN_REP_TRAVEL = 24;
 const BICEP_CURL_MIN_REP_INTERVAL_MS = 800;
 const BICEP_CURL_PEAK_REVERSAL_DELTA = 2;
-const BICEP_CURL_PEAK_LIMIT = 128;
-const BICEP_CURL_START_LIMIT = 136;
 const BICEP_CURL_MIN_TORSO_SLOPE_DEG = 48;
 const BICEP_CURL_MAX_HIP_Y_TRAVEL = 0.08;
 const BICEP_CURL_MIN_SECONDARY_ARM_VISIBILITY = 0.18;
@@ -55,28 +59,22 @@ const BICEP_CURL_GRIP_RECENT_FRAME_LIMIT = 8;
 const BICEP_CURL_GRIP_MIN_USABLE_FRAMES = 2;
 const BICEP_CURL_GRIP_MAX_OPEN_FRAMES = 1;
 const BICEP_CURL_GRIP_MAX_OPEN_RATIO = 0.25;
-const DIP_BOTTOM_LIMIT = 122;
 const DIP_MIN_REP_INTERVAL_MS = 850;
 const DIP_MIN_REP_TRAVEL = 18;
-const DIP_PEAK_LIMIT = 148;
 const DEFAULT_MIN_REP_INTERVAL_MS = 850;
-const PUSH_UP_BOTTOM_LIMIT = 150;
 const PUSH_UP_MIN_REP_INTERVAL_MS = 850;
 const PUSH_UP_MIN_REP_TRAVEL = 10;
 const PUSH_UP_MIN_SECONDARY_ARM_VISIBILITY = 0.1;
 const PUSH_UP_MIN_SECONDARY_ELBOW_AMPLITUDE = 1.2;
 const PUSH_UP_MIN_SECONDARY_ELBOW_RATIO = 0.1;
 const PUSH_UP_PEAK_REVERSAL_DELTA = 2;
-const PUSH_UP_PEAK_LIMIT = 152;
 const PUSH_UP_STRONG_SIDE_ELBOW_AMPLITUDE = 5;
 const PUSH_UP_MAX_HIP_X_DRIFT = 0.26;
 const PUSH_UP_MAX_TORSO_SLOPE_DEG = 92;
 const PUSH_UP_PHASE_SYNC_TOLERANCE_MS = 900;
 const PULL_UP_MIN_REP_INTERVAL_MS = 900;
 const PULL_UP_MIN_REP_TRAVEL = 8;
-const PULL_UP_PEAK_LIMIT = 135;
 const PULL_UP_PEAK_REVERSAL_DELTA = 2;
-const PULL_UP_START_LIMIT = 138;
 const WEIGHTED_CURL_EQUIPMENT_CONTEXTS = new Set<PoseEquipmentContext>([
   "dumbbell",
   "barbell",
@@ -86,6 +84,8 @@ const WEIGHTED_CURL_EQUIPMENT_CONTEXTS = new Set<PoseEquipmentContext>([
   "band",
   "mixed",
 ]);
+const STATIC_HOLD_INVALID_RESET_MS = 1200;
+const STATIC_HOLD_MAX_FRAME_DELTA_MS = 500;
 
 const DEFAULT_REQUIRED_CURL_GRIP_PROFILE: ExerciseGripProfileRecord = {
   maxOpenFrames: BICEP_CURL_GRIP_MAX_OPEN_FRAMES,
@@ -312,56 +312,19 @@ function getRepEngineThresholds(contract: PoseMovementContractRecord) {
 }
 
 function getRepAngleLimits(contract: PoseMovementContractRecord) {
+  const progressDirection =
+    contract.repThresholds.up.angle >= contract.repThresholds.down.angle
+      ? ("increase" as const)
+      : ("decrease" as const);
   const startLimit =
-    contract.repThresholds.down.angle + contract.repThresholds.down.tolerance;
+    progressDirection === "increase"
+      ? contract.repThresholds.down.angle + contract.repThresholds.down.tolerance
+      : contract.repThresholds.down.angle - contract.repThresholds.down.tolerance;
   const peakLimit =
-    contract.repThresholds.up.angle - contract.repThresholds.up.tolerance;
-  const canonicalExercise = toCanonicalPoseExerciseLabel(contract.exercise);
-
-  if (canonicalExercise === "push_up") {
-    const contractStartLimit =
-      contract.repThresholds.down.angle + contract.repThresholds.down.tolerance;
-    const contractPeakLimit =
-      contract.repThresholds.up.angle - contract.repThresholds.up.tolerance;
-    if (contractPeakLimit > contractStartLimit) {
-      return {
-        peakLimit: contractPeakLimit,
-        progressDirection: "increase" as const,
-        startLimit: contractStartLimit,
-      };
-    }
-    return {
-      peakLimit: PUSH_UP_PEAK_LIMIT,
-      progressDirection: "increase" as const,
-      startLimit: PUSH_UP_BOTTOM_LIMIT,
-    };
-  }
-
-  if (canonicalExercise === "bicep_curl") {
-    return {
-      peakLimit: BICEP_CURL_PEAK_LIMIT,
-      progressDirection: "decrease" as const,
-      startLimit: BICEP_CURL_START_LIMIT,
-    };
-  }
-
-  if (canonicalExercise === "dip") {
-    return {
-      peakLimit: Math.max(peakLimit, DIP_PEAK_LIMIT),
-      progressDirection: "increase" as const,
-      startLimit: Math.max(startLimit, DIP_BOTTOM_LIMIT),
-    };
-  }
-
-  if (canonicalExercise === "pull_up") {
-    return {
-      peakLimit: PULL_UP_PEAK_LIMIT,
-      progressDirection: "decrease" as const,
-      startLimit: PULL_UP_START_LIMIT,
-    };
-  }
-
-  return { peakLimit, progressDirection: "increase" as const, startLimit };
+    progressDirection === "increase"
+      ? contract.repThresholds.up.angle - contract.repThresholds.up.tolerance
+      : contract.repThresholds.up.angle + contract.repThresholds.up.tolerance;
+  return { peakLimit, progressDirection, startLimit };
 }
 
 function getPeakContractionReversalDelta(contract: PoseMovementContractRecord) {
@@ -440,6 +403,36 @@ function getPoseRepNoCountReason(
 
   const canonicalExercise = toCanonicalPoseExerciseLabel(contract.exercise);
   const lowConfidenceLandmarks = new Set(evidence.lowConfidenceLandmarks ?? []);
+  const trackingRequirements = contract.trackingRequirements;
+  const trackingMinConfidence = trackingRequirements?.minConfidence ?? 0;
+  const reliableLandmarkCount = evidence.keypoints
+    ? evidence.keypoints.filter(
+        (point) => point.visibility >= trackingMinConfidence,
+      ).length
+    : null;
+  if (
+    trackingRequirements &&
+    (evidence.signals.visibility.averageVisibility <
+      trackingRequirements.minConfidence ||
+      (reliableLandmarkCount !== null &&
+        reliableLandmarkCount <
+          trackingRequirements.minReliableFrameLandmarks)
+    )
+  ) {
+    return "tracking_confidence_below_contract";
+  }
+  if (
+    contract.bodyOrientation &&
+    contract.bodyOrientation !== "any" &&
+    contract.bodyOrientation !== "floor" &&
+    evidence.signals.orientation.bodyOrientation !== contract.bodyOrientation &&
+    !(
+      contract.bodyOrientation === "horizontal" &&
+      evidence.signals.orientation.bodyOrientation === "inclined"
+    )
+  ) {
+    return "body_orientation_mismatch";
+  }
   if (
     canonicalExercise !== "push_up" &&
     contract.requiredSides === "both" &&
@@ -646,12 +639,109 @@ export function createPoseRepEngineState(): PoseRepEngineState {
     currentHighAngle: null,
     currentLowAngle: null,
     downStreak: 0,
+    holdCompleted: false,
+    holdInvalidSinceMs: null,
+    holdLastValidAtMs: null,
+    holdStartedAtMs: null,
+    holdValidMs: 0,
     lastRepCompletedAtMs: null,
     phase: "primed",
     peakContractionPending: false,
     rawAngleData: [],
     repCount: 0,
     upStreak: 0,
+  };
+}
+
+export function stepPoseStaticHold(
+  state: PoseRepEngineState,
+  contract: PoseMovementContractRecord,
+  currentAngle: number | null,
+  timestamp: number,
+  evidence?: PoseRepEngineEvidence,
+): {
+  holdCompleted: boolean;
+  holdSeconds: number;
+  holdValid: boolean;
+  nextState: PoseRepEngineState;
+  noCountReason: string | null;
+} {
+  const activeContract = normalizePoseMovementContract(contract) ?? contract;
+  const durationSeconds =
+    typeof activeContract.holdDurationSeconds === "number" &&
+    Number.isFinite(activeContract.holdDurationSeconds) &&
+    activeContract.holdDurationSeconds > 0
+      ? activeContract.holdDurationSeconds
+      : 30;
+  if (activeContract.repModel !== "static_hold") {
+    return {
+      holdCompleted: false,
+      holdSeconds: state.holdValidMs / 1000,
+      holdValid: false,
+      nextState: { ...state, phase: "primed" },
+      noCountReason: "movement_contract_not_static_hold",
+    };
+  }
+  const safeTimestamp = Number.isFinite(timestamp) ? timestamp : Date.now();
+  const noCountReason =
+    currentAngle === null || !Number.isFinite(currentAngle)
+      ? "unavailable_primary_angle"
+      : getPoseRepNoCountReason(activeContract, evidence);
+  const previousValidAt = state.holdLastValidAtMs;
+  const invalidDuration =
+    state.holdInvalidSinceMs !== null
+      ? Math.max(0, safeTimestamp - state.holdInvalidSinceMs)
+      : 0;
+  if (noCountReason) {
+    const shouldReset = invalidDuration >= STATIC_HOLD_INVALID_RESET_MS;
+    const nextState = shouldReset
+      ? {
+          ...state,
+          holdCompleted: false,
+          holdInvalidSinceMs: safeTimestamp,
+          holdLastValidAtMs: null,
+          holdStartedAtMs: null,
+          holdValidMs: 0,
+          phase: "primed" as const,
+        }
+      : {
+          ...state,
+          holdInvalidSinceMs: state.holdInvalidSinceMs ?? safeTimestamp,
+          phase: "primed" as const,
+        };
+    return {
+      holdCompleted: false,
+      holdSeconds: nextState.holdValidMs / 1000,
+      holdValid: false,
+      nextState,
+      noCountReason,
+    };
+  }
+
+  const deltaMs =
+    previousValidAt === null || state.holdInvalidSinceMs !== null
+      ? 0
+      : Math.min(
+          STATIC_HOLD_MAX_FRAME_DELTA_MS,
+          Math.max(0, safeTimestamp - previousValidAt),
+        );
+  const holdValidMs = state.holdValidMs + deltaMs;
+  const holdCompleted = holdValidMs >= durationSeconds * 1000;
+  const nextState: PoseRepEngineState = {
+    ...state,
+    holdCompleted,
+    holdInvalidSinceMs: null,
+    holdLastValidAtMs: safeTimestamp,
+    holdStartedAtMs: state.holdStartedAtMs ?? safeTimestamp,
+    holdValidMs,
+    phase: "hold",
+  };
+  return {
+    holdCompleted: holdCompleted && !state.holdCompleted,
+    holdSeconds: holdValidMs / 1000,
+    holdValid: true,
+    nextState,
+    noCountReason: null,
   };
 }
 
@@ -666,6 +756,30 @@ export function stepPoseRepEngine(
   repCompleted: boolean;
   noCountReason: string | null;
 } {
+  const activeContract = normalizePoseMovementContract(contract) ?? contract;
+  const hasUsableThreshold = (threshold: unknown) =>
+    !!threshold &&
+    typeof threshold === "object" &&
+    typeof (threshold as { angle?: unknown }).angle === "number" &&
+    Number.isFinite((threshold as { angle: number }).angle) &&
+    typeof (threshold as { tolerance?: unknown }).tolerance === "number" &&
+    Number.isFinite((threshold as { tolerance: number }).tolerance);
+  if (
+    typeof activeContract.dominantJoint !== "string" ||
+    !hasUsableThreshold(activeContract.repThresholds?.down) ||
+    !hasUsableThreshold(activeContract.repThresholds?.up)
+  ) {
+    return {
+      nextState: {
+        ...state,
+        downStreak: 0,
+        peakContractionPending: false,
+        upStreak: 0,
+      },
+      noCountReason: "movement_contract_incomplete",
+      repCompleted: false,
+    };
+  }
   if (currentAngle === null || !Number.isFinite(currentAngle)) {
     return {
       nextState: state,
@@ -674,7 +788,7 @@ export function stepPoseRepEngine(
     };
   }
 
-  const noCountReason = getPoseRepNoCountReason(contract, evidence);
+  const noCountReason = getPoseRepNoCountReason(activeContract, evidence);
   if (noCountReason) {
     return {
       nextState: {
@@ -689,10 +803,10 @@ export function stepPoseRepEngine(
   }
 
   const { peakLimit, progressDirection, startLimit } =
-    getRepAngleLimits(contract);
-  const { minRepTravel, requiredStreak } = getRepEngineThresholds(contract);
+    getRepAngleLimits(activeContract);
+  const { minRepTravel, requiredStreak } = getRepEngineThresholds(activeContract);
   const peakContractionReversalDelta =
-    getPeakContractionReversalDelta(contract);
+    getPeakContractionReversalDelta(activeContract);
   const nextState: PoseRepEngineState = {
     ...state,
     currentHighAngle:
@@ -748,8 +862,8 @@ export function stepPoseRepEngine(
       travel >= minRepTravel &&
       !nextState.peakContractionPending
     ) {
-      if (countsRepOnPeakArrival(contract)) {
-        if (!hasRepCooldownElapsed(nextState, contract, timestamp)) {
+      if (countsRepOnPeakArrival(activeContract)) {
+        if (!hasRepCooldownElapsed(nextState, activeContract, timestamp)) {
           return {
             nextState: resetCycleAfterRejectedRep(nextState, currentAngle),
             noCountReason: "rep_cooldown_active",
@@ -770,7 +884,7 @@ export function stepPoseRepEngine(
           ...nextState.rawAngleData,
           buildRepAngleData(
             repNumber,
-            contract.dominantJoint,
+            activeContract.dominantJoint,
             repLowAngle,
             repHighAngle,
             timestamp,
@@ -806,7 +920,7 @@ export function stepPoseRepEngine(
         : currentAngle >= peakAngle + peakContractionReversalDelta;
 
     if (nextState.peakContractionPending && peakReversalDetected) {
-      if (!hasRepCooldownElapsed(nextState, contract, timestamp)) {
+      if (!hasRepCooldownElapsed(nextState, activeContract, timestamp)) {
         return {
           nextState: resetCycleAfterRejectedRep(nextState, currentAngle),
           noCountReason: "rep_cooldown_active",
@@ -827,7 +941,7 @@ export function stepPoseRepEngine(
         ...nextState.rawAngleData,
         buildRepAngleData(
           repNumber,
-          contract.dominantJoint,
+          activeContract.dominantJoint,
           repLowAngle,
           repHighAngle,
           timestamp,

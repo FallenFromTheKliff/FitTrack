@@ -776,6 +776,20 @@ export type PosePartialRepPolicy =
   | "count_half_reps"
   | "review_only";
 
+export type PoseBodyOrientation =
+  | "upright"
+  | "horizontal"
+  | "inclined"
+  | "floor"
+  | "any";
+
+export type PoseTrackingRequirementsRecord = {
+  minConfidence: number;
+  minReliableFrameLandmarks: number;
+  requiredLandmarks: string[];
+  requiredSides?: PoseRequiredSides;
+};
+
 export type PoseKeypointRecord = {
   visibility: number;
   x: number;
@@ -876,6 +890,8 @@ export type PoseRepThresholdRecord = {
 };
 
 export type PoseMovementContractRecord = {
+  bodyOrientation?: PoseBodyOrientation;
+  contractVersion?: string;
   dominantJoint: PoseJointName;
   degradedConditions?: string[];
   exercise: string;
@@ -885,6 +901,7 @@ export type PoseMovementContractRecord = {
   phaseOrder?: string[];
   primaryJoints?: string[];
   repModel?: PoseRepModel;
+  holdDurationSeconds?: number | null;
   repThresholds: {
     down: PoseRepThresholdRecord;
     up: PoseRepThresholdRecord;
@@ -893,6 +910,7 @@ export type PoseMovementContractRecord = {
   secondaryCheck: string;
   secondaryJoints?: string[];
   spatialRequirements?: PoseSpatialRequirementsRecord | null;
+  trackingRequirements?: PoseTrackingRequirementsRecord;
 };
 
 export type PoseRepAngleDataRecord = {

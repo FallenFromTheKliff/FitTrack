@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Platform } from "react-native";
 
 import type {
   CommerceCheckoutAttempt,
@@ -10,7 +11,20 @@ import { mobileApiClient } from "@/lib/api-client";
 type CheckoutReturnRoute = "bookings" | "profile";
 
 export function resolveCheckoutReturnInput(route: CheckoutReturnRoute) {
-  if (typeof window === "undefined") {
+  if (Platform.OS !== "web") {
+    return {
+      returnTarget: "mobile" as const,
+    };
+  }
+
+  const origin =
+    typeof window !== "undefined" &&
+    typeof window.location?.origin === "string" &&
+    window.location.origin.length > 0
+      ? window.location.origin
+      : null;
+
+  if (!origin) {
     return {
       returnTarget: "mobile" as const,
     };
@@ -18,7 +32,7 @@ export function resolveCheckoutReturnInput(route: CheckoutReturnRoute) {
 
   return {
     returnTarget: "expo_web" as const,
-    returnUrl: new URL(`/${route}`, window.location.origin).toString(),
+    returnUrl: new URL(`/${route}`, origin).toString(),
   };
 }
 

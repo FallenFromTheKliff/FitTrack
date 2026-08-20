@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useRouter } from "expo-router";
@@ -22,8 +22,17 @@ export function WorkoutLiveScreen() {
   );
   const [cameraCompletion, setCameraCompletion] =
     useState<WorkoutCameraTarget | null>(null);
+  const [cameraRestRemaining, setCameraRestRemaining] = useState(0);
+  const [autoResumeCamera, setAutoResumeCamera] = useState(false);
   const handleCameraSetCompleted = useCallback((target: WorkoutCameraTarget) => {
-    setCameraCompletion(target);
+    if (target.nextTarget) {
+      setCameraCompletion(target);
+      setCameraRestRemaining(target.restSeconds);
+      setShowCamera(true);
+      return;
+    }
+    setCameraCompletion(null);
+    setCameraRestRemaining(0);
     setShowCamera(false);
     setCameraTarget(null);
   }, []);
@@ -31,11 +40,53 @@ export function WorkoutLiveScreen() {
     cameraTarget,
     onCameraSetCompleted: handleCameraSetCompleted,
   });
+  const {
+    cameraRuntimeState,
+    isRecording,
+    onResumeRecord,
+  } = controller;
   const router = useRouter();
   const screenStyle = useAnimatedStyle(() => ({ opacity: controller.opacity.value }));
   const contentStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: controller.translateY.value }]
   }));
+
+  useEffect(() => {
+    if (cameraRestRemaining <= 0) return;
+    const timer = setInterval(
+      () => setCameraRestRemaining((current) => Math.max(0, current - 1)),
+      1000,
+    );
+    return () => clearInterval(timer);
+  }, [cameraRestRemaining]);
+
+  useEffect(() => {
+    const nextTarget = cameraCompletion?.nextTarget;
+    if (!nextTarget || cameraRestRemaining > 0) return;
+    const sameExercise = cameraTarget?.exerciseId === nextTarget.exerciseId;
+    setCameraTarget(nextTarget);
+    setCameraCompletion(null);
+    setAutoResumeCamera(sameExercise);
+  }, [cameraCompletion, cameraRestRemaining, cameraTarget?.exerciseId]);
+
+  useEffect(() => {
+    if (
+      !autoResumeCamera ||
+      !cameraTarget ||
+      cameraRuntimeState !== "ready" ||
+      isRecording
+    ) {
+      return;
+    }
+    setAutoResumeCamera(false);
+    void onResumeRecord();
+  }, [
+    autoResumeCamera,
+    cameraTarget,
+    cameraRuntimeState,
+    isRecording,
+    onResumeRecord,
+  ]);
 
   return (
     <View style={controller.base.screen}>
@@ -59,6 +110,9 @@ export function WorkoutLiveScreen() {
               cameraCompletion={cameraCompletion}
               onManagePlans={() => router.push("/workout-plans")}
               onShowCamera={(target) => {
+                setCameraCompletion(null);
+                setCameraRestRemaining(0);
+                setAutoResumeCamera(false);
                 setCameraTarget(target);
                 setShowCamera(true);
               }}
@@ -110,7 +164,9 @@ export function WorkoutLiveScreen() {
                         }}
                       >
                         Set {cameraTarget.setNumber} of {cameraTarget.totalSets} ·{" "}
-                        {cameraTarget.targetReps} reps
+                        {cameraTarget.targetDurationSeconds != null && cameraTarget.targetReps <= 0
+                          ? `${cameraTarget.targetDurationSeconds}s hold`
+                          : `${cameraTarget.targetReps} reps`}
                         {cameraTarget.targetWeightKg != null
                           ? ` · ${cameraTarget.targetWeightKg} kg`
                           : ""}
@@ -120,6 +176,9 @@ export function WorkoutLiveScreen() {
                       label="Manual"
                       onPress={() => {
                         controller.onPause();
+                        setCameraCompletion(null);
+                        setCameraRestRemaining(0);
+                        setAutoResumeCamera(false);
                         setShowCamera(false);
                         setCameraTarget(null);
                       }}
@@ -139,7 +198,10 @@ export function WorkoutLiveScreen() {
                 </View>
               ) : null}
               <WorkoutTrackingSection
+            cameraRuntimeState={controller.cameraRuntimeState}
+            cameraTarget={cameraTarget}
             cameraActive={controller.cameraActive}
+            cameraFrameSize={controller.cameraFrameSize}
             cameraFacing={controller.cameraFacing}
             cameraRemountKey={controller.cameraRemountKey}
             cameraRef={controller.cameraRef}
@@ -154,6 +216,8 @@ export function WorkoutLiveScreen() {
             equipmentDetectionBoxes={controller.equipmentDetectionBoxes}
             equipmentDetectionStatusText={controller.equipmentDetectionStatusText}
             equipmentSnapshotActive={controller.equipmentSnapshotActive}
+            holdProgressSeconds={controller.holdProgressSeconds}
+            holdValid={controller.holdValid}
             guidanceLabel={controller.trackingOverlayLabel}
             isFrozen={controller.isFrozen}
             isCameraSwitching={controller.isCameraSwitching}
@@ -172,6 +236,7 @@ export function WorkoutLiveScreen() {
             onToggleSubjectLock={controller.onToggleSubjectLock}
             permissionGranted={controller.permissionGranted}
             reps={controller.reps}
+            restRemaining={cameraRestRemaining}
             seconds={controller.seconds}
             s={controller.s}
             subjectLockGestureProgress={controller.subjectLockGestureProgress}

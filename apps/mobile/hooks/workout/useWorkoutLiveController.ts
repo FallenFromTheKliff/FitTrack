@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Platform } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CameraView, type CameraType } from "expo-camera";
@@ -22,6 +22,7 @@ import type {
   PoseKeypointRecord,
   PoseMovementContractRecord,
   PoseSequenceFrameRecord,
+  PoseSequenceSignalsRecord,
   PoseSessionQualityState,
 } from "@fittrack/types";
 import type { ExerciseReference } from "@/data/exercises";
@@ -41,8 +42,7 @@ import {
   normalizeExerciseHandShapeProfile,
   normalizeExerciseMovementProfile,
   normalizeExerciseMuscleTargets,
-  computePoseSignals,
-  getPoseJointAngle,
+  createPoseSignalCache,
   getPoseMovementContractAngle,
   summarizeMovementGuidance,
 } from "@fittrack/utils";
@@ -79,6 +79,7 @@ import {
 } from "@/lib/workout/browserPoseAnalyzer";
 import {
   createPoseRepEngineState,
+  stepPoseStaticHold,
   stepPoseRepEngine,
 } from "@/lib/workout/poseRepEngine";
 
@@ -121,6 +122,13 @@ type WorkoutLiveControllerOptions = {
   onCameraSetCompleted?: (target: WorkoutCameraTarget) => void;
 };
 
+export type WorkoutCameraRuntimeState =
+  | "tracking"
+  | "saving"
+  | "rest"
+  | "ready"
+  | "complete";
+
 const DEFAULT_POSE_FEEDBACK = [
   "Position yourself fully in frame",
   "Ensure good lighting for accurate tracking",
@@ -146,6 +154,8 @@ const SUBJECT_LOCK_VISIBILITY_THRESHOLD = 0.4;
 const SUBJECT_LOCK_RIG_VISIBILITY_THRESHOLD = 0.24;
 const SUBJECT_LOCK_MIN_VISIBLE_RIG_POINTS = 5;
 const SUBJECT_LOCK_LOST_FRAME_LIMIT = 10;
+const SUBJECT_LOCK_FINGERPRINT_DISTANCE_LIMIT = 0.42;
+const SUBJECT_LOCK_FINGERPRINT_BLEND = 0.16;
 const CAMERA_SWITCH_REMOUNT_MS = 350;
 const EQUIPMENT_CONTEXT_FRESH_MS = 6500;
 const EQUIPMENT_DETECTION_HOLD_MS = 5200;
@@ -158,6 +168,10 @@ const NATIVE_MIN_AVERAGE_VISIBILITY = 0.36;
 const NATIVE_POSE_LOW_VISIBILITY_ALPHA = 0.2;
 const NATIVE_POSE_NORMAL_ALPHA = 0.32;
 const NATIVE_POSE_HIGH_VISIBILITY_ALPHA = 0.44;
+const POSE_VISUAL_TARGET_FPS = 9;
+const POSE_SIGNAL_TARGET_FPS = 10;
+const POSE_VISUAL_UPDATE_INTERVAL_MS = Math.round(1000 / POSE_VISUAL_TARGET_FPS);
+const POSE_SIGNAL_UPDATE_INTERVAL_MS = Math.round(1000 / POSE_SIGNAL_TARGET_FPS);
 const NATIVE_POSE_HOLD_LAST_GOOD_MS = 420;
 const NATIVE_POSE_CORE_TELEPORT_DISTANCE = 0.14;
 const NATIVE_POSE_SEGMENT_SHIFT_DISTANCE = 0.12;
@@ -319,6 +333,59 @@ function averageVisibilityForIndexes(
     .filter((value) => Number.isFinite(value));
   if (!values.length) return 0;
   return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+type SubjectPoseFingerprint = {
+  capturedAtMs: number;
+  vector: number[];
+};
+
+function buildSubjectPoseFingerprint(
+  keypoints: PoseKeypointRecord[] | null | undefined,
+  capturedAtMs: number,
+): SubjectPoseFingerprint | null {
+  if (!isSubjectLockBodyRigVisible(keypoints)) return null;
+  const fingerprintIndexes = [
+    11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28,
+  ];
+  const shoulderCenter = {
+    x: ((keypoints?.[11]?.x ?? 0) + (keypoints?.[12]?.x ?? 0)) / 2,
+    y: ((keypoints?.[11]?.y ?? 0) + (keypoints?.[12]?.y ?? 0)) / 2,
+  };
+  const hipCenter = {
+    x: ((keypoints?.[23]?.x ?? 0) + (keypoints?.[24]?.x ?? 0)) / 2,
+    y: ((keypoints?.[23]?.y ?? 0) + (keypoints?.[24]?.y ?? 0)) / 2,
+  };
+  const scale = Math.max(
+    Math.hypot(shoulderCenter.x - hipCenter.x, shoulderCenter.y - hipCenter.y),
+    0.08,
+  );
+  return {
+    capturedAtMs,
+    vector: fingerprintIndexes.flatMap((index) => {
+      const point = keypoints?.[index];
+      if (!point || point.visibility < SUBJECT_LOCK_RIG_VISIBILITY_THRESHOLD) {
+        return [0, 0];
+      }
+      return [
+        (point.x - hipCenter.x) / scale,
+        (point.y - hipCenter.y) / scale,
+      ];
+    }),
+  };
+}
+
+function subjectFingerprintDistance(
+  first: SubjectPoseFingerprint,
+  second: SubjectPoseFingerprint,
+) {
+  const length = Math.min(first.vector.length, second.vector.length);
+  if (!length) return Number.POSITIVE_INFINITY;
+  let sum = 0;
+  for (let index = 0; index < length; index += 1) {
+    sum += Math.abs(first.vector[index] - second.vector[index]);
+  }
+  return sum / length;
 }
 
 function toPointVisibility(point: PoseKeypointRecord | undefined) {
@@ -529,10 +596,6 @@ function getNativeFrameReliability(keypoints: PoseKeypointRecord[]) {
       averageVisibility >= NATIVE_MIN_AVERAGE_VISIBILITY,
     visibleLandmarks,
   };
-}
-
-function isRockSignSubjectLockGesture(keypoints: PoseKeypointRecord[]) {
-  return isRockSignSubjectLockGestureWithProfile(keypoints, null);
 }
 
 function isRockSignSubjectLockGestureWithProfile(
@@ -1187,6 +1250,8 @@ export function useWorkoutLiveController(
     useState<string[]>([]);
   const [customExerciseLabel, setCustomExerciseLabel] = useState("");
   const [isRecording, setIsRecording] = useState(false);
+  const [cameraRuntimeState, setCameraRuntimeState] =
+    useState<WorkoutCameraRuntimeState>("ready");
   const [finishVisible, setFinishVisible] = useState(false);
   const [isFinishing, setIsFinishing] = useState(false);
   const [isPoseModelLoading, setIsPoseModelLoading] = useState(false);
@@ -1196,6 +1261,8 @@ export function useWorkoutLiveController(
   >(null);
   const [currentAngle, setCurrentAngle] = useState<number | null>(null);
   const [currentPhase, setCurrentPhase] = useState("primed");
+  const [holdProgressSeconds, setHoldProgressSeconds] = useState(0);
+  const [holdValid, setHoldValid] = useState(false);
   const [movementContract, setMovementContract] =
     useState<PoseMovementContractRecord | null>(null);
   const [lowConfidenceLandmarks, setLowConfidenceLandmarks] = useState<
@@ -1255,6 +1322,10 @@ export function useWorkoutLiveController(
   );
   const [cameraRemountKey, setCameraRemountKey] = useState(0);
   const [isCameraSwitching, setIsCameraSwitching] = useState(false);
+  const [cameraFrameSize, setCameraFrameSize] = useState<{
+    height: number;
+    width: number;
+  } | null>(null);
 
   const cameraRef = useRef<CameraView | null>(null);
   const frameIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -1272,6 +1343,13 @@ export function useWorkoutLiveController(
   );
   const poseFrameBufferRef = useRef<PoseSequenceFrameRecord[]>([]);
   const exerciseCreationFrameBufferRef = useRef<PoseSequenceFrameRecord[]>([]);
+  const poseSignalCacheRef = useRef(
+    createPoseSignalCache(
+      POSE_SIGNAL_UPDATE_INTERVAL_MS,
+      POSE_MIN_ANALYZE_FRAMES,
+    ),
+  );
+  const lastVisualPoseAtMsRef = useRef(0);
   const framesSinceAnalyzeRef = useRef(0);
   const trackingReliabilityNotifiedRef = useRef(false);
   const confirmedExerciseLabelRef = useRef<string | null>(null);
@@ -1281,6 +1359,7 @@ export function useWorkoutLiveController(
   const isRecordingRef = useRef(false);
   const repEngineStateRef = useRef(createPoseRepEngineState());
   const liveRepCountRef = useRef(0);
+  const holdProgressSecondsRef = useRef(0);
   const averageConfidenceRef = useRef<number | null>(null);
   const analyzeErrorMessageRef = useRef<string | null>(null);
   const equipmentDetectErrorMessageRef = useRef<string | null>(null);
@@ -1292,8 +1371,24 @@ export function useWorkoutLiveController(
   const subjectLockGestureConsumedRef = useRef(false);
   const subjectLockGestureStartMsRef = useRef<number | null>(null);
   const subjectLockLostFramesRef = useRef(0);
+  const subjectFingerprintRef = useRef<SubjectPoseFingerprint | null>(null);
   const autoCompletionKeyRef = useRef<string | null>(null);
   const autoFinalizeSetRef = useRef<((repCount: number) => void) | null>(null);
+  const cameraRuntimeStateRef = useRef<WorkoutCameraRuntimeState>("ready");
+  const completionLatchRef = useRef<{
+    key: string;
+    status: "idle" | "saving" | "saved";
+  } | null>(null);
+
+  const setCameraRuntime = (nextState: WorkoutCameraRuntimeState) => {
+    cameraRuntimeStateRef.current = nextState;
+    setCameraRuntimeState(nextState);
+  };
+
+  const getCameraTargetKey = (target: WorkoutCameraTarget | null) =>
+    target
+      ? `${target.sessionId}:${target.planExerciseId}:${target.setNumber}`
+      : null;
 
   const setTrackedReps = (
     nextValue: number | ((currentValue: number) => number),
@@ -1306,6 +1401,7 @@ export function useWorkoutLiveController(
     setReps(resolvedValue);
     if (
       isRecordingRef.current &&
+      cameraRuntimeStateRef.current === "tracking" &&
       cameraTarget &&
       cameraTarget.targetReps > 0 &&
       resolvedValue >= cameraTarget.targetReps
@@ -1379,16 +1475,44 @@ export function useWorkoutLiveController(
     ].slice(-EXERCISE_CREATION_FRAME_WINDOW_SIZE);
   };
 
+  const getBufferedPoseSignals = (
+    frames: PoseSequenceFrameRecord[],
+    capturedAtMs: number,
+  ) => {
+    return poseSignalCacheRef.current.getBuffered(frames, capturedAtMs);
+  };
+
+  const publishPoseVisual = (
+    keypoints: PoseKeypointRecord[],
+    capturedAtMs: number,
+  ) => {
+    if (
+      !lastVisualPoseAtMsRef.current ||
+      capturedAtMs - lastVisualPoseAtMsRef.current >=
+        POSE_VISUAL_UPDATE_INTERVAL_MS
+    ) {
+      lastVisualPoseAtMsRef.current = capturedAtMs;
+      setCurrentKeypoints(keypoints);
+    }
+  };
+
   const setSubjectLockState = (
     locked: boolean,
     confidence: number | null,
     source: "gesture" | "manual" | "reset",
+    fingerprintKeypoints?: PoseKeypointRecord[] | null,
   ) => {
     subjectLockedRef.current = locked;
     subjectLockConfidenceRef.current = confidence;
     subjectLockGestureConsumedRef.current = false;
     subjectLockGestureStartMsRef.current = null;
     subjectLockLostFramesRef.current = 0;
+    subjectFingerprintRef.current = locked
+      ? buildSubjectPoseFingerprint(
+          fingerprintKeypoints ?? currentKeypoints,
+          Date.now(),
+        )
+      : null;
     setSubjectLocked(locked);
     setSubjectLockConfidence(confidence);
     setSubjectLockGestureProgress(0);
@@ -1410,7 +1534,12 @@ export function useWorkoutLiveController(
       showMessage(status);
       return;
     }
-    setSubjectLockState(nextLocked, nextLocked ? 0.9 : null, "manual");
+    setSubjectLockState(
+      nextLocked,
+      nextLocked ? 0.9 : null,
+      "manual",
+      currentKeypoints,
+    );
     showMessage(nextLocked ? "Subject locked." : "Subject unlocked.");
   };
 
@@ -1429,37 +1558,72 @@ export function useWorkoutLiveController(
       rawAngleData: previousState.rawAngleData,
       repCount: previousState.repCount,
     };
+    holdProgressSecondsRef.current = 0;
+    setHoldProgressSeconds(0);
+    setHoldValid(false);
     setCurrentPhase("primed");
     setTrackedReps(previousState.repCount);
   };
 
-  const canCountLockedSubject = (keypoints: PoseKeypointRecord[]) => {
+  const canCountLockedSubject = (
+    keypoints: PoseKeypointRecord[],
+    capturedAtMs: number,
+  ) => {
     if (!subjectLockedRef.current) {
       subjectLockLostFramesRef.current = 0;
       return false;
     }
 
-    if (isSubjectLockBodyRigVisible(keypoints)) {
-      subjectLockLostFramesRef.current = 0;
-      return true;
+    const fingerprint = buildSubjectPoseFingerprint(keypoints, capturedAtMs);
+    if (fingerprint) {
+      if (!subjectFingerprintRef.current) {
+        subjectFingerprintRef.current = fingerprint;
+        subjectLockLostFramesRef.current = 0;
+        return true;
+      }
+      const distance = subjectFingerprintDistance(
+        subjectFingerprintRef.current,
+        fingerprint,
+      );
+      if (distance <= SUBJECT_LOCK_FINGERPRINT_DISTANCE_LIMIT) {
+        subjectLockLostFramesRef.current = 0;
+        subjectFingerprintRef.current = {
+          capturedAtMs,
+          vector: subjectFingerprintRef.current.vector.map(
+            (value, index) =>
+              value +
+              (fingerprint.vector[index] - value) *
+                SUBJECT_LOCK_FINGERPRINT_BLEND,
+          ),
+        };
+        return true;
+      }
+      // A complete, different body rig is a likely subject swap. Treat it as
+      // a lost frame and never feed it to the rep engine during grace.
+      subjectLockLostFramesRef.current += 1;
+    } else {
+      subjectLockLostFramesRef.current += 1;
     }
 
-    subjectLockLostFramesRef.current += 1;
+    if (subjectLockLostFramesRef.current < SUBJECT_LOCK_LOST_FRAME_LIMIT) {
+      return false;
+    }
+
     if (subjectLockLostFramesRef.current >= SUBJECT_LOCK_LOST_FRAME_LIMIT) {
       setSubjectLockState(false, null, "reset");
       setSubjectLockStatusText(
-        "Subject lock was released because the body rig left the frame.",
+        "Subject lock was released after the locked body was lost or swapped. Reacquire and lock again.",
       );
     }
 
     return false;
   };
 
-  const resetSubjectLockGesture = () => {
+  const resetSubjectLockGesture = useCallback(() => {
     subjectLockGestureConsumedRef.current = false;
     subjectLockGestureStartMsRef.current = null;
     setSubjectLockGestureProgress(0);
-  };
+  }, []);
 
   const handleToggleCameraFacing = () => {
     if (isRecording || countdownValue !== null || isCameraSwitching) {
@@ -1470,6 +1634,7 @@ export function useWorkoutLiveController(
     const nextFacing: CameraType = cameraFacing === "back" ? "front" : "back";
     if (!cameraActive) {
       setCameraFacing(nextFacing);
+      setCameraFrameSize(null);
       setCameraRemountKey((current) => current + 1);
       showMessage(
         `Switched to ${nextFacing === "front" ? "front" : "back"} camera.`,
@@ -1485,6 +1650,7 @@ export function useWorkoutLiveController(
     setIsCameraSwitching(true);
     setCameraActive(false);
     cameraRef.current = null;
+    setCameraFrameSize(null);
     setCameraFacing(nextFacing);
     setCameraRemountKey((current) => current + 1);
     resetPoseTrackingBuffers();
@@ -1554,7 +1720,7 @@ export function useWorkoutLiveController(
       !subjectLockGestureConsumedRef.current
     ) {
       subjectLockGestureConsumedRef.current = true;
-      setSubjectLockState(true, 0.92, "gesture");
+      setSubjectLockState(true, 0.92, "gesture", keypoints);
       showMessage("Subject locked by rock-sign gesture.");
     }
   };
@@ -1826,6 +1992,22 @@ export function useWorkoutLiveController(
   }, [exerciseReferences.length, exercisesLoading]);
   countdownValueRef.current = countdownValue;
   isExerciseConfirmationVisibleRef.current = isExerciseConfirmationVisible;
+  useEffect(() => {
+    const targetKey = getCameraTargetKey(cameraTarget);
+    if (!targetKey) {
+      completionLatchRef.current = null;
+      return;
+    }
+    if (completionLatchRef.current?.key === targetKey) return;
+    completionLatchRef.current = { key: targetKey, status: "idle" };
+    autoCompletionKeyRef.current = null;
+    setCameraRuntime("ready");
+  }, [
+    cameraTarget,
+    cameraTarget?.planExerciseId,
+    cameraTarget?.sessionId,
+    cameraTarget?.setNumber,
+  ]);
   const liveActiveSession = useMemo(
     () =>
       sessionsResponse.data.find(
@@ -2039,17 +2221,19 @@ export function useWorkoutLiveController(
     isRecordingRef.current = isRecording;
   }, [isRecording]);
 
-  const resetPoseTrackingBuffers = () => {
+  const resetPoseTrackingBuffers = useCallback(() => {
     poseFrameBufferRef.current = [];
     exerciseCreationFrameBufferRef.current = [];
     framesSinceAnalyzeRef.current = 0;
     trackingReliabilityNotifiedRef.current = false;
     frameInFlightRef.current = false;
+    poseSignalCacheRef.current.reset();
+    lastVisualPoseAtMsRef.current = 0;
     stableNativePoseFrameRef.current = null;
     subjectLockLostFramesRef.current = 0;
     setNativeLandmarksActive(false);
     resetSubjectLockGesture();
-  };
+  }, [resetSubjectLockGesture]);
 
   const resetEquipmentDetectionState = () => {
     equipmentSnapshotInFlightRef.current = false;
@@ -2065,18 +2249,106 @@ export function useWorkoutLiveController(
     setProviderEquipmentSource(null);
   };
 
-  const resetPoseRuntimeState = (clearReps: boolean) => {
+  const resetPoseRuntimeState = useCallback((clearReps: boolean) => {
     movementContractRef.current = null;
     repEngineStateRef.current = createPoseRepEngineState();
+    holdProgressSecondsRef.current = 0;
     averageConfidenceRef.current = null;
     setNativeLandmarksActive(false);
     setMovementContract(null);
     setCurrentAngle(null);
     setCurrentKeypoints(null);
     setCurrentPhase("primed");
+    setHoldProgressSeconds(0);
+    setHoldValid(false);
     setLowConfidenceLandmarks([]);
     if (clearReps) {
-      setTrackedReps(0);
+      liveRepCountRef.current = 0;
+      setReps(0);
+    }
+  }, []);
+
+  const resolveCameraMovementContract = (
+    contract: PoseMovementContractRecord | null,
+  ) => {
+    if (!contract) return null;
+    const targetDuration = cameraTarget?.targetDurationSeconds;
+    if (
+      contract.repModel === "static_hold" &&
+      typeof targetDuration === "number" &&
+      targetDuration > 0
+    ) {
+      return { ...contract, holdDurationSeconds: targetDuration };
+    }
+    return contract;
+  };
+
+  const updateStaticHoldFromFrame = ({
+    contract,
+    currentAngle: frameAngle,
+    capturedAtMs,
+    keypoints,
+    keypointFrames,
+    signals,
+    statusPrefix,
+  }: {
+    capturedAtMs: number;
+    contract: PoseMovementContractRecord;
+    currentAngle: number | null;
+    keypointFrames: PoseKeypointRecord[][];
+    keypoints: PoseKeypointRecord[];
+    signals: PoseSequenceSignalsRecord;
+    statusPrefix: string;
+  }) => {
+    const holdStep = stepPoseStaticHold(
+      repEngineStateRef.current,
+      contract,
+      frameAngle,
+      capturedAtMs,
+      {
+        equipmentContext: poseEquipmentContext,
+        equipmentSource: poseEquipmentSource,
+        handShapeProfile: activeHandShapeProfile,
+        keypointFrames,
+        keypoints,
+        lowConfidenceLandmarks: signals.visibility.lowConfidenceLandmarks,
+        signals,
+      },
+    );
+    repEngineStateRef.current = holdStep.nextState;
+    holdProgressSecondsRef.current = holdStep.holdSeconds;
+    setHoldProgressSeconds(holdStep.holdSeconds);
+    setHoldValid(holdStep.holdValid);
+    setCurrentPhase(holdStep.nextState.phase);
+    setTrackedReps(holdStep.nextState.repCount);
+    const targetSeconds = contract.holdDurationSeconds ?? 30;
+    const guidanceTips = summarizeMovementGuidance(
+      contract,
+      keypoints,
+      holdStep.nextState.phase,
+      signals.visibility.lowConfidenceLandmarks,
+    );
+    setPoseFeedback(
+      holdStep.noCountReason
+        ? [
+            "Hold paused: correct your form to resume valid time.",
+            "A sustained form break resets the hold timer.",
+            ...guidanceTips,
+          ].slice(0, 3)
+        : guidanceTips.length > 0
+          ? guidanceTips.slice(0, 3)
+          : ["Hold position steady while the timer counts valid form."],
+    );
+    setPoseStatusOverride(
+      holdStep.noCountReason
+        ? `${statusPrefix} ${buildPoseNoCountStatusText(holdStep.noCountReason, {
+            equipmentProviderEnabled,
+            requiresEquipmentSnapshot,
+          })}`
+        : `${statusPrefix} Valid hold ${holdStep.holdSeconds.toFixed(1)} / ${targetSeconds}s.`,
+    );
+    if (holdStep.holdCompleted) {
+      autoFinalizeSetRef.current?.(0);
     }
   };
 
@@ -2085,7 +2357,13 @@ export function useWorkoutLiveController(
     frameKeypoints: PoseKeypointRecord[] | null,
     statusText: string,
   ) => {
-    const fallbackContract = buildFallbackPoseMovementContract(exerciseLabel);
+    const configuredContract = activeMovementProfile?.movementContract ?? null;
+    const fallbackContract = resolveCameraMovementContract(
+      normalizeExerciseMovementProfile(
+        configuredContract ? { movementContract: configuredContract } : null,
+        { movementContract: buildFallbackPoseMovementContract(exerciseLabel) },
+      )?.movementContract ?? buildFallbackPoseMovementContract(exerciseLabel),
+    );
     if (!fallbackContract) {
       return null;
     }
@@ -2097,17 +2375,22 @@ export function useWorkoutLiveController(
       repCount: previousState.repCount,
     };
     movementContractRef.current = fallbackContract;
+    holdProgressSecondsRef.current = 0;
+    setHoldProgressSeconds(0);
+    setHoldValid(false);
     setMovementContract(fallbackContract);
     setCurrentPhase("primed");
     setCurrentAngle(
       frameKeypoints
-        ? getPoseJointAngle(frameKeypoints, fallbackContract.dominantJoint)
+        ? getPoseMovementContractAngle(fallbackContract, frameKeypoints)
         : null,
     );
     setPoseFeedback([
       `Local ${toDisplayExerciseName(fallbackContract.exercise)} counting is active.`,
       "Keep shoulders, hips, knees, and ankles visible to the camera.",
-      "Controlled half reps can still count once the joint angle cycles through the range.",
+      fallbackContract.repModel === "static_hold"
+        ? `Hold valid form for ${fallbackContract.holdDurationSeconds ?? 30} seconds; a sustained form break resets the timer.`
+        : "Controlled half reps can still count once the joint angle cycles through the range.",
     ]);
     setPoseStatusOverride(statusText);
     framesSinceAnalyzeRef.current = 0;
@@ -2174,13 +2457,18 @@ export function useWorkoutLiveController(
       stableNativePoseFrameRef.current,
     );
     stableNativePoseFrameRef.current = stableFrame;
+    setCameraFrameSize((current) =>
+      current?.width === frame.frameWidth && current.height === frame.frameHeight
+        ? current
+        : { height: frame.frameHeight, width: frame.frameWidth },
+    );
     rememberExerciseCreationFrame(stableFrame);
 
     setNativeLandmarksActive(true);
-    setCurrentKeypoints(stableFrame.keypoints);
+    publishPoseVisual(stableFrame.keypoints, stableFrame.capturedAtMs);
     updateSubjectLockGesture(stableFrame.keypoints, stableFrame.capturedAtMs);
 
-    const instantSignals = computePoseSignals([stableFrame]);
+    const instantSignals = poseSignalCacheRef.current.getInstant(stableFrame);
     const lowConfidenceLandmarks =
       instantSignals.visibility.lowConfidenceLandmarks;
     const reliability = getNativeFrameReliability(stableFrame.keypoints);
@@ -2205,6 +2493,17 @@ export function useWorkoutLiveController(
     }
 
     if (countdownValueRef.current !== null) {
+      return;
+    }
+
+    if (cameraRuntimeStateRef.current !== "tracking") {
+      setPoseStatusOverride(
+        cameraRuntimeStateRef.current === "saving"
+          ? "Saving this set. Keep the camera steady while FitTrack finalizes it."
+          : cameraRuntimeStateRef.current === "rest"
+            ? "Rest timer active. Native analysis and rep counting are paused."
+            : "Native camera is ready. Start the next planned set when you are positioned.",
+      );
       return;
     }
 
@@ -2239,9 +2538,17 @@ export function useWorkoutLiveController(
     const bufferedFrames = poseFrameBufferRef.current.slice(
       -POSE_FRAME_WINDOW_SIZE,
     );
-    const signals = computePoseSignals(bufferedFrames);
+    const bufferedSignals = getBufferedPoseSignals(
+      bufferedFrames,
+      stableFrame.capturedAtMs,
+    );
+    const signals = bufferedSignals ?? instantSignals;
     setLowConfidenceLandmarks(signals.visibility.lowConfidenceLandmarks);
     averageConfidenceRef.current = signals.visibility.averageVisibility;
+
+    if (cameraRuntimeStateRef.current !== "tracking") {
+      return;
+    }
 
     if (!movementContractRef.current && confirmedExerciseLabelRef.current) {
       armFallbackMovementContract(
@@ -2259,7 +2566,7 @@ export function useWorkoutLiveController(
         stableFrame.keypoints,
       );
       setCurrentAngle(liveAngle);
-      if (!canCountLockedSubject(stableFrame.keypoints)) {
+      if (!canCountLockedSubject(stableFrame.keypoints, stableFrame.capturedAtMs)) {
         resetRepEngineForSubjectLockWait();
         setPoseFeedback([
           subjectLockedRef.current
@@ -2273,6 +2580,21 @@ export function useWorkoutLiveController(
             ? "Subject lock is unstable. Counting is paused until the rig is visible again."
             : "Subject lock is required before rep counting. The overlay can move, but reps stay paused.",
         );
+        return;
+      }
+
+      if (movementContractRef.current.repModel === "static_hold") {
+        updateStaticHoldFromFrame({
+          capturedAtMs: stableFrame.capturedAtMs,
+          contract: movementContractRef.current,
+          currentAngle: liveAngle,
+          keypointFrames: bufferedFrames.map(
+            (bufferedFrame) => bufferedFrame.keypoints,
+          ),
+          keypoints: stableFrame.keypoints,
+          signals,
+          statusPrefix: "Native hold tracking is live.",
+        });
         return;
       }
 
@@ -2404,17 +2726,20 @@ export function useWorkoutLiveController(
         return;
       }
 
-      if (analysis.movementContract) {
-        movementContractRef.current = analysis.movementContract;
-        setMovementContract(analysis.movementContract);
+      const nextMovementContract = resolveCameraMovementContract(
+        analysis.movementContract,
+      );
+      if (nextMovementContract) {
+        movementContractRef.current = nextMovementContract;
+        setMovementContract(nextMovementContract);
         setCurrentPhase("primed");
         const liveAngle = getPoseMovementContractAngle(
-          analysis.movementContract,
+          nextMovementContract,
           stableFrame.keypoints,
         );
         setCurrentAngle(liveAngle);
         const guidanceTips = summarizeMovementGuidance(
-          analysis.movementContract,
+          nextMovementContract,
           stableFrame.keypoints,
           "primed",
           signals.visibility.lowConfidenceLandmarks,
@@ -2453,7 +2778,7 @@ export function useWorkoutLiveController(
         : null;
       if (analyzeErrorMessageRef.current !== message) {
         analyzeErrorMessageRef.current = message;
-        console.error("Native pose batch analyze failed", error);
+        console.error("Native pose batch analyze failed");
         showMessage(
           fallbackContract
             ? `Switched ${toDisplayExerciseName(fallbackContract.exercise)} to the native local counter.`
@@ -2541,7 +2866,7 @@ export function useWorkoutLiveController(
         equipmentDetectionMemoryRef.current.failureCount % 4 === 0;
       if (shouldLog) {
         equipmentDetectErrorMessageRef.current = message;
-        console.error("Native equipment detection failed", error);
+        console.error("Native equipment detection failed");
       }
     } finally {
       equipmentSnapshotInFlightRef.current = false;
@@ -2584,9 +2909,9 @@ export function useWorkoutLiveController(
     }
 
     rememberExerciseCreationFrame(frame);
-    setCurrentKeypoints(frame.keypoints);
+    publishPoseVisual(frame.keypoints, frame.capturedAtMs);
     updateSubjectLockGesture(frame.keypoints, frame.capturedAtMs);
-    const instantSignals = computePoseSignals([frame]);
+    const instantSignals = poseSignalCacheRef.current.getInstant(frame);
     setLowConfidenceLandmarks(instantSignals.visibility.lowConfidenceLandmarks);
 
     if (!frame.isReliable) {
@@ -2619,8 +2944,28 @@ export function useWorkoutLiveController(
     const bufferedFrames = poseFrameBufferRef.current.slice(
       -POSE_FRAME_WINDOW_SIZE,
     );
-    const signals = computePoseSignals(bufferedFrames);
+    const bufferedSignals = getBufferedPoseSignals(
+      bufferedFrames,
+      frame.capturedAtMs,
+    );
+    const signals = bufferedSignals ?? instantSignals;
     setLowConfidenceLandmarks(signals.visibility.lowConfidenceLandmarks);
+
+    if (cameraRuntimeStateRef.current !== "tracking") {
+      setPoseStatusOverride(
+        cameraRuntimeStateRef.current === "saving"
+          ? "Saving this set. Rep and analysis updates are paused."
+          : cameraRuntimeStateRef.current === "rest"
+            ? "Rest timer active. Local analysis is paused until the next set."
+            : "Camera ready. Start the next planned set when you are positioned.",
+      );
+      return;
+    }
+    setCameraFrameSize((current) =>
+      current?.width === frame.frameWidth && current.height === frame.frameHeight
+        ? current
+        : { height: frame.frameHeight, width: frame.frameWidth },
+    );
 
     if (movementContractRef.current) {
       const liveAngle = getPoseMovementContractAngle(
@@ -2628,7 +2973,7 @@ export function useWorkoutLiveController(
         frame.keypoints,
       );
       setCurrentAngle(liveAngle);
-      if (!canCountLockedSubject(frame.keypoints)) {
+      if (!canCountLockedSubject(frame.keypoints, frame.capturedAtMs)) {
         resetRepEngineForSubjectLockWait();
         setPoseFeedback([
           subjectLockedRef.current
@@ -2642,6 +2987,21 @@ export function useWorkoutLiveController(
             ? "Subject lock is unstable. Counting is paused until the rig is visible again."
             : "Subject lock is required before rep counting. The overlay can move, but reps stay paused.",
         );
+        return;
+      }
+
+      if (movementContractRef.current.repModel === "static_hold") {
+        updateStaticHoldFromFrame({
+          capturedAtMs: frame.capturedAtMs,
+          contract: movementContractRef.current,
+          currentAngle: liveAngle,
+          keypointFrames: bufferedFrames.map(
+            (bufferedFrame) => bufferedFrame.keypoints,
+          ),
+          keypoints: frame.keypoints,
+          signals,
+          statusPrefix: "Local hold tracking is live.",
+        });
         return;
       }
 
@@ -2764,17 +3124,20 @@ export function useWorkoutLiveController(
         return;
       }
 
-      if (analysis.movementContract) {
-        movementContractRef.current = analysis.movementContract;
-        setMovementContract(analysis.movementContract);
+      const nextMovementContract = resolveCameraMovementContract(
+        analysis.movementContract,
+      );
+      if (nextMovementContract) {
+        movementContractRef.current = nextMovementContract;
+        setMovementContract(nextMovementContract);
         setCurrentPhase("primed");
         const liveAngle = getPoseMovementContractAngle(
-          analysis.movementContract,
+          nextMovementContract,
           frame.keypoints,
         );
         setCurrentAngle(liveAngle);
         const guidanceTips = summarizeMovementGuidance(
-          analysis.movementContract,
+          nextMovementContract,
           frame.keypoints,
           "primed",
           signals.visibility.lowConfidenceLandmarks,
@@ -2820,7 +3183,7 @@ export function useWorkoutLiveController(
         : null;
       if (analyzeErrorMessageRef.current !== message) {
         analyzeErrorMessageRef.current = message;
-        console.error("Pose analyze batch failed", error);
+        console.error("Pose analyze batch failed");
         showMessage(
           fallbackContract
             ? `Switched ${toDisplayExerciseName(fallbackContract.exercise)} to the local counter.`
@@ -3054,6 +3417,7 @@ export function useWorkoutLiveController(
       resetEquipmentDetectionState();
       setPoseFeedback([]);
       setIsRecording(true);
+      setCameraRuntime("tracking");
       setIsExerciseConfirmationVisible(false);
       start();
       startFrameLoop(livePoseSessionId);
@@ -3079,6 +3443,7 @@ export function useWorkoutLiveController(
       const livePoseSessionId = await ensureLiveWorkout();
       resetPoseTrackingBuffers();
       setIsRecording(true);
+      setCameraRuntime("tracking");
       resume();
       startFrameLoop(livePoseSessionId);
       showMessage("Workout resumed.");
@@ -3089,6 +3454,7 @@ export function useWorkoutLiveController(
 
   const handlePause = () => {
     setIsRecording(false);
+    setCameraRuntime("ready");
     stopFrameLoop();
     resetPoseTrackingBuffers();
     pause();
@@ -3101,12 +3467,27 @@ export function useWorkoutLiveController(
 
   const handleFinishConfirm = async () => {
     if (isFinishing) return;
+    const targetKey = getCameraTargetKey(cameraTarget);
+    if (targetKey) {
+      const latch = completionLatchRef.current;
+      if (latch?.key === targetKey && latch.status !== "idle") return;
+      completionLatchRef.current = { key: targetKey, status: "saving" };
+    }
     setIsFinishing(true);
+    setCameraRuntime("saving");
     stopFrameLoop();
     resetPoseTrackingBuffers();
 
     try {
       let finalizedReps = liveRepCountRef.current;
+      const isStaticHoldTarget =
+        movementContractRef.current?.repModel === "static_hold" ||
+        (cameraTarget?.targetDurationSeconds != null &&
+          cameraTarget.targetReps <= 0);
+      const finalizedHoldSeconds = Math.max(
+        0,
+        Math.round(holdProgressSecondsRef.current),
+      );
       let finalizedLoadInputKg: number | null = null;
       let finalizedDetectedExerciseName =
         detectedExerciseName ?? confirmedExerciseLabelRef.current ?? null;
@@ -3195,7 +3576,9 @@ export function useWorkoutLiveController(
             equipmentConflicts: finalizedResolvedEquipmentConflicts,
             equipmentContext: finalizedResolvedEquipmentContext,
             equipmentSource: finalizedResolvedEquipmentSource,
-            finalRepCount: isWebPoseRuntime
+            finalRepCount: isStaticHoldTarget
+              ? 0
+              : isWebPoseRuntime
               ? repEngineStateRef.current.repCount
               : liveRepCountRef.current,
             formFeedback: poseFeedback,
@@ -3204,7 +3587,7 @@ export function useWorkoutLiveController(
             weightInputKg: finalizedLoadInputKg,
           },
         });
-        finalizedReps = finalizedPose.repCountAi;
+        finalizedReps = isStaticHoldTarget ? 0 : finalizedPose.repCountAi;
         setTrackedReps(finalizedPose.repCountAi);
         finalizedDetectedExerciseName =
           finalizedPose.detectedExerciseName ??
@@ -3267,7 +3650,9 @@ export function useWorkoutLiveController(
           sessionId: activeWorkoutId,
           userId: user?.id,
           input: {
-            durationSeconds: secondsRef.current,
+            durationSeconds: isStaticHoldTarget
+              ? finalizedHoldSeconds
+              : secondsRef.current,
             exerciseId: loggedExercise.exerciseId,
             ...(cameraTarget?.planExerciseId
               ? { planExerciseId: cameraTarget.planExerciseId }
@@ -3287,33 +3672,74 @@ export function useWorkoutLiveController(
         });
       }
 
+      const nextTarget = cameraTarget?.nextTarget ?? null;
+      const keepCameraMounted =
+        !!cameraTarget &&
+        !cameraTarget.completeWorkoutAfterSet &&
+        !!nextTarget;
+      if (targetKey) {
+        completionLatchRef.current = { key: targetKey, status: "saved" };
+      }
       await refetchSessions();
       setFinishVisible(false);
-      cleanupCamera();
-      cleanupTimer();
-      reset();
       setIsRecording(false);
-      setWorkoutSessionId(null);
       setPoseSessionId(null);
       setAcceptedFps(null);
-      setDetectedExerciseName(null);
-      setConfirmedExerciseLabel(null);
-      resetWorkoutLoadInput();
       resetEquipmentDetectionState();
-      confirmedExerciseLabelRef.current = null;
       setCustomExerciseLabel("");
       setExerciseConfirmationCandidates([]);
       setIsExerciseConfirmationVisible(false);
       setExerciseCreationDraft(null);
       setIsExerciseCreationReviewOpen(false);
-      setPoseStatusOverride(null);
       resetPoseRuntimeState(true);
-      setSubjectLockState(false, null, "reset");
-      disposePoseAnalyzer();
+      resetPoseTrackingBuffers();
+      if (keepCameraMounted && nextTarget) {
+        pause();
+        const exerciseChanged =
+          nextTarget.exerciseId !== cameraTarget?.exerciseId;
+        if (exerciseChanged) {
+          setDetectedExerciseName(null);
+          setConfirmedExerciseLabel(null);
+          confirmedExerciseLabelRef.current = null;
+          resetWorkoutLoadInput();
+          setCameraRuntime("ready");
+          setPoseStatusOverride(
+            `Ready for ${toDisplayExerciseName(nextTarget.exerciseName)}. Reposition, then start the next exercise.`,
+          );
+        } else {
+          setCameraRuntime(
+            cameraTarget.restSeconds > 0 ? "rest" : "ready",
+          );
+          setPoseStatusOverride(
+            cameraTarget.restSeconds > 0
+              ? `Set saved. Rest ${cameraTarget.restSeconds}s before set ${nextTarget.setNumber}.`
+              : `Set saved. Start set ${nextTarget.setNumber} when ready.`,
+          );
+        }
+      } else {
+        cleanupCamera();
+        cleanupTimer();
+        reset();
+        setWorkoutSessionId(null);
+        setDetectedExerciseName(null);
+        setConfirmedExerciseLabel(null);
+        resetWorkoutLoadInput();
+        confirmedExerciseLabelRef.current = null;
+        setPoseStatusOverride(null);
+        setSubjectLockState(false, null, "reset");
+        setCameraRuntime("complete");
+        disposePoseAnalyzer();
+      }
       showMessage(
         loggedExercise
           ? cameraTarget
-            ? `Set ${cameraTarget.setNumber} completed. Rest ${cameraTarget.restSeconds}s before the next set.`
+            ? keepCameraMounted
+              ? `Set ${cameraTarget.setNumber} completed. ${
+                  nextTarget && nextTarget.exerciseId === cameraTarget.exerciseId
+                    ? `Rest ${cameraTarget.restSeconds}s before the next set.`
+                    : `Ready for ${nextTarget?.exerciseName ?? "the next exercise"}.`
+                }`
+              : `Set ${cameraTarget.setNumber} completed.`
             : "Workout saved to the live fitness stack."
           : "The pose session ended, but no exercise reference was available for set logging.",
       );
@@ -3321,6 +3747,10 @@ export function useWorkoutLiveController(
         onCameraSetCompleted?.(cameraTarget);
       }
     } catch {
+      if (targetKey) {
+        completionLatchRef.current = { key: targetKey, status: "idle" };
+      }
+      setCameraRuntime("ready");
       showMessage("Failed to finish live workout.");
     } finally {
       setIsFinishing(false);
@@ -3337,7 +3767,9 @@ export function useWorkoutLiveController(
     stopFrameLoop();
     pause();
     showMessage(
-      `${cameraTarget.targetReps} reps reached. Saving set ${cameraTarget.setNumber}...`,
+      cameraTarget.targetDurationSeconds != null && cameraTarget.targetReps <= 0
+        ? `${cameraTarget.targetDurationSeconds}s hold reached. Saving set ${cameraTarget.setNumber}...`
+        : `${cameraTarget.targetReps} reps reached. Saving set ${cameraTarget.setNumber}...`,
     );
     void handleFinishConfirm();
   };
@@ -3369,12 +3801,19 @@ export function useWorkoutLiveController(
       cleanupTimer();
       cleanupCamera();
     };
-  }, [cleanupCamera, cleanupTimer]);
+  }, [
+    cleanupCamera,
+    cleanupTimer,
+    resetPoseRuntimeState,
+    resetPoseTrackingBuffers,
+  ]);
 
   return {
     base,
     cameraActive,
+    cameraRuntimeState,
     cameraFacing,
+    cameraFrameSize,
     cameraRemountKey,
     cameraRef,
     calories,
@@ -3436,6 +3875,8 @@ export function useWorkoutLiveController(
           ? DEFAULT_POSE_FEEDBACK
           : NATIVE_POSE_FEEDBACK,
     finishVisible,
+    holdProgressSeconds,
+    holdValid,
     isExerciseConfirmationVisible,
     isExerciseCreationReviewOpen,
     isExerciseCreationSubmitting:

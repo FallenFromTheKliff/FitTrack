@@ -207,6 +207,8 @@ export type PoseAnalyzeResponse = {
   matched_profile_id?: string | null;
   movement_contract?: {
     exercise: string;
+    contract_version?: string;
+    body_orientation?: 'upright' | 'horizontal' | 'inclined' | 'floor' | 'any';
     dominant_joint: 'elbow' | 'shoulder' | 'hip' | 'knee';
     rep_thresholds: {
       down: { angle: number; tolerance: number };
@@ -222,6 +224,8 @@ export type PoseAnalyzeResponse = {
       | 'static_hold'
       | 'unknown';
     required_sides?: 'both' | 'left' | 'right' | 'either' | 'alternating';
+    partial_rep_policy?: 'strict_full_rep' | 'count_half_reps' | 'review_only';
+    hold_duration_seconds?: number | null;
     primary_joints?: string[];
     secondary_joints?: string[];
     phase_order?: string[];
@@ -237,6 +241,12 @@ export type PoseAnalyzeResponse = {
       body_line_tolerance?: number | null;
       left_right_symmetry_tolerance?: number | null;
       phase_sync_tolerance_ms?: number | null;
+    } | null;
+    tracking_requirements?: {
+      min_confidence?: number;
+      min_reliable_frame_landmarks?: number;
+      required_landmarks?: string[];
+      required_sides?: 'both' | 'left' | 'right' | 'either' | 'alternating';
     } | null;
     no_count_conditions?: string[];
     degraded_conditions?: string[];
@@ -1466,6 +1476,14 @@ export class AiPythonClientService {
       this.isObject(value) &&
       typeof value.exercise === 'string' &&
       value.exercise.trim().length > 0 &&
+      (value.contract_version === undefined ||
+        typeof value.contract_version === 'string') &&
+      (value.body_orientation === undefined ||
+        value.body_orientation === 'upright' ||
+        value.body_orientation === 'horizontal' ||
+        value.body_orientation === 'inclined' ||
+        value.body_orientation === 'floor' ||
+        value.body_orientation === 'any') &&
       ['elbow', 'shoulder', 'hip', 'knee'].includes(value.dominant_joint) &&
       this.isObject(value.rep_thresholds) &&
       this.isObject(value.rep_thresholds.down) &&
@@ -1485,6 +1503,15 @@ export class AiPythonClientService {
         value.required_sides === 'right' ||
         value.required_sides === 'either' ||
         value.required_sides === 'alternating') &&
+      (value.partial_rep_policy === undefined ||
+        value.partial_rep_policy === 'strict_full_rep' ||
+        value.partial_rep_policy === 'count_half_reps' ||
+        value.partial_rep_policy === 'review_only') &&
+      (value.hold_duration_seconds === undefined ||
+        value.hold_duration_seconds === null ||
+        (typeof value.hold_duration_seconds === 'number' &&
+          Number.isFinite(value.hold_duration_seconds) &&
+          value.hold_duration_seconds > 0)) &&
       (value.primary_joints === undefined ||
         this.isStringArray(value.primary_joints)) &&
       (value.secondary_joints === undefined ||
@@ -1494,6 +1521,28 @@ export class AiPythonClientService {
       (value.spatial_requirements === undefined ||
         value.spatial_requirements === null ||
         this.isObject(value.spatial_requirements)) &&
+      (value.tracking_requirements === undefined ||
+        value.tracking_requirements === null ||
+        (this.isObject(value.tracking_requirements) &&
+          (value.tracking_requirements.min_confidence === undefined ||
+            this.isNullableFiniteNumber(
+              value.tracking_requirements.min_confidence,
+            )) &&
+          (value.tracking_requirements.min_reliable_frame_landmarks ===
+            undefined ||
+            (Number.isInteger(
+              value.tracking_requirements.min_reliable_frame_landmarks,
+            ) &&
+              value.tracking_requirements.min_reliable_frame_landmarks >= 1)) &&
+          (value.tracking_requirements.required_landmarks === undefined ||
+            (this.isStringArray(value.tracking_requirements.required_landmarks) &&
+              value.tracking_requirements.required_landmarks.length > 0)) &&
+          (value.tracking_requirements.required_sides === undefined ||
+            value.tracking_requirements.required_sides === 'both' ||
+            value.tracking_requirements.required_sides === 'left' ||
+            value.tracking_requirements.required_sides === 'right' ||
+            value.tracking_requirements.required_sides === 'either' ||
+            value.tracking_requirements.required_sides === 'alternating'))) &&
       (value.no_count_conditions === undefined ||
         this.isStringArray(value.no_count_conditions)) &&
       (value.degraded_conditions === undefined ||

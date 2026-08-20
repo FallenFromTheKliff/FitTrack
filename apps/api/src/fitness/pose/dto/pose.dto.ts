@@ -61,6 +61,14 @@ export const poseRequiredSides = [
   'alternating',
 ] as const;
 export type PoseRequiredSides = (typeof poseRequiredSides)[number];
+export const poseBodyOrientations = [
+  'upright',
+  'horizontal',
+  'inclined',
+  'floor',
+  'any',
+] as const;
+export type PoseBodyOrientation = (typeof poseBodyOrientations)[number];
 export const poseEquipmentContexts = [
   'bodyweight',
   'dumbbell',
@@ -662,10 +670,53 @@ export class PoseSpatialRequirementsDTO {
   phase_sync_tolerance_ms?: number | null;
 }
 
+export class PoseTrackingRequirementsDTO {
+  @ApiPropertyOptional({ example: 0.6 })
+  @IsOptional()
+  @IsNumber(
+    { allowInfinity: false, allowNaN: false, maxDecimalPlaces: 6 },
+    { message: 'min_confidence must be a finite number' },
+  )
+  @Min(0)
+  @Max(1)
+  min_confidence?: number;
+
+  @ApiPropertyOptional({ example: 12 })
+  @IsOptional()
+  @IsNumber(
+    { allowInfinity: false, allowNaN: false, maxDecimalPlaces: 0 },
+    { message: 'min_reliable_frame_landmarks must be a finite number' },
+  )
+  @Min(1)
+  min_reliable_frame_landmarks?: number;
+
+  @ApiPropertyOptional({ type: String, isArray: true })
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsString({ each: true })
+  required_landmarks?: string[];
+
+  @ApiPropertyOptional({ enum: poseRequiredSides })
+  @IsOptional()
+  @IsIn(poseRequiredSides)
+  required_sides?: PoseRequiredSides;
+}
+
 export class PoseMovementContractDTO {
   @ApiProperty({ example: 'squat' })
   @IsString({ message: 'exercise must be a string' })
   exercise: string;
+
+  @ApiPropertyOptional({ example: 'pose_movement_contract_v2' })
+  @IsOptional()
+  @IsString()
+  contract_version?: string;
+
+  @ApiPropertyOptional({ enum: poseBodyOrientations, example: 'upright' })
+  @IsOptional()
+  @IsIn(poseBodyOrientations)
+  body_orientation?: PoseBodyOrientation;
 
   @ApiProperty({ enum: poseJointNames, example: 'knee' })
   @IsIn(poseJointNames, {
@@ -702,6 +753,18 @@ export class PoseMovementContractDTO {
     message: `rep_model must be one of: ${poseRepModels.join(', ')}`,
   })
   rep_model?: PoseRepModel;
+
+  @ApiPropertyOptional({ example: 30, minimum: 1, maximum: 3600, nullable: true })
+  @IsOptional()
+  @IsNumber({ allowInfinity: false, allowNaN: false })
+  @Min(1)
+  @Max(3600)
+  hold_duration_seconds?: number | null;
+
+  @ApiPropertyOptional({ example: 'strict_full_rep' })
+  @IsOptional()
+  @IsIn(['strict_full_rep', 'count_half_reps', 'review_only'])
+  partial_rep_policy?: 'strict_full_rep' | 'count_half_reps' | 'review_only';
 
   @ApiPropertyOptional({ enum: poseRequiredSides, example: 'both' })
   @IsOptional()
@@ -751,6 +814,12 @@ export class PoseMovementContractDTO {
   @ValidateNested()
   @Type(() => PoseSpatialRequirementsDTO)
   spatial_requirements?: PoseSpatialRequirementsDTO | null;
+
+  @ApiPropertyOptional({ type: () => PoseTrackingRequirementsDTO })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => PoseTrackingRequirementsDTO)
+  tracking_requirements?: PoseTrackingRequirementsDTO | null;
 
   @ApiPropertyOptional({
     type: String,

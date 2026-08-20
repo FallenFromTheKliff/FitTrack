@@ -7,7 +7,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useThemeTransitionAnim } from "@/hooks/animations/core/useThemeTransition";
 import { R } from "@fittrack/ui/tokens";
 
-import { FitText, AnimatedFitText } from "./FitText";
+import { AnimatedFitText, StaticFitText } from "./FitText";
 
 export type FitButtonVariant =
     | "primary"
@@ -185,13 +185,6 @@ export default function FitButton({
       return { backgroundColor: ic.value.fieldBg, borderColor: ic.value.fieldBorder };
     return {};
   });
-  const ghostTextAnimStyle = useAnimatedStyle(() => {
-    if (variant === "ghost") return { color: ic.value.textSecondary };
-    if (variant === "nav") return { color: ic.value.textSecondary };
-    if (variant === "field") return { color: ic.value.textPrimary };
-    return {};
-  });
-
   const animContainerStyle = useAnimatedStyle(() => ({
     backgroundColor: animatedBg?.value ?? colors.brand,
     borderColor: animatedBorder?.value ?? colors.border
@@ -224,13 +217,17 @@ export default function FitButton({
               disabled={isDisabled}
           >
             {Icon && <Icon size={iconSize} color={iconColor[variant]} strokeWidth={2} />}
-            {!iconOnly && (
+            {!iconOnly && (animatedText ? (
                 <AnimatedFitText
-                    style={[textVariants[variant], textStyle, animatedText ? animTextStyle : undefined]}
+                    style={[textVariants[variant], textStyle, animTextStyle]}
                 >
                   {displayLabel}
                 </AnimatedFitText>
-            )}
+            ) : (
+                <StaticFitText style={[textVariants[variant], textStyle]}>
+                  {displayLabel}
+                </StaticFitText>
+            ))}
           </Pressable>
         </Animated.View>
     );
@@ -257,11 +254,9 @@ export default function FitButton({
                 <Icon size={iconSize} color={iconColor[variant]} strokeWidth={2} />
             )}
             {!iconOnly && (
-                <AnimatedFitText
-                    style={[textVariants[variant], textStyle, ghostTextAnimStyle]}
-                >
+                <StaticFitText style={[textVariants[variant], textStyle]}>
                   {displayLabel}
-                </AnimatedFitText>
+                </StaticFitText>
             )}
             {(showTrailing || variant === "field") && (
                 <ChevronRight
@@ -285,7 +280,7 @@ export default function FitButton({
       >
         {Icon && <Icon size={iconSize} color={iconColor[variant]} strokeWidth={2} />}
         {!iconOnly && (
-            <FitText style={[textVariants[variant], textStyle]}>{displayLabel}</FitText>
+            <StaticFitText style={[textVariants[variant], textStyle]}>{displayLabel}</StaticFitText>
         )}
         {showTrailing && (
             <ChevronRight size={17} color={iconColor[variant]} strokeWidth={2} />

@@ -16,6 +16,7 @@ import type {
 import {
   buildFallbackPoseMovementContract,
   getPoseMovementContractAngle,
+  normalizePoseMovementContract,
   toCanonicalPoseExerciseLabel,
 } from "./pose";
 import {
@@ -133,6 +134,24 @@ function buildStandingBase(overrides: Record<number, GeneratedPoint>) {
     26: [0.56, 0.74, 0, 0.86],
     27: [0.43, 0.94, 0, 0.84],
     28: [0.57, 0.94, 0, 0.84],
+    ...overrides,
+  });
+}
+
+function buildHorizontalBase(overrides: Record<number, GeneratedPoint>) {
+  return createGeneratedKeypoints({
+    11: [0.3, 0.42, 0, 0.92],
+    12: [0.42, 0.42, 0, 0.92],
+    13: [0.28, 0.57, 0, 0.9],
+    14: [0.44, 0.57, 0, 0.9],
+    15: [0.3, 0.72, 0, 0.88],
+    16: [0.46, 0.72, 0, 0.88],
+    23: [0.62, 0.46, 0, 0.9],
+    24: [0.74, 0.46, 0, 0.9],
+    25: [0.8, 0.58, 0, 0.86],
+    26: [0.9, 0.58, 0, 0.86],
+    27: [0.96, 0.7, 0, 0.84],
+    28: [1.06, 0.7, 0, 0.84],
     ...overrides,
   });
 }
@@ -258,9 +277,66 @@ function buildGeneratedRigKeypoints(exerciseLabel: string | null | undefined) {
     ];
   }
 
+  if (canonical === "bicep_curl") {
+    return [
+      buildStandingBase({}),
+      buildStandingBase({
+        13: [0.38, 0.39, 0, 0.9],
+        14: [0.62, 0.39, 0, 0.9],
+        15: [0.42, 0.3, 0, 0.88],
+        16: [0.58, 0.3, 0, 0.88],
+      }),
+      buildStandingBase({}),
+    ];
+  }
+
+  if (canonical === "bench_press") {
+    return [
+      buildHorizontalBase({}),
+      buildHorizontalBase({
+        13: [0.28, 0.52, 0, 0.9],
+        14: [0.44, 0.52, 0, 0.9],
+        15: [0.3, 0.62, 0, 0.88],
+        16: [0.46, 0.62, 0, 0.88],
+      }),
+      buildHorizontalBase({}),
+    ];
+  }
+
+  if (canonical === "shoulder_press") {
+    return [
+      buildStandingBase({}),
+      buildStandingBase({
+        13: [0.38, 0.3, 0, 0.9],
+        14: [0.62, 0.3, 0, 0.9],
+        15: [0.4, 0.16, 0, 0.88],
+        16: [0.6, 0.16, 0, 0.88],
+      }),
+      buildStandingBase({}),
+    ];
+  }
+
+  if (canonical === "plank") {
+    return [
+      buildHorizontalBase({}),
+      buildHorizontalBase({
+        23: [0.62, 0.51, 0, 0.9],
+        24: [0.74, 0.51, 0, 0.9],
+        25: [0.8, 0.61, 0, 0.86],
+        26: [0.9, 0.61, 0, 0.86],
+      }),
+      buildHorizontalBase({}),
+    ];
+  }
+
   return [
     buildStandingBase({}),
-    buildStandingBase({}),
+    buildStandingBase({
+      11: [0.42, 0.3, 0, 0.92],
+      12: [0.58, 0.3, 0, 0.92],
+      13: [0.38, 0.48, 0, 0.9],
+      14: [0.62, 0.48, 0, 0.9],
+    }),
     buildStandingBase({}),
   ];
 }
@@ -421,23 +497,30 @@ export function createGeneratedExerciseRigFromMovementContract({
   exerciseLabel?: string | null;
   movementContract: PoseMovementContractRecord;
 }): ExerciseRigRecord {
+  const normalizedMovementContract =
+    normalizePoseMovementContract(movementContract, exerciseLabel) ??
+    movementContract;
   const [startKeypoints, peakKeypoints, endKeypoints] =
-    buildGeneratedRigKeypoints(exerciseLabel ?? movementContract.exercise);
-  const upAngle = movementContract.repThresholds.up.angle;
-  const downAngle = movementContract.repThresholds.down.angle;
+    buildGeneratedRigKeypoints(
+      exerciseLabel ?? normalizedMovementContract.exercise,
+    );
+  const upAngle = normalizedMovementContract.repThresholds.up.angle;
+  const downAngle = normalizedMovementContract.repThresholds.down.angle;
   const minAngle = Math.min(upAngle, downAngle);
   const maxAngle = Math.max(upAngle, downAngle);
 
   return {
     angleSummary: {
-      dominantJoint: movementContract.dominantJoint,
+      dominantJoint: normalizedMovementContract.dominantJoint,
       maxAngle: round(maxAngle, 3),
       minAngle: round(minAngle, 3),
       repCount: 0,
       travel: round(maxAngle - minAngle, 3),
     },
     capturedFromSession: null,
-    exerciseLabel: normalizeLabel(exerciseLabel ?? movementContract.exercise),
+    exerciseLabel: normalizeLabel(
+      exerciseLabel ?? normalizedMovementContract.exercise,
+    ),
     keyframes: [
       createGeneratedKeyframe({
         angle: upAngle,

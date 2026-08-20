@@ -9,6 +9,10 @@ import type {
   ExerciseSubjectLockGestureProfileRecord,
   PoseMovementContractRecord,
 } from "@fittrack/types";
+import {
+  normalizePoseMovementContract,
+  toCanonicalPoseExerciseLabel,
+} from "./pose";
 
 export const DEFAULT_MUSCLE_DEFINITIONS = [
   {
@@ -781,11 +785,7 @@ export function normalizeExerciseMovementProfile(
     null) as PoseMovementContractRecord | null;
   return createExerciseMovementProfile({
     movementContract: movementContract
-      ? {
-          ...movementContract,
-          partialRepPolicy:
-            movementContract.partialRepPolicy ?? "count_half_reps",
-        }
+      ? normalizePoseMovementContract(movementContract)
       : null,
     rig: (record.rig ?? fallback?.rig ?? null) as ExerciseRigRecord | null,
     warnings: normalizeWarnings(record.warnings),
@@ -841,13 +841,72 @@ export function validateExerciseEditorContract(input: {
   const rig = input.movementProfile?.rig;
   const movementContract = input.movementProfile?.movementContract;
   if (!movementContract) {
-    errors.push("Add a movement contract before saving.");
+    if (rig) {
+      errors.push("Movement rigs need a movement contract; keep unsupported exercises manual-only.");
+    }
   } else {
+    const contractRecord = movementContract as unknown as Record<string, unknown>;
+    if (!toCanonicalPoseExerciseLabel(movementContract.exercise)) {
+      errors.push(
+        "This exercise is not supported for auto tracking; keep it manual-only.",
+      );
+    }
+    const thresholds = movementContract.repThresholds;
+    const hasValidThreshold = (value: unknown) =>
+      value &&
+      typeof value === "object" &&
+      typeof (value as { angle?: unknown }).angle === "number" &&
+      Number.isFinite((value as { angle: number }).angle) &&
+      typeof (value as { tolerance?: unknown }).tolerance === "number" &&
+      Number.isFinite((value as { tolerance: number }).tolerance);
+    if (
+      typeof movementContract.exercise !== "string" ||
+      !movementContract.exercise.trim() ||
+      typeof movementContract.dominantJoint !== "string" ||
+      typeof movementContract.secondaryCheck !== "string" ||
+      !Array.isArray(movementContract.oscillatingJoints) ||
+      !movementContract.oscillatingJoints.length ||
+      !movementContract.oscillatingJoints.every(
+        (joint) => typeof joint === "string" && joint.trim().length > 0,
+      ) ||
+      !hasValidThreshold(thresholds?.down) ||
+      !hasValidThreshold(thresholds?.up)
+    ) {
+      errors.push("Auto-track movement contracts need exercise, joints, secondary checks, and valid up/down thresholds.");
+    }
+    if (
+      contractRecord.contractVersion !== undefined &&
+      typeof contractRecord.contractVersion !== "string"
+    ) {
+      errors.push("Movement contract version must be a string.");
+    }
+    if (
+      contractRecord.bodyOrientation !== undefined &&
+      !["upright", "horizontal", "inclined", "floor", "any"].includes(
+        String(contractRecord.bodyOrientation),
+      )
+    ) {
+      errors.push("Movement contract body orientation is not supported.");
+    }
     const repModel = movementContract.repModel ?? "unknown";
     const requiredSides = movementContract.requiredSides ?? "either";
     const isStaticHold = repModel === "static_hold";
-    if (repModel === "unknown") {
+    if (
+      ![
+        "bilateral",
+        "unilateral_left",
+        "unilateral_right",
+        "alternating",
+        "static_hold",
+        "unknown",
+      ].includes(repModel)
+    ) {
+      errors.push("Choose a supported movement model before saving.");
+    } else if (repModel === "unknown") {
       errors.push("Choose a movement model before saving.");
+    }
+    if (!["both", "left", "right", "either", "alternating"].includes(requiredSides)) {
+      errors.push("Choose supported required sides before saving.");
     }
     if (repModel === "bilateral" && requiredSides !== "both") {
       errors.push("Bilateral exercises must require both sides.");
@@ -872,7 +931,7 @@ export function validateExerciseEditorContract(input: {
         errors.push("Bilateral exercises need a symmetry tolerance.");
       }
     }
-    if (!isStaticHold) {
+    if (!isStaticHold && hasValidThreshold(thresholds?.down) && hasValidThreshold(thresholds?.up)) {
       const downAngle = movementContract.repThresholds.down.angle;
       const upAngle = movementContract.repThresholds.up.angle;
       const travel = Math.abs(upAngle - downAngle);
@@ -889,15 +948,111 @@ export function validateExerciseEditorContract(input: {
     if (isStaticHold && movementContract.partialRepPolicy === "count_half_reps") {
       errors.push("Static holds cannot use half-rep counting.");
     }
+    if (
+      isStaticHold &&
+      (!Number.isFinite(movementContract.holdDurationSeconds) ||
+        (movementContract.holdDurationSeconds ?? 0) <= 0)
+    ) {
+      errors.push("Static holds need a positive duration target in seconds.");
+    }
+    if (
+      movementContract.trackingRequirements &&
+      (!Number.isFinite(movementContract.trackingRequirements.minConfidence) ||
+        movementContract.trackingRequirements.minConfidence < 0 ||
+        movementContract.trackingRequirements.minConfidence > 1 ||
+        !Number.isInteger(
+          movementContract.trackingRequirements.minReliableFrameLandmarks,
+        ) ||
+        movementContract.trackingRequirements.minReliableFrameLandmarks < 1 ||
+        !Array.isArray(movementContract.trackingRequirements.requiredLandmarks) ||
+        !movementContract.trackingRequirements.requiredLandmarks.length ||
+        !movementContract.trackingRequirements.requiredLandmarks.every(
+          (landmark) => typeof landmark === "string" && landmark.trim().length > 0,
+        ))
+    ) {
+      errors.push("Tracking requirements need a confidence threshold, landmark count, and landmark list.");
+    }
   }
 
-  if (!rig || rig.keyframes.length < 2) {
-    errors.push("Movement rig needs at least start and peak keyframes.");
-  } else if (movementContract?.repModel === "bilateral") {
-    const requiredIndexes = [11, 12, 13, 14, 15, 16];
-    const hasBothSideFrames = rig.keyframes.every((frame) =>
-      requiredIndexes.every((index) => (frame.keypoints[index]?.visibility ?? 0) > 0.1),
+  if (
+    movementContract &&
+    (!rig || !Array.isArray(rig.keyframes) || rig.keyframes.length < 3)
+  ) {
+    errors.push("Auto-track movement rigs need distinct start, peak, and end keyframes.");
+  } else if (movementContract && rig && movementContract.repModel !== "static_hold") {
+    const hasValidKeypointFrames = rig.keyframes.every(
+      (frame) =>
+        !!frame &&
+        typeof frame === "object" &&
+        Array.isArray(frame.keypoints) &&
+        frame.keypoints.length >= 33,
     );
+    if (!hasValidKeypointFrames) {
+      errors.push("Auto-track rig keyframes need complete 33-landmark frames.");
+    }
+    const byKind = new Map(
+      rig.keyframes
+        .filter((frame) => !!frame && typeof frame === "object")
+        .map((frame) => [frame.kind, frame]),
+    );
+    const start = byKind.get("start");
+    const peak = byKind.get("peak");
+    const end = byKind.get("end");
+    const frameDistance = (left: typeof start, right: typeof start) => {
+      if (
+        !left ||
+        !right ||
+        !Array.isArray(left.keypoints) ||
+        !Array.isArray(right.keypoints)
+      ) {
+        return 0;
+      }
+      return left.keypoints.reduce((distance, point, index) => {
+        const other = right.keypoints[index];
+        if (!other) return distance;
+        return distance +
+          Math.abs(point.x - other.x) +
+          Math.abs(point.y - other.y) +
+          Math.abs(point.z - other.z);
+      }, 0);
+    };
+    if (!start || !peak || !end) {
+      errors.push("Auto-track rigs must label start, peak, and end frames.");
+    } else {
+      if (frameDistance(start, peak) < 0.01 || frameDistance(peak, end) < 0.01) {
+        errors.push("Auto-track rig keyframes must show distinct movement; identical frames are invalid.");
+      }
+      if (
+        typeof start.angle !== "number" ||
+        typeof peak.angle !== "number" ||
+        typeof end.angle !== "number" ||
+        Math.abs(start.angle - peak.angle) < 10 ||
+        Math.abs(peak.angle - end.angle) < 10
+      ) {
+        errors.push("Auto-track rig keyframes need measurable start-to-peak-to-end angle travel.");
+      }
+      if (
+        !Number.isFinite(start.capturedAtMs) ||
+        !Number.isFinite(peak.capturedAtMs) ||
+        !Number.isFinite(end.capturedAtMs) ||
+        !(start.capturedAtMs < peak.capturedAtMs && peak.capturedAtMs < end.capturedAtMs)
+      ) {
+        errors.push("Auto-track rig keyframes must be ordered start, peak, then end.");
+      }
+    }
+  }
+
+  if (
+    movementContract &&
+    rig &&
+    Array.isArray(rig.keyframes) &&
+    movementContract.repModel === "bilateral"
+  ) {
+    const requiredIndexes = [11, 12, 13, 14, 15, 16];
+      const hasBothSideFrames = rig.keyframes.every((frame) =>
+        Array.isArray(frame.keypoints) &&
+        requiredIndexes.every((index) => (frame.keypoints[index]?.visibility ?? 0) > 0.1),
+      );
     if (!hasBothSideFrames) {
       errors.push("Bilateral rigs need visible left and right shoulder-elbow-wrist chains.");
     }

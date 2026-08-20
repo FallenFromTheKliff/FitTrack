@@ -400,6 +400,8 @@ type PoseFrameAnalysisApiRecord = {
   }> | null;
   matched_profile_id?: string | null;
   movement_contract?: {
+    body_orientation?: "upright" | "horizontal" | "inclined" | "floor" | "any";
+    contract_version?: string;
     degraded_conditions?: string[];
     dominant_joint: "elbow" | "shoulder" | "hip" | "knee";
     exercise: string;
@@ -408,6 +410,7 @@ type PoseFrameAnalysisApiRecord = {
     partial_rep_policy?: "strict_full_rep" | "count_half_reps" | "review_only";
     phase_order?: string[];
     primary_joints?: string[];
+    hold_duration_seconds?: number | null;
     rep_model?:
       | "bilateral"
       | "unilateral_left"
@@ -434,6 +437,12 @@ type PoseFrameAnalysisApiRecord = {
       wrist_anchor_drift_max?: number | null;
       left_right_symmetry_tolerance?: number | null;
       phase_sync_tolerance_ms?: number | null;
+    } | null;
+    tracking_requirements?: {
+      min_confidence?: number;
+      min_reliable_frame_landmarks?: number;
+      required_landmarks?: string[];
+      required_sides?: "both" | "left" | "right" | "either" | "alternating";
     } | null;
   } | null;
   needs_confirmation?: boolean;
@@ -1040,6 +1049,8 @@ function mapPoseFrameAnalysis(
     matchedProfileId: record.matched_profile_id ?? null,
     movementContract: record.movement_contract
       ? {
+          bodyOrientation: record.movement_contract.body_orientation,
+          contractVersion: record.movement_contract.contract_version,
           dominantJoint: record.movement_contract.dominant_joint,
           degradedConditions:
             record.movement_contract.degraded_conditions ?? [],
@@ -1049,6 +1060,8 @@ function mapPoseFrameAnalysis(
           partialRepPolicy: record.movement_contract.partial_rep_policy,
           phaseOrder: record.movement_contract.phase_order ?? [],
           primaryJoints: record.movement_contract.primary_joints ?? [],
+          holdDurationSeconds:
+            toNullableNumber(record.movement_contract.hold_duration_seconds),
           repModel: record.movement_contract.rep_model,
           repThresholds: {
             down: {
@@ -1111,6 +1124,21 @@ function mapPoseFrameAnalysis(
                 ),
               }
             : null,
+          trackingRequirements: record.movement_contract.tracking_requirements
+            ? {
+                minConfidence:
+                  record.movement_contract.tracking_requirements
+                    .min_confidence ?? 0.6,
+                minReliableFrameLandmarks:
+                  record.movement_contract.tracking_requirements
+                    .min_reliable_frame_landmarks ?? 12,
+                requiredLandmarks:
+                  record.movement_contract.tracking_requirements
+                    .required_landmarks ?? [],
+                requiredSides:
+                  record.movement_contract.tracking_requirements.required_sides,
+              }
+            : undefined,
         }
       : null,
     needsConfirmation: record.needs_confirmation ?? false,
@@ -2635,7 +2663,9 @@ export function createFitnessApi(transport: ApiTransport) {
               : {}),
             ...(input?.movementContract
               ? {
-                  movement_contract: {
+                movement_contract: {
+                    body_orientation: input.movementContract.bodyOrientation,
+                    contract_version: input.movementContract.contractVersion,
                     dominant_joint: input.movementContract.dominantJoint,
                     degraded_conditions:
                       input.movementContract.degradedConditions,
@@ -2647,6 +2677,8 @@ export function createFitnessApi(transport: ApiTransport) {
                     partial_rep_policy: input.movementContract.partialRepPolicy,
                     phase_order: input.movementContract.phaseOrder,
                     primary_joints: input.movementContract.primaryJoints,
+                    hold_duration_seconds:
+                      input.movementContract.holdDurationSeconds,
                     rep_model: input.movementContract.repModel,
                     rep_thresholds: {
                       down: input.movementContract.repThresholds.down,
@@ -2691,6 +2723,23 @@ export function createFitnessApi(transport: ApiTransport) {
                           phase_sync_tolerance_ms:
                             input.movementContract.spatialRequirements
                               .phaseSyncToleranceMs,
+                          }
+                        : null,
+                    tracking_requirements: input.movementContract
+                      .trackingRequirements
+                      ? {
+                          min_confidence:
+                            input.movementContract.trackingRequirements
+                              .minConfidence,
+                          min_reliable_frame_landmarks:
+                            input.movementContract.trackingRequirements
+                              .minReliableFrameLandmarks,
+                          required_landmarks:
+                            input.movementContract.trackingRequirements
+                              .requiredLandmarks,
+                          required_sides:
+                            input.movementContract.trackingRequirements
+                              .requiredSides,
                         }
                       : null,
                   },

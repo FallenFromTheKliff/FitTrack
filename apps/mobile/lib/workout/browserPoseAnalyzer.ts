@@ -4,6 +4,8 @@ import type { PoseSequenceFrameRecord } from "@fittrack/types";
 
 type BrowserCameraFacingMode = "user" | "environment";
 type BrowserPoseFrame = PoseSequenceFrameRecord & {
+  frameHeight: number;
+  frameWidth: number;
   isReliable: boolean;
   visibleLandmarkCount: number;
 };
@@ -357,6 +359,8 @@ export async function createBrowserPoseAnalyzer(): Promise<BrowserPoseAnalyzer> 
 
       return {
         capturedAtMs: Date.now(),
+        frameHeight: video.videoHeight ?? 0,
+        frameWidth: video.videoWidth ?? 0,
         isReliable,
         keypoints,
         visibleLandmarkCount,

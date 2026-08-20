@@ -41,6 +41,7 @@ import {
   DEFAULT_MUSCLE_ICON_KEY,
   evaluateExpRank,
 } from '../../../src/fitness/gamification/gamification.constants';
+import { buildFallbackPoseMovementContract } from '../../../../../packages/utils/pose';
 
 const EXERCISE_SEEDS = [
   {
@@ -209,6 +210,20 @@ const EXERCISE_SEEDS = [
     name: 'Push Up',
   },
   {
+    key: 'dip',
+    category: ExerciseCategory.strength,
+    description: 'Bodyweight press for triceps, chest, and shoulder control.',
+    muscleGroup: 'triceps',
+    name: 'Parallel Bar Dip',
+  },
+  {
+    key: 'pull-up',
+    category: ExerciseCategory.strength,
+    description: 'Vertical bodyweight pull for lats and upper-back strength.',
+    muscleGroup: 'lats',
+    name: 'Pull Up',
+  },
+  {
     key: 'run',
     category: ExerciseCategory.cardio,
     description: 'Steady-state conditioning for aerobic base work.',
@@ -232,14 +247,33 @@ const EXERCISE_SEEDS = [
   },
 ] as const;
 
-const POSE_PROFILE_EXERCISE_KEYS = [
+export const POSE_PROFILE_EXERCISE_KEYS = [
   'squat',
-  'bench',
   'barbell-bench',
+  'biceps-curl',
+  'dip',
+  'plank',
+  'pull-up',
+  'push-up',
+  'shoulder-press',
+] as const;
+
+export const LEGACY_POSE_PROFILE_EXERCISE_KEYS = [
+  'bench',
   'deadlift',
   'row',
-  'push-up',
 ] as const;
+
+export function getLegacySeedPoseProfileRetirementWhere() {
+  return {
+    id: {
+      in: LEGACY_POSE_PROFILE_EXERCISE_KEYS.map((key) =>
+        seedId(`pose-profile:${key}`),
+      ),
+    },
+    profile_kind: PoseProfileKind.seed,
+  };
+}
 
 const MUSCLE_DEFINITIONS = [
   ['chest', 'Chest', 'upper_body_push'],
@@ -390,40 +424,82 @@ async function seedExerciseBackbone(ctx: DynamicSeedContext) {
     return exercise;
   });
 
-  await ctx.prisma.poseExerciseProfile.createMany({
-    data: poseProfileExercises.map((exercise, index) => ({
+  for (const exercise of poseProfileExercises) {
+    const contract = buildFallbackPoseMovementContract(exercise.name);
+    if (!contract) {
+      throw new Error(
+        `Missing canonical pose movement contract for "${exercise.name}".`,
+      );
+    }
+    const trackingRequirements = contract.trackingRequirements;
+    const thresholdTolerance =
+      (contract.repThresholds.down.tolerance +
+        contract.repThresholds.up.tolerance) /
+      2;
+    const poseProfile = {
       id: seedId(`pose-profile:${exercise.key}`),
       angle_signature: {
-        bottom: { elbow: [70, 110], hip: [70, 110], knee: [70, 110] },
-        top: { elbow: [145, 180], hip: [145, 180], knee: [145, 180] },
+        contract_version: contract.contractVersion,
+        dominant_joint: contract.dominantJoint,
+        down: contract.repThresholds.down,
+        up: contract.repThresholds.up,
       },
-      canonical_name: exercise.name.toLowerCase(),
-      confidence_threshold: new Prisma.Decimal('0.720'),
-      dominant_joint: index % 2 === 0 ? 'knee' : 'elbow',
+      canonical_name: contract.exercise,
+      confidence_threshold: new Prisma.Decimal(
+        (trackingRequirements?.minConfidence ?? 0.6).toFixed(3),
+      ),
+      dominant_joint: contract.dominantJoint,
       exercise_id: ctx.state.exerciseIds[exercise.key],
       landmark_signature: {
-        anchors: ['shoulder', 'hip', 'knee', 'ankle'],
+        anchors: contract.primaryJoints ?? [],
+        required_landmarks: trackingRequirements?.requiredLandmarks ?? [],
         source: 'dynamic-seed',
       },
       movement_pattern: {
-        oscillating_landmarks: ['left_knee', 'right_knee'],
-        tracked_joint:
-          index % 2 === 0 ? 'hip_knee_ankle' : 'shoulder_elbow_wrist',
+        no_count_conditions: contract.noCountConditions ?? [],
+        oscillating_landmarks: contract.oscillatingJoints,
+        phase_order: contract.phaseOrder ?? [],
+        rep_model: contract.repModel,
+        tracked_joint: contract.primaryJoints ?? [contract.dominantJoint],
       },
       orientation_signature: {
-        body_orientation: index % 2 === 0 ? 'upright' : 'horizontal',
+        body_orientation: contract.bodyOrientation ?? 'any',
+        contract_version: contract.contractVersion,
       },
       profile_kind: PoseProfileKind.seed,
-      rep_rules: { count: 'phase_crossing', minimum_visibility: 0.45 },
-      rep_thresholds: { down: 0.32, up: 0.78 },
-      sample_count: 15 + index,
-      tolerance: new Prisma.Decimal('8.50'),
-      visibility_pattern: {
-        min_visibility: 0.45,
-        required_landmarks: ['left_shoulder', 'right_shoulder'],
+      rep_rules: {
+        count: contract.repModel === 'static_hold' ? 'static_hold' : 'phase_crossing',
+        minimum_visibility: trackingRequirements?.minConfidence ?? 0.6,
+        required_sides: contract.requiredSides,
       },
-    })),
-    skipDuplicates: true,
+      rep_thresholds: {
+        down: contract.repThresholds.down,
+        up: contract.repThresholds.up,
+      },
+      sample_count: 15,
+      tolerance: new Prisma.Decimal(thresholdTolerance.toFixed(2)),
+      visibility_pattern: {
+        min_visibility: trackingRequirements?.minConfidence ?? 0.6,
+        min_reliable_frame_landmarks:
+          trackingRequirements?.minReliableFrameLandmarks ?? 12,
+        required_landmarks: trackingRequirements?.requiredLandmarks ?? [],
+      },
+    };
+
+    const { id: poseProfileId, ...poseProfileUpdate } = poseProfile;
+    await ctx.prisma.poseExerciseProfile.upsert({
+      where: { id: poseProfileId },
+      update: poseProfileUpdate,
+      create: poseProfile,
+    });
+  }
+
+  // Bench, deadlift, and row were previously seeded with guessed alternating
+  // schemas. Retire only those deterministic seed rows; user-created profiles
+  // remain untouched and existing sessions keep their foreign-key history.
+  await ctx.prisma.poseExerciseProfile.updateMany({
+    where: getLegacySeedPoseProfileRetirementWhere(),
+    data: { is_active: false },
   });
 }
 

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AppState, type AppStateStatus, View } from "react-native";
+import * as FileSystem from "expo-file-system/legacy";
 import { useIsFocused } from "@react-navigation/native";
 import {
   Camera,
@@ -20,6 +21,8 @@ import type {
 
 const TARGET_POSE_FPS = 20;
 const EQUIPMENT_SNAPSHOT_INTERVAL_MS = 1800;
+const EQUIPMENT_SNAPSHOT_MAX_BACKOFF_MS = 12_000;
+const EQUIPMENT_SNAPSHOT_MAX_RETRIES = 4;
 const LANDMARK_KEY_ALIASES = [
   ["nose"],
   ["leftEyeInner"],
@@ -129,6 +132,7 @@ export function NativeVisionPoseCamera({
   cameraFacing,
   equipmentSnapshotActive = false,
   isActive,
+  poseProcessingEnabled = true,
   onEquipmentSnapshot,
   onPoseFrame,
   style,
@@ -137,6 +141,9 @@ export function NativeVisionPoseCamera({
   const equipmentSnapshotInFlightRef = useRef(false);
   const equipmentSnapshotCaptureWarningShownRef = useRef(false);
   const equipmentSnapshotDeliveryWarningShownRef = useRef(false);
+  const equipmentSnapshotFailureCountRef = useRef(0);
+  const equipmentSnapshotNextAttemptAtRef = useRef(0);
+  const equipmentSnapshotTerminalRef = useRef(false);
   const onEquipmentSnapshotRef = useRef(onEquipmentSnapshot);
   const isFocused = useIsFocused();
   const [appState, setAppState] = useState<AppStateStatus>(
@@ -173,24 +180,49 @@ export function NativeVisionPoseCamera({
 
     let cancelled = false;
     const captureEquipmentSnapshot = async () => {
-      if (equipmentSnapshotInFlightRef.current || !cameraRef.current) {
+      if (
+        equipmentSnapshotInFlightRef.current ||
+        !cameraRef.current ||
+        equipmentSnapshotTerminalRef.current ||
+        Date.now() < equipmentSnapshotNextAttemptAtRef.current
+      ) {
         return;
       }
 
       equipmentSnapshotInFlightRef.current = true;
+      let frameUri: string | null = null;
+      const scheduleRetry = () => {
+        equipmentSnapshotFailureCountRef.current += 1;
+        if (
+          equipmentSnapshotFailureCountRef.current >=
+          EQUIPMENT_SNAPSHOT_MAX_RETRIES
+        ) {
+          equipmentSnapshotTerminalRef.current = true;
+          equipmentSnapshotNextAttemptAtRef.current =
+            Number.POSITIVE_INFINITY;
+          return;
+        }
+        const backoff = Math.min(
+          EQUIPMENT_SNAPSHOT_MAX_BACKOFF_MS,
+          EQUIPMENT_SNAPSHOT_INTERVAL_MS *
+            2 ** (equipmentSnapshotFailureCountRef.current - 1),
+        );
+        equipmentSnapshotNextAttemptAtRef.current = Date.now() + backoff;
+      };
       try {
         let snapshot: Awaited<ReturnType<Camera["takeSnapshot"]>>;
         try {
-          snapshot = await cameraRef.current.takeSnapshot({ quality: 60 });
-        } catch (error) {
+          snapshot = await cameraRef.current.takeSnapshot({ quality: 50 });
+        } catch {
+          scheduleRetry();
           if (!equipmentSnapshotCaptureWarningShownRef.current) {
             equipmentSnapshotCaptureWarningShownRef.current = true;
-            console.warn("Native equipment snapshot capture failed", error);
+            console.warn("Native equipment snapshot capture failed");
           }
           return;
         }
 
-        const frameUri = toFileUri(snapshot.path);
+        frameUri = toFileUri(snapshot.path);
         if (cancelled || !frameUri) return;
 
         try {
@@ -202,19 +234,34 @@ export function NativeVisionPoseCamera({
             frameWidth: snapshot.width,
             source: "vision_camera_snapshot",
           });
-        } catch (error) {
+          equipmentSnapshotFailureCountRef.current = 0;
+          equipmentSnapshotNextAttemptAtRef.current = 0;
+          equipmentSnapshotTerminalRef.current = false;
+        } catch {
+          scheduleRetry();
           if (!equipmentSnapshotDeliveryWarningShownRef.current) {
             equipmentSnapshotDeliveryWarningShownRef.current = true;
-            console.warn("Native equipment snapshot delivery failed", error);
+            console.warn("Native equipment snapshot delivery failed");
           }
         }
-      } catch (error) {
+      } catch {
         // Snapshot capture is best-effort and should never stop live pose tracking.
+        scheduleRetry();
         if (!equipmentSnapshotCaptureWarningShownRef.current) {
           equipmentSnapshotCaptureWarningShownRef.current = true;
-          console.warn("Native equipment snapshot loop failed", error);
+          console.warn("Native equipment snapshot loop failed");
         }
       } finally {
+        if (frameUri) {
+          await FileSystem.deleteAsync(frameUri, { idempotent: true }).catch(
+            () => {
+              if (!equipmentSnapshotDeliveryWarningShownRef.current) {
+                equipmentSnapshotDeliveryWarningShownRef.current = true;
+                console.warn("Native equipment snapshot cleanup failed");
+              }
+            },
+          );
+        }
         equipmentSnapshotInFlightRef.current = false;
       }
     };
@@ -229,6 +276,9 @@ export function NativeVisionPoseCamera({
       cancelled = true;
       equipmentSnapshotCaptureWarningShownRef.current = false;
       equipmentSnapshotDeliveryWarningShownRef.current = false;
+      equipmentSnapshotFailureCountRef.current = 0;
+      equipmentSnapshotNextAttemptAtRef.current = 0;
+      equipmentSnapshotTerminalRef.current = false;
       clearInterval(interval);
     };
   }, [
@@ -249,7 +299,7 @@ export function NativeVisionPoseCamera({
   const frameProcessor = useFrameProcessor(
     (frame) => {
       "worklet";
-      if (!cameraShouldRun) return;
+      if (!cameraShouldRun || !poseProcessingEnabled) return;
 
       runAtTargetFps(TARGET_POSE_FPS, () => {
         "worklet";
@@ -274,7 +324,7 @@ export function NativeVisionPoseCamera({
         });
       });
     },
-    [cameraFacing, cameraShouldRun, emitPoseFrame],
+    [cameraFacing, cameraShouldRun, emitPoseFrame, poseProcessingEnabled],
   );
 
   if (!hasPermission || !device) {
