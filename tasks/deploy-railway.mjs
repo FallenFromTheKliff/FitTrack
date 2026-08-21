@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import {
   copyFileSync,
   existsSync,
@@ -12,11 +12,12 @@ import { fileURLToPath } from 'node:url';
 const REMOTE_RESET_CONFIRMATION = 'RESET_RAILWAY_DATABASE';
 const DYNAMIC_SEED_CONFIRMATION = 'RESET_REMOTE_DYNAMIC_SEED';
 const DEFAULT_ENVIRONMENT = 'production';
-const DEFAULT_SEED_USERS = 100;
+export const DEFAULT_SEED_USERS = 180;
 const DEFAULT_LINK_SERVICE = 'api';
 const DEPLOYMENT_LIST_LIMIT = 100;
 const DEPLOYMENT_STATUS_MAX_ATTEMPTS = 30;
 const DEPLOYMENT_STATUS_INTERVAL_MS = 30_000;
+const DEPLOYMENT_LOG_LINE_LIMIT = 100;
 const CAPTURED_COMMAND_MAX_BUFFER_BYTES = 20 * 1024 * 1024;
 const PENDING_DEPLOYMENT_STATUSES = new Set([
   'BUILDING',
@@ -25,8 +26,8 @@ const PENDING_DEPLOYMENT_STATUSES = new Set([
   'WAITING',
   'QUEUED',
 ]);
-const DEPLOYMENT_ID_PATTERN =
-  /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
+const DEPLOYMENT_ID_VALUE_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const argv = process.argv.slice(2).filter((arg) => arg !== '--');
 
@@ -83,25 +84,8 @@ Options:
 
 Examples:
   pnpm deploy:railway -- --project_name:fittrack-full-system --reauth
-  pnpm deploy:railway -- --project_name:fittrack-full-system --reset-db --confirm:${REMOTE_RESET_CONFIRMATION}
+  pnpm deploy:railway -- --project_name:fittrack-full-system --reset-db --seed-users:180 --confirm:${REMOTE_RESET_CONFIRMATION}
 `);
-}
-
-export function isPostUploadGraphqlTimeout(output) {
-  const text = String(output ?? '');
-  const hasRailwayTransportMarker =
-    /reqwest/i.test(text) || /backboard\.railway\.com\/graphql/i.test(text);
-  const hasGraphqlMarker = /graphql/i.test(text);
-  const hasTimeoutMarker =
-    /(?:operation\s+timed\s+out|timed\s*out|timeout|timed_out)/i.test(text);
-  const hasBuildLogStreamFailureMarker = /failed\s+to\s+(?:stream|retrieve)\s+(?:build\s+)?logs?/i.test(
-    text,
-  );
-
-  return (
-    (hasRailwayTransportMarker && hasGraphqlMarker && hasTimeoutMarker) ||
-    hasBuildLogStreamFailureMarker
-  );
 }
 
 export function parseDeploymentList(output) {
@@ -163,8 +147,61 @@ function extractDeploymentId(output) {
     return labelledId[1];
   }
 
-  const ids = [...text.matchAll(DEPLOYMENT_ID_PATTERN)].map(([id]) => id);
-  return ids.length === 1 ? ids[0] : undefined;
+  const jsonIds = new Set();
+  const collectJsonIds = (value, { root = false } = {}) => {
+    if (!value || typeof value !== 'object') {
+      return;
+    }
+
+    if (Array.isArray(value)) {
+      value.forEach((entry) => collectJsonIds(entry));
+      return;
+    }
+
+    const explicitId = value.deploymentId ?? value.deployment_id;
+    if (
+      typeof explicitId === 'string' &&
+      DEPLOYMENT_ID_VALUE_PATTERN.test(explicitId.trim())
+    ) {
+      jsonIds.add(explicitId.trim());
+    }
+
+    if (
+      root &&
+      typeof value.id === 'string' &&
+      DEPLOYMENT_ID_VALUE_PATTERN.test(value.id.trim())
+    ) {
+      jsonIds.add(value.id.trim());
+    }
+
+    if (value.deployment && typeof value.deployment === 'object') {
+      collectJsonIds(value.deployment, { root: true });
+    }
+    if (value.data && typeof value.data === 'object') {
+      collectJsonIds(value.data);
+    }
+    if (value.result && typeof value.result === 'object') {
+      collectJsonIds(value.result);
+    }
+  };
+
+  const jsonLines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  for (const candidate of [text, ...jsonLines]) {
+    try {
+      collectJsonIds(JSON.parse(candidate), { root: candidate === text });
+    } catch {
+      // Detached JSON output can be surrounded by CLI status text.
+    }
+  }
+
+  if (jsonIds.size === 1) {
+    return [...jsonIds][0];
+  }
+
+  return undefined;
 }
 
 function deploymentMessage(deployment) {
@@ -190,12 +227,14 @@ export function identifyUploadedDeployment({
     return outputId;
   }
 
-  if (!Array.isArray(priorDeployments) || !Array.isArray(currentDeployments)) {
+  if (!Array.isArray(currentDeployments)) {
     return undefined;
   }
 
   const priorIds = new Set(
-    priorDeployments.map((deployment) => deployment?.id).filter(Boolean),
+    (Array.isArray(priorDeployments) ? priorDeployments : [])
+      .map((deployment) => deployment?.id)
+      .filter(Boolean),
   );
   let candidates = currentDeployments.filter(
     (deployment) => deployment?.id && !priorIds.has(deployment.id),
@@ -208,7 +247,7 @@ export function identifyUploadedDeployment({
     return messageMatches.length === 1 ? messageMatches[0].id : undefined;
   }
 
-  return candidates.length === 1 ? candidates[0].id : undefined;
+  return undefined;
 }
 
 export function classifyDeploymentStatus(status) {
@@ -498,52 +537,6 @@ function run(
   return captureOutput ? { status, stdout, stderr } : status;
 }
 
-function appendBoundedOutput(current, chunk) {
-  const next = current + String(chunk);
-  if (next.length <= CAPTURED_COMMAND_MAX_BUFFER_BYTES) {
-    return next;
-  }
-
-  const half = Math.floor(CAPTURED_COMMAND_MAX_BUFFER_BYTES / 2);
-  return `${next.slice(0, half)}\n[railway-deploy] captured output truncated\n${next.slice(-half)}`;
-}
-
-function runStreamingCaptured(command, args) {
-  console.log(`\n> ${command} ${args.join(' ')}`);
-  const invocation =
-    command === 'railway'
-      ? resolveRailwayInvocation()
-      : { command, prefixArgs: [] };
-
-  return new Promise((resolve, reject) => {
-    const child = spawn(
-      invocation.command,
-      [...invocation.prefixArgs, ...args],
-      {
-        cwd: process.cwd(),
-        shell: false,
-        stdio: ['inherit', 'pipe', 'pipe'],
-      },
-    );
-    let stdout = '';
-    let stderr = '';
-
-    child.stdout.on('data', (chunk) => {
-      process.stdout.write(chunk);
-      stdout = appendBoundedOutput(stdout, chunk);
-    });
-    child.stderr.on('data', (chunk) => {
-      process.stderr.write(chunk);
-      stderr = appendBoundedOutput(stderr, chunk);
-    });
-    child.on('error', reject);
-    child.on('close', (status) => {
-      restoreTerminalTitle();
-      resolve({ status: status ?? 1, stdout, stderr });
-    });
-  });
-}
-
 function deploymentListArgs(service, environment) {
   return [
     'deployment',
@@ -586,13 +579,78 @@ function queryDeployments(service, environment) {
   }
 }
 
-function requireDeployments(service, environment, reason) {
+function printCapturedOutput(label, result) {
+  const output = [result?.stdout, result?.stderr]
+    .filter((value) => value)
+    .join('\n')
+    .trim();
+
+  if (output) {
+    console.error(`\n[railway-deploy] ${label}:\n${output}`);
+  }
+}
+
+function fetchDeploymentLogs({ service, environment, deploymentId }) {
+  for (const [kind, flag] of [
+    ['build', '--build'],
+    ['deploy', '--deployment'],
+  ]) {
+    const args = [
+      'logs',
+      ...(deploymentId ? [deploymentId] : ['--latest']),
+      '--service',
+      service,
+      '--environment',
+      environment,
+      flag,
+      '--lines',
+      `${DEPLOYMENT_LOG_LINE_LIMIT}`,
+      '--json',
+    ];
+    const result = run('railway', args, {
+      allowFailure: true,
+      captureOutput: true,
+      echoCapturedOutput: false,
+    });
+
+    printCapturedOutput(
+      `${service} ${kind} logs for ${deploymentId ?? 'latest available deployment'}`,
+      result,
+    );
+    if (result.status !== 0 && !result.stdout && !result.stderr) {
+      console.error(
+        `[railway-deploy] Could not retrieve ${service} ${kind} logs ` +
+          `(exit code ${result.status}).`,
+      );
+    }
+  }
+}
+
+function failWithDeploymentEvidence({
+  service,
+  environment,
+  deploymentId,
+  message,
+  uploadResult,
+}) {
+  if (uploadResult) {
+    printCapturedOutput(`${service} detached upload output`, uploadResult);
+  }
+  fetchDeploymentLogs({ service, environment, deploymentId });
+  fail(message);
+}
+
+function requireDeployments(service, environment, reason, deploymentId) {
   const result = queryDeployments(service, environment);
   if (result.error) {
-    fail(
-      `Could not inspect ${service} deployment after ${reason}: ${result.error}. ` +
-        'The uploaded deployment identity could not be verified.',
-    );
+    failWithDeploymentEvidence({
+      service,
+      environment,
+      deploymentId,
+      message:
+        `Could not inspect ${service} deployment after ${reason}: ${result.error}. ` +
+        'The exact deployment status could not be verified.',
+    });
   }
   return result.deployments;
 }
@@ -616,16 +674,25 @@ function waitForDeploymentSuccess({
 
   for (let attempt = 1; attempt <= DEPLOYMENT_STATUS_MAX_ATTEMPTS; attempt += 1) {
     const deployments =
-      attempt === 1
+      attempt === 1 && Array.isArray(initialDeployments)
         ? initialDeployments
-        : requireDeployments(service, environment, `status check ${attempt}`);
+        : requireDeployments(
+            service,
+            environment,
+            `status check ${attempt}`,
+            deploymentId,
+          );
     const deployment = deployments.find((candidate) => candidate.id === deploymentId);
     if (!deployment) {
       if (attempt === DEPLOYMENT_STATUS_MAX_ATTEMPTS) {
-        fail(
-          `Deployment ${deploymentId} for ${service} was not present after ` +
+        failWithDeploymentEvidence({
+          service,
+          environment,
+          deploymentId,
+          message:
+            `Deployment ${deploymentId} for ${service} was not present after ` +
             `${DEPLOYMENT_STATUS_MAX_ATTEMPTS} bounded status checks.`,
-        );
+        });
       }
       sleep(DEPLOYMENT_STATUS_INTERVAL_MS);
       continue;
@@ -641,17 +708,25 @@ function waitForDeploymentSuccess({
     }
 
     if (outcome === 'failure') {
-      fail(
-        `Deployment ${deploymentId} for ${service} reached ${lastStatus}; ` +
-          'the Railway up failure was not recovered.',
-      );
+      failWithDeploymentEvidence({
+        service,
+        environment,
+        deploymentId,
+        message:
+          `Deployment ${deploymentId} for ${service} reached ${lastStatus}; ` +
+          'the exact Railway deployment failed.',
+      });
     }
 
     if (outcome === 'unknown') {
-      fail(
-        `Deployment ${deploymentId} for ${service} reported unknown status ` +
+      failWithDeploymentEvidence({
+        service,
+        environment,
+        deploymentId,
+        message:
+          `Deployment ${deploymentId} for ${service} reported unknown status ` +
           `"${lastStatus ?? 'missing'}"; deployment stopped.`,
-      );
+      });
     }
 
     if (attempt < DEPLOYMENT_STATUS_MAX_ATTEMPTS) {
@@ -663,11 +738,15 @@ function waitForDeploymentSuccess({
     }
   }
 
-  fail(
-    `Deployment ${deploymentId} for ${service} did not reach SUCCESS after ` +
+  failWithDeploymentEvidence({
+    service,
+    environment,
+    deploymentId,
+    message:
+      `Deployment ${deploymentId} for ${service} did not reach SUCCESS after ` +
       `${DEPLOYMENT_STATUS_MAX_ATTEMPTS} bounded status checks; last status ` +
       `was ${lastStatus ?? 'missing'}.`,
-  );
+  });
 }
 
 async function deployService({
@@ -677,7 +756,7 @@ async function deployService({
   deployMessage,
 }) {
   const priorLookup = queryDeployments(service, environment);
-  const upResult = await runStreamingCaptured(
+  const upResult = run(
     'railway',
     [
       'up',
@@ -687,34 +766,21 @@ async function deployService({
       service,
       '--environment',
       environment,
-      '--ci',
+      '--detach',
+      '--json',
       '--message',
       deployMessage,
     ],
+    {
+      allowFailure: true,
+      captureOutput: true,
+      echoCapturedOutput: false,
+    },
   );
-
-  if (upResult.status === 0) {
-    return;
-  }
 
   const output = `${upResult.stdout}\n${upResult.stderr}`;
-  if (!isPostUploadGraphqlTimeout(output)) {
-    fail(
-      `Railway up for ${service} failed with exit code ${upResult.status}; ` +
-        'the failure was not the bounded post-upload recovery case. ' +
-        'Deployment stopped.',
-    );
-  }
-
-  console.log(
-    `[railway-deploy] Railway up for ${service} reported a post-upload connectivity ` +
-      'issue; verifying the uploaded deployment before continuing.',
-  );
-  const currentDeployments = requireDeployments(
-    service,
-    environment,
-    'post-upload timeout recovery',
-  );
+  const currentLookup = queryDeployments(service, environment);
+  const currentDeployments = currentLookup.deployments ?? [];
   const deploymentId = identifyUploadedDeployment({
     output,
     priorDeployments: priorLookup.deployments,
@@ -723,9 +789,34 @@ async function deployService({
   });
 
   if (!deploymentId) {
-    fail(
-      `Could not identify the uploaded ${service} deployment after the post-upload ` +
-        'GraphQL timeout; deployment stopped.',
+    const lookupDetail = currentLookup.error ? ` ${currentLookup.error}.` : '';
+    failWithDeploymentEvidence({
+      service,
+      environment,
+      message:
+        `Could not identify the exact uploaded ${service} deployment after ` +
+        `detached upload (exit code ${upResult.status}).${lookupDetail}`,
+      uploadResult: upResult,
+    });
+  }
+
+  if (upResult.status !== 0) {
+    printCapturedOutput(
+      `${service} detached upload returned exit code ${upResult.status}; ` +
+        `identified deployment ${deploymentId}`,
+      upResult,
+    );
+  }
+
+  if (currentLookup.error) {
+    console.error(
+      `[railway-deploy] ${service} deployment list was unavailable after upload; ` +
+        `polling exact deployment ${deploymentId}.`,
+    );
+  } else {
+    console.log(
+      `[railway-deploy] Identified ${service} deployment ${deploymentId}; ` +
+        'polling until SUCCESS.',
     );
   }
 
@@ -733,7 +824,7 @@ async function deployService({
     service,
     environment,
     deploymentId,
-    initialDeployments: currentDeployments,
+    initialDeployments: currentLookup.deployments,
   });
 }
 

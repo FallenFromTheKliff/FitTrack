@@ -2,26 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  DEFAULT_SEED_USERS,
   classifyDeploymentStatus,
   identifyUploadedDeployment,
-  isPostUploadGraphqlTimeout,
   parseDeploymentList,
 } from './deploy-railway.mjs';
-
-const POST_UPLOAD_TIMEOUT = [
-  'Failed to fetch: error sending request for url',
-  '(https://backboard.railway.com/graphql/v2)',
-  'Caused by:',
-  'operation timed out',
-].join('\n');
-
-test('recognizes the Railway post-upload GraphQL timeout only', () => {
-  assert.equal(isPostUploadGraphqlTimeout(POST_UPLOAD_TIMEOUT), true);
-  assert.equal(
-    isPostUploadGraphqlTimeout('Build failed: GraphQL validation returned 400.'),
-    false,
-  );
-});
 
 test('selects exactly one uploaded deployment outside the prior list', () => {
   const priorDeployments = parseDeploymentList(
@@ -68,11 +53,44 @@ test('does not accept an unrelated sole new deployment', () => {
   );
 });
 
+test('uses the unique deploy message when the prior list is unavailable', () => {
+  assert.equal(
+    identifyUploadedDeployment({
+      output: '',
+      currentDeployments: [
+        {
+          id: 'new-deployment',
+          status: 'BUILDING',
+          message: 'FitTrack CLI deploy 2026-08-09T00:00:00.000Z',
+        },
+        { id: 'other-deployment', status: 'SUCCESS', message: 'Manual deploy' },
+      ],
+      deployMessage: 'FitTrack CLI deploy 2026-08-09T00:00:00.000Z',
+    }),
+    'new-deployment',
+  );
+});
+
 test('extracts the exact deployment id from the Railway build logs URL', () => {
   assert.equal(
     identifyUploadedDeployment({
       output:
         'Build Logs: https://railway.com/project/11111111-1111-1111-1111-111111111111/service/22222222-2222-2222-2222-222222222222?id=33333333-3333-3333-3333-333333333333&',
+      priorDeployments: [],
+      currentDeployments: [],
+      deployMessage: 'FitTrack CLI deploy',
+    }),
+    '33333333-3333-3333-3333-333333333333',
+  );
+});
+
+test('extracts the exact deployment id from detached JSON output', () => {
+  assert.equal(
+    identifyUploadedDeployment({
+      output: JSON.stringify({
+        id: '33333333-3333-3333-3333-333333333333',
+        status: 'BUILDING',
+      }),
       priorDeployments: [],
       currentDeployments: [],
       deployMessage: 'FitTrack CLI deploy',
@@ -101,4 +119,8 @@ test('normalizes deployment list JSON and preserves failure classifications', ()
   assert.equal(classifyDeploymentStatus('CRASHED'), 'failure');
   assert.equal(classifyDeploymentStatus('DEPLOYING'), 'pending');
   assert.equal(classifyDeploymentStatus('UNKNOWN_STATUS'), 'unknown');
+});
+
+test('defaults reset deployments to 180 seed users', () => {
+  assert.equal(DEFAULT_SEED_USERS, 180);
 });
