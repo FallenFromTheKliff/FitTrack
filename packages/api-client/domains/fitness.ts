@@ -3,16 +3,10 @@ import type {
   AdminMilestoneDefinitionRecord,
   AdminMilestoneEvidenceListParams,
   AnalyzePoseSequenceInput,
-  CreateExerciseDraftProposalInput,
-  CreateExerciseReviewSubmissionInput,
   CreateFitnessExerciseInput,
   CreateTrainingPlanInput,
   CreateMuscleDefinitionInput,
   DetectPoseEquipmentInput,
-  ExerciseReviewEvidenceRecord,
-  ExerciseDraftProposalRecord,
-  ExerciseReviewSubmissionRecord,
-  ExerciseReviewSubmissionStatus,
   FitnessAchievementReviewRecord,
   ExerciseLogRecord,
   ExerciseHandShapeProfileRecord,
@@ -21,7 +15,6 @@ import type {
   ExerciseMuscleTargetRole,
   ExerciseRigKeyframeKind,
   FinalizePoseSessionInput,
-  FitnessCreatorState,
   PoseEquipmentContext,
   PoseEquipmentDetectionBoxRecord,
   PoseEquipmentDetectionRecord,
@@ -29,7 +22,6 @@ import type {
   PoseProgressionDisposition,
   PoseSessionQualityState,
   FitnessExerciseListParams,
-  FitnessExerciseReviewSubmissionListParams,
   FitnessExerciseRecord,
   FitnessIntegritySummaryRecord,
   FitnessLeaderboardEntryRecord,
@@ -70,7 +62,6 @@ import type {
   TrainingProgressionSuggestionRecord,
   UpdateFitnessRankingProfileInput,
   UpsertAdminMilestoneDefinitionInput,
-  UpdateExerciseReviewSubmissionInput,
   UpdateFitnessExerciseInput,
   UpdateMuscleDefinitionInput,
   WorkoutSessionDetailRecord,
@@ -86,19 +77,12 @@ export type {
   AdminMilestoneDefinitionRecord,
   AdminMilestoneEvidenceListParams,
   AnalyzePoseSequenceInput,
-  CreateExerciseDraftProposalInput,
-  CreateExerciseReviewSubmissionInput,
   CreateFitnessExerciseInput,
   CreateTrainingPlanInput,
   CreateMuscleDefinitionInput,
   DetectPoseEquipmentInput,
-  ExerciseReviewEvidenceRecord,
-  ExerciseDraftProposalRecord,
-  ExerciseReviewSubmissionRecord,
-  ExerciseReviewSubmissionStatus,
   ExerciseHandShapeProfileRecord,
   FitnessAchievementReviewRecord,
-  FitnessCreatorState,
   FitnessExerciseCategory,
   ExerciseMovementProfileRecord,
   ExerciseMuscleTargetRecord,
@@ -107,7 +91,6 @@ export type {
   ExerciseLogRecord,
   FinalizePoseSessionInput,
   FitnessExerciseListParams,
-  FitnessExerciseReviewSubmissionListParams,
   FitnessExerciseRecord,
   FitnessIntegritySummaryRecord,
   FitnessLeaderboardEntryRecord,
@@ -152,7 +135,6 @@ export type {
   TrainingProgressionSuggestionRecord,
   UpdateFitnessRankingProfileInput,
   UpsertAdminMilestoneDefinitionInput,
-  UpdateExerciseReviewSubmissionInput,
   UpdateFitnessExerciseInput,
   UpdateMuscleDefinitionInput,
   WorkoutSessionDetailRecord,
@@ -193,60 +175,6 @@ type MuscleDefinitionApiRecord = {
   updated_at: string;
 };
 
-type ExerciseReviewSubmissionApiRecord = {
-  category: ExerciseReviewSubmissionRecord["category"];
-  creator_candidate_score?: number;
-  creator_display_name?: string | null;
-  creator_email?: string | null;
-  creator_governance_note?: string | null;
-  creator_last_state_changed_at?: string | null;
-  creator_profile_updated_at?: string | null;
-  creator_published_count?: number;
-  creator_rejected_count?: number;
-  creator_state?: FitnessCreatorState;
-  creator_state_label?: string;
-  creator_submission_count?: number;
-  created_at: string;
-  description: string | null;
-  evidence_bars: ExerciseReviewEvidenceRecord | null;
-  hand_shape_profile?: ExerciseHandShapeProfileRecord | null;
-  id: string;
-  instructions: string | null;
-  match_hint: string | null;
-  movement_profile?: ExerciseMovementProfileRecord | null;
-  muscle_group: string;
-  muscle_targets?: ExerciseMuscleTargetRecord[] | null;
-  origin_label: string;
-  pose_session_id: string | null;
-  proposed_name: string;
-  published_exercise_id: string | null;
-  queue_tag: string;
-  review_notes: string | null;
-  reviewed_at: string | null;
-  source_label: string;
-  status: ExerciseReviewSubmissionStatus;
-  summary: string;
-  title: string;
-  trigger_label: string;
-  updated_at: string;
-  user_id: string;
-};
-
-type ExerciseDraftProposalApiRecord = {
-  category: ExerciseDraftProposalRecord["category"];
-  confidence: number;
-  description: string;
-  evidence: ExerciseDraftProposalRecord["evidence"];
-  hand_shape_profile: ExerciseDraftProposalRecord["handShapeProfile"];
-  instructions: string;
-  movement_profile: ExerciseDraftProposalRecord["movementProfile"];
-  muscle_group: string;
-  muscle_targets: ExerciseDraftProposalRecord["muscleTargets"];
-  proposal_source: ExerciseDraftProposalRecord["proposalSource"];
-  proposed_name: string;
-  review_warnings: string[];
-  summary: string;
-};
 
 type TrainingPlanExerciseApiRecord = {
   category: TrainingPlanDetailRecord["scheduleDays"][number]["exercises"][number]["category"];
@@ -772,69 +700,6 @@ function mapMuscleDefinition(
     name: record.name,
     sortOrder: record.sort_order,
     updatedAt: record.updated_at,
-  };
-}
-
-function mapExerciseReviewSubmission(
-  record: ExerciseReviewSubmissionApiRecord,
-): ExerciseReviewSubmissionRecord {
-  return {
-    category: record.category,
-    creatorCandidateScore: record.creator_candidate_score ?? 0,
-    creatorDisplayName: record.creator_display_name ?? null,
-    creatorEmail: record.creator_email ?? null,
-    creatorGovernanceNote: record.creator_governance_note ?? null,
-    creatorLastStateChangedAt: record.creator_last_state_changed_at ?? null,
-    creatorProfileUpdatedAt: record.creator_profile_updated_at ?? null,
-    creatorPublishedCount: record.creator_published_count ?? 0,
-    creatorRejectedCount: record.creator_rejected_count ?? 0,
-    creatorState: record.creator_state ?? "none",
-    creatorStateLabel: record.creator_state_label ?? "None",
-    creatorSubmissionCount: record.creator_submission_count ?? 0,
-    createdAt: record.created_at,
-    description: record.description,
-    evidenceBars: record.evidence_bars,
-    handShapeProfile: record.hand_shape_profile ?? null,
-    id: record.id,
-    instructions: record.instructions,
-    matchHint: record.match_hint,
-    movementProfile: record.movement_profile ?? null,
-    muscleGroup: record.muscle_group,
-    muscleTargets: record.muscle_targets ?? [],
-    originLabel: record.origin_label,
-    poseSessionId: record.pose_session_id,
-    proposedName: record.proposed_name,
-    publishedExerciseId: record.published_exercise_id,
-    queueTag: record.queue_tag,
-    reviewNotes: record.review_notes,
-    reviewedAt: record.reviewed_at,
-    sourceLabel: record.source_label,
-    status: record.status,
-    summary: record.summary,
-    title: record.title,
-    triggerLabel: record.trigger_label,
-    updatedAt: record.updated_at,
-    userId: record.user_id,
-  };
-}
-
-function mapExerciseDraftProposal(
-  record: ExerciseDraftProposalApiRecord,
-): ExerciseDraftProposalRecord {
-  return {
-    category: record.category,
-    confidence: record.confidence,
-    description: record.description,
-    evidence: record.evidence,
-    handShapeProfile: record.hand_shape_profile,
-    instructions: record.instructions,
-    movementProfile: record.movement_profile,
-    muscleGroup: record.muscle_group,
-    muscleTargets: record.muscle_targets,
-    proposalSource: record.proposal_source,
-    proposedName: record.proposed_name,
-    reviewWarnings: record.review_warnings ?? [],
-    summary: record.summary,
   };
 }
 
@@ -1484,18 +1349,6 @@ function toExerciseListParams(params?: FitnessExerciseListParams) {
   };
 }
 
-function toExerciseReviewSubmissionListParams(
-  params?: FitnessExerciseReviewSubmissionListParams,
-) {
-  return {
-    ...(params?.page !== undefined ? { page: params.page } : {}),
-    ...(params?.limit !== undefined ? { limit: params.limit } : {}),
-    ...(params?.status ? { status: params.status } : {}),
-    ...(params?.search ? { search: params.search } : {}),
-    ...(params?.category ? { category: params.category } : {}),
-    ...(params?.muscleGroup ? { muscle_group: params.muscleGroup } : {}),
-  };
-}
 
 function toMuscleDefinitionListParams(params?: MuscleDefinitionListParams) {
   return {
@@ -1562,110 +1415,7 @@ function toExerciseMutationPayload(
   };
 }
 
-function toExerciseReviewSubmissionPayload(
-  input:
-    | CreateExerciseReviewSubmissionInput
-    | UpdateExerciseReviewSubmissionInput,
-) {
-  return {
-    ...("category" in input && input.category
-      ? { category: input.category }
-      : {}),
-    ...("creatorGovernanceNote" in input && input.creatorGovernanceNote?.trim()
-      ? { creator_governance_note: input.creatorGovernanceNote.trim() }
-      : {}),
-    ...("creatorState" in input && input.creatorState
-      ? { creator_state: input.creatorState }
-      : {}),
-    ...("description" in input && input.description?.trim()
-      ? { description: input.description.trim() }
-      : {}),
-    ...("evidenceBars" in input && input.evidenceBars !== undefined
-      ? { evidence_bars: input.evidenceBars }
-      : {}),
-    ...("instructions" in input && input.instructions?.trim()
-      ? { instructions: input.instructions.trim() }
-      : {}),
-    ...("matchHint" in input && input.matchHint?.trim()
-      ? { match_hint: input.matchHint.trim() }
-      : {}),
-    ...("muscleGroup" in input && input.muscleGroup?.trim()
-      ? { muscle_group: input.muscleGroup.trim() }
-      : {}),
-    ...("muscleTargets" in input && input.muscleTargets !== undefined
-      ? { muscle_targets: input.muscleTargets }
-      : {}),
-    ...("movementProfile" in input && input.movementProfile !== undefined
-      ? { movement_profile: input.movementProfile }
-      : {}),
-    ...("handShapeProfile" in input && input.handShapeProfile !== undefined
-      ? { hand_shape_profile: input.handShapeProfile }
-      : {}),
-    ...("originLabel" in input && input.originLabel?.trim()
-      ? { origin_label: input.originLabel.trim() }
-      : {}),
-    ...("poseSessionId" in input && input.poseSessionId
-      ? { pose_session_id: input.poseSessionId }
-      : {}),
-    ...("proposedName" in input && input.proposedName?.trim()
-      ? { proposed_name: input.proposedName.trim() }
-      : {}),
-    ...("queueTag" in input && input.queueTag?.trim()
-      ? { queue_tag: input.queueTag.trim() }
-      : {}),
-    ...("status" in input && input.status ? { status: input.status } : {}),
-    ...("sourceLabel" in input && input.sourceLabel?.trim()
-      ? { source_label: input.sourceLabel.trim() }
-      : {}),
-    ...("summary" in input && input.summary?.trim()
-      ? { summary: input.summary.trim() }
-      : {}),
-    ...("title" in input && input.title?.trim()
-      ? { title: input.title.trim() }
-      : {}),
-    ...("triggerLabel" in input && input.triggerLabel?.trim()
-      ? { trigger_label: input.triggerLabel.trim() }
-      : {}),
-    ...("publishedExerciseId" in input && input.publishedExerciseId
-      ? { published_exercise_id: input.publishedExerciseId }
-      : {}),
-    ...("reviewNotes" in input && input.reviewNotes?.trim()
-      ? { review_notes: input.reviewNotes.trim() }
-      : {}),
-  };
-}
 
-function toExerciseDraftProposalPayload(
-  input: CreateExerciseDraftProposalInput,
-) {
-  return {
-    ...(input.category ? { category: input.category } : {}),
-    ...(input.description?.trim()
-      ? { description: input.description.trim() }
-      : {}),
-    ...(input.evidence !== undefined ? { evidence: input.evidence } : {}),
-    ...(input.handShapeProfile !== undefined
-      ? { hand_shape_profile: input.handShapeProfile }
-      : {}),
-    ...(input.instructions?.trim()
-      ? { instructions: input.instructions.trim() }
-      : {}),
-    ...(input.movementProfile !== undefined
-      ? { movement_profile: input.movementProfile }
-      : {}),
-    ...(input.muscleGroup?.trim()
-      ? { muscle_group: input.muscleGroup.trim() }
-      : {}),
-    ...(input.muscleTargets !== undefined
-      ? { muscle_targets: input.muscleTargets }
-      : {}),
-    ...(input.poseSessionId ? { pose_session_id: input.poseSessionId } : {}),
-    ...(input.proposedName?.trim()
-      ? { proposed_name: input.proposedName.trim() }
-      : {}),
-    ...(input.summary?.trim() ? { summary: input.summary.trim() } : {}),
-  };
-}
 
 function toMasteryListParams(params?: FitnessMasteryListParams) {
   return {
@@ -1940,59 +1690,6 @@ export function createFitnessApi(transport: ApiTransport) {
             toExerciseMutationPayload(input),
           ),
           "Unable to update fitness exercise.",
-        ),
-      );
-    },
-    async listExerciseReviewSubmissions(
-      params?: FitnessExerciseReviewSubmissionListParams,
-    ): Promise<FitnessPaginatedResult<ExerciseReviewSubmissionRecord>> {
-      const result =
-        await unwrapPaginatedResponse<ExerciseReviewSubmissionApiRecord>(
-          transport.get("/fitness/exercise-review-submissions", {
-            params: toExerciseReviewSubmissionListParams(params),
-          }),
-          "Unable to load exercise review submissions.",
-        );
-      return {
-        ...result,
-        data: result.data.map(mapExerciseReviewSubmission),
-      };
-    },
-    async createExerciseReviewSubmission(
-      input: CreateExerciseReviewSubmissionInput,
-    ) {
-      return mapExerciseReviewSubmission(
-        await unwrapResponse<ExerciseReviewSubmissionApiRecord>(
-          transport.post(
-            "/fitness/exercise-review-submissions",
-            toExerciseReviewSubmissionPayload(input),
-          ),
-          "Unable to submit exercise review draft.",
-        ),
-      );
-    },
-    async createExerciseDraftProposal(input: CreateExerciseDraftProposalInput) {
-      return mapExerciseDraftProposal(
-        await unwrapResponse<ExerciseDraftProposalApiRecord>(
-          transport.post(
-            "/fitness/exercise-draft-proposals",
-            toExerciseDraftProposalPayload(input),
-          ),
-          "Unable to generate exercise draft proposal.",
-        ),
-      );
-    },
-    async updateExerciseReviewSubmission(
-      submissionId: string,
-      input: UpdateExerciseReviewSubmissionInput,
-    ) {
-      return mapExerciseReviewSubmission(
-        await unwrapResponse<ExerciseReviewSubmissionApiRecord>(
-          transport.patch(
-            `/fitness/exercise-review-submissions/${submissionId}`,
-            toExerciseReviewSubmissionPayload(input),
-          ),
-          "Unable to update exercise review submission.",
         ),
       );
     },

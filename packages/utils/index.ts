@@ -5,7 +5,7 @@ export * from "./contrast";
 export * from "./date";
 export * from "./display";
 export * from "./exercise-editor";
-export * from "./exercise-creation";
+export * from "./fitness-catalog";
 export * from "./number";
 export * from "./password";
 export * from "./pose";

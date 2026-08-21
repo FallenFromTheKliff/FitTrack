@@ -14,7 +14,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Archive,
   Badge,
-  ChevronRight,
   Dumbbell,
   Flame,
   Medal,
@@ -33,8 +32,6 @@ import {
 } from "@fittrack/types";
 import type {
   CreateMuscleDefinitionInput,
-  ExerciseReviewSubmissionStatus,
-  FitnessCreatorState,
   FitnessExerciseCategory,
   FitnessExerciseRecord,
   MuscleDefinitionRecord,
@@ -45,17 +42,13 @@ import {
   archiveMuscleDefinitionMutationOptions,
   createMuscleDefinitionMutationOptions,
   createFitnessExerciseMutationOptions,
-  fitnessExerciseReviewSubmissionsQueryOptions,
   fitnessExercisesQueryOptions,
   fitnessMuscleDefinitionsQueryOptions,
   uploadImageMutationOptions,
-  updateExerciseReviewSubmissionMutationOptions,
   updateFitnessExerciseMutationOptions,
   updateMuscleDefinitionMutationOptions,
 } from "@fittrack/query";
 import {
-  normalizeExerciseHandShapeProfile,
-  normalizeExerciseMovementProfile,
   normalizeExerciseMuscleTargets,
   buildRenderableAssetUrl,
   validateExerciseEditorContract,
@@ -77,23 +70,16 @@ import type {
 } from "@/components/fit/FitTable";
 import { createExerciseDraft } from "@/components/exercise-lab/exercise-lab-data";
 import {
-  CREATOR_DECISION_STATES,
   EMPTY_LIBRARY_EXERCISES,
-  EMPTY_REVIEW_CANDIDATES,
   MUSCLE_LIBRARY_PAGE_SIZE,
   filterEmptyExerciseDraft,
   formatDate,
-  getCreatorStateTone,
   getErrorMessage,
-  getEvidenceSummary,
-  getReviewStatusColor,
   isValidOptionalHttpUrl,
   normalizeExerciseName,
-  scoreExerciseMatch,
   toTitleCase,
   type ConfirmationState,
   type ExerciseDraft,
-  type ExerciseReviewCandidateLike,
   type LibraryScope,
   type MuscleDefinitionDraft,
   type SheetState,
@@ -271,7 +257,7 @@ function useExerciseLabPageState() {
   const { message: feedbackMessage, showMessage } = useTimedMessage(
     FEEDBACK_DURATION_MS.standard,
   );
-  const [mode, setMode] = useState<SurfaceMode>("review");
+  const [mode, setMode] = useState<SurfaceMode>("library");
   const [librarySearch, setLibrarySearch] = useState("");
   const [libraryCategory, setLibraryCategory] = useState<string>("");
   const [libraryScope, setLibraryScope] = useState<LibraryScope>("active");
@@ -288,39 +274,15 @@ function useExerciseLabPageState() {
   const [editingMuscleId, setEditingMuscleId] = useState<string | null>(null);
   const [muscleEditorOpen, setMuscleEditorOpen] = useState(false);
   const [musclePage, setMusclePage] = useState(1);
-  const [reviewPage, setReviewPage] = useState(1);
-  const [reviewSearch, setReviewSearch] = useState("");
-  const [reviewStatus, setReviewStatus] = useState<
-    ExerciseReviewSubmissionStatus | ""
-  >("pending");
-  const [reviewCategory, setReviewCategory] = useState<
-    FitnessExerciseCategory | ""
-  >("");
-  const [reviewMuscleFilter, setReviewMuscleFilter] = useState("");
   const [sheetState, setSheetState] = useState<SheetState>(null);
   const [draft, setDraft] = useState<ExerciseDraft>(createExerciseDraft());
   const [activeEditorTab, setActiveEditorTab] =
     useState<ExerciseEditorTab>("basics");
   const initialDraftRef = useRef<ExerciseDraft>(createExerciseDraft());
   const [formError, setFormError] = useState<string | null>(null);
-  const [matchDrawerOpen, setMatchDrawerOpen] = useState(false);
-  const [matchSearch, setMatchSearch] = useState("");
   const [confirmationState, setConfirmationState] =
     useState<ConfirmationState>(null);
-  const [rejectTarget, setRejectTarget] =
-    useState<ExerciseReviewCandidateLike | null>(null);
-  const [rejectRationale, setRejectRationale] = useState("");
-  const [rejectValidationError, setRejectValidationError] = useState<
-    string | null
-  >(null);
-  const [selectedCandidateId, setSelectedCandidateId] = useState("");
-  const [reviewModalCandidate, setReviewModalCandidate] =
-    useState<ExerciseReviewCandidateLike | null>(null);
-  const [creatorStateDraft, setCreatorStateDraft] =
-    useState<FitnessCreatorState>("none");
-  const [creatorGovernanceNote, setCreatorGovernanceNote] = useState("");
   const [isCompact, setIsCompact] = useState(false);
-  const [viewportHeight, setViewportHeight] = useState(900);
   const canAnimate = settings.animationLevel !== "none";
   const fullMotion = settings.animationLevel === "full";
   const editorColors = useMemo<EditorColors>(
@@ -341,7 +303,6 @@ function useExerciseLabPageState() {
   useEffect(() => {
     const evaluateViewport = () => {
       setIsCompact(window.innerWidth < 1220);
-      setViewportHeight(window.innerHeight);
     };
     evaluateViewport();
     window.addEventListener("resize", evaluateViewport);
@@ -351,7 +312,6 @@ function useExerciseLabPageState() {
   useEffect(() => {
     const requestedTab = searchParams.get("tab");
     if (
-      requestedTab === "review" ||
       requestedTab === "library" ||
       requestedTab === "muscles"
     ) {
@@ -374,21 +334,6 @@ function useExerciseLabPageState() {
     replaceSurfaceRoute(nextMode);
   };
 
-  const reviewQueueQuery = useQuery(
-    fitnessExerciseReviewSubmissionsQueryOptions(webApiClient, {
-      limit: 8,
-      page: reviewPage,
-      ...(reviewStatus ? { status: reviewStatus } : {}),
-      ...(reviewSearch.trim() ? { search: reviewSearch.trim() } : {}),
-      ...(reviewCategory ? { category: reviewCategory } : {}),
-      ...(reviewMuscleFilter.trim()
-        ? { muscleGroup: reviewMuscleFilter.trim() }
-        : {}),
-    }),
-  );
-  const reviewLibraryQuery = useQuery(
-    fitnessExercisesQueryOptions(webApiClient, { limit: 60, page: 1 }),
-  );
   const libraryQuery = useQuery(
     fitnessExercisesQueryOptions(webApiClient, {
       limit: 8,
@@ -421,88 +366,22 @@ function useExerciseLabPageState() {
   const archiveMuscleDefinitionMutation = useMutation(
     archiveMuscleDefinitionMutationOptions(webApiClient, queryClient),
   );
-  const updateReviewSubmissionMutation = useMutation(
-    updateExerciseReviewSubmissionMutationOptions(webApiClient, queryClient),
-  );
   const updateExerciseMutation = useMutation(
     updateFitnessExerciseMutationOptions(webApiClient, queryClient),
   );
-  const reviewCandidates =
-    reviewQueueQuery.data?.data ?? EMPTY_REVIEW_CANDIDATES;
-  const visibleReviewCandidates = reviewCandidates;
-  const reviewViewportHeight = Math.max(540, viewportHeight - 228);
-  const workbenchMotionKey = `${mode}-${reviewModalCandidate?.id ?? "empty"}`;
+  const workbenchMotionKey = mode;
 
   useEffect(() => {
     setLibraryPage(1);
   }, [librarySearch, libraryCategory, libraryScope]);
 
   useEffect(() => {
-    setReviewPage(1);
-  }, [reviewCategory, reviewMuscleFilter, reviewSearch, reviewStatus]);
-
-  useEffect(() => {
     setMusclePage(1);
   }, [muscleSearch]);
 
-  const selectedCandidate = reviewModalCandidate;
-  const selectedCreatorTone = selectedCandidate
-    ? getCreatorStateTone(selectedCandidate.creatorState)
-    : "muted";
-  const selectedCreatorToneColor =
-    selectedCreatorTone === "success"
-      ? colors.success
-      : selectedCreatorTone === "danger"
-        ? colors.danger
-        : selectedCreatorTone === "warning"
-          ? colors.warning
-          : selectedCreatorTone === "brand"
-            ? colors.brand
-            : colors.textMuted;
-  useEffect(() => {
-    setCreatorStateDraft(selectedCandidate?.creatorState ?? "none");
-    setCreatorGovernanceNote(selectedCandidate?.creatorGovernanceNote ?? "");
-  }, [
-    selectedCandidate?.creatorGovernanceNote,
-    selectedCandidate?.creatorState,
-    selectedCandidate?.id,
-  ]);
-
-  const matchSuggestions = useMemo(() => {
-    if (!selectedCandidate) return [];
-    const reviewExercises = reviewLibraryQuery.data?.data ?? [];
-    return [...reviewExercises]
-      .map((exercise) => ({
-        exercise,
-        score: scoreExerciseMatch(selectedCandidate, exercise),
-      }))
-      .sort((left, right) => right.score - left.score)
-      .slice(0, 6);
-  }, [reviewLibraryQuery.data?.data, selectedCandidate]);
-
-  const filteredMatches = useMemo(() => {
-    if (!matchSearch.trim()) return matchSuggestions;
-    const query = matchSearch.trim().toLowerCase();
-    return matchSuggestions.filter(({ exercise }) =>
-      [exercise.name, exercise.muscleGroup, exercise.category]
-        .join(" ")
-        .toLowerCase()
-        .includes(query),
-    );
-  }, [matchSearch, matchSuggestions]);
-
-  const closestMatch = matchSuggestions[0]?.exercise ?? null;
-  const publishCandidate =
-    sheetState?.mode === "publish"
-      ? (reviewCandidates.find(
-          (candidate) => candidate.id === sheetState.candidateId,
-        ) ?? null)
-      : null;
   const sheetPending =
     createExerciseMutation.isPending ||
-    updateExerciseMutation.isPending ||
-    updateReviewSubmissionMutation.isPending;
-  const reviewMeta = reviewQueueQuery.data?.meta;
+    updateExerciseMutation.isPending;
   const libraryItems = libraryQuery.data?.data ?? EMPTY_LIBRARY_EXERCISES;
   const libraryMeta = libraryQuery.data?.meta;
   const muscleDefinitions = muscleDefinitionsQuery.data ?? [];
@@ -519,31 +398,11 @@ function useExerciseLabPageState() {
   );
   const knownGlobalExercises = useMemo(() => {
     const merged = new Map<string, FitnessExerciseRecord>();
-    for (const exercise of [
-      ...(reviewLibraryQuery.data?.data ?? []),
-      ...libraryItems,
-    ]) {
+    for (const exercise of libraryItems) {
       merged.set(exercise.id, exercise);
     }
     return Array.from(merged.values());
-  }, [libraryItems, reviewLibraryQuery.data?.data]);
-  const reviewMatchByCandidateId = useMemo(() => {
-    const reviewExercises = reviewLibraryQuery.data?.data ?? [];
-    const matchById = new Map<
-      string,
-      { exercise: FitnessExerciseRecord; score: number }
-    >();
-    for (const candidate of reviewCandidates) {
-      const match = [...reviewExercises]
-        .map((exercise) => ({
-          exercise,
-          score: scoreExerciseMatch(candidate, exercise),
-        }))
-        .sort((left, right) => right.score - left.score)[0];
-      if (match) matchById.set(candidate.id, match);
-    }
-    return matchById;
-  }, [reviewCandidates, reviewLibraryQuery.data?.data]);
+  }, [libraryItems]);
   const duplicateDraftExercise =
     draft.name.trim().length >= 3
       ? (knownGlobalExercises.find((exercise) => {
@@ -599,14 +458,6 @@ function useExerciseLabPageState() {
       complete: isValidOptionalHttpUrl(draft.videoUrl),
       label: "Video URL is valid",
     },
-    ...(sheetState?.mode === "publish"
-      ? [
-          {
-            complete: draft.publishNote.trim().length >= 12,
-            label: "Publish provenance note",
-          },
-        ]
-      : []),
   ];
   const completedDefinitionItems = definitionChecklist.filter(
     (item) => item.complete,
@@ -628,11 +479,6 @@ function useExerciseLabPageState() {
     let nextDraft: ExerciseDraft;
     if (!nextState) {
       nextDraft = createExerciseDraft();
-    } else if (nextState.mode === "publish") {
-      const candidate = reviewCandidates.find(
-        (item) => item.id === nextState.candidateId,
-      );
-      nextDraft = createExerciseDraft(candidate);
     } else if (nextState.mode === "edit") {
       nextDraft = {
         ...createExerciseDraft({
@@ -646,11 +492,10 @@ function useExerciseLabPageState() {
             nextState.exercise.muscleTargets,
             nextState.exercise.muscleGroup,
           ),
-          proposedName: nextState.exercise.name,
+          name: nextState.exercise.name,
         }),
         imageUrl: nextState.exercise.imageUrl ?? "",
         videoUrl: nextState.exercise.videoUrl ?? "",
-        publishNote: "",
       };
     } else {
       nextDraft = createExerciseDraft();
@@ -658,14 +503,6 @@ function useExerciseLabPageState() {
 
     initialDraftRef.current = nextDraft;
     setDraft(nextDraft);
-  };
-
-  const handleOpenPublish = (
-    candidate: ExerciseReviewCandidateLike | null = selectedCandidate,
-  ) => {
-    if (!candidate) return;
-    setReviewModalCandidate(null);
-    resetSheet({ mode: "publish", candidateId: candidate.id });
   };
 
   const handleOpenCreate = () => {
@@ -690,93 +527,6 @@ function useExerciseLabPageState() {
   const closeSheetAfterSave = () => {
     setConfirmationState(null);
     resetSheet(null);
-  };
-
-  const handleCreatorGovernanceUpdate = async () => {
-    if (!selectedCandidate) return;
-
-    const trimmedNote = creatorGovernanceNote.trim();
-    if (CREATOR_DECISION_STATES.has(creatorStateDraft) && !trimmedNote) {
-      showMessage("Add a short rationale before changing creator standing.");
-      return;
-    }
-
-    try {
-      const updatedCandidate = await updateReviewSubmissionMutation.mutateAsync({
-        submissionId: selectedCandidate.id,
-        payload: {
-          creatorGovernanceNote: trimmedNote || undefined,
-          creatorState: creatorStateDraft,
-        },
-      });
-      setReviewModalCandidate(updatedCandidate);
-      showMessage(
-        `${selectedCandidate.title} creator state moved to ${toTitleCase(creatorStateDraft)}.`,
-      );
-    } catch (error) {
-      showMessage(
-        getErrorMessage(error, "Unable to update creator governance state."),
-      );
-    }
-  };
-
-  const handleLeavePrivate = async (
-    candidate: ExerciseReviewCandidateLike | null = selectedCandidate,
-  ) => {
-    if (!candidate) return;
-    try {
-      await updateReviewSubmissionMutation.mutateAsync({
-        submissionId: candidate.id,
-        payload: {
-          reviewNotes:
-            "Left private from Exercise Lab review; not promoted to the global exercise library.",
-          status: "left_private",
-        },
-      });
-      showMessage(
-        `${candidate.title} was left as a private custom exercise.`,
-      );
-      setConfirmationState(null);
-      setReviewModalCandidate(null);
-      resetSheet(null);
-    } catch (error) {
-      showMessage(
-        getErrorMessage(
-          error,
-          "Unable to leave this submission as a private exercise.",
-        ),
-      );
-    }
-  };
-
-  const handleReject = async () => {
-    if (!rejectTarget) return;
-    const trimmedRationale = rejectRationale.trim();
-    if (trimmedRationale.length < 12) {
-      setRejectValidationError(
-        "Add a rejection rationale of at least 12 characters.",
-      );
-      showMessage("Add a rejection rationale of at least 12 characters.");
-      return;
-    }
-    try {
-      await updateReviewSubmissionMutation.mutateAsync({
-        submissionId: rejectTarget.id,
-        payload: {
-          reviewNotes: trimmedRationale,
-          status: "rejected",
-        },
-      });
-      showMessage(`${rejectTarget.title} was removed from the publish queue.`);
-      setRejectTarget(null);
-      setRejectRationale("");
-      setRejectValidationError(null);
-      setReviewModalCandidate(null);
-    } catch (error) {
-      showMessage(
-        getErrorMessage(error, "Unable to reject this review submission."),
-      );
-    }
   };
 
   const handleArchiveToggle = async (
@@ -981,7 +731,6 @@ function useExerciseLabPageState() {
     const name = draft.name.trim();
     const instructions = draft.instructions.trim();
     const description = draft.description.trim();
-    const publishNote = draft.publishNote.trim();
 
     if (name.length < 3)
       return "Exercise name must be at least 3 characters.";
@@ -1001,8 +750,6 @@ function useExerciseLabPageState() {
       return "Image URL must be blank or start with http:// or https://.";
     if (!isValidOptionalHttpUrl(draft.videoUrl))
       return "Video URL must be blank or start with http:// or https://.";
-    if (sheetState?.mode === "publish" && publishNote.length < 12)
-      return "Publish note needs a short provenance or audit note.";
     return null;
   };
   const draftValidationError = validateDraft();
@@ -1029,21 +776,7 @@ function useExerciseLabPageState() {
         payload: filterEmptyExerciseDraft(draft),
       });
 
-      if (sheetState?.mode === "publish") {
-        await updateReviewSubmissionMutation.mutateAsync({
-          submissionId: sheetState.candidateId,
-          payload: {
-            publishedExerciseId: createdExercise.id,
-            reviewNotes: draft.publishNote.trim(),
-            status: "published",
-          },
-        });
-        showMessage(
-          `${createdExercise.name} was published to the global library.`,
-        );
-      } else {
-        showMessage(`${createdExercise.name} was added to the global library.`);
-      }
+      showMessage(`${createdExercise.name} was added to the global library.`);
 
       handleModeChange("library");
       setLibrarySearch(createdExercise.name);
@@ -1053,45 +786,18 @@ function useExerciseLabPageState() {
     }
   };
 
-  const applyMatchReference = (exercise: FitnessExerciseRecord) => {
-    setDraft((current) => ({
-      ...current,
-      category: exercise.category,
-      muscleGroup: exercise.muscleGroup,
-      muscleTargets: normalizeExerciseMuscleTargets(
-        exercise.muscleTargets,
-        exercise.muscleGroup,
-      ),
-      movementProfile: normalizeExerciseMovementProfile(
-        exercise.movementProfile,
-        current.movementProfile ?? undefined,
-      ),
-      handShapeProfile: normalizeExerciseHandShapeProfile(
-        exercise.handShapeProfile ?? current.handShapeProfile,
-      ),
-      instructions: exercise.instructions ?? current.instructions,
-      description: exercise.description ?? current.description,
-    }));
-    setMatchDrawerOpen(false);
-    showMessage(`Copied taxonomy cues from ${exercise.name}.`);
-  };
-
   const confirmationTitle =
     confirmationState?.mode === "discard-sheet"
       ? "Discard changes?"
-      : confirmationState?.mode === "leave-private"
-        ? "Leave exercise private?"
-        : confirmationState?.mode === "archive"
-          ? confirmationState.nextActive
-            ? "Restore global exercise?"
-            : "Archive global exercise?"
-          : "";
+      : confirmationState?.mode === "archive"
+        ? confirmationState.nextActive
+          ? "Restore global exercise?"
+          : "Archive global exercise?"
+        : "";
   const confirmationMessage =
     confirmationState?.mode === "discard-sheet"
       ? "You have unsaved edits in this sheet. Closing now will drop the draft changes."
-      : confirmationState?.mode === "leave-private"
-        ? `${confirmationState.candidate.title} will leave the publish queue and remain available only as the client's private custom exercise.`
-        : confirmationState?.mode === "archive"
+      : confirmationState?.mode === "archive"
           ? confirmationState.nextActive
             ? `${confirmationState.exercise.name} will become available in the active global library again.`
             : `${confirmationState.exercise.name} will be hidden from the active global library, but can still be restored later.`
@@ -1099,17 +805,13 @@ function useExerciseLabPageState() {
   const confirmationLabel =
     confirmationState?.mode === "discard-sheet"
       ? "Discard changes"
-      : confirmationState?.mode === "leave-private"
-        ? "Leave private"
-        : confirmationState?.mode === "archive"
+      : confirmationState?.mode === "archive"
           ? confirmationState.nextActive
             ? "Restore exercise"
             : "Archive exercise"
           : "Confirm";
   const confirmationLoadingLabel =
-    confirmationState?.mode === "leave-private"
-      ? "Leaving private..."
-      : confirmationState?.mode === "archive"
+    confirmationState?.mode === "archive"
         ? confirmationState.nextActive
           ? "Restoring..."
           : "Archiving..."
@@ -1123,9 +825,7 @@ function useExerciseLabPageState() {
   const confirmationLoading =
     confirmationState?.mode === "archive"
       ? updateExerciseMutation.isPending
-      : confirmationState?.mode === "leave-private"
-        ? updateReviewSubmissionMutation.isPending
-        : false;
+      : false;
   const handleConfirmAction = () => {
     if (!confirmationState) return;
     if (confirmationState.mode === "discard-sheet") {
@@ -1133,248 +833,11 @@ function useExerciseLabPageState() {
       resetSheet(null);
       return;
     }
-    if (confirmationState.mode === "leave-private") {
-      void handleLeavePrivate(confirmationState.candidate);
-      return;
-    }
     void handleArchiveToggle(
       confirmationState.exercise,
       confirmationState.nextActive,
     );
   };
-
-  const openReviewModal = (candidate: ExerciseReviewCandidateLike) => {
-    setSelectedCandidateId(candidate.id);
-    setReviewModalCandidate(candidate);
-  };
-
-  const reviewTableColumns = useMemo<
-    FitTableColumn<ExerciseReviewCandidateLike>[]
-  >(
-    () => [
-      {
-        key: "submission",
-        heading: "Submission",
-        align: "left",
-        render: (candidate) => (
-          <div style={{ display: "grid", gap: 3, minWidth: 210 }}>
-            <FitText
-              style={{ fontSize: 12.5, fontWeight: 850, lineHeight: "17px" }}
-            >
-              {candidate.title}
-            </FitText>
-            <FitText
-              style={{
-                fontSize: 12,
-                lineHeight: "16px",
-                color: colors.textSecondary,
-              }}
-            >
-              {candidate.proposedName}
-            </FitText>
-            <div
-              style={{
-                alignItems: "center",
-                color: getReviewStatusColor(candidate.status, colors),
-                display: "inline-flex",
-                fontSize: 10.5,
-                fontWeight: 800,
-                gap: 5,
-                lineHeight: "13px",
-                width: "fit-content",
-              }}
-            >
-              <span
-                aria-hidden="true"
-                style={{
-                  backgroundColor: "currentColor",
-                  borderRadius: "50%",
-                  height: 5,
-                  width: 5,
-                }}
-              />
-              {toTitleCase(candidate.status)}
-            </div>
-          </div>
-        ),
-      },
-      {
-        key: "creator",
-        heading: "Creator",
-        align: "left",
-        render: (candidate) => {
-          const tone = getCreatorStateTone(candidate.creatorState);
-          const toneColor =
-            tone === "success"
-              ? colors.success
-              : tone === "danger"
-                ? colors.danger
-                : tone === "warning"
-                  ? colors.warning
-                  : tone === "brand"
-                    ? colors.brand
-                    : colors.textMuted;
-          return (
-            <div style={{ display: "grid", gap: 3, minWidth: 190 }}>
-              <FitText
-                style={{ fontSize: 12.5, fontWeight: 800, lineHeight: "17px" }}
-              >
-                {candidate.creatorDisplayName ?? "Creator member"}
-              </FitText>
-              <FitText
-                style={{
-                  fontSize: 11.5,
-                  lineHeight: "16px",
-                  color: colors.textSecondary,
-                }}
-              >
-                {candidate.creatorEmail ?? "Email unavailable"}
-              </FitText>
-              <FitPill
-                mode="status"
-                label={candidate.creatorStateLabel}
-                color={toneColor}
-                fontSize={9.5}
-                style={{
-                  borderRadius: 6,
-                  flexShrink: 0,
-                  marginTop: 1,
-                  paddingBlock: 1,
-                  width: "fit-content",
-                }}
-              />
-            </div>
-          );
-        },
-      },
-      {
-        key: "movement",
-        heading: "Movement",
-        align: "left",
-        render: (candidate) => (
-          <div style={{ display: "grid", gap: 3 }}>
-            <FitText
-              style={{ fontSize: 13, fontWeight: 800, lineHeight: "17px" }}
-            >
-              {toTitleCase(candidate.category)}
-            </FitText>
-            <FitText
-              style={{
-                fontSize: 12,
-                lineHeight: "16px",
-                color: colors.textSecondary,
-              }}
-            >
-              {toTitleCase(candidate.muscleGroup)}
-            </FitText>
-          </div>
-        ),
-      },
-      {
-        key: "match",
-        heading: "Closest match",
-        align: "left",
-        render: (candidate) => {
-          const match = reviewMatchByCandidateId.get(candidate.id);
-          return (
-            <div style={{ display: "grid", gap: 3, minWidth: 130 }}>
-              <FitText
-                style={{ fontSize: 13, fontWeight: 800, lineHeight: "17px" }}
-              >
-                {match?.exercise.name ?? candidate.matchHint ?? "Manual review"}
-              </FitText>
-              <FitText
-                style={{
-                  fontSize: 12,
-                  lineHeight: "16px",
-                  color: colors.textSecondary,
-                }}
-              >
-                {match ? `${Math.max(58, Math.min(96, match.score))}% fit` : "No close match"}
-              </FitText>
-            </div>
-          );
-        },
-      },
-      {
-        key: "evidence",
-        heading: "Evidence",
-        align: "left",
-        render: (candidate) => (
-          <div style={{ display: "grid", gap: 3, minWidth: 130 }}>
-            <FitText
-              style={{ fontSize: 13, fontWeight: 800, lineHeight: "17px" }}
-            >
-              {getEvidenceSummary(candidate.evidenceBars)}
-            </FitText>
-            <FitText
-              style={{
-                fontSize: 12,
-                lineHeight: "16px",
-                color: colors.textSecondary,
-              }}
-            >
-              {candidate.sourceLabel}
-            </FitText>
-          </div>
-        ),
-      },
-      {
-        key: "submitted",
-        heading: "Submitted",
-        align: "left",
-        render: (candidate) => (
-          <FitText
-            style={{
-              fontSize: 12.5,
-              lineHeight: "17px",
-              color: colors.textSecondary,
-            }}
-          >
-            {formatDate(candidate.createdAt)}
-          </FitText>
-        ),
-      },
-    ],
-    [colors, reviewMatchByCandidateId],
-  );
-
-  const reviewTableActions = useMemo<
-    FitTableAction<ExerciseReviewCandidateLike>[]
-  >(
-    () => [
-      {
-        label: "Review",
-        ariaLabel: (candidate) => `Review ${candidate.title}`,
-        variant: "ghost",
-        onClick: openReviewModal,
-        style: {
-          borderRadius: 7,
-          minHeight: 34,
-          minWidth: 82,
-        },
-      },
-      {
-        label: "Open review",
-        ariaLabel: (candidate) => `Open review for ${candidate.title}`,
-        variant: "ghost",
-        icon: ChevronRight,
-        iconOnly: true,
-        iconSize: 16,
-        onClick: openReviewModal,
-        style: {
-          backgroundColor: "transparent",
-          border: 0,
-          borderRadius: 5,
-          minHeight: 30,
-          minWidth: 30,
-          padding: 4,
-        },
-      },
-    ],
-    [],
-  );
-
   const libraryTableColumns: FitTableColumn<FitnessExerciseRecord>[] = [
     {
       key: "name",
@@ -1637,10 +1100,8 @@ function useExerciseLabPageState() {
   return {
     activeEditorTab,
     activeMuscleDefinitions,
-    applyMatchReference,
     archiveMuscleDefinitionMutation,
     canAnimate,
-    closestMatch,
     colors,
     completedDefinitionItems,
     confirmationIcon,
@@ -1653,8 +1114,6 @@ function useExerciseLabPageState() {
     contractValidation,
     createExerciseMutation,
     createMuscleDefinitionMutation,
-    creatorGovernanceNote,
-    creatorStateDraft,
     definitionChecklist,
     draft,
     draftValidationError,
@@ -1663,17 +1122,13 @@ function useExerciseLabPageState() {
     editingMuscleId,
     fadeIn,
     feedbackMessage,
-    filteredMatches,
     formError,
     fullMotion,
     handleCloseSheet,
     handleConfirmAction,
-    handleCreatorGovernanceUpdate,
     handleModeChange,
     handleMuscleIconFileChange,
     handleOpenCreate,
-    handleOpenPublish,
-    handleReject,
     handleSaveMuscleDefinition,
     handleSheetSubmit,
     isCompact,
@@ -1686,9 +1141,6 @@ function useExerciseLabPageState() {
     librarySearch,
     libraryTableActions,
     libraryTableColumns,
-    matchDrawerOpen,
-    matchSearch,
-    matchSuggestions,
     mode,
     muscleDefinitions,
     muscleDefinitionsQuery,
@@ -1700,34 +1152,12 @@ function useExerciseLabPageState() {
     muscleTableActions,
     muscleTableColumns,
     muscleTotalPages,
-    openReviewModal,
     openMuscleEditor,
     pendingMuscleIconFile,
-    publishCandidate,
-    rejectRationale,
-    rejectTarget,
-    rejectValidationError,
     resetMuscleDraft,
     closeMuscleEditor,
-    reviewCategory,
-    reviewLibraryQuery,
-    reviewMeta,
-    reviewModalCandidate,
-    reviewMuscleFilter,
-    reviewPage,
-    reviewQueueQuery,
-    reviewSearch,
-    reviewStatus,
-    reviewTableActions,
-    reviewTableColumns,
-    reviewViewportHeight,
-    selectedCandidate,
-    selectedCandidateId,
-    selectedCreatorToneColor,
     setActiveEditorTab,
     setConfirmationState,
-    setCreatorGovernanceNote,
-    setCreatorStateDraft,
     setDraft,
     setDraftField,
     setFormError,
@@ -1735,23 +1165,11 @@ function useExerciseLabPageState() {
     setLibraryPage,
     setLibraryScope,
     setLibrarySearch,
-    setMatchDrawerOpen,
-    setMatchSearch,
     setMode,
     setMuscleDraft,
     setMusclePage,
     setMuscleSearch,
     selectMuscleLibraryIcon,
-    setRejectRationale,
-    setRejectTarget,
-    setRejectValidationError,
-    setReviewCategory,
-    setReviewModalCandidate,
-    setReviewMuscleFilter,
-    setReviewPage,
-    setReviewSearch,
-    setReviewStatus,
-    setSelectedCandidateId,
     sheetPending,
     sheetState,
     showMessage,
@@ -1762,9 +1180,7 @@ function useExerciseLabPageState() {
     updateExerciseMutation,
     updateMuscleDefinitionMutation,
     uploadMuscleIconMutation,
-    updateReviewSubmissionMutation,
     visibleMuscleDefinitions,
-    visibleReviewCandidates,
     workbenchMotionKey,
   };
 }

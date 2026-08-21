@@ -607,7 +607,7 @@ export function PaymentReturnPage({ variant }: { variant: PaymentReturnVariant }
           resetReconcile();
           reconcileHold(holdId);
         },
-        variant: "ghost",
+        variant: "ghost" as const,
       }
     : undefined;
 

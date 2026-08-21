@@ -311,26 +311,16 @@ describe('PoseService', () => {
       poseSessionId: 'pose-1',
       exerciseHint: null,
       starterCatalog: [
-        'push_up',
-        'pull_up',
         'squat',
+        'bench_press',
         'bicep_curl',
-        'shoulder_press',
+        'dip',
         'plank',
+        'pull_up',
+        'push_up',
+        'shoulder_press',
       ],
-      candidateProfiles: [
-        {
-          id: 'profile-1',
-          canonical_name: 'squat',
-          profile_kind: PoseProfileKind.seed,
-          landmark_signature: { left_shoulder: [0.1, 0.2] },
-          angle_signature: { hip_knee_ankle: 92.4 },
-          orientation_signature: {},
-          movement_pattern: {},
-          visibility_pattern: {},
-          rep_rules: { rep_start_angle: 88 },
-        },
-      ],
+      candidateProfiles: [],
     });
   });
 
@@ -599,8 +589,8 @@ describe('PoseService', () => {
     expect(result.exercise_class).toBe('push_up');
     expect(result.classification_source).toBe('classifier');
     expect(result.processing_mode).toBe('sequence');
-    expect(result.movement_contract?.exercise).toBe('push_up');
-    expect(result.movement_contract?.dominant_joint).toBe('elbow');
+    expect(result.movement_contract).toBeNull();
+    expect(result.needs_confirmation).toBe(true);
   });
 
   it('accepts native frame payloads through the owned analyze endpoint', async () => {
@@ -709,7 +699,7 @@ describe('PoseService', () => {
     );
   });
 
-  it('generates and backfills a movement contract when a matched push-up preset has no thresholds yet', async () => {
+  it('keeps an incomplete learned profile manual-only', async () => {
     repo.findPoseSessionByIdOrThrow.mockResolvedValue(makePoseSessionDetail());
     repo.listBootstrapPoseProfiles.mockResolvedValue([
       {
@@ -791,7 +781,7 @@ describe('PoseService', () => {
     repo.updatePoseSessionAnalysis.mockResolvedValue(
       makePoseSessionDetail({
         detected_exercise_name: 'push_up',
-        detected_profile_id: 'profile-push-up-learned',
+        detected_profile_id: null,
       }),
     );
 
@@ -847,29 +837,11 @@ describe('PoseService', () => {
       }),
     );
 
-    const learnedProfileCalls = repo.upsertLearnedPoseProfile.mock
-      .calls as Array<
-      [
-        {
-          canonicalName: string;
-          dominantJoint: string | null;
-          repThresholds: {
-            down: { angle: number; tolerance: number };
-            up: { angle: number; tolerance: number };
-          } | null;
-        },
-      ]
-    >;
-    const learnedProfileInput = learnedProfileCalls[0][0];
-    expect(learnedProfileInput.canonicalName).toBe('push_up');
-    expect(learnedProfileInput.dominantJoint).toBe('elbow');
-    expect(typeof learnedProfileInput.repThresholds?.down.angle).toBe('number');
-    expect(typeof learnedProfileInput.repThresholds?.up.angle).toBe('number');
+    expect(repo.upsertLearnedPoseProfile).not.toHaveBeenCalled();
     expect(result.exercise_class).toBe('push_up');
-    expect(result.matched_profile_id).toBe('profile-push-up-learned');
-    expect(result.needs_confirmation).toBe(false);
-    expect(result.movement_contract?.exercise).toBe('push_up');
-    expect(result.movement_contract?.dominant_joint).toBe('elbow');
+    expect(result.matched_profile_id).toBeNull();
+    expect(result.needs_confirmation).toBe(true);
+    expect(result.movement_contract).toBeNull();
   });
 
   it('returns provider-unavailable equipment metadata when hosted detection is not configured', async () => {

@@ -43,7 +43,6 @@ describe('GamificationService', () => {
     resolveIntegrityCase: jest.fn(),
     restoreProgressionGrant: jest.fn(),
     syncMilestoneProgressForUser: jest.fn(),
-    updateCreatorState: jest.fn(),
     upsertRankingProfile: jest.fn(),
     upsertMuscleMasteryProgress: jest.fn(),
     updateMuscleMasteryRank: jest.fn(),
@@ -1376,29 +1375,6 @@ describe('GamificationService', () => {
           },
         ],
       },
-      creatorCounts: {
-        none: 0,
-        candidate: 1,
-        pending_review: 0,
-        approved: 2,
-        suspended: 0,
-        revoked: 0,
-      },
-      creatorProfiles: [
-        {
-          user_id: 'user-2',
-          state: 'candidate',
-          admin_notes: 'Strong submissions.',
-          last_state_changed_at: new Date('2026-04-03T00:00:00.000Z'),
-          user: {
-            profile: { first_name: 'Casey', last_name: 'Creator' },
-            exercise_review_submissions: [
-              { status: 'published' },
-              { status: 'pending' },
-            ],
-          },
-        },
-      ],
       disqualifiedRankingCount: 0,
       escalatedCaseCount: 1,
       governedRankingCount: 1,
@@ -1467,17 +1443,6 @@ describe('GamificationService', () => {
           {
             user_id: 'user-1',
             season_is_hidden: true,
-          },
-        ],
-      },
-      creators: {
-        candidate_count: 1,
-        profiles: [
-          {
-            user_id: 'user-2',
-            state_label: 'Candidate',
-            published_submission_count: 1,
-            submission_count: 2,
           },
         ],
       },
@@ -1695,33 +1660,6 @@ describe('GamificationService', () => {
         rationale: 'Reopen archived season.',
       }),
     ).rejects.toThrow('Cannot move a archived season to active.');
-  });
-
-  it('updates creator governance state through the repository path', async () => {
-    repo.updateCreatorState.mockResolvedValue({
-      userId: 'user-1',
-      userName: 'Casey Creator',
-      state: 'approved',
-      adminNotes: 'Creator workflow enabled.',
-      lastStateChangedAt: new Date('2026-04-03T00:00:00.000Z'),
-      moderationActionId: 'action-creator-1',
-    });
-
-    await expect(
-      service.adminUpdateCreatorState('admin-1', 'user-1', {
-        state: 'approved',
-        rationale: 'High-signal submissions.',
-        admin_notes: 'Creator workflow enabled.',
-      }),
-    ).resolves.toEqual({
-      user_id: 'user-1',
-      member_name: 'Casey Creator',
-      state: 'approved',
-      state_label: 'Approved',
-      admin_notes: 'Creator workflow enabled.',
-      last_state_changed_at: '2026-04-03T00:00:00.000Z',
-      moderation_action_id: 'action-creator-1',
-    });
   });
 
   it('voids a progression grant through the moderation repository path', async () => {

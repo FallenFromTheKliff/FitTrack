@@ -1,7 +1,12 @@
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import type { PrismaClient } from '@prisma/client';
-import type { DynamicSeedConfig, MemberCohort, SeedCredential } from './types';
+import type {
+  DynamicSeedConfig,
+  MemberCohort,
+  ScenarioDimensionCounts,
+  SeedCredential,
+} from './types';
 
 export const DYNAMIC_SEED_MANIFEST_PATH = resolve(
   process.cwd(),
@@ -44,7 +49,6 @@ export const MODEL_DELEGATES = [
   'coachClientRelationship',
   'exerciseCatalog',
   'muscleDefinition',
-  'exerciseReviewSubmission',
   'trainingPlan',
   'trainingScheduleDay',
   'planExercise',
@@ -67,7 +71,6 @@ export const MODEL_DELEGATES = [
   'integrityProfile',
   'integrityCase',
   'integrityEvent',
-  'creatorProfile',
   'moderationActionRecord',
   'tdeeProfile',
   'macroTarget',
@@ -127,6 +130,8 @@ export type DynamicSeedIntegritySummary = {
     }
   >;
   scenarioMatrix: Record<string, string>;
+  roleCounts: Record<string, number>;
+  scenarioCounts: ScenarioDimensionCounts;
   status: DynamicSeedIntegrityStatus;
   summary: Record<string, number>;
   targets: Record<string, number>;
@@ -159,6 +164,8 @@ export type DynamicSeedManifest = {
   modelCoverage: typeof MODEL_COVERAGE;
   manifestPath: string;
   notableIds: Record<string, string>;
+  roleCounts: Record<string, number>;
+  scenarioCounts: ScenarioDimensionCounts;
   runAt: string;
 };
 
@@ -252,6 +259,8 @@ export async function writeDynamicSeedManifest(args: {
   credentials: SeedCredential[];
   integrity: DynamicSeedIntegritySummary;
   notableIds: Record<string, string>;
+  roleCounts?: Record<string, number>;
+  scenarioCounts?: ScenarioDimensionCounts;
 }) {
   await mkdir(dirname(DYNAMIC_SEED_MANIFEST_PATH), { recursive: true });
 
@@ -281,6 +290,8 @@ export async function writeDynamicSeedManifest(args: {
     manifestPath: DYNAMIC_SEED_MANIFEST_PATH,
     modelCoverage: MODEL_COVERAGE,
     notableIds: args.notableIds,
+    roleCounts: args.roleCounts ?? args.integrity.roleCounts,
+    scenarioCounts: args.scenarioCounts ?? args.integrity.scenarioCounts,
     runAt: new Date().toISOString(),
   };
 

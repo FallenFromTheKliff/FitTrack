@@ -4,7 +4,6 @@ import {
   type QueryClient,
 } from "@tanstack/react-query";
 import type {
-  AdminGamificationCreatorStateInput,
   AdminGamificationIntegrityResolutionInput,
   AdminGamificationMuscleLeaderboardListParams,
   AdminGamificationSeasonCreateInput,
@@ -175,29 +174,6 @@ export function updateAdminGamificationSeasonStatusMutationOptions(
       seasonId: string;
     }) => client.admin.updateGamificationSeasonStatus(seasonId, payload),
     onSuccess: () => invalidateAdminGamificationRankingViews(queryClient),
-  });
-}
-
-export function updateAdminGamificationCreatorStateMutationOptions(
-  client: Pick<ApiClient, "admin">,
-  queryClient: QueryClient,
-) {
-  return mutationOptions({
-    mutationFn: ({
-      payload,
-      userId,
-    }: {
-      payload: AdminGamificationCreatorStateInput;
-      userId: string;
-    }) => client.admin.updateGamificationCreatorState(userId, payload),
-    onSuccess: async () => {
-      await Promise.all([
-        invalidateAdminGamificationOverviewQuery(queryClient),
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.fitnessExerciseReviewSubmissions(),
-        }),
-      ]);
-    },
   });
 }
 

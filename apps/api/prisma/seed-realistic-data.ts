@@ -8,10 +8,8 @@ import {
   ChatContext,
   ChatRole,
   CoachScheduleType,
-  CreatorState,
   EquipmentStatus,
   ExerciseCategory,
-  ExerciseReviewSubmissionStatus,
   FitnessGoal,
   Gender,
   GymChatRole,
@@ -2026,37 +2024,6 @@ async function ensureFitnessAndTraining() {
     },
   });
 
-  await prisma.exerciseReviewSubmission.upsert({
-    where: { id: id('exercise-review:pushup-variant') },
-    update: {
-      status: ExerciseReviewSubmissionStatus.pending,
-      title: 'Incline Push-Up Review',
-      proposed_name: 'Incline Push-Up',
-      summary: 'Member submitted an incline push-up variant for review.',
-      category: ExerciseCategory.strength,
-      muscle_group: 'chest',
-      muscle_targets: json(['chest', 'triceps']),
-      movement_profile: json({ pattern: 'horizontal_push', incline: true }),
-      hand_shape_profile: json({ grip: 'bench_edge' }),
-      evidence_bars: json([{ label: 'Similarity', value: 0.72 }]),
-    },
-    create: {
-      id: id('exercise-review:pushup-variant'),
-      user_id: accountId['member-active'],
-      pose_session_id: null,
-      published_exercise_id: id('exercise:pushup'),
-      status: ExerciseReviewSubmissionStatus.pending,
-      title: 'Incline Push-Up Review',
-      proposed_name: 'Incline Push-Up',
-      summary: 'Member submitted an incline push-up variant for review.',
-      category: ExerciseCategory.strength,
-      muscle_group: 'chest',
-      muscle_targets: json(['chest', 'triceps']),
-      movement_profile: json({ pattern: 'horizontal_push', incline: true }),
-      hand_shape_profile: json({ grip: 'bench_edge' }),
-      evidence_bars: json([{ label: 'Similarity', value: 0.72 }]),
-    },
-  });
 }
 
 async function ensureGamification() {
@@ -2333,22 +2300,6 @@ async function ensureGamification() {
       risk_level: IntegrityRiskLevel.medium,
       details: json({ duplicatePoseSessionIds: ['local-cache-replay'] }),
       is_resolved: true,
-    },
-  });
-
-  await prisma.creatorProfile.upsert({
-    where: { user_id: accountId['member-active'] },
-    update: {
-      state: CreatorState.candidate,
-      last_state_changed_at: nowPlusDays(-4),
-      admin_notes: 'Strong exercise submissions, awaiting second review.',
-    },
-    create: {
-      id: id('creator-profile:active'),
-      user_id: accountId['member-active'],
-      state: CreatorState.candidate,
-      last_state_changed_at: nowPlusDays(-4),
-      admin_notes: 'Strong exercise submissions, awaiting second review.',
     },
   });
 
@@ -3780,13 +3731,6 @@ async function ensureBulkOperationalData() {
 
       if (index < 18 && sessionIndex === 1) {
         const poseSessionId = id(`pose-session:${account.key}`);
-        const reviewSubmissionId = id(`exercise-review:${account.key}`);
-        const reviewStatus =
-          index % 3 === 0
-            ? ExerciseReviewSubmissionStatus.pending
-            : index % 3 === 1
-              ? ExerciseReviewSubmissionStatus.published
-              : ExerciseReviewSubmissionStatus.rejected;
         await prisma.poseSession.upsert({
           where: { id: poseSessionId },
           update: {
@@ -3818,104 +3762,6 @@ async function ensureBulkOperationalData() {
           },
         });
 
-        await prisma.exerciseReviewSubmission.upsert({
-          where: { id: reviewSubmissionId },
-          update: {
-            user_id: accountId[account.key],
-            pose_session_id: poseSessionId,
-            published_exercise_id:
-              reviewStatus === ExerciseReviewSubmissionStatus.published
-                ? id('exercise:pushup')
-                : null,
-            status: reviewStatus,
-            source_label: 'member capture',
-            origin_label: 'pose-assisted exercise lab',
-            queue_tag:
-              reviewStatus === ExerciseReviewSubmissionStatus.pending
-                ? 'needs review'
-                : 'resolved',
-            trigger_label: 'movement proposal from pose replay',
-            title: 'Incline Push-Up Variant Review',
-            proposed_name: 'Incline Push-Up',
-            summary:
-              'Member submitted a realistic incline push-up draft for operator review.',
-            match_hint: 'Similar to Push-Up with elevated hand placement.',
-            category: ExerciseCategory.strength,
-            muscle_group: 'chest',
-            muscle_targets: json(['chest', 'triceps', 'front_delts']),
-            movement_profile: json({
-              pattern: 'horizontal_push',
-              incline: true,
-            }),
-            hand_shape_profile: json({ grip: 'bench_edge' }),
-            description:
-              'Controlled incline push-up variation proposed from recent pose capture.',
-            instructions:
-              'Brace through the core, keep elbows stacked, and lower with control.',
-            evidence_bars: json([
-              { label: 'Similarity', value: 0.82 },
-              { label: 'Confidence', value: 0.84 },
-            ]),
-            review_notes:
-              reviewStatus === ExerciseReviewSubmissionStatus.rejected
-                ? 'Rejected after reviewing duplicate evidence against an existing pattern.'
-                : reviewStatus === ExerciseReviewSubmissionStatus.published
-                  ? 'Published after confirming the captured movement contract.'
-                  : null,
-            reviewed_at:
-              reviewStatus === ExerciseReviewSubmissionStatus.pending
-                ? null
-                : nowPlusDays(-(1 + (index % 8)), 16),
-          },
-          create: {
-            id: reviewSubmissionId,
-            user_id: accountId[account.key],
-            pose_session_id: poseSessionId,
-            published_exercise_id:
-              reviewStatus === ExerciseReviewSubmissionStatus.published
-                ? id('exercise:pushup')
-                : null,
-            status: reviewStatus,
-            source_label: 'member capture',
-            origin_label: 'pose-assisted exercise lab',
-            queue_tag:
-              reviewStatus === ExerciseReviewSubmissionStatus.pending
-                ? 'needs review'
-                : 'resolved',
-            trigger_label: 'movement proposal from pose replay',
-            title: 'Incline Push-Up Variant Review',
-            proposed_name: 'Incline Push-Up',
-            summary:
-              'Member submitted a realistic incline push-up draft for operator review.',
-            match_hint: 'Similar to Push-Up with elevated hand placement.',
-            category: ExerciseCategory.strength,
-            muscle_group: 'chest',
-            muscle_targets: json(['chest', 'triceps', 'front_delts']),
-            movement_profile: json({
-              pattern: 'horizontal_push',
-              incline: true,
-            }),
-            hand_shape_profile: json({ grip: 'bench_edge' }),
-            description:
-              'Controlled incline push-up variation proposed from recent pose capture.',
-            instructions:
-              'Brace through the core, keep elbows stacked, and lower with control.',
-            evidence_bars: json([
-              { label: 'Similarity', value: 0.82 },
-              { label: 'Confidence', value: 0.84 },
-            ]),
-            review_notes:
-              reviewStatus === ExerciseReviewSubmissionStatus.rejected
-                ? 'Rejected after reviewing duplicate evidence against an existing pattern.'
-                : reviewStatus === ExerciseReviewSubmissionStatus.published
-                  ? 'Published after confirming the captured movement contract.'
-                  : null,
-            reviewed_at:
-              reviewStatus === ExerciseReviewSubmissionStatus.pending
-                ? null
-                : nowPlusDays(-(1 + (index % 8)), 16),
-          },
-        });
       }
     }
   }
@@ -4138,31 +3984,6 @@ async function ensureBulkOperationalData() {
       },
     });
 
-    if (index < 12) {
-      await prisma.creatorProfile.upsert({
-        where: { user_id: accountId[account.key] },
-        update: {
-          state:
-            index % 3 === 0
-              ? CreatorState.pending_review
-              : CreatorState.candidate,
-          last_state_changed_at: nowPlusDays(-(2 + index), 17),
-          admin_notes:
-            'Bulk realistic creator profile seeded from exercise review queue.',
-        },
-        create: {
-          id: id(`creator-profile:${account.key}`),
-          user_id: accountId[account.key],
-          state:
-            index % 3 === 0
-              ? CreatorState.pending_review
-              : CreatorState.candidate,
-          last_state_changed_at: nowPlusDays(-(2 + index), 17),
-          admin_notes:
-            'Bulk realistic creator profile seeded from exercise review queue.',
-        },
-      });
-    }
   }
 
   for (const [index, account] of ACCOUNTS.slice(0, 140).entries()) {
@@ -4411,7 +4232,6 @@ async function buildCounts() {
     coachClientRelationships: await prisma.coachClientRelationship.count(),
     exerciseCatalog: await prisma.exerciseCatalog.count(),
     muscleDefinitions: await prisma.muscleDefinition.count(),
-    exerciseReviewSubmissions: await prisma.exerciseReviewSubmission.count(),
     trainingPlans: await prisma.trainingPlan.count(),
     trainingScheduleDays: await prisma.trainingScheduleDay.count(),
     planExercises: await prisma.planExercise.count(),
@@ -4431,7 +4251,6 @@ async function buildCounts() {
     integrityProfiles: await prisma.integrityProfile.count(),
     integrityCases: await prisma.integrityCase.count(),
     integrityEvents: await prisma.integrityEvent.count(),
-    creatorProfiles: await prisma.creatorProfile.count(),
     moderationActionRecords: await prisma.moderationActionRecord.count(),
     tdeeProfiles: await prisma.tdeeProfile.count(),
     macroTargets: await prisma.macroTarget.count(),

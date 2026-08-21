@@ -319,9 +319,6 @@ export async function invalidateFitnessQueries(
       queryKey: queryKeys.fitnessExercises(),
     }),
     queryClient.invalidateQueries({
-      queryKey: queryKeys.fitnessExerciseReviewSubmissions(),
-    }),
-    queryClient.invalidateQueries({
       predicate: (query) => {
         const [scope, area, queryUserId] = query.queryKey as [
           string,

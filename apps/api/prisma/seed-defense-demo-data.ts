@@ -50,6 +50,15 @@ import { createHash } from 'node:crypto';
 
 import { localEnvFilePath } from '../env-path';
 import { TEST_ACCOUNTS, type TestAccount, seedId } from './test-data/constants';
+import {
+  CANONICAL_EXERCISE_CATALOG,
+  CANONICAL_POSE_CAPABILITIES,
+  getCanonicalPoseCapability,
+} from '../../../packages/utils/fitness-catalog';
+import {
+  buildFallbackPoseMovementContract,
+  isValidPoseMovementContract,
+} from '../../../packages/utils/pose';
 
 config(localEnvFilePath ? { path: localEnvFilePath } : undefined);
 
@@ -106,6 +115,8 @@ type PlanSeed = {
 };
 
 type ExerciseSeed = {
+  id: string;
+  key: string;
   name: string;
   muscleGroup: string;
   category: ExerciseCategory;
@@ -373,65 +384,14 @@ function buildAccounts() {
 }
 
 function buildExercises(): ExerciseSeed[] {
-  return [
-    ['Push-Up', 'chest', 'shoulder'],
-    ['Incline Push-Up', 'chest', 'shoulder'],
-    ['Bench Press', 'chest', 'elbow'],
-    ['Dumbbell Bench Press', 'chest', 'elbow'],
-    ['Chest Fly', 'chest', 'shoulder'],
-    ['Pull-Up', 'back', 'elbow'],
-    ['Lat Pulldown', 'back', 'elbow'],
-    ['Seated Cable Row', 'back', 'elbow'],
-    ['Bent-Over Row', 'back', 'hip'],
-    ['Single-Arm Row', 'back', 'elbow'],
-    ['Bodyweight Squat', 'quads', 'knee'],
-    ['Goblet Squat', 'quads', 'knee'],
-    ['Back Squat', 'quads', 'knee'],
-    ['Front Squat', 'quads', 'knee'],
-    ['Leg Press', 'quads', 'knee'],
-    ['Walking Lunge', 'quads', 'knee'],
-    ['Reverse Lunge', 'glutes', 'knee'],
-    ['Romanian Deadlift', 'hamstrings', 'hip'],
-    ['Conventional Deadlift', 'hamstrings', 'hip'],
-    ['Hip Thrust', 'glutes', 'hip'],
-    ['Glute Bridge', 'glutes', 'hip'],
-    ['Leg Curl', 'hamstrings', 'knee'],
-    ['Leg Extension', 'quads', 'knee'],
-    ['Standing Calf Raise', 'calves', 'ankle'],
-    ['Seated Calf Raise', 'calves', 'ankle'],
-    ['Shoulder Press', 'shoulders', 'shoulder'],
-    ['Lateral Raise', 'shoulders', 'shoulder'],
-    ['Rear Delt Fly', 'shoulders', 'shoulder'],
-    ['Face Pull', 'shoulders', 'shoulder'],
-    ['Biceps Curl', 'biceps', 'elbow'],
-    ['Hammer Curl', 'biceps', 'elbow'],
-    ['Triceps Pushdown', 'triceps', 'elbow'],
-    ['Overhead Triceps Extension', 'triceps', 'elbow'],
-    ['Plank', 'core', 'hip'],
-    ['Side Plank', 'core', 'hip'],
-    ['Dead Bug', 'core', 'hip'],
-    ['Mountain Climber', 'core', 'hip'],
-    ['Russian Twist', 'core', 'spine'],
-    ['Burpee', 'full_body', 'hip'],
-    ['Jumping Jack', 'cardio', 'shoulder'],
-    ['High Knees', 'cardio', 'hip'],
-    ['Box Jump', 'power', 'knee'],
-    ['Kettlebell Swing', 'power', 'hip'],
-    ['Battle Rope Slam', 'conditioning', 'shoulder'],
-    ['Rowing Machine Pull', 'cardio', 'elbow'],
-    ['Stationary Bike Sprint', 'cardio', 'knee'],
-    ['Treadmill Run', 'cardio', 'knee'],
-    ['Medicine Ball Slam', 'power', 'shoulder'],
-    ['Cable Woodchop', 'core', 'spine'],
-    ['Assisted Dip', 'triceps', 'elbow'],
-  ].map(([name, muscleGroup, dominantJoint], index) => ({
-    name,
-    muscleGroup,
-    dominantJoint,
-    category:
-      index >= 39 && index <= 46
-        ? ExerciseCategory.cardio
-        : ExerciseCategory.strength,
+  return CANONICAL_EXERCISE_CATALOG.map((exercise) => ({
+    id: seedId(`exercise:${exercise.key}`),
+    key: exercise.key,
+    name: exercise.name,
+    muscleGroup: exercise.muscleGroup,
+    category: exercise.category as ExerciseCategory,
+    dominantJoint:
+      getCanonicalPoseCapability(exercise.key)?.dominantJoint ?? 'none',
   }));
 }
 
@@ -1229,102 +1189,158 @@ async function ensureAmenities() {
 }
 
 async function ensureExercises() {
-  for (const exercise of buildExercises()) {
-    const exerciseId = id(`exercise:${slugify(exercise.name)}`);
+  const exercises = buildExercises();
+  const poseProfiles = new Map(
+    CANONICAL_POSE_CAPABILITIES.map((capability) => {
+      const exercise = exercises.find(
+        (candidate) => candidate.key === capability.exerciseKey,
+      );
+      const contract = buildFallbackPoseMovementContract(
+        capability.contractExercise,
+      );
+      if (!exercise || !contract || !isValidPoseMovementContract(contract)) {
+        throw new Error(
+          `Invalid canonical defense pose contract for ${capability.exerciseKey}.`,
+        );
+      }
+      return [capability.exerciseKey, { contract, exercise }];
+    }),
+  );
+  const supportedExerciseIds = [...poseProfiles.values()].map(
+    ({ exercise }) => exercise.id,
+  );
+
+  for (const exercise of exercises) {
     await prisma.exerciseCatalog.upsert({
-      where: { id: exerciseId },
+      where: { id: exercise.id },
       update: {
         name: exercise.name,
         muscle_group: exercise.muscleGroup,
         category: exercise.category,
         muscle_targets: json({
           primary: [exercise.muscleGroup],
-          secondary: ['core', 'stabilizers'],
+          secondary: ['core'],
         }),
         movement_profile: json({
-          pattern: exercise.dominantJoint === 'hip' ? 'hinge' : 'flex_extend',
+          pattern:
+            exercise.category === ExerciseCategory.cardio
+              ? 'cyclic'
+              : 'strength_reps',
           dominantJoint: exercise.dominantJoint,
         }),
         hand_shape_profile: json({ grip: 'neutral_or_standard' }),
         is_active: true,
-        description: `${exercise.name} seeded for camera-assisted rep tracking demos.`,
+        description: `${exercise.name} seeded for defense demo catalog coverage.`,
         instructions:
           'Use controlled tempo and complete the full safe range of motion.',
       },
       create: {
-        id: exerciseId,
+        id: exercise.id,
         name: exercise.name,
         muscle_group: exercise.muscleGroup,
         category: exercise.category,
         muscle_targets: json({
           primary: [exercise.muscleGroup],
-          secondary: ['core', 'stabilizers'],
+          secondary: ['core'],
         }),
         movement_profile: json({
-          pattern: exercise.dominantJoint === 'hip' ? 'hinge' : 'flex_extend',
+          pattern:
+            exercise.category === ExerciseCategory.cardio
+              ? 'cyclic'
+              : 'strength_reps',
           dominantJoint: exercise.dominantJoint,
         }),
         hand_shape_profile: json({ grip: 'neutral_or_standard' }),
-        description: `${exercise.name} seeded for camera-assisted rep tracking demos.`,
+        description: `${exercise.name} seeded for defense demo catalog coverage.`,
         instructions:
           'Use controlled tempo and complete the full safe range of motion.',
       },
     });
+  }
 
+  await prisma.poseExerciseProfile.updateMany({
+    where: {
+      profile_kind: PoseProfileKind.seed,
+      is_active: true,
+      OR: [
+        { exercise_id: null },
+        { exercise_id: { notIn: supportedExerciseIds } },
+      ],
+    },
+    data: { is_active: false },
+  });
+
+  for (const [exerciseKey, { contract, exercise }] of poseProfiles) {
+    const tracking = contract.trackingRequirements;
+    const profileId = seedId(`pose-profile:${exerciseKey}`);
+    const profileData = {
+      exercise_id: exercise.id,
+      canonical_name: contract.exercise,
+      profile_kind: PoseProfileKind.seed,
+      landmark_signature: json({
+        anchors: contract.primaryJoints ?? [],
+        required_landmarks: tracking?.requiredLandmarks ?? [],
+        source: 'defense-demo-seed',
+      }),
+      angle_signature: json({
+        contract_version: contract.contractVersion,
+        dominant_joint: contract.dominantJoint,
+        down: contract.repThresholds.down,
+        up: contract.repThresholds.up,
+      }),
+      orientation_signature: json({
+        body_orientation: contract.bodyOrientation ?? 'any',
+        contract_version: contract.contractVersion,
+      }),
+      movement_pattern: json({
+        no_count_conditions: contract.noCountConditions ?? [],
+        oscillating_landmarks: contract.oscillatingJoints,
+        phase_order: contract.phaseOrder ?? [],
+        rep_model: contract.repModel,
+        tracked_joint: contract.primaryJoints ?? [contract.dominantJoint],
+      }),
+      visibility_pattern: json({
+        min_visibility: tracking?.minConfidence ?? 0.6,
+        min_reliable_frame_landmarks: tracking?.minReliableFrameLandmarks ?? 12,
+        required_landmarks: tracking?.requiredLandmarks ?? [],
+      }),
+      dominant_joint: contract.dominantJoint,
+      tolerance: money(
+        (
+          (contract.repThresholds.down.tolerance +
+            contract.repThresholds.up.tolerance) /
+          2
+        ).toFixed(2),
+      ),
+      rep_thresholds: json({
+        down: contract.repThresholds.down,
+        up: contract.repThresholds.up,
+      }),
+      rep_rules: json({
+        count:
+          contract.repModel === 'static_hold'
+            ? 'static_hold'
+            : 'phase_crossing',
+        contract_version: contract.contractVersion,
+        hold_duration_seconds: contract.holdDurationSeconds ?? null,
+        minimum_visibility: tracking?.minConfidence ?? 0.6,
+        primary_joints: contract.primaryJoints ?? [],
+        required_sides: contract.requiredSides,
+        phase_order: contract.phaseOrder ?? [],
+        rep_model: contract.repModel,
+        secondary_check: contract.secondaryCheck,
+        secondary_joints: contract.secondaryJoints ?? [],
+        spatial_requirements: contract.spatialRequirements ?? null,
+        tracking_requirements: tracking ?? null,
+      }),
+      sample_count: 15,
+      confidence_threshold: money((tracking?.minConfidence ?? 0.6).toFixed(3)),
+      is_active: true,
+    };
     await prisma.poseExerciseProfile.upsert({
-      where: { id: id(`pose-profile:${slugify(exercise.name)}`) },
-      update: {
-        exercise_id: exerciseId,
-        canonical_name: exercise.name,
-        profile_kind: PoseProfileKind.seed,
-        landmark_signature: json({
-          required: ['shoulder', 'hip', 'knee', 'ankle', 'elbow', 'wrist'],
-        }),
-        angle_signature: json({
-          primary: exercise.dominantJoint,
-          minDegrees: 55,
-          maxDegrees: 170,
-        }),
-        orientation_signature: json({ accepted: ['front', 'side'] }),
-        movement_pattern: json({
-          phase: ['eccentric', 'concentric'],
-          repSignal: `${exercise.dominantJoint}_angle_delta`,
-        }),
-        visibility_pattern: json({ minLandmarks: 8, minVisibility: 0.55 }),
-        dominant_joint: exercise.dominantJoint,
-        tolerance: money(0.18),
-        rep_thresholds: json({ bottom: 70, top: 155, minDelta: 35 }),
-        rep_rules: json({ requireLockout: false, debounceMs: 250 }),
-        sample_count: 12,
-        confidence_threshold: money('0.760'),
-        is_active: true,
-      },
-      create: {
-        id: id(`pose-profile:${slugify(exercise.name)}`),
-        exercise_id: exerciseId,
-        canonical_name: exercise.name,
-        profile_kind: PoseProfileKind.seed,
-        landmark_signature: json({
-          required: ['shoulder', 'hip', 'knee', 'ankle', 'elbow', 'wrist'],
-        }),
-        angle_signature: json({
-          primary: exercise.dominantJoint,
-          minDegrees: 55,
-          maxDegrees: 170,
-        }),
-        orientation_signature: json({ accepted: ['front', 'side'] }),
-        movement_pattern: json({
-          phase: ['eccentric', 'concentric'],
-          repSignal: `${exercise.dominantJoint}_angle_delta`,
-        }),
-        visibility_pattern: json({ minLandmarks: 8, minVisibility: 0.55 }),
-        dominant_joint: exercise.dominantJoint,
-        tolerance: money(0.18),
-        rep_thresholds: json({ bottom: 70, top: 155, minDelta: 35 }),
-        rep_rules: json({ requireLockout: false, debounceMs: 250 }),
-        sample_count: 12,
-        confidence_threshold: money('0.760'),
-      },
+      where: { id: profileId },
+      update: profileData,
+      create: { id: profileId, ...profileData },
     });
   }
 }
@@ -1693,7 +1709,13 @@ async function ensureAttendanceNutritionAndWorkouts(
 
       for (let set = 1; set <= 2; set += 1) {
         const exercise = exercises[(index + session + set) % exercises.length];
-        const exerciseId = id(`exercise:${slugify(exercise.name)}`);
+        const capability = getCanonicalPoseCapability(exercise.key);
+        const isStaticHold = capability?.repModel === 'static_hold';
+        const countedReps = isStaticHold ? 0 : 10 + (index % 4);
+        const holdSeconds = isStaticHold
+          ? 20 + ((index + session + set) % 3) * 15
+          : null;
+        const exerciseId = exercise.id;
         const exerciseLogId = id(
           `exercise-log:${account.key}:${session}:${set}`,
         );
@@ -1704,10 +1726,11 @@ async function ensureAttendanceNutritionAndWorkouts(
             user_id: account.userId,
             exercise_id: exerciseId,
             set_number: set,
-            reps_target: 10,
-            reps_completed: 10 + (index % 4),
-            reps_ai_counted: 10 + (index % 4),
+            reps_target: isStaticHold ? null : 10,
+            reps_completed: isStaticHold ? 0 : 10 + (index % 4),
+            reps_ai_counted: capability && !isStaticHold ? countedReps : null,
             weight_kg: money(20 + (index % 16) * 2.5),
+            duration_seconds: holdSeconds,
           },
           create: {
             id: exerciseLogId,
@@ -1715,50 +1738,68 @@ async function ensureAttendanceNutritionAndWorkouts(
             user_id: account.userId,
             exercise_id: exerciseId,
             set_number: set,
-            reps_target: 10,
-            reps_completed: 10 + (index % 4),
-            reps_ai_counted: 10 + (index % 4),
+            reps_target: isStaticHold ? null : 10,
+            reps_completed: isStaticHold ? 0 : 10 + (index % 4),
+            reps_ai_counted: capability && !isStaticHold ? countedReps : null,
             weight_kg: money(20 + (index % 16) * 2.5),
+            duration_seconds: holdSeconds,
           },
         });
 
-        const poseProfileId = id(`pose-profile:${slugify(exercise.name)}`);
+        if (!capability) {
+          continue;
+        }
+
+        const poseProfileId = seedId(`pose-profile:${exercise.key}`);
+        const poseSessionId = id(
+          `pose-session:${account.key}:${session}:${set}`,
+        );
+        const poseSummary = isStaticHold
+          ? {
+              source: 'defense-demo-seed',
+              form_feedback: 'Stable body line during the seeded hold.',
+              hold_seconds: holdSeconds,
+              counted_reps: 0,
+            }
+          : {
+              source: 'defense-demo-seed',
+              form_feedback: 'Stable tempo and controlled range of motion.',
+              counted_reps: countedReps,
+            };
         await prisma.poseSession.upsert({
-          where: { id: id(`pose-session:${account.key}:${session}:${set}`) },
+          where: { id: poseSessionId },
           update: {
             user_id: account.userId,
             exercise_log_id: exerciseLogId,
             exercise_hint: exercise.name,
-            rep_count_ai: 10 + (index % 4),
+            rep_count_ai: countedReps,
             confidence_avg: money('0.860'),
             detected_exercise_name: exercise.name,
             detected_profile_id: poseProfileId,
             classification_confidence: money('0.840'),
             subject_lock_confidence: money('0.910'),
-            analysis_summary: json({
-              form_feedback: 'Stable tempo and clean lockout on most reps.',
-              demo: true,
-            }),
+            analysis_summary: json(poseSummary),
             started_at: startedAt,
-            ended_at: addMinutes(startedAt, 8),
+            ended_at: new Date(
+              startedAt.getTime() + (holdSeconds ?? 8 * 60) * 1000,
+            ),
           },
           create: {
-            id: id(`pose-session:${account.key}:${session}:${set}`),
+            id: poseSessionId,
             user_id: account.userId,
             exercise_log_id: exerciseLogId,
             exercise_hint: exercise.name,
-            rep_count_ai: 10 + (index % 4),
+            rep_count_ai: countedReps,
             confidence_avg: money('0.860'),
             detected_exercise_name: exercise.name,
             detected_profile_id: poseProfileId,
             classification_confidence: money('0.840'),
             subject_lock_confidence: money('0.910'),
-            analysis_summary: json({
-              form_feedback: 'Stable tempo and clean lockout on most reps.',
-              demo: true,
-            }),
+            analysis_summary: json(poseSummary),
             started_at: startedAt,
-            ended_at: addMinutes(startedAt, 8),
+            ended_at: new Date(
+              startedAt.getTime() + (holdSeconds ?? 8 * 60) * 1000,
+            ),
           },
         });
       }

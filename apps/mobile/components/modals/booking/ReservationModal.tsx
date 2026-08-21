@@ -420,7 +420,9 @@ export default function ReservationModal({
       });
     },
   });
-  const reservingText = useLoadingText("Reserving", isSubmitting);
+  const isCheckoutActive = checkoutReturn.attempt != null;
+  const isBusy = isSubmitting || isCheckoutActive;
+  const reservingText = useLoadingText("Reserving", isBusy);
 
   const {
     data: venues = [],
@@ -879,12 +881,7 @@ export default function ReservationModal({
 
   const coachMatchesWindow = useMemo(() => {
     return selectedCoachCoversWindow;
-  }, [
-    startTime,
-    selectedCoachCoversWindow,
-    endTime,
-    date,
-  ]);
+  }, [selectedCoachCoversWindow]);
 
   const coachStatusMessage = useMemo(() => {
     if (!selectedCoach) {
@@ -925,9 +922,11 @@ export default function ReservationModal({
   resetFormRef.current = handleReset;
 
   const handleClose = () => {
-    if (isSubmitting) return;
+    if (isBusy) return;
     handleReset();
-    attemptIdempotencyKeyRef.current = null;
+    if (!isCheckoutActive) {
+      attemptIdempotencyKeyRef.current = null;
+    }
     onClose();
   };
 
@@ -943,6 +942,7 @@ export default function ReservationModal({
   };
 
   const submitReservation = async () => {
+    if (isBusy) return;
     if (!selectedBookableVenue) return;
     if (!date || !startTime || !endTime) {
       setReviewAttempted(true);
@@ -1035,6 +1035,7 @@ export default function ReservationModal({
   };
 
   const handleConfirm = () => {
+    if (isBusy) return;
     setReviewAttempted(true);
     if (!date || !startTime || !endTime) {
       setApiError("Please choose a reservation date, start time, and end time.");
@@ -1112,7 +1113,8 @@ export default function ReservationModal({
           !isCalOpen &&
           !isTimeOpen &&
           !isVenuePickerOpen &&
-          !isCoachPickerOpen
+          !isCoachPickerOpen &&
+          !isCheckoutActive
         }
         transparent
         animationType="none"
@@ -1487,14 +1489,14 @@ export default function ReservationModal({
                 label="Cancel"
                 variant="ghost"
                 onPress={handleClose}
-                disabled={isSubmitting}
+                disabled={isBusy}
                 flex={1}
               />
               <FitButton
-                label={isSubmitting ? reservingText : confirmButtonLabel}
+                label={isBusy ? reservingText : confirmButtonLabel}
                 variant="primary"
                 onPress={handleConfirm}
-                disabled={isSubmitting}
+                disabled={isBusy}
                 loading={isSubmitting}
                 flex={2}
               />
@@ -1524,11 +1526,11 @@ export default function ReservationModal({
         message={reservationConfirmation?.message ?? ""}
         yesLabel={reservationConfirmation?.yesLabel ?? "Confirm"}
         noLabel="Cancel"
-        isLoading={isSubmitting}
+        isLoading={isBusy}
         loadingLabel={confirmButtonLabel.toUpperCase()}
         loadingTitle="Submitting reservation"
         onNo={() => {
-          if (isSubmitting) return;
+          if (isBusy) return;
           setReservationConfirmation(null);
         }}
         onYes={() => {

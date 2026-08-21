@@ -1,6 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
-  CreatorState,
   IntegrityCaseStatus,
   IntegrityRiskLevel,
   MasteryRank,
@@ -1256,40 +1255,6 @@ export class AdminSeasonUpdateDTO {
   auto_start_next?: boolean;
 }
 
-export class AdminCreatorStateDTO {
-  @ApiProperty({
-    enum: CreatorState,
-    example: CreatorState.approved,
-  })
-  @IsEnum(CreatorState, {
-    message: `state must be one of: ${Object.values(CreatorState).join(', ')}`,
-  })
-  state: CreatorState;
-
-  @ApiProperty({
-    example: 'Approved after repeated high-signal submissions.',
-  })
-  @TrimString()
-  @IsString({ message: 'rationale must be a string' })
-  @MinLength(3, { message: 'rationale must be at least 3 characters' })
-  @MaxLength(500, {
-    message: 'rationale must not exceed 500 characters',
-  })
-  rationale: string;
-
-  @ApiPropertyOptional({
-    example: 'Eligible for creator workflows; monitor next two submissions.',
-    nullable: true,
-  })
-  @IsOptional()
-  @TrimString()
-  @IsString({ message: 'admin_notes must be a string' })
-  @MaxLength(500, {
-    message: 'admin_notes must not exceed 500 characters',
-  })
-  admin_notes?: string | null;
-}
-
 export class CreateIntegrityCaseDTO {
   @ApiProperty({ example: '22222222-2222-4222-8222-222222222222' })
   @IsUUID('4', { message: 'user_id must be a valid UUID' })
@@ -1583,41 +1548,6 @@ export class AdminSeasonGovernanceResponseDTO {
     nullable: true,
   })
   archived_at: string | null;
-}
-
-export class AdminCreatorStateResponseDTO {
-  @ApiProperty({ example: '22222222-2222-4222-8222-222222222222' })
-  user_id: string;
-
-  @ApiProperty({ example: 'Fit Member' })
-  member_name: string;
-
-  @ApiProperty({ enum: CreatorState, example: CreatorState.approved })
-  state: CreatorState;
-
-  @ApiProperty({ example: 'Approved' })
-  state_label: string;
-
-  @ApiPropertyOptional({
-    type: String,
-    example: 'Eligible for creator workflows.',
-    nullable: true,
-  })
-  admin_notes: string | null;
-
-  @ApiPropertyOptional({
-    type: String,
-    example: '2026-04-24T00:00:00.000Z',
-    nullable: true,
-  })
-  last_state_changed_at: string | null;
-
-  @ApiPropertyOptional({
-    type: String,
-    example: '77777777-7777-4777-8777-777777777777',
-    nullable: true,
-  })
-  moderation_action_id: string | null;
 }
 
 export class AdminGamificationSeasonSummaryDTO {
@@ -2038,60 +1968,6 @@ export class AdminGamificationRankingSectionDTO {
   profiles: AdminGamificationRankingProfileDTO[];
 }
 
-export class AdminGamificationCreatorProfileDTO {
-  @ApiProperty({ example: '22222222-2222-4222-8222-222222222222' })
-  user_id: string;
-
-  @ApiProperty({ example: 'Fit Member' })
-  member_name: string;
-
-  @ApiProperty({ enum: CreatorState, example: CreatorState.candidate })
-  state: CreatorState;
-
-  @ApiProperty({ example: 'Candidate' })
-  state_label: string;
-
-  @ApiPropertyOptional({
-    type: String,
-    example: 'Two clean custom submissions.',
-    nullable: true,
-  })
-  admin_notes: string | null;
-
-  @ApiProperty({ example: 4 })
-  submission_count: number;
-
-  @ApiProperty({ example: 2 })
-  published_submission_count: number;
-
-  @ApiPropertyOptional({
-    type: String,
-    example: '2026-04-24T00:00:00.000Z',
-    nullable: true,
-  })
-  last_state_changed_at: string | null;
-}
-
-export class AdminGamificationCreatorSectionDTO {
-  @ApiProperty({ example: 2 })
-  candidate_count: number;
-
-  @ApiProperty({ example: 1 })
-  pending_review_count: number;
-
-  @ApiProperty({ example: 4 })
-  approved_count: number;
-
-  @ApiProperty({ example: 1 })
-  suspended_count: number;
-
-  @ApiProperty({ example: 0 })
-  revoked_count: number;
-
-  @ApiProperty({ type: () => [AdminGamificationCreatorProfileDTO] })
-  profiles: AdminGamificationCreatorProfileDTO[];
-}
-
 export class AdminGamificationAuditActionDTO {
   @ApiProperty({ example: '77777777-7777-4777-8777-777777777777' })
   id: string;
@@ -2163,9 +2039,6 @@ export class AdminGamificationOverviewResponseDTO {
 
   @ApiProperty({ type: () => AdminGamificationRankingSectionDTO })
   rankings: AdminGamificationRankingSectionDTO;
-
-  @ApiProperty({ type: () => AdminGamificationCreatorSectionDTO })
-  creators: AdminGamificationCreatorSectionDTO;
 
   @ApiProperty({ type: () => AdminGamificationAuditSectionDTO })
   audit: AdminGamificationAuditSectionDTO;

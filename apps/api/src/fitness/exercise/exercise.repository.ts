@@ -1,17 +1,5 @@
 import { ConflictException, Injectable } from '@nestjs/common';
-import {
-  AuthProvider,
-  CreatorProfile,
-  CreatorState,
-  ExerciseCatalog,
-  ExerciseReviewSubmission,
-  ExerciseReviewSubmissionStatus,
-  MembershipCardStatus,
-  ModerationActionType,
-  MuscleDefinition,
-  Prisma,
-  UserRole,
-} from '@prisma/client';
+import { ExerciseCatalog, MuscleDefinition, Prisma } from '@prisma/client';
 
 import {
   BaseRepository,
@@ -22,7 +10,6 @@ import {
   ExerciseFilterDTO,
   MuscleDefinitionFilterDTO,
 } from './dto/exercise.dto';
-import { ExerciseReviewSubmissionFilterDTO } from './dto/exercise-review.dto';
 
 const exerciseOrderBy = [
   { muscle_group: 'asc' },
@@ -34,36 +21,7 @@ export type ActiveExerciseGenerationRecord = Pick<
   'id' | 'name' | 'muscle_group' | 'category'
 >;
 
-export type ExerciseReviewSubmissionRecord = ExerciseReviewSubmission;
-
-export type CreatorProfileRecord = CreatorProfile;
-
-export type CreatorUserIdentityRecord = {
-  auth_identities: { identifier: string }[];
-  id: string;
-  profile: { first_name: string; last_name: string } | null;
-};
-
-export type ExerciseReviewSubmissionStatusRecord = Pick<
-  ExerciseReviewSubmission,
-  'status' | 'user_id'
->;
-
-export type CreatorSubmissionAccessRecord = {
-  creatorProfileState: CreatorState | null;
-  membershipCardStatus: MembershipCardStatus | null;
-  role: UserRole;
-};
-
 export type MuscleDefinitionRecord = MuscleDefinition;
-
-const creatorModerationActionByState: Partial<
-  Record<CreatorState, ModerationActionType>
-> = {
-  [CreatorState.approved]: ModerationActionType.approve_creator,
-  [CreatorState.suspended]: ModerationActionType.suspend_creator,
-  [CreatorState.revoked]: ModerationActionType.revoke_creator,
-};
 
 @Injectable()
 export class ExerciseRepository extends BaseRepository {
@@ -132,68 +90,6 @@ export class ExerciseRepository extends BaseRepository {
     });
   }
 
-  listReviewSubmissions(
-    dto: ExerciseReviewSubmissionFilterDTO,
-  ): Promise<PaginatedResult<ExerciseReviewSubmissionRecord>> {
-    const where: Prisma.ExerciseReviewSubmissionWhereInput = {
-      ...(dto.status ? { status: dto.status } : {}),
-      ...(dto.category ? { category: dto.category } : {}),
-    };
-
-    if (dto.muscle_group?.trim()) {
-      where.muscle_group = {
-        contains: dto.muscle_group.trim(),
-        mode: 'insensitive',
-      };
-    }
-
-    if (dto.search?.trim()) {
-      const term = dto.search.trim();
-      where.OR = [
-        { title: { contains: term, mode: 'insensitive' } },
-        { proposed_name: { contains: term, mode: 'insensitive' } },
-        { summary: { contains: term, mode: 'insensitive' } },
-        { source_label: { contains: term, mode: 'insensitive' } },
-        { origin_label: { contains: term, mode: 'insensitive' } },
-        { queue_tag: { contains: term, mode: 'insensitive' } },
-        { trigger_label: { contains: term, mode: 'insensitive' } },
-        { match_hint: { contains: term, mode: 'insensitive' } },
-        { muscle_group: { contains: term, mode: 'insensitive' } },
-        {
-          user: {
-            profile: {
-              is: {
-                OR: [
-                  { first_name: { contains: term, mode: 'insensitive' } },
-                  { last_name: { contains: term, mode: 'insensitive' } },
-                ],
-              },
-            },
-          },
-        },
-        {
-          user: {
-            auth_identities: {
-              some: {
-                identifier: { contains: term, mode: 'insensitive' },
-                provider: AuthProvider.email,
-              },
-            },
-          },
-        },
-      ];
-    }
-
-    return this.paginate<ExerciseReviewSubmissionRecord>(
-      this.prisma.exerciseReviewSubmission,
-      {
-        where,
-        orderBy: [{ created_at: 'desc' }],
-      },
-      { page: dto.page, limit: dto.limit },
-    );
-  }
-
   listMuscleDefinitions(
     dto: MuscleDefinitionFilterDTO,
   ): Promise<MuscleDefinitionRecord[]> {
@@ -234,55 +130,6 @@ export class ExerciseRepository extends BaseRepository {
         key: { in: keys },
       },
       orderBy: [{ sort_order: 'asc' }, { name: 'asc' }],
-    });
-  }
-
-  listCreatorProfilesByUserIds(
-    userIds: string[],
-  ): Promise<CreatorProfileRecord[]> {
-    if (!userIds.length) return Promise.resolve([]);
-
-    return this.prisma.creatorProfile.findMany({
-      where: { user_id: { in: userIds } },
-    });
-  }
-
-  listCreatorUserIdentitiesByUserIds(
-    userIds: string[],
-  ): Promise<CreatorUserIdentityRecord[]> {
-    if (!userIds.length) return Promise.resolve([]);
-
-    return this.prisma.user.findMany({
-      where: { id: { in: userIds } },
-      select: {
-        auth_identities: {
-          orderBy: [{ is_primary: 'desc' }, { created_at: 'asc' }],
-          select: { identifier: true },
-          take: 1,
-          where: { provider: AuthProvider.email },
-        },
-        id: true,
-        profile: {
-          select: {
-            first_name: true,
-            last_name: true,
-          },
-        },
-      },
-    });
-  }
-
-  listReviewSubmissionStatusesByUserIds(
-    userIds: string[],
-  ): Promise<ExerciseReviewSubmissionStatusRecord[]> {
-    if (!userIds.length) return Promise.resolve([]);
-
-    return this.prisma.exerciseReviewSubmission.findMany({
-      where: { user_id: { in: userIds } },
-      select: {
-        status: true,
-        user_id: true,
-      },
     });
   }
 
@@ -354,15 +201,6 @@ export class ExerciseRepository extends BaseRepository {
     }
   }
 
-  createReviewSubmission(
-    data: Prisma.ExerciseReviewSubmissionCreateInput,
-  ): Promise<ExerciseReviewSubmissionRecord> {
-    return this.create<ExerciseReviewSubmissionRecord>(
-      this.prisma.exerciseReviewSubmission,
-      data,
-    );
-  }
-
   async updateExercise(
     id: string,
     data: Prisma.ExerciseCatalogUpdateInput,
@@ -385,126 +223,6 @@ export class ExerciseRepository extends BaseRepository {
 
       throw error;
     }
-  }
-
-  async updateReviewSubmission(
-    id: string,
-    data: Prisma.ExerciseReviewSubmissionUpdateInput,
-    creatorGovernance?: {
-      actorUserId?: string;
-      note?: string;
-      state?: CreatorState;
-    },
-  ): Promise<ExerciseReviewSubmissionRecord> {
-    const existingSubmission =
-      await this.findByIdOrThrow<ExerciseReviewSubmissionRecord>(
-        this.prisma.exerciseReviewSubmission,
-        id,
-        'Exercise review submission',
-      );
-
-    return this.prisma.$transaction(async (tx) => {
-      const updatedSubmission = await tx.exerciseReviewSubmission.update({
-        where: { id },
-        data,
-      });
-
-      const existingProfile = await tx.creatorProfile.findUnique({
-        where: { user_id: existingSubmission.user_id },
-      });
-      const shouldAutoPromoteCandidate =
-        updatedSubmission.status === ExerciseReviewSubmissionStatus.published &&
-        (!existingProfile || existingProfile.state === CreatorState.none);
-      const nextCreatorState =
-        creatorGovernance?.state ??
-        (shouldAutoPromoteCandidate ? CreatorState.candidate : undefined);
-
-      if (!nextCreatorState && !creatorGovernance?.note?.trim()) {
-        return updatedSubmission;
-      }
-
-      const now = new Date();
-      const nextAdminNote =
-        creatorGovernance?.note?.trim() ||
-        (shouldAutoPromoteCandidate
-          ? `Auto-candidacy from published Exercise Lab submission: ${updatedSubmission.title}.`
-          : undefined);
-      const nextState =
-        nextCreatorState ?? existingProfile?.state ?? CreatorState.none;
-      const profile = await tx.creatorProfile.upsert({
-        where: { user_id: existingSubmission.user_id },
-        create: {
-          user_id: existingSubmission.user_id,
-          state: nextState,
-          last_state_changed_at: nextCreatorState ? now : null,
-          admin_notes: nextAdminNote,
-        },
-        update: {
-          ...(nextCreatorState
-            ? { state: nextState, last_state_changed_at: now }
-            : {}),
-          ...(nextAdminNote !== undefined
-            ? { admin_notes: nextAdminNote }
-            : {}),
-        },
-      });
-
-      const moderationActionType = creatorModerationActionByState[nextState];
-      const stateChanged = existingProfile?.state !== profile.state;
-      if (moderationActionType && stateChanged) {
-        await tx.moderationActionRecord.create({
-          data: {
-            actor_user_id: creatorGovernance?.actorUserId,
-            target_user_id: existingSubmission.user_id,
-            action_type: moderationActionType,
-            rationale:
-              nextAdminNote ?? `Creator state changed to ${nextState}.`,
-            before_state: {
-              creator_state: existingProfile?.state ?? CreatorState.none,
-              submission_id: updatedSubmission.id,
-              submission_status: existingSubmission.status,
-            } satisfies Prisma.JsonObject,
-            after_state: {
-              creator_state: profile.state,
-              submission_id: updatedSubmission.id,
-              submission_status: updatedSubmission.status,
-            } satisfies Prisma.JsonObject,
-          },
-        });
-      }
-
-      return updatedSubmission;
-    });
-  }
-
-  async findCreatorSubmissionAccess(
-    userId: string,
-  ): Promise<CreatorSubmissionAccessRecord | null> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        role: true,
-        membership_card: { select: { status: true } },
-        creator_profile: { select: { state: true } },
-      },
-    });
-
-    if (!user) return null;
-
-    return {
-      creatorProfileState: user.creator_profile?.state ?? null,
-      membershipCardStatus: user.membership_card?.status ?? null,
-      role: user.role,
-    };
-  }
-
-  async findPoseSessionOwner(poseSessionId: string): Promise<string | null> {
-    const poseSession = await this.prisma.poseSession.findUnique({
-      where: { id: poseSessionId },
-      select: { user_id: true },
-    });
-
-    return poseSession?.user_id ?? null;
   }
 
   private buildDuplicateExerciseConflict(): ConflictException {

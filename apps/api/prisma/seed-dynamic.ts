@@ -75,6 +75,10 @@ async function main() {
   };
 
   await runDomain('users-auth-profiles', seedUsersAuthProfiles, ctx);
+  console.log(
+    `[dynamic-seed] roleCounts=${JSON.stringify(ctx.state.roleCounts)} ` +
+      `scenarioCounts=${JSON.stringify(ctx.state.scenarioCounts)}`,
+  );
   await bootstrapDefaults(prisma, {
     includeUsers: false,
     referenceDate: config.anchorDate,
@@ -105,6 +109,8 @@ async function main() {
       credentials: ctx.state.demoCredentials,
       integrity: error.outcome,
       notableIds: ctx.notableIds,
+      roleCounts: ctx.state.roleCounts,
+      scenarioCounts: ctx.state.scenarioCounts,
     });
     throw error;
   }
@@ -126,6 +132,8 @@ async function main() {
     credentials: ctx.state.demoCredentials,
     integrity,
     notableIds: ctx.notableIds,
+    roleCounts: ctx.state.roleCounts,
+    scenarioCounts: ctx.state.scenarioCounts,
   });
 
   console.log('[dynamic-seed] complete');

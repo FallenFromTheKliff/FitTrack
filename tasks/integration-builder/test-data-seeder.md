@@ -5,13 +5,13 @@ Use the dedicated dev-only seeder when you want realistic records for manual fil
 ## Commands
 
 - Canonical local realistic seed:
-  - `pnpm.cmd seed:realistic --target=local --mode=reset --users=100 --exercise-history=100`
+  - `pnpm.cmd seed:realistic --target=local --mode=reset --users=180 --exercise-history=100`
 - Canonical Railway realistic reset:
-  - `pnpm.cmd seed:realistic --target=railway --mode=reset --users=100 --exercise-history=100 --allow-remote-reset --confirm=RESET_REMOTE_DYNAMIC_SEED`
+  - `pnpm.cmd seed:realistic --target=railway --mode=reset --users=180 --exercise-history=100 --allow-remote-reset --confirm=RESET_REMOTE_DYNAMIC_SEED`
 - `pnpm test:seed:dynamic`
   - runs the bounded no-database seed contract checks
 - `pnpm db:seed:dynamic`
-  - resets the local Docker Postgres database and seeds the modular realistic scenario with 100 users
+  - resets the local Docker Postgres database and seeds the modular realistic scenario with 180 users
 - `pnpm db:seed:dynamic:additive`
   - upserts/appends the modular realistic scenario without clearing local data
 - `pnpm db:seed:dynamic:railway`

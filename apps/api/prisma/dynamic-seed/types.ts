@@ -52,7 +52,94 @@ export type MemberPersona =
   | 'suspended'
   | 'trial';
 
-export type SeedAccount = {
+export type MemberEngagement =
+  | 'gym_rat'
+  | 'frequent'
+  | 'regular'
+  | 'casual'
+  | 'lazy'
+  | 'zero_use';
+
+export type MembershipLifecycle =
+  | 'active'
+  | 'trial_or_new'
+  | 'expired'
+  | 'frozen'
+  | 'none_or_pending'
+  | 'cancelled_former';
+
+export type BookingProfile = 'none' | 'occasional' | 'regular' | 'heavy';
+
+export type CoachingProfile =
+  | 'none'
+  | 'one_time'
+  | 'recurring_active'
+  | 'recurring_former'
+  | 'checkout_failed';
+
+export type PaymentProfile =
+  | 'reliable'
+  | 'failed_then_successful'
+  | 'abandoned_or_failed';
+
+export type CoachLifecycle = 'active' | 'paused' | 'former';
+export type CoachQuality = 'excellent' | 'good' | 'average' | 'poor';
+export type CoachWorkload = 'high' | 'medium' | 'low';
+
+export type ScenarioDimensionCounts = Record<string, Record<string, number>>;
+
+export type SeedLifecycle = {
+  registeredAt: Date;
+  verifiedAt: Date | null;
+  accessStart: Date | null;
+  accessEnd: Date | null;
+  activityStart: Date | null;
+  activityEnd: Date | null;
+  deletedAt: Date | null;
+  deletionRequestedAt: Date | null;
+  deletionReviewedAt: Date | null;
+  historicalOnly: boolean;
+};
+
+export type PhysicalTrend = 'cutting' | 'bulking' | 'maintenance';
+
+export type SeedPhysicalBaseline = {
+  heightCm: number;
+  weightKg: number;
+  bmi: number;
+  baselineWeightKg: number;
+  bodyFatPct: number;
+  muscleMassKg: number;
+  waistCm: number;
+  chestCm: number;
+  trend: PhysicalTrend;
+};
+
+export type SeedScenario = {
+  memberEngagement?: MemberEngagement;
+  engagement?: MemberEngagement;
+  membershipLifecycle?: MembershipLifecycle;
+  membership?: MembershipLifecycle;
+  bookingProfile?: BookingProfile;
+  booking?: BookingProfile;
+  /** Canonical venue-booking behavior alias used by domain allocators. */
+  bookingBehavior?: BookingProfile;
+  coachingProfile?: CoachingProfile;
+  coaching?: CoachingProfile;
+  paymentProfile?: PaymentProfile;
+  payment?: PaymentProfile;
+  coachLifecycle?: CoachLifecycle;
+  coachQuality?: CoachQuality;
+  coachWorkload?: CoachWorkload;
+  hasCompletedHistory?: boolean;
+  hasFutureBookings?: boolean;
+  hasCurrentAccess?: boolean;
+  currentAccess?: boolean;
+  canAcceptFutureBookings?: boolean;
+  futureBookingAcceptance?: boolean;
+};
+
+export type SeedAccount = SeedScenario & {
   activityLevel?: ActivityLevel | null;
   dateOfBirth?: Date | null;
   deletedAt?: Date | null;
@@ -67,9 +154,14 @@ export type SeedAccount = {
   label: string;
   lastName: string;
   memberPersona?: MemberPersona;
+  fixedScenario?: string;
+  pinned?: boolean;
   password: string;
   phone: string;
   role: UserRole;
+  scenario?: SeedScenario;
+  lifecycle?: SeedLifecycle;
+  physicalBaseline?: SeedPhysicalBaseline;
   status?: UserStatus;
   weightKg?: number | null;
 };
@@ -85,6 +177,7 @@ export type SeedState = {
   accounts: SeedAccount[];
   activeMemberKeys: string[];
   adminKeys: string[];
+  amenityIds: Record<string, string>;
   coachAccountKeys: string[];
   coachProfileIds: Record<string, string>;
   demoCredentials: SeedCredential[];
@@ -94,9 +187,12 @@ export type SeedState = {
   memberKeys: string[];
   memberCohorts: Record<string, MemberCohort>;
   membershipPlanIds: Record<string, string>;
+  operatingHourIds: Record<string, string>;
   premiumMemberKeys: string[];
   productIds: Record<string, string>;
   restrictedMemberKeys: string[];
+  roleCounts: Record<string, number>;
+  scenarioCounts: ScenarioDimensionCounts;
   seasonId?: string;
   staffKeys: string[];
   tdeeProfileIds: Record<string, string>;
@@ -121,6 +217,7 @@ export function createInitialSeedState(): SeedState {
     accounts: [],
     activeMemberKeys: [],
     adminKeys: [],
+    amenityIds: {},
     coachAccountKeys: [],
     coachProfileIds: {},
     demoCredentials: [],
@@ -130,9 +227,12 @@ export function createInitialSeedState(): SeedState {
     memberKeys: [],
     memberCohorts: {},
     membershipPlanIds: {},
+    operatingHourIds: {},
     premiumMemberKeys: [],
     productIds: {},
     restrictedMemberKeys: [],
+    roleCounts: {},
+    scenarioCounts: {},
     staffKeys: [],
     tdeeProfileIds: {},
     userIds: {},

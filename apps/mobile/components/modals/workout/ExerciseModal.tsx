@@ -48,8 +48,6 @@ type Props = {
   loadSliderMin?: number;
   loadSliderValue?: number;
   onClose: () => void;
-  onCreateFromSession?: () => void;
-  createFromSessionDisabled?: boolean;
   onApplyLoadInput?: () => void;
   onChangeLoadInputUnit?: (unit: LoadInputUnit) => void;
   onChangeLoadInputValue?: (value: string) => void;
@@ -180,8 +178,6 @@ export default function ExerciseModal({
   loadSliderMin = 1,
   loadSliderValue = 1,
   onClose,
-  onCreateFromSession,
-  createFromSessionDisabled = false,
   onApplyLoadInput,
   onChangeLoadInputUnit,
   onChangeLoadInputValue,
@@ -469,15 +465,6 @@ export default function ExerciseModal({
               </View>
             ) : null}
             <View style={s.footer}>
-              {onCreateFromSession ? (
-                <FitButton
-                  disabled={createFromSessionDisabled}
-                  label="Create Draft"
-                  variant="ghost"
-                  onPress={onCreateFromSession}
-                  style={s.footerAction}
-                />
-              ) : null}
               {canEditLoadInput ? (
                 <FitButton
                   label={loadButtonLabel}

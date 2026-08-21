@@ -6,13 +6,9 @@ import * as FileSystem from "expo-file-system/legacy";
 import { ApiClientError } from "@fittrack/api-client";
 
 import type {
-  CreateExerciseDraftProposalInput,
-  CreateExerciseReviewSubmissionInput,
-  ExerciseAiDraftEvidenceRecord,
   ExerciseHandShapeProfileRecord,
   ExerciseMovementProfileRecord,
   ExerciseMuscleTargetRecord,
-  FitnessExerciseCategory,
   IThemeContext,
   PoseCameraFacingMode,
   PoseEquipmentContext,
@@ -31,17 +27,10 @@ import type {
   NativePoseFrame,
 } from "@/components/workout/NativeVisionPoseCamera.types";
 import type { WorkoutCameraTarget } from "@/components/workout/workout-camera-target";
-import type { ExerciseCreationDraft } from "@/components/modals/workout/ExerciseCreationReviewModal";
 import {
-  buildExerciseAiDraftEvidence,
-  buildExerciseRigFromPoseFrames,
   buildFallbackPoseMovementContract,
-  createDefaultExerciseMuscleTargets,
-  createExerciseMovementProfile,
-  getPrimaryExerciseMuscleGroup,
-  normalizeExerciseHandShapeProfile,
+  isValidPoseMovementContract,
   normalizeExerciseMovementProfile,
-  normalizeExerciseMuscleTargets,
   createPoseSignalCache,
   getPoseMovementContractAngle,
   summarizeMovementGuidance,
@@ -54,8 +43,6 @@ import { useCameraCountdown } from "@/hooks/workout/useCameraCountdown";
 import {
   analyzePoseSessionMutationOptions,
   completeWorkoutSessionMutationOptions,
-  createExerciseDraftProposalMutationOptions,
-  createExerciseReviewSubmissionMutationOptions,
   fitnessExercisesQueryOptions,
   fitnessPlanDetailQueryOptions,
   fitnessPlansQueryOptions,
@@ -140,8 +127,6 @@ const NATIVE_POSE_FEEDBACK = [
   "Lock the exercise manually if auto detection drifts.",
 ];
 const POSE_FRAME_WINDOW_SIZE = 20;
-const EXERCISE_CREATION_FRAME_WINDOW_SIZE = 80;
-const EXERCISE_CREATION_MIN_REPS = 3;
 const POSE_FRAME_BATCH_TRIGGER = 4;
 const POSE_MIN_ANALYZE_FRAMES = 20;
 const TRACKING_UNRELIABLE_MESSAGE =
@@ -1240,10 +1225,6 @@ export function useWorkoutLiveController(
   const { message, showMessage } = useTimedMessage(2500);
 
   const [isExerciseModalOpen, setIsExerciseModalOpen] = useState(false);
-  const [isExerciseCreationReviewOpen, setIsExerciseCreationReviewOpen] =
-    useState(false);
-  const [exerciseCreationDraft, setExerciseCreationDraft] =
-    useState<ExerciseCreationDraft | null>(null);
   const [isExerciseConfirmationVisible, setIsExerciseConfirmationVisible] =
     useState(false);
   const [exerciseConfirmationCandidates, setExerciseConfirmationCandidates] =
@@ -1342,7 +1323,6 @@ export function useWorkoutLiveController(
     null,
   );
   const poseFrameBufferRef = useRef<PoseSequenceFrameRecord[]>([]);
-  const exerciseCreationFrameBufferRef = useRef<PoseSequenceFrameRecord[]>([]);
   const poseSignalCacheRef = useRef(
     createPoseSignalCache(
       POSE_SIGNAL_UPDATE_INTERVAL_MS,
@@ -1466,13 +1446,6 @@ export function useWorkoutLiveController(
   const handleClearWorkoutLoadInput = () => {
     resetWorkoutLoadInput();
     showMessage("Load cleared.");
-  };
-
-  const rememberExerciseCreationFrame = (frame: PoseSequenceFrameRecord) => {
-    exerciseCreationFrameBufferRef.current = [
-      ...exerciseCreationFrameBufferRef.current,
-      frame,
-    ].slice(-EXERCISE_CREATION_FRAME_WINDOW_SIZE);
   };
 
   const getBufferedPoseSignals = (
@@ -1808,13 +1781,6 @@ export function useWorkoutLiveController(
   const finalizePoseSessionMutation = useMutation(
     finalizePoseSessionMutationOptions(mobileApiClient, queryClient),
   );
-  const createExerciseReviewSubmissionMutation = useMutation(
-    createExerciseReviewSubmissionMutationOptions(mobileApiClient, queryClient),
-  );
-  const createExerciseDraftProposalMutation = useMutation(
-    createExerciseDraftProposalMutationOptions(mobileApiClient, queryClient),
-  );
-
   const currentPlanExercise = useMemo(() => {
     if (cameraTarget) {
       const catalogExercise = exercisesResponse.data.find(
@@ -2021,192 +1987,6 @@ export function useWorkoutLiveController(
     [reps, seconds],
   );
   const permissionGranted = toPermissionGranted(permission);
-  const exerciseCreationReady =
-    !!movementContractRef.current &&
-    !!poseSessionIdRef.current &&
-    repEngineStateRef.current.repCount >= EXERCISE_CREATION_MIN_REPS &&
-    exerciseCreationFrameBufferRef.current.length >= 8;
-
-  const buildCurrentExerciseCreationDraft = (): ExerciseCreationDraft | null => {
-    const activeContract = movementContractRef.current;
-    const activePoseSessionId = poseSessionIdRef.current;
-    const repCount = repEngineStateRef.current.repCount;
-    if (
-      !activeContract ||
-      !activePoseSessionId ||
-      repCount < EXERCISE_CREATION_MIN_REPS
-    ) {
-      return null;
-    }
-
-    const exerciseLabel =
-      confirmedExerciseLabelRef.current ??
-      trackingExerciseLabel ??
-      activeContract.exercise;
-    const displayName = toDisplayExerciseName(exerciseLabel);
-    const rig = buildExerciseRigFromPoseFrames({
-      exerciseLabel,
-      frames: exerciseCreationFrameBufferRef.current,
-      movementContract: activeContract,
-      poseSessionId: activePoseSessionId,
-      rawAngleData: repEngineStateRef.current.rawAngleData,
-    });
-    const evidence: ExerciseAiDraftEvidenceRecord = buildExerciseAiDraftEvidence({
-      confidence: averageConfidenceRef.current,
-      integrityNotes: [
-        subjectLockedRef.current
-          ? "Subject lock was active during capture."
-          : "Subject lock was not active for the entire capture.",
-        ...poseEquipmentConflicts,
-      ].filter(Boolean),
-      movementContract: activeContract,
-      repCount,
-      rig,
-    });
-    const primaryMuscleGroup = getPrimaryExerciseMuscleGroup(activeMuscleTargets);
-    const muscleGroup =
-      primaryMuscleGroup ||
-      trackingExerciseReference?.muscleGroup ||
-      planExerciseReference?.muscleGroup ||
-      selectedExercise?.muscleGroup ||
-      "custom";
-    const muscleTargets = normalizeExerciseMuscleTargets(
-      activeMuscleTargets.length
-        ? activeMuscleTargets
-        : createDefaultExerciseMuscleTargets(muscleGroup),
-      muscleGroup,
-    );
-    const normalizedHandShapeProfile =
-      normalizeExerciseHandShapeProfile(activeHandShapeProfile);
-    const handShapeProfile = {
-      ...normalizedHandShapeProfile,
-      grip: {
-        ...normalizedHandShapeProfile.grip,
-        required:
-          normalizedHandShapeProfile.grip.required ||
-          normalizeExerciseName(exerciseLabel).includes("curl"),
-      },
-    };
-    const movementProfile =
-      normalizeExerciseMovementProfile(activeMovementProfile, {
-        movementContract: activeContract,
-        rig,
-      }) ??
-      createExerciseMovementProfile({
-        movementContract: activeContract,
-        rig,
-      });
-    const category: FitnessExerciseCategory = "strength";
-
-    return {
-      category,
-      description: `${displayName} captured from a live member pose session. The draft is based on ${repCount} counted reps, a ${activeContract.dominantJoint}-dominant movement contract, and the attached rig keyframes.`,
-      evidence,
-      handShapeProfile,
-      instructions:
-        trackingExerciseReference?.recommendation ??
-        `Start in the captured setup, move through the shown range of motion, reach peak contraction, then return with control while keeping the tracked body chain visible.`,
-      movementProfile,
-      muscleGroup,
-      muscleTargets,
-      name: displayName,
-      summary: `${repCount} reps captured with ${activeContract.dominantJoint}-dominant range-of-motion evidence.`,
-    };
-  };
-
-  const handleOpenExerciseCreationReview = async () => {
-    const localDraft = buildCurrentExerciseCreationDraft();
-    if (!localDraft) {
-      showMessage(
-        `Capture ${EXERCISE_CREATION_MIN_REPS} clean reps with a visible rig before creating an exercise draft.`,
-      );
-      return;
-    }
-
-    const payload: CreateExerciseDraftProposalInput = {
-      category: localDraft.category,
-      description: localDraft.description,
-      evidence: localDraft.evidence,
-      handShapeProfile: localDraft.handShapeProfile,
-      instructions: localDraft.instructions,
-      movementProfile: localDraft.movementProfile,
-      muscleGroup: localDraft.muscleGroup,
-      muscleTargets: localDraft.muscleTargets,
-      poseSessionId: poseSessionIdRef.current,
-      proposedName: localDraft.name,
-      summary: localDraft.summary,
-    };
-
-    try {
-      const proposal = await createExerciseDraftProposalMutation.mutateAsync({
-        payload,
-        userId: user?.id,
-      });
-      setExerciseCreationDraft({
-        category: proposal.category,
-        description: proposal.description,
-        evidence: proposal.evidence,
-        handShapeProfile: proposal.handShapeProfile,
-        instructions: proposal.instructions,
-        movementProfile: proposal.movementProfile,
-        muscleGroup: proposal.muscleGroup,
-        muscleTargets: proposal.muscleTargets,
-        name: proposal.proposedName,
-        summary: proposal.summary,
-      });
-      showMessage("Exercise draft proposal generated.");
-    } catch (error) {
-      if (error instanceof ApiClientError && error.status === 403) {
-        showMessage(error.message);
-        return;
-      }
-      setExerciseCreationDraft(localDraft);
-      showMessage("Using local draft fallback. Review it before submitting.");
-    }
-    setIsExerciseCreationReviewOpen(true);
-    setIsExerciseModalOpen(false);
-  };
-
-  const handleSubmitExerciseCreationDraft = async () => {
-    if (!exerciseCreationDraft) return;
-
-    const payload: CreateExerciseReviewSubmissionInput = {
-      category: exerciseCreationDraft.category,
-      description: exerciseCreationDraft.description,
-      evidenceBars: exerciseCreationDraft.evidence,
-      handShapeProfile: exerciseCreationDraft.handShapeProfile,
-      instructions: exerciseCreationDraft.instructions,
-      matchHint: exerciseCreationDraft.evidence.movementContract?.exercise,
-      movementProfile: exerciseCreationDraft.movementProfile,
-      muscleGroup: exerciseCreationDraft.muscleGroup,
-      muscleTargets: exerciseCreationDraft.muscleTargets,
-      originLabel: "mobile creator session",
-      poseSessionId: poseSessionIdRef.current,
-      proposedName: exerciseCreationDraft.name,
-      queueTag: "ai draft",
-      sourceLabel: "mobile pose rig",
-      summary: exerciseCreationDraft.summary,
-      title: exerciseCreationDraft.name,
-      triggerLabel: `${exerciseCreationDraft.evidence.repCount} reps captured`,
-    };
-
-    try {
-      await createExerciseReviewSubmissionMutation.mutateAsync({
-        payload,
-        userId: user?.id,
-      });
-      setIsExerciseCreationReviewOpen(false);
-      setExerciseCreationDraft(null);
-      showMessage("Exercise draft submitted to Exercise Lab.");
-    } catch (error) {
-      showMessage(
-        error instanceof ApiClientError
-          ? error.message
-          : "Failed to submit exercise draft.",
-      );
-    }
-  };
-
   useEffect(() => {
     if (liveActiveSession?.id && !workoutSessionId) {
       setWorkoutSessionId(liveActiveSession.id);
@@ -2223,7 +2003,6 @@ export function useWorkoutLiveController(
 
   const resetPoseTrackingBuffers = useCallback(() => {
     poseFrameBufferRef.current = [];
-    exerciseCreationFrameBufferRef.current = [];
     framesSinceAnalyzeRef.current = 0;
     trackingReliabilityNotifiedRef.current = false;
     frameInFlightRef.current = false;
@@ -2358,13 +2137,18 @@ export function useWorkoutLiveController(
     statusText: string,
   ) => {
     const configuredContract = activeMovementProfile?.movementContract ?? null;
+    if (configuredContract && !isValidPoseMovementContract(configuredContract)) {
+      // Never turn an incomplete or incompatible profile into an automatic
+      // counter.  The workout remains usable through manual set logging.
+      return null;
+    }
     const fallbackContract = resolveCameraMovementContract(
       normalizeExerciseMovementProfile(
         configuredContract ? { movementContract: configuredContract } : null,
         { movementContract: buildFallbackPoseMovementContract(exerciseLabel) },
       )?.movementContract ?? buildFallbackPoseMovementContract(exerciseLabel),
     );
-    if (!fallbackContract) {
+    if (!fallbackContract || !isValidPoseMovementContract(fallbackContract)) {
       return null;
     }
 
@@ -2462,7 +2246,6 @@ export function useWorkoutLiveController(
         ? current
         : { height: frame.frameHeight, width: frame.frameWidth },
     );
-    rememberExerciseCreationFrame(stableFrame);
 
     setNativeLandmarksActive(true);
     publishPoseVisual(stableFrame.keypoints, stableFrame.capturedAtMs);
@@ -2727,7 +2510,10 @@ export function useWorkoutLiveController(
       }
 
       const nextMovementContract = resolveCameraMovementContract(
-        analysis.movementContract,
+        analysis.movementContract &&
+          isValidPoseMovementContract(analysis.movementContract)
+          ? analysis.movementContract
+          : null,
       );
       if (nextMovementContract) {
         movementContractRef.current = nextMovementContract;
@@ -2908,7 +2694,6 @@ export function useWorkoutLiveController(
       return;
     }
 
-    rememberExerciseCreationFrame(frame);
     publishPoseVisual(frame.keypoints, frame.capturedAtMs);
     updateSubjectLockGesture(frame.keypoints, frame.capturedAtMs);
     const instantSignals = poseSignalCacheRef.current.getInstant(frame);
@@ -3125,7 +2910,10 @@ export function useWorkoutLiveController(
       }
 
       const nextMovementContract = resolveCameraMovementContract(
-        analysis.movementContract,
+        analysis.movementContract &&
+          isValidPoseMovementContract(analysis.movementContract)
+          ? analysis.movementContract
+          : null,
       );
       if (nextMovementContract) {
         movementContractRef.current = nextMovementContract;
@@ -3689,8 +3477,6 @@ export function useWorkoutLiveController(
       setCustomExerciseLabel("");
       setExerciseConfirmationCandidates([]);
       setIsExerciseConfirmationVisible(false);
-      setExerciseCreationDraft(null);
-      setIsExerciseCreationReviewOpen(false);
       resetPoseRuntimeState(true);
       resetPoseTrackingBuffers();
       if (keepCameraMounted && nextTarget) {
@@ -3825,8 +3611,6 @@ export function useWorkoutLiveController(
     currentPlanExerciseLabel: currentPlanExercise?.exerciseName ?? null,
     customExerciseLabel,
     exerciseConfirmationCandidates,
-    exerciseCreationDraft,
-    exerciseCreationReady,
     exerciseFocusText: trackingExerciseLabel
       ? `Tracking: ${toDisplayExerciseName(trackingExerciseLabel)}${trackingExerciseReference ? ` - ${trackingExerciseReference.muscleGroup}` : ""}`
       : currentPlanExercise?.exerciseName
@@ -3878,10 +3662,6 @@ export function useWorkoutLiveController(
     holdProgressSeconds,
     holdValid,
     isExerciseConfirmationVisible,
-    isExerciseCreationReviewOpen,
-    isExerciseCreationSubmitting:
-      createExerciseReviewSubmissionMutation.isPending ||
-      createExerciseDraftProposalMutation.isPending,
     isExerciseModalOpen,
     isFinishing,
     isFrozen,
@@ -3893,8 +3673,6 @@ export function useWorkoutLiveController(
     lowConfidenceLandmarks,
     onChangeCustomExerciseLabel: setCustomExerciseLabel,
     onCloseExerciseConfirmation: handleCloseExerciseConfirmation,
-    onCloseExerciseCreationReview: () =>
-      setIsExerciseCreationReviewOpen(false),
     onCloseExerciseModal: () => setIsExerciseModalOpen(false),
     onConfirmExerciseLabel: handleConfirmExerciseLabel,
     onFinishCancel: handleFinishCancel,
@@ -3912,7 +3690,6 @@ export function useWorkoutLiveController(
       }
       setIsExerciseModalOpen(true);
     },
-    onOpenExerciseCreationReview: handleOpenExerciseCreationReview,
     onPause: handlePause,
     onResumeRecord: handleResumeRecord,
     onSelectExerciseReference: handleSelectExerciseReference,
@@ -3920,8 +3697,6 @@ export function useWorkoutLiveController(
     onStopRecord: handleStopRecord,
     onToggleCameraFacing: handleToggleCameraFacing,
     onToggleSubjectLock: handleToggleSubjectLock,
-    onUpdateExerciseCreationDraft: setExerciseCreationDraft,
-    onSubmitExerciseCreationDraft: handleSubmitExerciseCreationDraft,
     onUseAutoDetection: handleUseAutoDetection,
     onApplyWorkoutLoadInput: handleApplyWorkoutLoadInput,
     onChangeWorkoutLoadInputUnit: handleChangeWorkoutLoadInputUnit,

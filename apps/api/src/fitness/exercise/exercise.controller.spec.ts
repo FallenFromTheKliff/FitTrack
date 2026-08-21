@@ -16,9 +16,7 @@ function getGuardMetadata(
     | 'listMemberMuscleDefinitions'
     | 'createMuscleDefinition'
     | 'updateMuscleDefinition'
-    | 'archiveMuscleDefinition'
-    | 'listReviewSubmissions'
-    | 'updateReviewSubmission',
+    | 'archiveMuscleDefinition',
 ): unknown[] | undefined {
   return Reflect.getMetadata(
     GUARDS_METADATA,
@@ -34,9 +32,7 @@ function getRolesMetadata(
     | 'listMemberMuscleDefinitions'
     | 'createMuscleDefinition'
     | 'updateMuscleDefinition'
-    | 'archiveMuscleDefinition'
-    | 'listReviewSubmissions'
-    | 'updateReviewSubmission',
+    | 'archiveMuscleDefinition',
 ): UserRole[] | undefined {
   return Reflect.getMetadata(
     ROLES_KEY,
@@ -49,14 +45,12 @@ describe('ExerciseController', () => {
     listExercises: jest.fn(),
     listMuscleDefinitions: jest.fn(),
     listMemberMuscleDefinitions: jest.fn(),
-    listReviewSubmissions: jest.fn(),
     getExerciseById: jest.fn(),
     createExercise: jest.fn(),
     createMuscleDefinition: jest.fn(),
     updateExercise: jest.fn(),
     updateMuscleDefinition: jest.fn(),
     archiveMuscleDefinition: jest.fn(),
-    updateReviewSubmission: jest.fn(),
   };
 
   let controller: ExerciseController;
@@ -89,8 +83,6 @@ describe('ExerciseController', () => {
     'createMuscleDefinition',
     'updateMuscleDefinition',
     'archiveMuscleDefinition',
-    'listReviewSubmissions',
-    'updateReviewSubmission',
   ] as const)('locks %s to admin and staff users', (methodName) => {
     expect(getGuardMetadata(methodName)).toEqual([JwtAuthGuard, RolesGuard]);
     expect(getRolesMetadata(methodName)).toEqual([
@@ -136,9 +128,15 @@ describe('ExerciseController', () => {
 
   it('manages muscle definitions through the service', async () => {
     exerciseService.listMuscleDefinitions.mockResolvedValue({ data: [] });
-    exerciseService.createMuscleDefinition.mockResolvedValue({ id: 'muscle-1' });
-    exerciseService.updateMuscleDefinition.mockResolvedValue({ id: 'muscle-1' });
-    exerciseService.archiveMuscleDefinition.mockResolvedValue({ id: 'muscle-1' });
+    exerciseService.createMuscleDefinition.mockResolvedValue({
+      id: 'muscle-1',
+    });
+    exerciseService.updateMuscleDefinition.mockResolvedValue({
+      id: 'muscle-1',
+    });
+    exerciseService.archiveMuscleDefinition.mockResolvedValue({
+      id: 'muscle-1',
+    });
 
     await controller.listMuscleDefinitions({ include_archived: true });
     await controller.createMuscleDefinition({
@@ -161,24 +159,6 @@ describe('ExerciseController', () => {
     );
     expect(exerciseService.archiveMuscleDefinition).toHaveBeenCalledWith(
       'muscle-1',
-    );
-  });
-
-  it('updates review submissions with the current operator as actor', async () => {
-    exerciseService.updateReviewSubmission.mockResolvedValue({
-      id: 'review-submission-1',
-    });
-
-    await controller.updateReviewSubmission(
-      'review-submission-1',
-      { creator_state: 'candidate' as never },
-      { sub: 'operator-1' } as never,
-    );
-
-    expect(exerciseService.updateReviewSubmission).toHaveBeenCalledWith(
-      'review-submission-1',
-      { creator_state: 'candidate' },
-      'operator-1',
     );
   });
 });

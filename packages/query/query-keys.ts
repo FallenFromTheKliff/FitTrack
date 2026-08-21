@@ -431,17 +431,6 @@ const fitnessKeys = {
     params
       ? (["fitness", "exercises", params] as const)
       : (["fitness", "exercises"] as const),
-  exerciseReviewSubmissions: (params?: {
-    category?: string;
-    limit?: number;
-    muscleGroup?: string;
-    page?: number;
-    search?: string;
-    status?: string;
-  }) =>
-    params
-      ? (["fitness", "exercise-review-submissions", params] as const)
-      : (["fitness", "exercise-review-submissions"] as const),
   muscleDefinitions: (params?: { includeArchived?: boolean; search?: string }) =>
     params
       ? (["fitness", "muscle-definitions", params] as const)
@@ -672,7 +661,6 @@ export const queryKeys = {
   analyticsInsightDetail: analyticsKeys.insightDetail,
   auditLogs: auditKeys.logs,
   fitnessExercises: fitnessKeys.exercises,
-  fitnessExerciseReviewSubmissions: fitnessKeys.exerciseReviewSubmissions,
   fitnessMuscleDefinitions: fitnessKeys.muscleDefinitions,
   fitnessMemberMuscleDefinitions: fitnessKeys.memberMuscleDefinitions,
   fitnessPlans: fitnessKeys.plans,

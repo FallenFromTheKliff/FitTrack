@@ -10,7 +10,13 @@ import { daysFrom } from './time';
 import type { DynamicSeedContext } from './types';
 
 function scheduleItemStatus(status: AppointmentStatus) {
-  if (status === AppointmentStatus.cancelled) {
+  // A no-show is terminal history. It must never look like an activated
+  // payable schedule item even though the appointment itself remains in the
+  // no-show state for reporting and reschedule flows.
+  if (
+    status === AppointmentStatus.cancelled ||
+    status === AppointmentStatus.no_show
+  ) {
     return RecurringCoachingScheduleItemStatus.cancelled;
   }
   return RecurringCoachingScheduleItemStatus.activated;
@@ -79,7 +85,22 @@ export async function reconcileCoachingContracts(ctx: DynamicSeedContext) {
         { week_number: 'asc' },
         { day_of_week: 'asc' },
       ],
-        select: { id: true, plan_id: true, week_number: true },
+      select: {
+        day_of_week: true,
+        exercises: {
+          select: {
+            duration_seconds: true,
+            exercise_id: true,
+            id: true,
+            reps: true,
+            sets: true,
+            weight_kg_target: true,
+          },
+        },
+        id: true,
+        plan_id: true,
+        week_number: true,
+      },
     }),
     ctx.prisma.workoutSession.findMany({
       where: { plan_id: { in: trainingPlanIds }, status: 'completed' },
@@ -118,6 +139,9 @@ export async function reconcileCoachingContracts(ctx: DynamicSeedContext) {
     );
   }
   const sessionCursorByPlanAndUser = new Map<string, number>();
+  const workoutSessionModel = ctx.prisma.workoutSession as unknown as {
+    create?: (input: { data: Record<string, unknown> }) => Promise<unknown>;
+  };
   let scheduleItemCount = 0;
   let assignmentCount = 0;
 
@@ -188,27 +212,94 @@ export async function reconcileCoachingContracts(ctx: DynamicSeedContext) {
       );
       const sessionKey = `${trainingPlan.id}:${appointment.user_id}`;
       const sessionCursor = sessionCursorByPlanAndUser.get(sessionKey) ?? 0;
-      const workoutSession =
+      let workoutSession =
         appointment.status === AppointmentStatus.completed
           ? sessionRows?.[sessionCursor]
           : undefined;
+      if (
+        appointment.status === AppointmentStatus.completed &&
+        !workoutSession
+      ) {
+        const fallbackScheduleDay = days[sequenceIndex % days.length];
+        const fallbackExercises = fallbackScheduleDay?.exercises ?? [];
+        if (fallbackExercises.length === 0) {
+          throw new Error(
+            `completed appointment ${appointment.id} has no complete authored workout day`,
+          );
+        }
+        const repairedSession = {
+          completed_at:
+            appointment.completed_at ??
+            new Date(appointment.scheduled_at.getTime() + 3_600_000),
+          created_at: daysFrom(appointment.scheduled_at, -1, 9),
+          duration_seconds: appointment.duration_minutes * 60,
+          id: seedId(`workout-session:reconcile:${appointment.id}`),
+          last_activity_at:
+            appointment.completed_at ??
+            new Date(appointment.scheduled_at.getTime() + 3_600_000),
+          plan: { connect: { id: trainingPlan.id } },
+          started_at: appointment.scheduled_at,
+          status: 'completed',
+          total_volume_kg: fallbackExercises.reduce(
+            (total, exercise) =>
+              total +
+              Number(exercise.weight_kg_target ?? 0) *
+                Number(exercise.reps ?? 0) *
+                Number(exercise.sets),
+            0,
+          ),
+          user: { connect: { id: appointment.user_id } },
+          exercise_logs: {
+            create: fallbackExercises.flatMap((exercise) =>
+              Array.from({ length: exercise.sets }, (_, setIndex) => ({
+                created_at: new Date(
+                  Math.min(
+                    (
+                      appointment.completed_at ??
+                      new Date(appointment.scheduled_at.getTime() + 3_600_000)
+                    ).getTime() - 1_000,
+                    appointment.scheduled_at.getTime() +
+                      (10 + setIndex * 3) * 60_000,
+                  ),
+                ),
+                duration_seconds:
+                  exercise.reps === null ? exercise.duration_seconds : null,
+                exercise: { connect: { id: exercise.exercise_id } },
+                plan_exercise_id: exercise.id,
+                reps_completed: exercise.reps,
+                reps_target: exercise.reps,
+                set_number: setIndex + 1,
+                user: { connect: { id: appointment.user_id } },
+                weight_kg: exercise.weight_kg_target,
+              })),
+            ),
+          },
+        };
+        if (!workoutSessionModel.create) {
+          throw new Error(
+            `completed appointment ${appointment.id} has no repairable workout session`,
+          );
+        }
+        await workoutSessionModel.create({ data: repairedSession });
+        workoutSession = {
+          id: repairedSession.id,
+          plan_id: trainingPlan.id,
+          user_id: appointment.user_id,
+        };
+        sessionRows?.push(workoutSession);
+      }
       if (workoutSession) {
         sessionCursorByPlanAndUser.set(sessionKey, sessionCursor + 1);
       }
       const terminalWithoutSession =
         appointment.status === AppointmentStatus.cancelled ||
         appointment.status === AppointmentStatus.no_show;
-      const completedWithoutSession =
-        appointment.status === AppointmentStatus.completed && !workoutSession;
-
       const assignmentState = workoutSession
         ? CoachWorkoutAssignmentState.completed
-        : terminalWithoutSession || completedWithoutSession
+        : terminalWithoutSession
           ? CoachWorkoutAssignmentState.skipped
           : CoachWorkoutAssignmentState.assigned;
-      const overrideReason = completedWithoutSession
-        ? 'Historical appointment retained without a workout under the configured exercise-history density.'
-        : null;
+      const overrideReason = null;
       const assignmentId = seedIdForAssignment(appointment.id);
       await ctx.prisma.coachWorkoutAssignment.upsert({
         where: { id: assignmentId },

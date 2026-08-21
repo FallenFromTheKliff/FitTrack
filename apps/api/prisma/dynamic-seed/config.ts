@@ -8,7 +8,8 @@ import type {
 
 loadEnv(localEnvFilePath ? { path: localEnvFilePath } : undefined);
 
-const DEFAULT_USERS = 100;
+export const DEFAULT_USERS = 180;
+export const MINIMUM_SEED_USERS = 12;
 const DEFAULT_SEED = 20260523;
 const DEFAULT_HISTORY_MONTHS = 12;
 const DEFAULT_EXERCISE_HISTORY = 50;
@@ -87,7 +88,7 @@ export function parseDynamicSeedConfig(
   argv: readonly string[] = process.argv,
 ): DynamicSeedConfig {
   const users = Math.max(
-    11,
+    MINIMUM_SEED_USERS,
     parsePositiveInt(getFlag(argv, 'users'), DEFAULT_USERS),
   );
   const seed = parsePositiveInt(getFlag(argv, 'seed'), DEFAULT_SEED);
@@ -135,9 +136,11 @@ export function parseDynamicSeedConfig(
     allowRemoteReset: hasFlag(argv, 'allow-remote-reset'),
     anchorDate,
     bookingDensity: parseDensity(getFlag(argv, 'booking-density')),
-    coachActiveRate: parseRate(getFlag(argv, 'coach-active-rate'), 0.35),
-    coachFormerRate: parseRate(getFlag(argv, 'coach-former-rate'), 0.15),
-    coachPausedRate: parseRate(getFlag(argv, 'coach-paused-rate'), 0.08),
+    // Keep the CLI mirrors aligned with the canonical coach scenario quotas
+    // (active 70%, paused 20%, former 10%).
+    coachActiveRate: parseRate(getFlag(argv, 'coach-active-rate'), 0.7),
+    coachFormerRate: parseRate(getFlag(argv, 'coach-former-rate'), 0.1),
+    coachPausedRate: parseRate(getFlag(argv, 'coach-paused-rate'), 0.2),
     confirmRemoteReset: getFlag(argv, 'confirm'),
     exerciseHistory,
     historyEndDate,

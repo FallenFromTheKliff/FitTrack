@@ -69,7 +69,6 @@ model User {
   coach_assigned_plans           TrainingPlan[]                @relation("coach_trainer")
   workout_sessions               WorkoutSession[]
   exercise_logs                  ExerciseLog[]
-  exercise_review_submissions    ExerciseReviewSubmission[]
   pose_sessions                  PoseSession[]
   // S8
   muscle_mastery                 MuscleMasteryProgress[]
@@ -88,7 +87,6 @@ model User {
   integrity_profile              IntegrityProfile?
   integrity_cases                IntegrityCase[]
   integrity_events               IntegrityEvent[]
-  creator_profile                CreatorProfile?
   moderation_actions_taken       ModerationActionRecord[]      @relation("moderation_actor")
   moderation_actions_received    ModerationActionRecord[]      @relation("moderation_target")
   // S9
@@ -1042,7 +1040,6 @@ model ExerciseCatalog {
 
   plan_exercises               PlanExercise[]
   exercise_logs                ExerciseLog[]
-  published_review_submissions ExerciseReviewSubmission[] @relation("published_exercise_review_submissions")
   pose_profiles                PoseExerciseProfile[]
 
   @@index([muscle_group, is_active])
@@ -1075,49 +1072,6 @@ enum ExerciseCategory {
   cardio
   flexibility
   balance
-}
-
-enum ExerciseReviewSubmissionStatus {
-  pending
-  left_private
-  rejected
-  published
-}
-
-model ExerciseReviewSubmission {
-  id                    String                         @id @default(uuid()) @db.Uuid
-  user_id               String                         @db.Uuid
-  pose_session_id       String?                        @unique @db.Uuid
-  published_exercise_id String?                        @db.Uuid
-  status                ExerciseReviewSubmissionStatus @default(pending)
-  source_label          String                         @default("detected unknown movement") @db.VarChar(100)
-  origin_label          String                         @default("client custom") @db.VarChar(100)
-  queue_tag             String                         @default("needs match") @db.VarChar(50)
-  trigger_label         String                         @default("unknown after 3 reps") @db.VarChar(100)
-  title                 String                         @db.VarChar(255)
-  proposed_name         String                         @db.VarChar(255)
-  summary               String                         @db.VarChar(255)
-  match_hint            String?                        @db.VarChar(255)
-  category              ExerciseCategory
-  muscle_group          String                         @db.VarChar(100)
-  muscle_targets        Json?
-  movement_profile      Json?
-  hand_shape_profile    Json?
-  description           String?
-  instructions          String?
-  evidence_bars         Json?
-  review_notes          String?
-  created_at            DateTime                       @default(now()) @db.Timestamptz(6)
-  updated_at            DateTime                       @updatedAt @db.Timestamptz(6)
-  reviewed_at           DateTime?                      @db.Timestamptz(6)
-
-  user               User             @relation(fields: [user_id], references: [id])
-  pose_session       PoseSession?     @relation(fields: [pose_session_id], references: [id], onDelete: SetNull)
-  published_exercise ExerciseCatalog? @relation("published_exercise_review_submissions", fields: [published_exercise_id], references: [id], onDelete: SetNull)
-
-  @@index([status, created_at(sort: Desc)])
-  @@index([user_id, status])
-  @@map("exercise_review_submissions")
 }
 
 enum PoseProfileKind {
@@ -1345,7 +1299,6 @@ model PoseSession {
 
   user              User                      @relation(fields: [user_id], references: [id])
   exercise_log      ExerciseLog?              @relation(fields: [exercise_log_id], references: [id])
-  review_submission ExerciseReviewSubmission?
   pose_profile      PoseExerciseProfile?      @relation(fields: [detected_profile_id], references: [id], onDelete: SetNull)
 
   @@index([user_id])
@@ -1696,21 +1649,6 @@ model IntegrityEvent {
   @@map("integrity_events")
 }
 
-model CreatorProfile {
-  id                    String       @id @default(uuid()) @db.Uuid
-  user_id               String       @unique @db.Uuid
-  state                 CreatorState @default(none)
-  last_state_changed_at DateTime?    @db.Timestamptz(6)
-  admin_notes           String?
-  created_at            DateTime     @default(now()) @db.Timestamptz(6)
-  updated_at            DateTime     @updatedAt @db.Timestamptz(6)
-
-  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
-
-  @@index([state, last_state_changed_at])
-  @@map("creator_profiles")
-}
-
 model ModerationActionRecord {
   id                   String               @id @default(uuid()) @db.Uuid
   actor_user_id        String?              @db.Uuid
@@ -1879,24 +1817,12 @@ enum IntegrityCaseStatus {
   escalated
 }
 
-enum CreatorState {
-  none
-  candidate
-  pending_review
-  approved
-  suspended
-  revoked
-}
-
 enum ModerationActionType {
   manual_exp_grant
   void_progression_grant
   restore_progression_grant
   hide_from_rankings
   disqualify_active_season
-  approve_creator
-  suspend_creator
-  revoke_creator
   resolve_integrity_case_valid
   resolve_integrity_case_invalid
 }

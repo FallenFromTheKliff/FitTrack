@@ -1,6 +1,4 @@
 import type {
-  AdminGamificationCreatorStateInput,
-  AdminGamificationCreatorStateRecord,
   AdminGamificationIntegrityCaseMutationRecord,
   AdminGamificationIntegrityResolutionInput,
   AdminGamificationOverviewRecord,
@@ -42,8 +40,6 @@ import {
 } from "./bookings";
 
 export type {
-  AdminGamificationCreatorStateInput,
-  AdminGamificationCreatorStateRecord,
   AdminGamificationIntegrityCaseMutationRecord,
   AdminGamificationIntegrityResolutionInput,
   AdminGamificationOverviewRecord,
@@ -167,23 +163,6 @@ type AdminGamificationOverviewApiRecord = {
     }[];
     recent_correction_count: number;
   };
-  creators: {
-    approved_count: number;
-    candidate_count: number;
-    pending_review_count: number;
-    profiles: {
-      admin_notes: string | null;
-      last_state_changed_at: string | null;
-      member_name: string;
-      published_submission_count: number;
-      state: AdminGamificationOverviewRecord["creators"]["profiles"][number]["state"];
-      state_label: string;
-      submission_count: number;
-      user_id: string;
-    }[];
-    revoked_count: number;
-    suspended_count: number;
-  };
   generated_at: string;
   integrity: {
     cases: {
@@ -282,15 +261,6 @@ type AdminSeasonStandingApiRecord = {
   visibility: AdminGamificationSeasonStandingRecord["visibility"];
 };
 
-type AdminCreatorStateApiRecord = {
-  admin_notes: string | null;
-  last_state_changed_at: string | null;
-  member_name: string;
-  moderation_action_id: string | null;
-  state: AdminGamificationCreatorStateRecord["state"];
-  state_label: string;
-  user_id: string;
-};
 
 type AdminRankingOverrideApiRecord = {
   admin_note: string | null;
@@ -374,23 +344,6 @@ function mapAdminGamificationOverview(
         updatedAt: profile.updated_at,
         userId: profile.user_id,
         visibility: profile.visibility,
-      })),
-    },
-    creators: {
-      approvedCount: record.creators.approved_count,
-      candidateCount: record.creators.candidate_count,
-      pendingReviewCount: record.creators.pending_review_count,
-      revokedCount: record.creators.revoked_count,
-      suspendedCount: record.creators.suspended_count,
-      profiles: record.creators.profiles.map((profile) => ({
-        adminNotes: profile.admin_notes,
-        lastStateChangedAt: profile.last_state_changed_at,
-        memberName: profile.member_name,
-        publishedSubmissionCount: profile.published_submission_count,
-        state: profile.state,
-        stateLabel: profile.state_label,
-        submissionCount: profile.submission_count,
-        userId: profile.user_id,
       })),
     },
     audit: {
@@ -540,19 +493,6 @@ function toAdminMuscleStandingParams(
   };
 }
 
-function mapAdminCreatorState(
-  record: AdminCreatorStateApiRecord,
-): AdminGamificationCreatorStateRecord {
-  return {
-    adminNotes: record.admin_notes,
-    lastStateChangedAt: record.last_state_changed_at,
-    memberName: record.member_name,
-    moderationActionId: record.moderation_action_id,
-    state: record.state,
-    stateLabel: record.state_label,
-    userId: record.user_id,
-  };
-}
 
 function mapAdminRankingOverride(
   record: AdminRankingOverrideApiRecord,
@@ -904,22 +844,6 @@ export function createAdminApi(transport: ApiTransport) {
         "Unable to update gamification season.",
       );
       return mapAdminSeasonGovernance(data);
-    },
-    async updateGamificationCreatorState(
-      userId: string,
-      payload: AdminGamificationCreatorStateInput,
-    ) {
-      const data = await unwrapResponse<AdminCreatorStateApiRecord>(
-        transport.patch(`/admin/gamification/creators/${userId}`, {
-          state: payload.state,
-          rationale: payload.rationale,
-          ...(payload.adminNotes !== undefined
-            ? { admin_notes: payload.adminNotes }
-            : {}),
-        }),
-        "Unable to update creator governance.",
-      );
-      return mapAdminCreatorState(data);
     },
     async updateGamificationRankingOverride(
       userId: string,

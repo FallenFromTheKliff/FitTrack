@@ -364,10 +364,12 @@ function getCoachFormErrorMessage(error: unknown, fallback: string) {
 function RecurringPlanMobilePanel({
   error,
   isLoading,
+  onRetry,
   plans,
 }: {
   error: string | null;
   isLoading: boolean;
+  onRetry?: () => void;
   plans: RecurringCoachingPlanRecord[];
 }) {
   const { colors } = useTheme();
@@ -406,9 +408,18 @@ function RecurringPlanMobilePanel({
         </FitText>
       ) : null}
       {error ? (
-        <FitText style={{ color: colors.warning, fontSize: 12 }}>
-          {error}
-        </FitText>
+        <View style={{ gap: 8 }}>
+          <FitText style={{ color: colors.warning, fontSize: 12 }}>
+            {error}
+          </FitText>
+          {onRetry ? (
+            <FitButton
+              label="Retry monthly coaching"
+              onPress={onRetry}
+              variant="ghost"
+            />
+          ) : null}
+        </View>
       ) : null}
       {plan ? (
         <>
@@ -471,6 +482,7 @@ export default function BookingsScreen() {
     staleTime: 20_000,
     gcTime: 300_000,
   });
+  const refetchRecurringPlans = recurringPlansQuery.refetch;
   const coachSelfProfileQuery = useQuery({
     ...coachSelfProfileQueryOptions<CoachProfileRecord>(
       mobileApiClient,
@@ -1128,7 +1140,7 @@ export default function BookingsScreen() {
           const attempt =
             await mobileApiClient.commerceCheckout.reconcileHold(checkoutHoldId);
           await Promise.all([
-            recurringPlansQuery.refetch(),
+            refetchRecurringPlans(),
             refetchAppointments(),
           ]);
           if (attempt.state === "succeeded") {
@@ -1217,9 +1229,10 @@ export default function BookingsScreen() {
     checkoutFlow,
     checkoutHoldId,
     checkoutResult,
-    recurringPlansQuery.refetch,
+    isBookingCheckoutFlow,
     isFocused,
     isUserRole,
+    refetchRecurringPlans,
     refetch,
     refetchAppointments,
   ]);
@@ -1242,6 +1255,7 @@ export default function BookingsScreen() {
     checkoutHoldId,
     checkoutResult,
     clearCheckoutReturnParams,
+    isBookingCheckoutFlow,
     isFocused,
     isUserRole,
   ]);
@@ -1764,15 +1778,8 @@ export default function BookingsScreen() {
   }, [filtered]);
 
   const coachSessionsForClientSummary = useMemo(() => {
-    let result = appointmentsWithTimeline;
-    if (statusFilter !== "all") {
-      result = result.filter((booking) => booking.status === statusFilter);
-    }
-    if (startDate)
-      result = result.filter((booking) => booking.date >= startDate);
-    if (endDate) result = result.filter((booking) => booking.date <= endDate);
-    return result;
-  }, [appointmentsWithTimeline, endDate, startDate, statusFilter]);
+    return appointmentsWithTimeline;
+  }, [appointmentsWithTimeline]);
 
   const coachClientSummaries = useMemo<CoachClientSummary[]>(() => {
     const byClient = new Map<
@@ -2295,6 +2302,7 @@ export default function BookingsScreen() {
           topChipOptions={sectionOptions}
           activeTopChip={activeSection}
           onTopChipChange={handleSectionChange}
+          topChipAccessibilityRole="tab"
           topChipLabel="View"
           chipOptions={chipOptions}
           activeChip={statusFilter}
@@ -2329,6 +2337,7 @@ export default function BookingsScreen() {
                   : null
               }
               isLoading={recurringPlansQuery.isPending}
+              onRetry={() => void recurringPlansQuery.refetch()}
               plans={recurringPlansQuery.data ?? []}
             />
           ) : null}
@@ -2617,11 +2626,17 @@ export default function BookingsScreen() {
                   </View>
                 </View>
 
-                <View style={{ flexDirection: "row", gap: 8 }}>
+                <View
+                  accessibilityLabel="Client detail tabs"
+                  style={{ flexDirection: "row", gap: 8 }}
+                >
                   {COACH_CLIENT_DETAIL_TABS.map((tab) => {
                     const isActive = clientDetailTab === tab.value;
                     return (
                       <Pressable
+                        accessibilityLabel={`${tab.label} client detail tab`}
+                        accessibilityRole="tab"
+                        accessibilityState={{ selected: isActive }}
                         key={tab.value}
                         onPress={() => setClientDetailTab(tab.value)}
                         style={{
@@ -2758,6 +2773,8 @@ export default function BookingsScreen() {
                       )}
                     </View>
                     <Pressable
+                      accessibilityLabel="Open workout programs"
+                      accessibilityRole="button"
                       onPress={() => setClientDetailTab("workout")}
                       style={{
                         alignItems: "center",

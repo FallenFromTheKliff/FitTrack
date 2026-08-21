@@ -20,8 +20,7 @@ import {
 } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 
-import type { JwtPayload } from '../../auth/types/jwt-payload.type';
-import { CurrentUser, Roles } from '../../common/decorators';
+import { Roles } from '../../common/decorators';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { ExerciseService } from './exercise.service';
@@ -35,14 +34,6 @@ import {
   UpdateMuscleDefinitionDTO,
   UpdateExerciseDTO,
 } from './dto/exercise.dto';
-import {
-  CreateExerciseDraftProposalDTO,
-  CreateExerciseReviewSubmissionDTO,
-  ExerciseDraftProposalResponseDTO,
-  ExerciseReviewSubmissionFilterDTO,
-  ExerciseReviewSubmissionResponseDTO,
-  UpdateExerciseReviewSubmissionDTO,
-} from './dto/exercise-review.dto';
 
 function apiEnvelopeSchema(schemaRef: string) {
   return {
@@ -76,12 +67,8 @@ function paginatedEnvelopeSchema(itemSchemaRef: string) {
 
 @ApiTags('Fitness')
 @ApiExtraModels(
-  CreateExerciseDraftProposalDTO,
   CreateMuscleDefinitionDTO,
-  CreateExerciseReviewSubmissionDTO,
-  ExerciseDraftProposalResponseDTO,
   ExerciseResponseDTO,
-  ExerciseReviewSubmissionResponseDTO,
   MuscleDefinitionResponseDTO,
 )
 @Controller('fitness')
@@ -270,95 +257,4 @@ export class ExerciseController {
     return this.exerciseService.updateExercise(id, dto);
   }
 
-  @Get('exercise-review-submissions')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.admin, UserRole.staff)
-  @ApiBearerAuth('access-token')
-  @ApiOperation({
-    summary: 'List custom exercise review submissions. Admin and staff only.',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Review submissions returned.',
-    schema: paginatedEnvelopeSchema(
-      getSchemaPath(ExerciseReviewSubmissionResponseDTO),
-    ),
-  })
-  listReviewSubmissions(@Query() dto: ExerciseReviewSubmissionFilterDTO) {
-    return this.exerciseService.listReviewSubmissions(dto);
-  }
-
-  @Post('exercise-review-submissions')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth('access-token')
-  @ApiBody({ type: CreateExerciseReviewSubmissionDTO })
-  @ApiOperation({
-    summary:
-      'Submit a member-created exercise draft from a live mobile pose session.',
-  })
-  @ApiResponse({
-    status: 201,
-    description: 'Review submission created.',
-    schema: apiEnvelopeSchema(
-      getSchemaPath(ExerciseReviewSubmissionResponseDTO),
-    ),
-  })
-  @ApiResponse({
-    status: 403,
-    description: 'User cannot submit exercise drafts.',
-  })
-  createReviewSubmission(
-    @Body() dto: CreateExerciseReviewSubmissionDTO,
-    @CurrentUser() user: JwtPayload,
-  ) {
-    return this.exerciseService.createReviewSubmission(dto, user.sub);
-  }
-
-  @Post('exercise-draft-proposals')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth('access-token')
-  @ApiBody({ type: CreateExerciseDraftProposalDTO })
-  @ApiOperation({
-    summary:
-      'Generate a safe exercise draft proposal from mobile pose evidence.',
-  })
-  @ApiResponse({
-    status: 201,
-    description: 'Draft proposal generated.',
-    schema: apiEnvelopeSchema(getSchemaPath(ExerciseDraftProposalResponseDTO)),
-  })
-  @ApiResponse({
-    status: 403,
-    description: 'User cannot generate exercise drafts.',
-  })
-  createExerciseDraftProposal(
-    @Body() dto: CreateExerciseDraftProposalDTO,
-    @CurrentUser() user: JwtPayload,
-  ) {
-    return this.exerciseService.createExerciseDraftProposal(dto, user.sub);
-  }
-
-  @Patch('exercise-review-submissions/:id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.admin, UserRole.staff)
-  @ApiBearerAuth('access-token')
-  @ApiBody({ type: UpdateExerciseReviewSubmissionDTO })
-  @ApiOperation({
-    summary:
-      'Update the status of a custom exercise review submission. Admin and staff only.',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Review submission updated.',
-    schema: apiEnvelopeSchema(
-      getSchemaPath(ExerciseReviewSubmissionResponseDTO),
-    ),
-  })
-  updateReviewSubmission(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: UpdateExerciseReviewSubmissionDTO,
-    @CurrentUser() user: JwtPayload,
-  ) {
-    return this.exerciseService.updateReviewSubmission(id, dto, user.sub);
-  }
 }

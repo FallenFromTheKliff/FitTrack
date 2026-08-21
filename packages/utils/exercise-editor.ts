@@ -4,179 +4,23 @@ import type {
   ExerciseMovementProfileRecord,
   ExerciseMuscleTargetRecord,
   ExerciseMuscleTargetRole,
+  ExerciseRigKeyframeKind,
+  ExerciseRigKeyframeRecord,
   ExerciseRigRecord,
   MuscleDefinitionRecord,
   ExerciseSubjectLockGestureProfileRecord,
+  PoseKeypointRecord,
   PoseMovementContractRecord,
 } from "@fittrack/types";
 import {
+  isValidPoseMovementContract,
   normalizePoseMovementContract,
   toCanonicalPoseExerciseLabel,
 } from "./pose";
+import { CANONICAL_MUSCLE_DEFINITIONS } from "./fitness-catalog";
 
-export const DEFAULT_MUSCLE_DEFINITIONS = [
-  {
-    aliases: ["pecs", "pectorals"],
-    bodyRegion: "upper_body_push",
-    key: "chest",
-    name: "Chest",
-    sortOrder: 10,
-  },
-  {
-    aliases: ["upper chest"],
-    bodyRegion: "upper_body_push",
-    key: "upper_chest",
-    name: "Upper Chest",
-    sortOrder: 11,
-  },
-  {
-    aliases: ["latissimus dorsi"],
-    bodyRegion: "upper_body_pull",
-    key: "lats",
-    name: "Lats",
-    sortOrder: 20,
-  },
-  {
-    aliases: ["mid back", "rhomboids"],
-    bodyRegion: "upper_body_pull",
-    key: "upper_back",
-    name: "Upper Back",
-    sortOrder: 21,
-  },
-  {
-    aliases: ["trapezius"],
-    bodyRegion: "upper_body_pull",
-    key: "traps",
-    name: "Traps",
-    sortOrder: 22,
-  },
-  {
-    aliases: ["delts", "deltoids"],
-    bodyRegion: "shoulders",
-    key: "shoulders",
-    name: "Shoulders",
-    sortOrder: 30,
-  },
-  {
-    aliases: ["anterior delts"],
-    bodyRegion: "shoulders",
-    key: "front_delts",
-    name: "Front Delts",
-    sortOrder: 31,
-  },
-  {
-    aliases: ["lateral delts"],
-    bodyRegion: "shoulders",
-    key: "side_delts",
-    name: "Side Delts",
-    sortOrder: 32,
-  },
-  {
-    aliases: ["posterior delts"],
-    bodyRegion: "shoulders",
-    key: "rear_delts",
-    name: "Rear Delts",
-    sortOrder: 33,
-  },
-  {
-    aliases: ["bis"],
-    bodyRegion: "arms",
-    key: "biceps",
-    name: "Biceps",
-    sortOrder: 40,
-  },
-  {
-    aliases: ["tris"],
-    bodyRegion: "arms",
-    key: "triceps",
-    name: "Triceps",
-    sortOrder: 41,
-  },
-  {
-    aliases: ["grip"],
-    bodyRegion: "arms",
-    key: "forearms",
-    name: "Forearms",
-    sortOrder: 42,
-  },
-  {
-    aliases: ["abdominals"],
-    bodyRegion: "core",
-    key: "abs",
-    name: "Abs",
-    sortOrder: 50,
-  },
-  {
-    aliases: ["side abs"],
-    bodyRegion: "core",
-    key: "obliques",
-    name: "Obliques",
-    sortOrder: 51,
-  },
-  {
-    aliases: ["trunk"],
-    bodyRegion: "core",
-    key: "core",
-    name: "Core",
-    sortOrder: 52,
-  },
-  {
-    aliases: ["spinal erectors", "erectors"],
-    bodyRegion: "core",
-    key: "lower_back",
-    name: "Lower Back",
-    sortOrder: 53,
-  },
-  {
-    aliases: ["butt", "gluteals"],
-    bodyRegion: "lower_body",
-    key: "glutes",
-    name: "Glutes",
-    sortOrder: 60,
-  },
-  {
-    aliases: ["quadriceps"],
-    bodyRegion: "lower_body",
-    key: "quads",
-    name: "Quads",
-    sortOrder: 61,
-  },
-  {
-    aliases: ["hams"],
-    bodyRegion: "lower_body",
-    key: "hamstrings",
-    name: "Hamstrings",
-    sortOrder: 62,
-  },
-  {
-    aliases: ["gastroc", "soleus"],
-    bodyRegion: "lower_body",
-    key: "calves",
-    name: "Calves",
-    sortOrder: 63,
-  },
-  {
-    aliases: ["inner thighs"],
-    bodyRegion: "lower_body",
-    key: "adductors",
-    name: "Adductors",
-    sortOrder: 64,
-  },
-  {
-    aliases: ["outer hips"],
-    bodyRegion: "lower_body",
-    key: "abductors",
-    name: "Abductors",
-    sortOrder: 65,
-  },
-  {
-    aliases: ["iliopsoas"],
-    bodyRegion: "lower_body",
-    key: "hip_flexors",
-    name: "Hip Flexors",
-    sortOrder: 66,
-  },
-] as const;
+/** Backward-compatible editor export backed by the shared fixed catalog. */
+export const DEFAULT_MUSCLE_DEFINITIONS = CANONICAL_MUSCLE_DEFINITIONS;
 
 export const EXERCISE_MUSCLE_GROUP_OPTIONS = DEFAULT_MUSCLE_DEFINITIONS.map(
   (definition) => definition.key,
@@ -413,7 +257,9 @@ export function getPrimaryExerciseMuscleGroup(
     muscleTargets?.find((target) => target.role === "primary") ??
     muscleTargets?.[0] ??
     null;
-  return normalizeMuscleKey(primary?.muscleGroup) || normalizeMuscleKey(fallback);
+  return (
+    normalizeMuscleKey(primary?.muscleGroup) || normalizeMuscleKey(fallback)
+  );
 }
 
 export function getCanonicalMuscleDefinitions(
@@ -477,7 +323,11 @@ export function normalizeExerciseMuscleTargets(
       if (!muscleGroup) return null;
       return {
         allocationPercent: Math.round(
-          clamp(toNumber(record.allocationPercent ?? record.allocation_percent, 0), 0, 100),
+          clamp(
+            toNumber(record.allocationPercent ?? record.allocation_percent, 0),
+            0,
+            100,
+          ),
         ),
         muscleGroup,
         role: normalizeRole(record.role),
@@ -593,11 +443,16 @@ export function normalizeExerciseGripProfile(
   value: unknown,
 ): ExerciseGripProfileRecord {
   const record =
-    value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+    value && typeof value === "object"
+      ? (value as Record<string, unknown>)
+      : {};
   return {
     maxOpenFrames: Math.round(
       clamp(
-        toNumber(record.maxOpenFrames, DEFAULT_EXERCISE_GRIP_PROFILE.maxOpenFrames),
+        toNumber(
+          record.maxOpenFrames,
+          DEFAULT_EXERCISE_GRIP_PROFILE.maxOpenFrames,
+        ),
         0,
         8,
       ),
@@ -609,14 +464,20 @@ export function normalizeExerciseGripProfile(
     ),
     minUsableFrames: Math.round(
       clamp(
-        toNumber(record.minUsableFrames, DEFAULT_EXERCISE_GRIP_PROFILE.minUsableFrames),
+        toNumber(
+          record.minUsableFrames,
+          DEFAULT_EXERCISE_GRIP_PROFILE.minUsableFrames,
+        ),
         1,
         10,
       ),
     ),
     recentFrameLimit: Math.round(
       clamp(
-        toNumber(record.recentFrameLimit, DEFAULT_EXERCISE_GRIP_PROFILE.recentFrameLimit),
+        toNumber(
+          record.recentFrameLimit,
+          DEFAULT_EXERCISE_GRIP_PROFILE.recentFrameLimit,
+        ),
         1,
         18,
       ),
@@ -640,22 +501,32 @@ export function normalizeExerciseSubjectLockGestureProfile(
   value: unknown,
 ): ExerciseSubjectLockGestureProfileRecord {
   const record =
-    value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+    value && typeof value === "object"
+      ? (value as Record<string, unknown>)
+      : {};
   const defaults = DEFAULT_EXERCISE_SUBJECT_LOCK_GESTURE_PROFILE;
   return {
     enabled: normalizeBoolean(record.enabled, defaults.enabled),
     gesture: "rock_sign",
     handAboveShoulderOffset: clamp(
-      toNumber(record.handAboveShoulderOffset, defaults.handAboveShoulderOffset),
+      toNumber(
+        record.handAboveShoulderOffset,
+        defaults.handAboveShoulderOffset,
+      ),
       0,
       0.2,
     ),
     handRaisedFromElbowOffset: clamp(
-      toNumber(record.handRaisedFromElbowOffset, defaults.handRaisedFromElbowOffset),
+      toNumber(
+        record.handRaisedFromElbowOffset,
+        defaults.handRaisedFromElbowOffset,
+      ),
       0,
       0.2,
     ),
-    holdMs: Math.round(clamp(toNumber(record.holdMs, defaults.holdMs), 400, 6000)),
+    holdMs: Math.round(
+      clamp(toNumber(record.holdMs, defaults.holdMs), 400, 6000),
+    ),
     hornThumbLeadOffset: clamp(
       toNumber(record.hornThumbLeadOffset, defaults.hornThumbLeadOffset),
       0,
@@ -698,7 +569,9 @@ export function normalizeExerciseHandShapeProfile(
   value: unknown,
 ): ExerciseHandShapeProfileRecord {
   const record =
-    value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+    value && typeof value === "object"
+      ? (value as Record<string, unknown>)
+      : {};
   const handPosePreview = normalizeExerciseHandPosePreview(
     record.handPosePreview ?? record.hand_pose_preview,
   );
@@ -727,18 +600,16 @@ function normalizeExerciseHandPosePreview(
     "custom",
   ]);
   const rawPoints = Array.isArray(record.points) ? record.points : [];
-  const points = rawPoints
-    .slice(0, 21)
-    .map((point) => {
-      const current =
-        point && typeof point === "object"
-          ? (point as Record<string, unknown>)
-          : {};
-      return {
-        x: clamp(toNumber(current.x, 0.5), -0.25, 1.25),
-        y: clamp(toNumber(current.y, 0.5), -0.25, 1.25),
-      };
-    });
+  const points = rawPoints.slice(0, 21).map((point) => {
+    const current =
+      point && typeof point === "object"
+        ? (point as Record<string, unknown>)
+        : {};
+    return {
+      x: clamp(toNumber(current.x, 0.5), -0.25, 1.25),
+      y: clamp(toNumber(current.y, 0.5), -0.25, 1.25),
+    };
+  });
   if (!points.length) return null;
   const preset =
     typeof record.preset === "string" && allowedPresets.has(record.preset)
@@ -769,6 +640,137 @@ export function createExerciseMovementProfile({
   };
 }
 
+const GENERATED_RIG_LANDMARK_COUNT = 33;
+
+function createGeneratedRigKeypoints(
+  dominantJoint: PoseMovementContractRecord["dominantJoint"],
+  angle: number,
+): PoseKeypointRecord[] {
+  const keypoints = Array.from(
+    { length: GENERATED_RIG_LANDMARK_COUNT },
+    (): PoseKeypointRecord => ({
+      visibility: 0.08,
+      x: 0.5,
+      y: 0.5,
+      z: 0,
+    }),
+  );
+  const triples: Record<
+    PoseMovementContractRecord["dominantJoint"],
+    Array<[number, number, number]>
+  > = {
+    elbow: [
+      [11, 13, 15],
+      [12, 14, 16],
+    ],
+    shoulder: [
+      [13, 11, 23],
+      [14, 12, 24],
+    ],
+    hip: [
+      [11, 23, 25],
+      [12, 24, 26],
+    ],
+    knee: [
+      [23, 25, 27],
+      [24, 26, 28],
+    ],
+  };
+  const radians = (Math.max(0, Math.min(180, angle)) * Math.PI) / 180;
+  triples[dominantJoint].forEach(([a, b, c], side) => {
+    const centerX = side === 0 ? 0.42 : 0.58;
+    const centerY = 0.5;
+    const radius = 0.14;
+    keypoints[a] = { visibility: 0.92, x: centerX + radius, y: centerY, z: 0 };
+    keypoints[b] = { visibility: 0.92, x: centerX, y: centerY, z: 0 };
+    keypoints[c] = {
+      visibility: 0.92,
+      x: centerX + radius * Math.cos(radians),
+      y: centerY + radius * Math.sin(radians),
+      z: 0,
+    };
+  });
+  return keypoints;
+}
+
+function createGeneratedRigKeyframe(
+  kind: ExerciseRigKeyframeKind,
+  angle: number,
+  capturedAtMs: number,
+  keypoints: PoseKeypointRecord[],
+): ExerciseRigKeyframeRecord {
+  return {
+    angle,
+    capturedAtMs,
+    confidence: 0.82,
+    keypoints,
+    kind,
+    label:
+      kind === "peak"
+        ? "Peak contraction"
+        : kind === "end"
+          ? "Return"
+          : "Start position",
+  };
+}
+
+/** Create the editable starter rig used by the admin exercise contract editor. */
+export function createGeneratedExerciseRigFromMovementContract({
+  exerciseLabel,
+  movementContract,
+}: {
+  exerciseLabel?: string | null;
+  movementContract: PoseMovementContractRecord;
+}): ExerciseRigRecord {
+  const contract =
+    normalizePoseMovementContract(movementContract, exerciseLabel) ??
+    movementContract;
+  const upAngle = contract.repThresholds.up.angle;
+  const downAngle = contract.repThresholds.down.angle;
+  const minAngle = Math.min(upAngle, downAngle);
+  const maxAngle = Math.max(upAngle, downAngle);
+  const label = (exerciseLabel ?? contract.exercise).trim() || null;
+
+  return {
+    angleSummary: {
+      dominantJoint: contract.dominantJoint,
+      maxAngle,
+      minAngle,
+      repCount: 0,
+      travel: maxAngle - minAngle,
+    },
+    capturedFromSession: null,
+    exerciseLabel: label,
+    keyframes: [
+      createGeneratedRigKeyframe(
+        "start",
+        upAngle,
+        0,
+        createGeneratedRigKeypoints(contract.dominantJoint, upAngle),
+      ),
+      createGeneratedRigKeyframe(
+        "peak",
+        downAngle,
+        650,
+        createGeneratedRigKeypoints(contract.dominantJoint, downAngle),
+      ),
+      createGeneratedRigKeyframe(
+        "end",
+        upAngle,
+        1300,
+        createGeneratedRigKeypoints(contract.dominantJoint, upAngle),
+      ),
+    ],
+    landmarkSchema: "mediapipe_pose_v1",
+    repIndex: null,
+    schemaVersion: "exercise_rig_v1",
+    source: "generated_contract",
+    warnings: [
+      "Generated from the movement contract; verify joint positions before publishing.",
+    ],
+  };
+}
+
 export function normalizeExerciseMovementProfile(
   value: unknown,
   fallback?: {
@@ -778,7 +780,9 @@ export function normalizeExerciseMovementProfile(
 ): ExerciseMovementProfileRecord | null {
   if (!value && !fallback?.movementContract && !fallback?.rig) return null;
   const record =
-    value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+    value && typeof value === "object"
+      ? (value as Record<string, unknown>)
+      : {};
   const movementContract = (record.movementContract ??
     record.movement_contract ??
     fallback?.movementContract ??
@@ -794,7 +798,9 @@ export function normalizeExerciseMovementProfile(
 
 export function validateExerciseEditorContract(input: {
   handShapeProfile?: ExerciseHandShapeProfileRecord | null;
-  muscleDefinitions?: Array<Pick<MuscleDefinitionRecord, "isActive" | "key">> | null;
+  muscleDefinitions?: Array<
+    Pick<MuscleDefinitionRecord, "isActive" | "key">
+  > | null;
   movementProfile?: ExerciseMovementProfileRecord | null;
   muscleGroup?: string | null;
   muscleTargets?: ExerciseMuscleTargetRecord[] | null;
@@ -804,7 +810,9 @@ export function validateExerciseEditorContract(input: {
     input.muscleTargets ?? [],
     input.muscleGroup,
   );
-  const primaryTargets = muscleTargets.filter((target) => target.role === "primary");
+  const primaryTargets = muscleTargets.filter(
+    (target) => target.role === "primary",
+  );
   const totalAllocation = muscleTargets.reduce(
     (sum, target) => sum + target.allocationPercent,
     0,
@@ -842,10 +850,20 @@ export function validateExerciseEditorContract(input: {
   const movementContract = input.movementProfile?.movementContract;
   if (!movementContract) {
     if (rig) {
-      errors.push("Movement rigs need a movement contract; keep unsupported exercises manual-only.");
+      errors.push(
+        "Movement rigs need a movement contract; keep unsupported exercises manual-only.",
+      );
     }
   } else {
-    const contractRecord = movementContract as unknown as Record<string, unknown>;
+    const contractRecord = movementContract as unknown as Record<
+      string,
+      unknown
+    >;
+    if (!isValidPoseMovementContract(movementContract)) {
+      errors.push(
+        "This movement contract does not match the reviewed pose runtime; keep the exercise manual-only.",
+      );
+    }
     if (!toCanonicalPoseExerciseLabel(movementContract.exercise)) {
       errors.push(
         "This exercise is not supported for auto tracking; keep it manual-only.",
@@ -872,7 +890,9 @@ export function validateExerciseEditorContract(input: {
       !hasValidThreshold(thresholds?.down) ||
       !hasValidThreshold(thresholds?.up)
     ) {
-      errors.push("Auto-track movement contracts need exercise, joints, secondary checks, and valid up/down thresholds.");
+      errors.push(
+        "Auto-track movement contracts need exercise, joints, secondary checks, and valid up/down thresholds.",
+      );
     }
     if (
       contractRecord.contractVersion !== undefined &&
@@ -905,7 +925,11 @@ export function validateExerciseEditorContract(input: {
     } else if (repModel === "unknown") {
       errors.push("Choose a movement model before saving.");
     }
-    if (!["both", "left", "right", "either", "alternating"].includes(requiredSides)) {
+    if (
+      !["both", "left", "right", "either", "alternating"].includes(
+        requiredSides,
+      )
+    ) {
       errors.push("Choose supported required sides before saving.");
     }
     if (repModel === "bilateral" && requiredSides !== "both") {
@@ -931,12 +955,18 @@ export function validateExerciseEditorContract(input: {
         errors.push("Bilateral exercises need a symmetry tolerance.");
       }
     }
-    if (!isStaticHold && hasValidThreshold(thresholds?.down) && hasValidThreshold(thresholds?.up)) {
+    if (
+      !isStaticHold &&
+      hasValidThreshold(thresholds?.down) &&
+      hasValidThreshold(thresholds?.up)
+    ) {
       const downAngle = movementContract.repThresholds.down.angle;
       const upAngle = movementContract.repThresholds.up.angle;
       const travel = Math.abs(upAngle - downAngle);
       if (travel < 10) {
-        errors.push("Dynamic rep thresholds need at least 10 degrees of travel.");
+        errors.push(
+          "Dynamic rep thresholds need at least 10 degrees of travel.",
+        );
       }
       if (
         movementContract.repThresholds.down.tolerance < 0 ||
@@ -945,7 +975,10 @@ export function validateExerciseEditorContract(input: {
         errors.push("Rep threshold tolerances cannot be negative.");
       }
     }
-    if (isStaticHold && movementContract.partialRepPolicy === "count_half_reps") {
+    if (
+      isStaticHold &&
+      movementContract.partialRepPolicy === "count_half_reps"
+    ) {
       errors.push("Static holds cannot use half-rep counting.");
     }
     if (
@@ -964,13 +997,18 @@ export function validateExerciseEditorContract(input: {
           movementContract.trackingRequirements.minReliableFrameLandmarks,
         ) ||
         movementContract.trackingRequirements.minReliableFrameLandmarks < 1 ||
-        !Array.isArray(movementContract.trackingRequirements.requiredLandmarks) ||
+        !Array.isArray(
+          movementContract.trackingRequirements.requiredLandmarks,
+        ) ||
         !movementContract.trackingRequirements.requiredLandmarks.length ||
         !movementContract.trackingRequirements.requiredLandmarks.every(
-          (landmark) => typeof landmark === "string" && landmark.trim().length > 0,
+          (landmark) =>
+            typeof landmark === "string" && landmark.trim().length > 0,
         ))
     ) {
-      errors.push("Tracking requirements need a confidence threshold, landmark count, and landmark list.");
+      errors.push(
+        "Tracking requirements need a confidence threshold, landmark count, and landmark list.",
+      );
     }
   }
 
@@ -978,8 +1016,14 @@ export function validateExerciseEditorContract(input: {
     movementContract &&
     (!rig || !Array.isArray(rig.keyframes) || rig.keyframes.length < 3)
   ) {
-    errors.push("Auto-track movement rigs need distinct start, peak, and end keyframes.");
-  } else if (movementContract && rig && movementContract.repModel !== "static_hold") {
+    errors.push(
+      "Auto-track movement rigs need distinct start, peak, and end keyframes.",
+    );
+  } else if (
+    movementContract &&
+    rig &&
+    movementContract.repModel !== "static_hold"
+  ) {
     const hasValidKeypointFrames = rig.keyframes.every(
       (frame) =>
         !!frame &&
@@ -1010,17 +1054,24 @@ export function validateExerciseEditorContract(input: {
       return left.keypoints.reduce((distance, point, index) => {
         const other = right.keypoints[index];
         if (!other) return distance;
-        return distance +
+        return (
+          distance +
           Math.abs(point.x - other.x) +
           Math.abs(point.y - other.y) +
-          Math.abs(point.z - other.z);
+          Math.abs(point.z - other.z)
+        );
       }, 0);
     };
     if (!start || !peak || !end) {
       errors.push("Auto-track rigs must label start, peak, and end frames.");
     } else {
-      if (frameDistance(start, peak) < 0.01 || frameDistance(peak, end) < 0.01) {
-        errors.push("Auto-track rig keyframes must show distinct movement; identical frames are invalid.");
+      if (
+        frameDistance(start, peak) < 0.01 ||
+        frameDistance(peak, end) < 0.01
+      ) {
+        errors.push(
+          "Auto-track rig keyframes must show distinct movement; identical frames are invalid.",
+        );
       }
       if (
         typeof start.angle !== "number" ||
@@ -1029,15 +1080,22 @@ export function validateExerciseEditorContract(input: {
         Math.abs(start.angle - peak.angle) < 10 ||
         Math.abs(peak.angle - end.angle) < 10
       ) {
-        errors.push("Auto-track rig keyframes need measurable start-to-peak-to-end angle travel.");
+        errors.push(
+          "Auto-track rig keyframes need measurable start-to-peak-to-end angle travel.",
+        );
       }
       if (
         !Number.isFinite(start.capturedAtMs) ||
         !Number.isFinite(peak.capturedAtMs) ||
         !Number.isFinite(end.capturedAtMs) ||
-        !(start.capturedAtMs < peak.capturedAtMs && peak.capturedAtMs < end.capturedAtMs)
+        !(
+          start.capturedAtMs < peak.capturedAtMs &&
+          peak.capturedAtMs < end.capturedAtMs
+        )
       ) {
-        errors.push("Auto-track rig keyframes must be ordered start, peak, then end.");
+        errors.push(
+          "Auto-track rig keyframes must be ordered start, peak, then end.",
+        );
       }
     }
   }
@@ -1049,19 +1107,26 @@ export function validateExerciseEditorContract(input: {
     movementContract.repModel === "bilateral"
   ) {
     const requiredIndexes = [11, 12, 13, 14, 15, 16];
-      const hasBothSideFrames = rig.keyframes.every((frame) =>
+    const hasBothSideFrames = rig.keyframes.every(
+      (frame) =>
         Array.isArray(frame.keypoints) &&
-        requiredIndexes.every((index) => (frame.keypoints[index]?.visibility ?? 0) > 0.1),
-      );
+        requiredIndexes.every(
+          (index) => (frame.keypoints[index]?.visibility ?? 0) > 0.1,
+        ),
+    );
     if (!hasBothSideFrames) {
-      errors.push("Bilateral rigs need visible left and right shoulder-elbow-wrist chains.");
+      errors.push(
+        "Bilateral rigs need visible left and right shoulder-elbow-wrist chains.",
+      );
     }
   }
 
   return {
     errors,
     normalized: {
-      handShapeProfile: normalizeExerciseHandShapeProfile(input.handShapeProfile),
+      handShapeProfile: normalizeExerciseHandShapeProfile(
+        input.handShapeProfile,
+      ),
       movementProfile: normalizeExerciseMovementProfile(input.movementProfile),
       muscleGroup: getPrimaryExerciseMuscleGroup(
         muscleTargets,

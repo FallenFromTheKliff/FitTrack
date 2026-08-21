@@ -28,12 +28,37 @@ function isUpcomingSession(session: DetailBooking) {
     return false;
   }
 
-  const parsed = new Date(sessionDateTimeValue(session));
-  if (Number.isNaN(parsed.getTime())) {
-    return false;
-  }
+  const [year, month, day] = session.date.split("-").map(Number);
+  const time =
+    session.startTime?.trim() || session.time?.split(" - ")[0]?.trim() || "";
+  const match = time.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!year || !month || !day || !match) return false;
 
-  return parsed.getTime() >= Date.now();
+  let hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return false;
+  if (match[3].toUpperCase() === "AM" && hour === 12) hour = 0;
+  if (match[3].toUpperCase() === "PM" && hour !== 12) hour += 12;
+
+  // DetailBooking stores the display date/time in gym time (UTC+8).
+  const gymTimestamp =
+    Date.UTC(year, month - 1, day, hour, minute) - 8 * 60 * 60 * 1000;
+  return Number.isFinite(gymTimestamp) && gymTimestamp >= Date.now();
+}
+
+function formatSessionStatus(status: string) {
+  switch (status) {
+    case "cancelled":
+      return "Cancelled";
+    case "completed":
+      return "Completed";
+    case "confirmed":
+      return "Confirmed";
+    case "no_show":
+      return "No show";
+    default:
+      return "Unavailable";
+  }
 }
 
 function resolveSessionSubtitle(session: DetailBooking) {
@@ -159,8 +184,8 @@ export function CoachClientPaidSchedule({
                 key={session.id}
                 label={title}
                 icon={statusIcon}
-                subtitle={`${session.status} · ${resolveSessionSubtitle(session)}`}
-                trailingLabel={session.status}
+                subtitle={`${formatSessionStatus(session.status)} · ${resolveSessionSubtitle(session)}`}
+                trailingLabel={formatSessionStatus(session.status)}
                 trailingLabelColor={resolveSessionStatusColor(
                   colors,
                   session.status,

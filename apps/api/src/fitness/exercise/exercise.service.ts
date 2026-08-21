@@ -1,26 +1,17 @@
 import {
   BadRequestException,
-  ForbiddenException,
   Injectable,
-  NotFoundException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import {
-  CreatorProfile,
-  CreatorState,
   ExerciseCategory,
   ExerciseCatalog,
-  ExerciseReviewSubmission,
-  ExerciseReviewSubmissionStatus,
   Prisma,
-  UserRole,
 } from '@prisma/client';
 
 import { ActivityLevelService } from '../../user/activity-level.service';
 import { PaginatedResult } from '../../common/base-repository/base-repository';
 import {
   ActiveExerciseGenerationRecord,
-  CreatorUserIdentityRecord,
   ExerciseRepository,
   MuscleDefinitionRecord,
 } from './exercise.repository';
@@ -34,14 +25,6 @@ import {
   UpdateMuscleDefinitionDTO,
   UpdateExerciseDTO,
 } from './dto/exercise.dto';
-import {
-  CreateExerciseReviewSubmissionDTO,
-  CreateExerciseDraftProposalDTO,
-  ExerciseDraftProposalResponseDTO,
-  ExerciseReviewSubmissionFilterDTO,
-  ExerciseReviewSubmissionResponseDTO,
-  UpdateExerciseReviewSubmissionDTO,
-} from './dto/exercise-review.dto';
 
 const EXERCISE_UPDATE_FIELDS = [
   'name',
@@ -53,41 +36,6 @@ const EXERCISE_UPDATE_FIELDS = [
   'image_url',
   'is_active',
 ] as const;
-
-const EXERCISE_REVIEW_SUBMISSION_UPDATE_FIELDS = [
-  'status',
-  'published_exercise_id',
-  'review_notes',
-] as const;
-
-type CreatorReviewCounts = {
-  leftPrivate: number;
-  pending: number;
-  published: number;
-  rejected: number;
-  total: number;
-};
-
-type CreatorReviewContext = {
-  counts: CreatorReviewCounts;
-  identity: CreatorUserIdentityRecord | null;
-  profile: CreatorProfile | null;
-};
-
-type AiExerciseDraftProposalPayload = {
-  category?: unknown;
-  confidence?: unknown;
-  description?: unknown;
-  evidence?: unknown;
-  hand_shape_profile?: unknown;
-  instructions?: unknown;
-  movement_profile?: unknown;
-  muscle_group?: unknown;
-  muscle_targets?: unknown;
-  proposed_name?: unknown;
-  review_warnings?: unknown;
-  summary?: unknown;
-};
 
 function pickDefined<T extends object, K extends keyof T>(
   source: T,
@@ -111,19 +59,6 @@ function toJsonInput(value: unknown) {
   return value as Prisma.InputJsonValue;
 }
 
-function normalizeReviewEvidence(
-  value: Prisma.JsonValue | null,
-): number[] | Record<string, unknown> | null {
-  if (value === null) return null;
-  if (Array.isArray(value)) {
-    return value.map((entry) => Number(entry));
-  }
-  if (typeof value === 'object') {
-    return value as Record<string, unknown>;
-  }
-  return null;
-}
-
 function normalizeJsonArray(value: Prisma.JsonValue | null): unknown[] | null {
   return Array.isArray(value) ? value : null;
 }
@@ -134,16 +69,6 @@ function normalizeJsonObject(
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
-}
-
-function normalizeDraftLabel(value: unknown, fallback: string): string {
-  if (typeof value !== 'string') return fallback;
-  const normalized = value.trim().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
-  if (!normalized) return fallback;
-  return normalized
-    .split(' ')
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
 }
 
 function normalizeMuscleKey(value: unknown): string {
@@ -189,62 +114,10 @@ function normalizeUnknownObject(value: unknown): Record<string, unknown> | null 
     : null;
 }
 
-function normalizeUnknownArray(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : [];
-}
-
-function inferMuscleGroupFromName(value: string): string {
-  const normalized = value.toLowerCase();
-  if (normalized.includes('curl')) return 'biceps';
-  if (normalized.includes('push')) return 'chest';
-  if (normalized.includes('pull')) return 'lats';
-  if (normalized.includes('dip')) return 'triceps';
-  if (normalized.includes('squat')) return 'quads';
-  return 'custom';
-}
-
-function createDefaultHandShapeProfile(exerciseName: string) {
-  const requiresGrip = exerciseName.toLowerCase().includes('curl');
-  return {
-    grip: {
-      maxOpenFrames: 0,
-      maxOpenRatio: 0.18,
-      minUsableFrames: 2,
-      recentFrameLimit: 6,
-      reliablePointMinVisibility: 0.36,
-      required: requiresGrip,
-    },
-    schemaVersion: 'exercise_hand_shape_v1',
-    subjectLockGesture: {
-      enabled: true,
-      gesture: 'rock_sign',
-      handAboveShoulderOffset: 0.018,
-      handRaisedFromElbowOffset: 0.018,
-      holdMs: 3000,
-      hornThumbLeadOffset: 0.025,
-      maxHornLiftDelta: 0.08,
-      minFingerDistance: 0.045,
-      minFingerLift: 0.035,
-      minFingerSpreadX: 0.025,
-      minThumbOffset: 0.012,
-      minThumbSeparation: 0.025,
-    },
-    warnings: [],
-  };
-}
-
-function isExerciseCategory(value: unknown): value is ExerciseCategory {
-  return (
-    typeof value === 'string' &&
-    Object.values(ExerciseCategory).includes(value as ExerciseCategory)
-  );
-}
-
 @Injectable()
 export class ExerciseService {
   constructor(
     private readonly repo: ExerciseRepository,
-    private readonly config: ConfigService,
     private readonly activityLevelService: ActivityLevelService,
   ) {}
 
@@ -334,25 +207,6 @@ export class ExerciseService {
     return this.repo.listActiveExercisesForGeneration();
   }
 
-  async listReviewSubmissions(
-    dto: ExerciseReviewSubmissionFilterDTO,
-  ): Promise<PaginatedResult<ExerciseReviewSubmissionResponseDTO>> {
-    const result = await this.repo.listReviewSubmissions(dto);
-    const creatorContextByUserId = await this.loadCreatorReviewContext(
-      result.data.map((submission) => submission.user_id),
-    );
-
-    return {
-      data: result.data.map((submission) =>
-        this.toReviewSubmissionResponse(
-          submission,
-          creatorContextByUserId.get(submission.user_id),
-        ),
-      ),
-      meta: result.meta,
-    };
-  }
-
   async createExercise(dto: CreateExerciseDTO): Promise<ExerciseResponseDTO> {
     const muscleContract = await this.normalizeAndValidateMuscleTargets(
       dto.muscle_targets,
@@ -368,282 +222,6 @@ export class ExerciseService {
         }),
       ),
     );
-  }
-
-  async createReviewSubmission(
-    dto: CreateExerciseReviewSubmissionDTO,
-    userId: string,
-  ): Promise<ExerciseReviewSubmissionResponseDTO> {
-    await this.ensureCanSubmitExerciseDraft(userId);
-    await this.ensurePoseSessionBelongsToUser(dto.pose_session_id, userId);
-    const muscleContract = await this.normalizeAndValidateMuscleTargets(
-      dto.muscle_targets,
-      dto.muscle_group,
-    );
-
-    const createdSubmission = await this.repo.createReviewSubmission({
-      proposed_name: dto.proposed_name,
-      summary: dto.summary,
-      category: dto.category,
-      muscle_group: muscleContract.muscleGroup,
-      description: dto.description,
-      evidence_bars: toJsonInput(dto.evidence_bars),
-      hand_shape_profile: toJsonInput(dto.hand_shape_profile),
-      instructions: dto.instructions,
-      match_hint: dto.match_hint,
-      movement_profile: toJsonInput(dto.movement_profile),
-      muscle_targets: toJsonInput(muscleContract.muscleTargets),
-      origin_label: dto.origin_label,
-      queue_tag: dto.queue_tag,
-      source_label: dto.source_label,
-      status: ExerciseReviewSubmissionStatus.pending,
-      title: dto.title?.trim() || dto.proposed_name.trim(),
-      trigger_label: dto.trigger_label,
-      user: { connect: { id: userId } },
-      ...(dto.pose_session_id
-        ? { pose_session: { connect: { id: dto.pose_session_id } } }
-        : {}),
-    });
-    const creatorContextByUserId = await this.loadCreatorReviewContext([
-      userId,
-    ]);
-    await this.activityLevelService.recalculateForUser(userId);
-
-    return this.toReviewSubmissionResponse(
-      createdSubmission,
-      creatorContextByUserId.get(userId),
-    );
-  }
-
-  async createExerciseDraftProposal(
-    dto: CreateExerciseDraftProposalDTO,
-    userId: string,
-  ): Promise<ExerciseDraftProposalResponseDTO> {
-    await this.ensureCanSubmitExerciseDraft(userId);
-    await this.ensurePoseSessionBelongsToUser(dto.pose_session_id, userId);
-
-    const proposedName = normalizeDraftLabel(
-      dto.proposed_name,
-      'Custom Exercise Draft',
-    );
-    const evidence = normalizeUnknownObject(dto.evidence) ?? {};
-    const incomingMovementProfile = normalizeUnknownObject(dto.movement_profile);
-    const evidenceMovementContract = normalizeUnknownObject(
-      evidence.movementContract,
-    );
-    const evidenceRig = normalizeUnknownObject(evidence.rig);
-    const movementProfile =
-      incomingMovementProfile ??
-      ({
-        movementContract: evidenceMovementContract,
-        rig: evidenceRig,
-        schemaVersion: 'exercise_movement_profile_v1',
-        warnings: [
-          'Generated from submitted draft evidence; verify before publishing.',
-        ],
-      } satisfies Record<string, unknown>);
-    const confidence =
-      typeof evidence.confidence === 'number'
-        ? Math.max(0, Math.min(1, evidence.confidence))
-        : 0.58;
-    const muscleGroup =
-      dto.muscle_group?.trim() || inferMuscleGroupFromName(proposedName);
-    const muscleTargets = normalizeUnknownArray(dto.muscle_targets);
-    const normalizedMuscleTargets = muscleTargets.length
-      ? muscleTargets
-      : [
-          {
-            allocationPercent: 100,
-            muscleGroup,
-            role: 'primary',
-          },
-        ];
-    const normalizedEvidence = {
-      confidence,
-      integrityNotes: normalizeUnknownArray(evidence.integrityNotes),
-      movementContract:
-        normalizeUnknownObject(movementProfile.movementContract) ??
-        evidenceMovementContract,
-      promptContractVersion: 'exercise_creation_v1',
-      repCount: Number.isFinite(Number(evidence.repCount))
-        ? Number(evidence.repCount)
-        : 0,
-      rig: normalizeUnknownObject(movementProfile.rig) ?? evidenceRig,
-      schemaVersion: 'exercise_ai_draft_v1',
-      source: 'mobile_pose_session',
-    };
-
-    const fallbackProposal: ExerciseDraftProposalResponseDTO = {
-      category: dto.category ?? ExerciseCategory.strength,
-      confidence,
-      description:
-        dto.description?.trim() ||
-        `${proposedName} generated from pose evidence and editable movement thresholds.`,
-      evidence: normalizedEvidence,
-      hand_shape_profile:
-        normalizeUnknownObject(dto.hand_shape_profile) ??
-        createDefaultHandShapeProfile(proposedName),
-      instructions:
-        dto.instructions?.trim() ||
-        'Use the visual rig to confirm the start position, peak contraction, and controlled return before publishing.',
-      movement_profile: movementProfile,
-      muscle_group: muscleGroup,
-      muscle_targets: normalizedMuscleTargets,
-      proposal_source: 'deterministic_fallback',
-      proposed_name: proposedName,
-      review_warnings: [
-        'AI-assisted draft endpoint used deterministic fallback; validate rig, thresholds, and muscles before publishing.',
-      ],
-      summary:
-        dto.summary?.trim() ||
-        `${proposedName} draft generated from submitted pose evidence.`,
-    };
-
-    const aiProposal = await this.tryCreateAiExerciseDraftProposal(
-      dto,
-      fallbackProposal,
-    );
-
-    return aiProposal ?? fallbackProposal;
-  }
-
-  private async tryCreateAiExerciseDraftProposal(
-    dto: CreateExerciseDraftProposalDTO,
-    fallbackProposal: ExerciseDraftProposalResponseDTO,
-  ): Promise<ExerciseDraftProposalResponseDTO | null> {
-    const apiBaseUrl = this.config.get<string>('ai.apiBaseUrl', '').trim();
-    if (!apiBaseUrl) {
-      return null;
-    }
-
-    const requestTimeoutMs = Math.max(
-      1000,
-      Number(this.config.get<number>('ai.requestTimeoutMs', 60000)) || 60000,
-    );
-
-    try {
-      const response = await fetch(
-        `${apiBaseUrl.replace(/\/+$/, '')}/exercise-drafts/propose`,
-        {
-          body: JSON.stringify({
-            category: dto.category ?? fallbackProposal.category,
-            description: dto.description ?? fallbackProposal.description,
-            evidence: normalizeUnknownObject(dto.evidence) ?? fallbackProposal.evidence,
-            hand_shape_profile:
-              normalizeUnknownObject(dto.hand_shape_profile) ??
-              fallbackProposal.hand_shape_profile,
-            instructions: dto.instructions ?? fallbackProposal.instructions,
-            movement_profile:
-              normalizeUnknownObject(dto.movement_profile) ??
-              fallbackProposal.movement_profile,
-            muscle_group: dto.muscle_group ?? fallbackProposal.muscle_group,
-            muscle_targets:
-              normalizeUnknownArray(dto.muscle_targets).length > 0
-                ? normalizeUnknownArray(dto.muscle_targets)
-                : fallbackProposal.muscle_targets,
-            pose_session_id: dto.pose_session_id ?? null,
-            proposed_name: dto.proposed_name ?? fallbackProposal.proposed_name,
-            summary: dto.summary ?? fallbackProposal.summary,
-          }),
-          headers: {
-            accept: 'application/json',
-            'content-type': 'application/json',
-          },
-          method: 'POST',
-          signal: AbortSignal.timeout(requestTimeoutMs),
-        },
-      );
-
-      if (!response.ok) {
-        return null;
-      }
-
-      return this.mergeAiDraftProposal(
-        (await response.json()) as AiExerciseDraftProposalPayload,
-        fallbackProposal,
-      );
-    } catch {
-      return null;
-    }
-  }
-
-  private mergeAiDraftProposal(
-    payload: AiExerciseDraftProposalPayload,
-    fallbackProposal: ExerciseDraftProposalResponseDTO,
-  ): ExerciseDraftProposalResponseDTO | null {
-    const aiPayload = normalizeUnknownObject(payload);
-    if (!aiPayload) {
-      return null;
-    }
-    if (aiPayload.proposal_source !== 'ai') {
-      return null;
-    }
-
-    const movementProfile =
-      normalizeUnknownObject(aiPayload.movement_profile) ??
-      fallbackProposal.movement_profile;
-    const handShapeProfile =
-      normalizeUnknownObject(aiPayload.hand_shape_profile) ??
-      fallbackProposal.hand_shape_profile;
-    const evidence =
-      normalizeUnknownObject(aiPayload.evidence) ?? fallbackProposal.evidence;
-    const muscleTargets = normalizeUnknownArray(aiPayload.muscle_targets);
-    const reviewWarnings = normalizeUnknownArray(aiPayload.review_warnings)
-      .filter((warning): warning is string => typeof warning === 'string')
-      .map((warning) => warning.trim())
-      .filter(Boolean);
-
-    if (!movementProfile || !handShapeProfile || !evidence) {
-      return null;
-    }
-
-    return {
-      ...fallbackProposal,
-      category: isExerciseCategory(aiPayload.category)
-        ? aiPayload.category
-        : fallbackProposal.category,
-      confidence:
-        typeof aiPayload.confidence === 'number' &&
-        Number.isFinite(aiPayload.confidence)
-          ? Math.max(0, Math.min(1, aiPayload.confidence))
-          : fallbackProposal.confidence,
-      description: this.normalizeAiDraftText(
-        aiPayload.description,
-        fallbackProposal.description,
-      ),
-      evidence,
-      hand_shape_profile: handShapeProfile,
-      instructions: this.normalizeAiDraftText(
-        aiPayload.instructions,
-        fallbackProposal.instructions,
-      ),
-      movement_profile: movementProfile,
-      muscle_group: this.normalizeAiDraftText(
-        aiPayload.muscle_group,
-        fallbackProposal.muscle_group,
-      ),
-      muscle_targets: muscleTargets.length
-        ? muscleTargets
-        : fallbackProposal.muscle_targets,
-      proposal_source: 'ai',
-      proposed_name: normalizeDraftLabel(
-        aiPayload.proposed_name,
-        fallbackProposal.proposed_name,
-      ),
-      review_warnings: reviewWarnings.length
-        ? reviewWarnings
-        : [
-            'AI-assisted proposal generated; validate rig, thresholds, and muscles before publishing.',
-          ],
-      summary: this.normalizeAiDraftText(
-        aiPayload.summary,
-        fallbackProposal.summary,
-      ),
-    };
-  }
-
-  private normalizeAiDraftText(value: unknown, fallback: string): string {
-    return typeof value === 'string' && value.trim() ? value.trim() : fallback;
   }
 
   private async normalizeAndValidateMuscleTargets(
@@ -775,38 +353,6 @@ export class ExerciseService {
     );
   }
 
-  async updateReviewSubmission(
-    id: string,
-    dto: UpdateExerciseReviewSubmissionDTO,
-    actorUserId?: string,
-  ): Promise<ExerciseReviewSubmissionResponseDTO> {
-    const reviewedAt =
-      dto.status && dto.status !== 'pending' ? new Date() : undefined;
-    const updatedSubmission = await this.repo.updateReviewSubmission(
-      id,
-      {
-        ...pickDefined(dto, EXERCISE_REVIEW_SUBMISSION_UPDATE_FIELDS),
-        ...(reviewedAt ? { reviewed_at: reviewedAt } : {}),
-      },
-      {
-        actorUserId,
-        note: dto.creator_governance_note,
-        state: dto.creator_state,
-      },
-    );
-    const creatorContextByUserId = await this.loadCreatorReviewContext([
-      updatedSubmission.user_id,
-    ]);
-    await this.activityLevelService.recalculateForUser(
-      updatedSubmission.user_id,
-    );
-
-    return this.toReviewSubmissionResponse(
-      updatedSubmission,
-      creatorContextByUserId.get(updatedSubmission.user_id),
-    );
-  }
-
   private toCreateInput(
     dto: CreateExerciseDTO,
   ): Prisma.ExerciseCatalogCreateInput {
@@ -881,191 +427,4 @@ export class ExerciseService {
     };
   }
 
-  private toReviewSubmissionResponse(
-    submission: ExerciseReviewSubmission,
-    creatorContext?: CreatorReviewContext,
-  ): ExerciseReviewSubmissionResponseDTO {
-    const creatorState = creatorContext?.profile?.state ?? CreatorState.none;
-    const creatorCounts = creatorContext?.counts ?? {
-      leftPrivate: 0,
-      pending: 0,
-      published: 0,
-      rejected: 0,
-      total: 0,
-    };
-
-    return {
-      id: submission.id,
-      user_id: submission.user_id,
-      pose_session_id: submission.pose_session_id ?? null,
-      creator_display_name: this.toCreatorDisplayName(creatorContext?.identity),
-      creator_email: this.toCreatorEmail(creatorContext?.identity),
-      published_exercise_id: submission.published_exercise_id ?? null,
-      status: submission.status,
-      title: submission.title,
-      proposed_name: submission.proposed_name,
-      summary: submission.summary,
-      origin_label: submission.origin_label,
-      trigger_label: submission.trigger_label,
-      source_label: submission.source_label,
-      queue_tag: submission.queue_tag,
-      match_hint: submission.match_hint ?? null,
-      category: submission.category,
-      muscle_group: submission.muscle_group,
-      muscle_targets: normalizeJsonArray(submission.muscle_targets),
-      movement_profile: normalizeJsonObject(submission.movement_profile),
-      hand_shape_profile: normalizeJsonObject(submission.hand_shape_profile),
-      description: submission.description ?? null,
-      instructions: submission.instructions ?? null,
-      evidence_bars: normalizeReviewEvidence(submission.evidence_bars),
-      review_notes: submission.review_notes ?? null,
-      created_at: submission.created_at.toISOString(),
-      updated_at: submission.updated_at.toISOString(),
-      reviewed_at: submission.reviewed_at?.toISOString() ?? null,
-      creator_state: creatorState,
-      creator_state_label: this.toCreatorStateLabel(creatorState),
-      creator_submission_count: creatorCounts.total,
-      creator_published_count: creatorCounts.published,
-      creator_rejected_count: creatorCounts.rejected,
-      creator_candidate_score:
-        this.calculateCreatorCandidateScore(creatorCounts),
-      creator_governance_note: creatorContext?.profile?.admin_notes ?? null,
-      creator_last_state_changed_at:
-        creatorContext?.profile?.last_state_changed_at?.toISOString() ?? null,
-      creator_profile_updated_at:
-        creatorContext?.profile?.updated_at.toISOString() ?? null,
-    };
-  }
-
-  private async loadCreatorReviewContext(
-    userIds: string[],
-  ): Promise<Map<string, CreatorReviewContext>> {
-    const uniqueUserIds = [...new Set(userIds)].filter(Boolean);
-    if (!uniqueUserIds.length) return new Map();
-
-    const [profiles, statusRows, identities] = await Promise.all([
-      this.repo.listCreatorProfilesByUserIds(uniqueUserIds),
-      this.repo.listReviewSubmissionStatusesByUserIds(uniqueUserIds),
-      this.repo.listCreatorUserIdentitiesByUserIds(uniqueUserIds),
-    ]);
-    const contextByUserId = new Map<string, CreatorReviewContext>();
-
-    for (const userId of uniqueUserIds) {
-      contextByUserId.set(userId, {
-        counts: {
-          leftPrivate: 0,
-          pending: 0,
-          published: 0,
-          rejected: 0,
-          total: 0,
-        },
-        identity: null,
-        profile: null,
-      });
-    }
-
-    for (const identity of identities) {
-      const context = contextByUserId.get(identity.id);
-      if (context) {
-        context.identity = identity;
-      }
-    }
-
-    for (const profile of profiles) {
-      const context = contextByUserId.get(profile.user_id);
-      if (context) {
-        context.profile = profile;
-      }
-    }
-
-    for (const row of statusRows) {
-      const context = contextByUserId.get(row.user_id);
-      if (!context) continue;
-
-      context.counts.total += 1;
-      if (row.status === ExerciseReviewSubmissionStatus.pending) {
-        context.counts.pending += 1;
-      } else if (row.status === ExerciseReviewSubmissionStatus.published) {
-        context.counts.published += 1;
-      } else if (row.status === ExerciseReviewSubmissionStatus.rejected) {
-        context.counts.rejected += 1;
-      } else if (row.status === ExerciseReviewSubmissionStatus.left_private) {
-        context.counts.leftPrivate += 1;
-      }
-    }
-
-    return contextByUserId;
-  }
-
-  private toCreatorDisplayName(
-    identity: CreatorUserIdentityRecord | null | undefined,
-  ): string | null {
-    const profile = identity?.profile;
-    const displayName = [profile?.first_name, profile?.last_name]
-      .filter(Boolean)
-      .join(' ')
-      .trim();
-    return displayName || null;
-  }
-
-  private toCreatorEmail(
-    identity: CreatorUserIdentityRecord | null | undefined,
-  ): string | null {
-    return identity?.auth_identities[0]?.identifier ?? null;
-  }
-
-  private async ensureCanSubmitExerciseDraft(userId: string): Promise<void> {
-    const access = await this.repo.findCreatorSubmissionAccess(userId);
-    if (!access) {
-      throw new NotFoundException('User not found.');
-    }
-
-    if (access.role === UserRole.admin || access.role === UserRole.staff) {
-      return;
-    }
-
-    if (
-      access.creatorProfileState === CreatorState.approved ||
-      access.creatorProfileState === CreatorState.candidate ||
-      access.creatorProfileState === CreatorState.pending_review
-    ) {
-      return;
-    }
-
-    throw new ForbiddenException(
-      'Only admins, staff, and approved creator candidates can submit exercise drafts.',
-    );
-  }
-
-  private async ensurePoseSessionBelongsToUser(
-    poseSessionId: string | null | undefined,
-    userId: string,
-  ): Promise<void> {
-    if (!poseSessionId) return;
-
-    const ownerUserId = await this.repo.findPoseSessionOwner(poseSessionId);
-    if (!ownerUserId || ownerUserId !== userId) {
-      throw new NotFoundException('Pose session not found.');
-    }
-  }
-
-  private calculateCreatorCandidateScore(counts: CreatorReviewCounts): number {
-    return Math.max(
-      0,
-      Math.min(
-        100,
-        counts.published * 35 +
-          counts.pending * 12 +
-          counts.leftPrivate * 5 -
-          counts.rejected * 10,
-      ),
-    );
-  }
-
-  private toCreatorStateLabel(state: CreatorState): string {
-    return state
-      .split('_')
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(' ');
-  }
 }

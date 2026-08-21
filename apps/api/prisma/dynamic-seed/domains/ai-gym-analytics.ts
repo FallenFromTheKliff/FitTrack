@@ -115,6 +115,13 @@ const FAQS = [
   ],
 ] as const;
 
+export function shouldSeedCanonicalOperatingHour(
+  mode: 'additive' | 'reset',
+  exists: boolean,
+) {
+  return mode === 'reset' || !exists;
+}
+
 function seedChatDate(
   ctx: DynamicSeedContext,
   userKey: string,
@@ -123,7 +130,9 @@ function seedChatDate(
   hour: number,
   minute = 0,
 ) {
-  const account = ctx.state.accounts.find((candidate) => candidate.key === userKey);
+  const account = ctx.state.accounts.find(
+    (candidate) => candidate.key === userKey,
+  );
   if (account?.role === 'member') {
     return (
       activityDateFor(ctx, userKey, index, total, hour, minute) ??
@@ -279,11 +288,20 @@ async function seedNotifications(ctx: DynamicSeedContext) {
     const isMember = account.role === 'member';
     const isRestricted = ctx.state.restrictedMemberKeys.includes(account.key);
     const total = isMember
-      ? Math.min(200, isRestricted ? Math.min(3, memberVolumeCount(ctx, account.key, 'notifications')) : memberVolumeCount(ctx, account.key, 'notifications'))
+      ? Math.min(
+          200,
+          isRestricted
+            ? Math.min(3, memberVolumeCount(ctx, account.key, 'notifications'))
+            : memberVolumeCount(ctx, account.key, 'notifications'),
+        )
       : 8;
     for (let rowIndex = 0; rowIndex < total; rowIndex += 1) {
       const type = isRestricted
-        ? [NotificationType.system, NotificationType.payment_failed, NotificationType.subscription_expired][rowIndex % 3]
+        ? [
+            NotificationType.system,
+            NotificationType.payment_failed,
+            NotificationType.subscription_expired,
+          ][rowIndex % 3]
         : types[(userIndex + rowIndex) % types.length];
       const status =
         rowIndex % 5 === 0
@@ -292,8 +310,20 @@ async function seedNotifications(ctx: DynamicSeedContext) {
             ? NotificationStatus.sent
             : NotificationStatus.pending;
       const createdAt = isMember
-        ? seedChatDate(ctx, account.key, rowIndex, total, 9 + (rowIndex % 8), rowIndex % 50)
-        : daysFrom(ctx.config.anchorDate, -4 + (rowIndex % 3), 9 + (rowIndex % 8), rowIndex % 50);
+        ? seedChatDate(
+            ctx,
+            account.key,
+            rowIndex,
+            total,
+            9 + (rowIndex % 8),
+            rowIndex % 50,
+          )
+        : daysFrom(
+            ctx.config.anchorDate,
+            -4 + (rowIndex % 3),
+            9 + (rowIndex % 8),
+            rowIndex % 50,
+          );
       notificationRows.push({
         id: seedId(`notification:${account.key}:${rowIndex}`),
         body:
@@ -307,15 +337,29 @@ async function seedNotifications(ctx: DynamicSeedContext) {
             ? NotificationChannel.in_app
             : NotificationChannel.email,
         created_at: createdAt,
-        data: { source: 'dynamic-seed', type, cohort: isMember ? ctx.state.memberCohorts[account.key] : null },
+        data: {
+          source: 'dynamic-seed',
+          type,
+          cohort: isMember ? ctx.state.memberCohorts[account.key] : null,
+        },
         read_at:
           status === NotificationStatus.read
-            ? daysFrom(createdAt, 0, createdAt.getUTCHours() + 2, createdAt.getUTCMinutes())
+            ? daysFrom(
+                createdAt,
+                0,
+                createdAt.getUTCHours() + 2,
+                createdAt.getUTCMinutes(),
+              )
             : null,
         sent_at:
           status === NotificationStatus.pending
             ? null
-            : daysFrom(createdAt, 0, createdAt.getUTCHours() + 1, createdAt.getUTCMinutes()),
+            : daysFrom(
+                createdAt,
+                0,
+                createdAt.getUTCHours() + 1,
+                createdAt.getUTCMinutes(),
+              ),
         status,
         title:
           type === NotificationType.low_stock
@@ -381,25 +425,36 @@ async function seedGymLayoutAndKnowledge(ctx: DynamicSeedContext) {
   }
 
   for (let day = 0; day < 7; day += 1) {
-    await ctx.prisma.gymOperatingHour.upsert({
+    const existing = await ctx.prisma.gymOperatingHour.findUnique({
       where: { day_of_week: day },
-      update: {
-        closes_at: fixedTime(day === 0 ? '18:00:00' : '22:00:00'),
-        is_active: true,
-        is_closed: false,
-        label: day === 0 ? 'Sunday short day' : 'Regular seeded hours',
-        opens_at: fixedTime(day === 0 ? '08:00:00' : '06:00:00'),
-      },
-      create: {
-        id: seedId(`operating-hour:${day}`),
-        closes_at: fixedTime(day === 0 ? '18:00:00' : '22:00:00'),
-        day_of_week: day,
-        is_active: true,
-        is_closed: false,
-        label: day === 0 ? 'Sunday short day' : 'Regular seeded hours',
-        opens_at: fixedTime(day === 0 ? '08:00:00' : '06:00:00'),
-      },
+      select: { id: true },
     });
+    let persisted = existing;
+    if (shouldSeedCanonicalOperatingHour(ctx.config.mode, Boolean(existing))) {
+      persisted = await ctx.prisma.gymOperatingHour.upsert({
+        where: { day_of_week: day },
+        update: {
+          closes_at: fixedTime(day === 0 ? '18:00:00' : '22:00:00'),
+          is_active: true,
+          is_closed: false,
+          label: day === 0 ? 'Sunday short day' : 'Regular seeded hours',
+          opens_at: fixedTime(day === 0 ? '08:00:00' : '06:00:00'),
+        },
+        create: {
+          id: seedId(`operating-hour:${day}`),
+          closes_at: fixedTime(day === 0 ? '18:00:00' : '22:00:00'),
+          day_of_week: day,
+          is_active: true,
+          is_closed: false,
+          label: day === 0 ? 'Sunday short day' : 'Regular seeded hours',
+          opens_at: fixedTime(day === 0 ? '08:00:00' : '06:00:00'),
+        },
+        select: { id: true },
+      });
+    }
+    if (persisted) {
+      ctx.state.operatingHourIds[String(day)] = persisted.id;
+    }
   }
 
   await ctx.prisma.gymSpecialSchedule.createMany({
@@ -434,8 +489,7 @@ async function seedGymLayoutAndKnowledge(ctx: DynamicSeedContext) {
     data: [
       {
         id: seedId('promotion:premium-coaching-demo'),
-        description:
-          'Premium coaching member promo for the current campaign.',
+        description: 'Premium coaching member promo for the current campaign.',
         ends_at: daysFrom(ctx.config.anchorDate, 21, 23, 59),
         is_active: true,
         pricing_note: 'Free assessment on first recurring plan.',
@@ -445,7 +499,8 @@ async function seedGymLayoutAndKnowledge(ctx: DynamicSeedContext) {
       },
       {
         id: seedId('promotion:amenity-bundle'),
-        description: 'Boxing ring and studio reservation promo for the current campaign.',
+        description:
+          'Boxing ring and studio reservation promo for the current campaign.',
         ends_at: daysFrom(ctx.config.anchorDate, 10, 23, 59),
         is_active: true,
         pricing_note: '10% off two-hour amenity blocks.',
@@ -486,7 +541,10 @@ async function seedGymChat(ctx: DynamicSeedContext) {
     const aiMessageCount = ctx.state.restrictedMemberKeys.includes(memberKey)
       ? 0
       : Math.floor(chatBudget / 4) * 2;
-    const gymTurns = Math.max(1, Math.floor(Math.max(2, chatBudget - aiMessageCount) / 2));
+    const gymTurns = Math.max(
+      1,
+      Math.floor(Math.max(2, chatBudget - aiMessageCount) / 2),
+    );
     for (let threadIndex = 0; threadIndex < gymTurns; threadIndex += 1) {
       const sessionId = seedId(`gym-chat-session:${memberKey}:${threadIndex}`);
       const userMessageAt = seedChatDate(
@@ -535,7 +593,12 @@ async function seedGymChat(ctx: DynamicSeedContext) {
           grounded_sources: restricted
             ? [{ type: 'support', id: seedId('gym-faq:1') }]
             : [
-                { type: 'operating_hours', id: seedId('operating-hour:1') },
+                {
+                  type: 'operating_hours',
+                  id:
+                    ctx.state.operatingHourIds['1'] ??
+                    seedId('operating-hour:1'),
+                },
                 { type: 'faq', id: seedId('gym-faq:3') },
               ],
           out_of_scope: false,
@@ -551,11 +614,17 @@ async function seedGymChat(ctx: DynamicSeedContext) {
           assistantMessageAt.getUTCHours(),
           assistantMessageAt.getUTCMinutes() + 1,
         ),
-        grounding_payload: { sources: restricted ? ['support'] : ['operating_hours', 'faq'] },
+        grounding_payload: {
+          sources: restricted ? ['support'] : ['operating_hours', 'faq'],
+        },
         latency_ms: 240 + memberIndex * 8 + threadIndex,
         model_used: 'seeded-grounded-gym-chat',
         out_of_scope: false,
-        request_payload: { prompt: restricted ? 'seeded onboarding question' : 'seeded gym question' },
+        request_payload: {
+          prompt: restricted
+            ? 'seeded onboarding question'
+            : 'seeded gym question',
+        },
         response_payload: { grounded: true, response: 'seeded gym answer' },
         session_id: sessionId,
         token_count: 140 + memberIndex + threadIndex,

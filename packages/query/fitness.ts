@@ -8,14 +8,11 @@ import type {
   AdminMilestoneEvidenceListParams,
   AnalyzePoseSequenceInput,
   ApiClient,
-  CreateExerciseDraftProposalInput,
-  CreateExerciseReviewSubmissionInput,
   CreateFitnessExerciseInput,
   CreateMuscleDefinitionInput,
   DetectPoseEquipmentInput,
   FinalizePoseSessionInput,
   FitnessExerciseListParams,
-  FitnessExerciseReviewSubmissionListParams,
   FitnessLeaderboardListParams,
   FitnessMuscleLeaderboardListParams,
   FitnessMasteryListParams,
@@ -30,7 +27,6 @@ import type {
   SubmitFitnessMilestoneEvidenceInput,
   TrainingPlanListParams,
   UpdateFitnessRankingProfileInput,
-  UpdateExerciseReviewSubmissionInput,
   UpdateFitnessExerciseInput,
   UpdateMuscleDefinitionInput,
   UpsertAdminMilestoneDefinitionInput,
@@ -49,15 +45,6 @@ export function fitnessExercisesQueryOptions(
   });
 }
 
-export function fitnessExerciseReviewSubmissionsQueryOptions(
-  client: Pick<ApiClient, "fitness">,
-  params?: FitnessExerciseReviewSubmissionListParams,
-) {
-  return queryOptions({
-    queryKey: queryKeys.fitnessExerciseReviewSubmissions(params),
-    queryFn: () => client.fitness.listExerciseReviewSubmissions(params),
-  });
-}
 
 export function fitnessMuscleDefinitionsQueryOptions(
   client: Pick<ApiClient, "fitness">,
@@ -173,75 +160,6 @@ export function archiveMuscleDefinitionMutationOptions(
   });
 }
 
-export function updateExerciseReviewSubmissionMutationOptions(
-  client: Pick<ApiClient, "fitness">,
-  queryClient: QueryClient,
-) {
-  return mutationOptions({
-    mutationFn: ({
-      submissionId,
-      payload,
-    }: {
-      payload: UpdateExerciseReviewSubmissionInput;
-      submissionId: string;
-    }) => client.fitness.updateExerciseReviewSubmission(submissionId, payload),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.fitnessExerciseReviewSubmissions(),
-      });
-    },
-  });
-}
-
-export function createExerciseReviewSubmissionMutationOptions(
-  client: Pick<ApiClient, "fitness">,
-  queryClient: QueryClient,
-) {
-  return mutationOptions({
-    mutationFn: ({
-      payload,
-    }: {
-      payload: CreateExerciseReviewSubmissionInput;
-      userId?: string;
-    }) => client.fitness.createExerciseReviewSubmission(payload),
-    onSuccess: async (_data, variables) => {
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.fitnessExerciseReviewSubmissions(),
-      });
-      if (variables.payload.poseSessionId) {
-        await invalidateFitnessPoseQuery(
-          queryClient,
-          variables.payload.poseSessionId,
-        );
-      }
-    },
-  });
-}
-
-export function createExerciseDraftProposalMutationOptions(
-  client: Pick<ApiClient, "fitness">,
-  queryClient: QueryClient,
-) {
-  return mutationOptions({
-    mutationFn: ({
-      payload,
-    }: {
-      payload: CreateExerciseDraftProposalInput;
-      userId?: string;
-    }) => client.fitness.createExerciseDraftProposal(payload),
-    onSuccess: async (data, variables) => {
-      if (variables.payload.poseSessionId) {
-        await invalidateFitnessPoseQuery(
-          queryClient,
-          variables.payload.poseSessionId,
-        );
-      }
-      if (variables.userId) {
-        await invalidateFitnessQueries(queryClient, variables.userId);
-      }
-    },
-  });
-}
 
 export function fitnessPlansQueryOptions(
   client: Pick<ApiClient, "fitness">,

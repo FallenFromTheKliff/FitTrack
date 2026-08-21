@@ -1,8 +1,12 @@
 import type {
+  BookingProfile,
   DynamicSeedConfig,
   DynamicSeedContext,
   MemberCohort,
+  MemberEngagement,
+  SeedAccount,
 } from './types';
+import { UserRole } from '@prisma/client';
 import { daysFrom } from './time';
 
 export type VolumeDomain =
@@ -20,14 +24,23 @@ export type VolumeDomain =
 
 export type MemberVolumeBand = Record<VolumeDomain, number>;
 
-export const COHORT_COUNTS: Record<MemberCohort, number> = {
-  power: 6,
-  frequent: 12,
-  regular: 15,
-  light_trial: 10,
-  historical_only: 19,
-  pending_unverified_suspended: 11,
+export const COHORT_WEIGHTS: Record<MemberCohort, number> = {
+  power: 10,
+  frequent: 20,
+  regular: 30,
+  light_trial: 20,
+  historical_only: 15,
+  pending_unverified_suspended: 5,
 };
+
+export const COHORT_ORDER: readonly MemberCohort[] = [
+  'power',
+  'frequent',
+  'regular',
+  'light_trial',
+  'historical_only',
+  'pending_unverified_suspended',
+];
 
 export const MEMBER_VOLUME_BANDS: Record<MemberCohort, MemberVolumeBand> = {
   power: {
@@ -130,6 +143,13 @@ const DENSITY_MULTIPLIERS = {
   high: 1.32,
 } as const;
 
+const BOOKING_PROFILE_BASE_COUNTS: Record<BookingProfile, number> = {
+  none: 0,
+  occasional: 3,
+  regular: 8,
+  heavy: 16,
+};
+
 const COHORT_FILL: Record<MemberCohort, number> = {
   power: 0.68,
   frequent: 0.64,
@@ -137,6 +157,15 @@ const COHORT_FILL: Record<MemberCohort, number> = {
   light_trial: 0.52,
   historical_only: 0.56,
   pending_unverified_suspended: 0.7,
+};
+
+const ENGAGEMENT_HISTORY_MULTIPLIERS: Record<MemberEngagement, number> = {
+  gym_rat: 1,
+  frequent: 0.8,
+  regular: 0.6,
+  casual: 0.75,
+  lazy: 0.2,
+  zero_use: 0,
 };
 
 const PINNED_COHORTS: Record<string, MemberCohort> = {
@@ -164,14 +193,31 @@ function stableFraction(value: string) {
   return stableHash(value) / 0x100000000;
 }
 
-function stableOffset(config: DynamicSeedConfig, memberKey: string, modulo: number) {
+function stableOffset(
+  config: DynamicSeedConfig,
+  memberKey: string,
+  modulo: number,
+) {
   return modulo > 0 ? stableHash(`${config.seed}:${memberKey}`) % modulo : 0;
 }
 
 export function buildMemberCohortMap(
   memberKeys: readonly string[],
+  scenarioSource?:
+    | readonly SeedAccount[]
+    | Readonly<Record<string, SeedAccount>>,
 ): Record<string, MemberCohort> {
   const result: Record<string, MemberCohort> = {};
+  const sourceByKey = (
+    Array.isArray(scenarioSource)
+      ? Object.fromEntries(
+          (scenarioSource as readonly SeedAccount[]).map((account) => [
+            account.key,
+            account,
+          ]),
+        )
+      : (scenarioSource ?? {})
+  ) as Readonly<Record<string, SeedAccount>>;
   const remaining = memberKeys.filter((key) => {
     const pinned = PINNED_COHORTS[key];
     if (pinned) {
@@ -181,21 +227,84 @@ export function buildMemberCohortMap(
     return true;
   });
 
-  for (const cohort of Object.keys(COHORT_COUNTS) as MemberCohort[]) {
-    const alreadyAssigned = Object.values(result).filter(
-      (value) => value === cohort,
-    ).length;
-    const slots = Math.max(0, COHORT_COUNTS[cohort] - alreadyAssigned);
-    for (let index = 0; index < slots && remaining.length > 0; index += 1) {
-      const key = remaining.shift();
-      if (key) {
-        result[key] = cohort;
-      }
+  const cohortForScenario = (
+    account: SeedAccount,
+  ): MemberCohort | undefined => {
+    switch (account.memberEngagement ?? account.scenario?.memberEngagement) {
+      case 'gym_rat':
+        return 'power';
+      case 'frequent':
+        return 'frequent';
+      case 'regular':
+        return 'regular';
+      case 'casual':
+        return 'light_trial';
+      case 'lazy':
+        return 'historical_only';
+      case 'zero_use':
+        return ['active', 'trial_or_new'].includes(
+          account.membershipLifecycle ??
+            account.scenario?.membershipLifecycle ??
+            '',
+        )
+          ? 'light_trial'
+          : 'pending_unverified_suspended';
+      default:
+        return undefined;
+    }
+  };
+
+  const unassigned: string[] = [];
+  for (const key of remaining) {
+    const scenarioCohort = sourceByKey[key]
+      ? cohortForScenario(sourceByKey[key])
+      : undefined;
+    if (scenarioCohort) {
+      result[key] = scenarioCohort;
+    } else {
+      unassigned.push(key);
     }
   }
 
-  for (const key of remaining) {
-    result[key] = 'regular';
+  const totalWeight = COHORT_ORDER.reduce(
+    (sum, cohort) => sum + COHORT_WEIGHTS[cohort],
+    0,
+  );
+  const rows = COHORT_ORDER.map((cohort, index) => {
+    const exact =
+      totalWeight > 0
+        ? (unassigned.length * COHORT_WEIGHTS[cohort]) / totalWeight
+        : 0;
+    return {
+      cohort,
+      floor: Math.floor(exact),
+      index,
+      remainder: exact - Math.floor(exact),
+    };
+  });
+  let remainder =
+    unassigned.length - rows.reduce((sum, row) => sum + row.floor, 0);
+  rows.sort(
+    (left, right) =>
+      right.remainder - left.remainder || left.index - right.index,
+  );
+  for (let index = 0; index < rows.length && remainder > 0; index += 1) {
+    rows[index].floor += 1;
+    remainder -= 1;
+  }
+  const orderedKeys = [...unassigned].sort(
+    (left, right) =>
+      stableHash(left) - stableHash(right) || left.localeCompare(right),
+  );
+  let offset = 0;
+  for (const row of rows) {
+    for (let index = 0; index < row.floor; index += 1) {
+      const key = orderedKeys[offset];
+      if (key) {
+        result[key] = row.cohort;
+        offset += 1;
+      }
+    }
   }
 
   return result;
@@ -217,25 +326,43 @@ export function isMonthlyCoachingMember(
   ctx: Pick<DynamicSeedContext, 'config' | 'state'>,
   memberKey: string,
 ) {
-  if (memberKey === 'member-active' || memberKey === 'member-checkout-abandoned') {
-    return false;
-  }
-  const cohort = cohortForMember(ctx, memberKey);
-  if (cohort === 'power' || cohort === 'frequent') {
-    return true;
-  }
-  if (cohort === 'historical_only') {
-    return (
-      memberKey === 'member-frozen' ||
-      memberKey === 'member-expired' ||
-      memberKey === 'member-archived' ||
-      stableFraction(`${ctx.config.seed}:${memberKey}:monthly-history`) < 0.72
-    );
-  }
-  if (cohort === 'regular') {
-    return stableFraction(`${ctx.config.seed}:${memberKey}:monthly`) < 0.58;
-  }
-  return false;
+  const account = ctx.state.accounts.find(
+    (candidate) => candidate.key === memberKey,
+  );
+  return (
+    account?.coachingProfile === 'recurring_active' &&
+    account.membershipLifecycle === 'active' &&
+    account.hasCurrentAccess === true &&
+    account.status !== 'suspended' &&
+    account.emailVerified !== false
+  );
+}
+
+/** Historical recurring coaching is an explicit product scenario. */
+export function isFormerCoachingMember(
+  ctx: Pick<DynamicSeedContext, 'state'>,
+  memberKey: string,
+) {
+  const account = ctx.state.accounts.find(
+    (candidate) => candidate.key === memberKey,
+  );
+  return (
+    account?.coachingProfile === 'recurring_former' &&
+    account.hasCompletedHistory === true &&
+    account.hasCurrentAccess !== true &&
+    account.lifecycle?.historicalOnly === true
+  );
+}
+
+/** Any member with a recurring coaching product, current or historical. */
+export function isRecurringCoachingMember(
+  ctx: Pick<DynamicSeedContext, 'config' | 'state'>,
+  memberKey: string,
+) {
+  return (
+    isMonthlyCoachingMember(ctx, memberKey) ||
+    isFormerCoachingMember(ctx, memberKey)
+  );
 }
 
 export function volumeBandForMember(
@@ -251,10 +378,34 @@ export function memberVolumeCount(
   domain: VolumeDomain,
   density: 'low' | 'normal' | 'high' = 'normal',
 ) {
+  const account = ctx.state.accounts.find(
+    (candidate) => candidate.key === memberKey,
+  );
   const cohort = cohortForMember(ctx, memberKey);
   const cap = Math.min(MEMBER_VOLUME_BANDS[cohort][domain], HARD_CAPS[domain]);
   if (cap === 0) {
     return 0;
+  }
+
+  if (domain === 'workouts' || domain === 'exerciseLogs') {
+    const engagement =
+      account?.memberEngagement ??
+      account?.scenario?.memberEngagement ??
+      ('regular' as MemberEngagement);
+    const window = memberAccessWindow(ctx, memberKey);
+    const noHistory =
+      !account ||
+      account.role !== UserRole.member ||
+      engagement === 'zero_use' ||
+      account.emailVerified === false ||
+      account.hasCompletedHistory === false ||
+      account.memberPersona === 'pending' ||
+      account.memberPersona === 'unverified' ||
+      !window.activityStart ||
+      !window.activityEnd;
+    if (noHistory) {
+      return 0;
+    }
   }
 
   const historyScale =
@@ -263,12 +414,85 @@ export function memberVolumeCount(
         ? 0
         : Math.min(1.5, Math.max(0.2, ctx.config.exerciseHistory / 50))
       : 1;
-  const jitter = stableFraction(`${ctx.config.seed}:${memberKey}:${domain}`) * 0.16 - 0.08;
+  const engagementScale =
+    domain === 'workouts' || domain === 'exerciseLogs'
+      ? ENGAGEMENT_HISTORY_MULTIPLIERS[
+          account?.memberEngagement ??
+            account?.scenario?.memberEngagement ??
+            ('regular' as MemberEngagement)
+        ]
+      : 1;
+  const jitter =
+    stableFraction(`${ctx.config.seed}:${memberKey}:${domain}`) * 0.16 - 0.08;
   const densityScale = DENSITY_MULTIPLIERS[density];
   const estimate = Math.floor(
-    cap * Math.max(0, COHORT_FILL[cohort] + jitter) * densityScale * historyScale,
+    cap *
+      Math.max(0, COHORT_FILL[cohort] + jitter) *
+      densityScale *
+      historyScale *
+      engagementScale,
   );
-  return Math.max(1, Math.min(cap, estimate));
+  return estimate > 0 ? Math.max(1, Math.min(cap, estimate)) : 0;
+}
+
+/**
+ * Venue bookings are a scenario-shaped domain. Keep this separate from the
+ * engagement/cohort volume bands so a high-workout member with
+ * `bookingBehavior: none` does not accidentally receive reservations.
+ */
+export function bookingBehaviorFor(
+  account: SeedAccount | undefined,
+): BookingProfile {
+  return (
+    account?.bookingBehavior ??
+    account?.bookingProfile ??
+    account?.booking ??
+    account?.scenario?.bookingBehavior ??
+    account?.scenario?.bookingProfile ??
+    account?.scenario?.booking ??
+    'none'
+  );
+}
+
+export function bookingVolumeCount(
+  ctx: DynamicSeedContext,
+  memberKey: string,
+  density: 'low' | 'normal' | 'high' = 'normal',
+) {
+  const account = ctx.state.accounts.find(
+    (candidate) => candidate.key === memberKey,
+  );
+  if (!account || account.role !== UserRole.member) {
+    return 0;
+  }
+
+  const profile = bookingBehaviorFor(account);
+  const base = BOOKING_PROFILE_BASE_COUNTS[profile] ?? 0;
+  if (base === 0 || account.hasCompletedHistory === false) {
+    return 0;
+  }
+
+  const window = memberAccessWindow(ctx, memberKey);
+  const activityStart = window.activityStart;
+  const activityEnd = window.activityEnd ?? ctx.config.anchorDate;
+  if (!activityStart || activityEnd <= activityStart) {
+    return 0;
+  }
+
+  const tenureDays = Math.max(
+    1,
+    (activityEnd.getTime() - activityStart.getTime()) / (24 * 60 * 60 * 1_000),
+  );
+  const tenureScale = Math.min(1, Math.max(0.35, tenureDays / 120));
+  const densityScale = DENSITY_MULTIPLIERS[density];
+  const stableJitter =
+    stableFraction(`${ctx.config.seed}:${memberKey}:booking-behavior`) * 0.16 -
+    0.08;
+  const count = Math.floor(
+    base * tenureScale * densityScale * (1 + stableJitter),
+  );
+
+  return Math.max(1, Math.min(HARD_CAPS.bookings, count));
 }
 
 export type MemberAccessWindow = {
@@ -284,9 +508,42 @@ export function memberAccessWindow(
   ctx: Pick<DynamicSeedContext, 'config' | 'state'>,
   memberKey: string,
 ): MemberAccessWindow {
+  const account = ctx.state.accounts.find(
+    (candidate) => candidate.key === memberKey,
+  );
+  if (account?.lifecycle) {
+    const lifecycle = account.lifecycle;
+    return {
+      startsAt: lifecycle.accessStart,
+      expiresAt: lifecycle.accessEnd,
+      activityStart: lifecycle.activityStart,
+      activityEnd: lifecycle.activityEnd,
+      hasAccess:
+        account.hasCurrentAccess === true &&
+        account.status !== 'suspended' &&
+        account.memberPersona !== 'pending' &&
+        account.memberPersona !== 'unverified' &&
+        lifecycle.accessStart !== null,
+      historicalOnly: lifecycle.historicalOnly,
+    };
+  }
   const cohort = cohortForMember(ctx, memberKey);
   const offset = stableOffset(ctx.config, memberKey, 28);
-  if (cohort === 'pending_unverified_suspended') {
+  const lifecycle = account?.membershipLifecycle;
+  const currentAccess = account?.hasCurrentAccess;
+  const historical =
+    lifecycle === 'expired' ||
+    lifecycle === 'cancelled_former' ||
+    (lifecycle === 'frozen' && account?.hasCompletedHistory === true) ||
+    (cohort === 'historical_only' && account?.hasCompletedHistory !== false);
+  const restricted =
+    cohort === 'pending_unverified_suspended' ||
+    (account !== undefined &&
+      currentAccess === false &&
+      !historical &&
+      account.hasCompletedHistory !== true);
+
+  if (restricted) {
     return {
       startsAt: null,
       expiresAt: null,
@@ -297,7 +554,7 @@ export function memberAccessWindow(
     };
   }
 
-  if (cohort === 'historical_only') {
+  if (historical) {
     const startsAt = daysFrom(ctx.config.anchorDate, -260 - offset, 9);
     const archiveCutoff =
       memberKey === 'member-archived'
@@ -313,7 +570,7 @@ export function memberAccessWindow(
     };
   }
 
-  const trial = cohort === 'light_trial';
+  const trial = lifecycle === 'trial_or_new' || cohort === 'light_trial';
   const startsAt = daysFrom(
     ctx.config.anchorDate,
     trial ? -35 - (offset % 12) : -190 - (offset % 38),
@@ -330,7 +587,7 @@ export function memberAccessWindow(
     expiresAt,
     activityStart: startsAt,
     activityEnd: daysFrom(ctx.config.anchorDate, -1, 20),
-    hasAccess: true,
+    hasAccess: currentAccess !== false,
     historicalOnly: false,
   };
 }
@@ -353,7 +610,12 @@ export function activityDateFor(
     (window.activityEnd.getTime() - window.activityStart.getTime()) * fraction;
   const target = new Date(timestamp);
   target.setUTCHours(hour, minute, 0, 0);
-  return target;
+  return new Date(
+    Math.min(
+      window.activityEnd.getTime(),
+      Math.max(window.activityStart.getTime(), target.getTime()),
+    ),
+  );
 }
 
 export function futureDateFor(
@@ -406,7 +668,11 @@ export class KeyedIntervalAllocator {
   tryAllocateMany(keys: readonly string[], start: Date, end: Date) {
     const startMs = start.getTime();
     const endMs = end.getTime();
-    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+    if (
+      !Number.isFinite(startMs) ||
+      !Number.isFinite(endMs) ||
+      endMs <= startMs
+    ) {
       return false;
     }
 
@@ -431,7 +697,10 @@ export class KeyedIntervalAllocator {
 
       const previous = rows[low - 1];
       const next = rows[low];
-      if ((previous && previous.end > startMs) || (next && endMs > next.start)) {
+      if (
+        (previous && previous.end > startMs) ||
+        (next && endMs > next.start)
+      ) {
         return false;
       }
       insertionIndexes.set(key, low);
@@ -439,7 +708,10 @@ export class KeyedIntervalAllocator {
 
     for (const key of uniqueKeys) {
       const rows = this.intervals.get(key) ?? [];
-      rows.splice(insertionIndexes.get(key)!, 0, { start: startMs, end: endMs });
+      rows.splice(insertionIndexes.get(key)!, 0, {
+        start: startMs,
+        end: endMs,
+      });
       this.intervals.set(key, rows);
     }
     return true;

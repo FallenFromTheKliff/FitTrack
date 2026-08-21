@@ -18,6 +18,7 @@ type Props = {
   topChipOptions?: FitFilterChipOption[];
   activeTopChip?: string;
   onTopChipChange?: (value: string) => void;
+  topChipAccessibilityRole?: "button" | "tab";
   topChipLabel?: string;
   chipOptions?: FitFilterChipOption[];
   chipLabel?: string;
@@ -40,6 +41,7 @@ export default function FitFilter({
   topChipOptions,
   activeTopChip,
   onTopChipChange,
+  topChipAccessibilityRole = "button",
   topChipLabel = "View",
   chipOptions,
   chipLabel = "Status",
@@ -107,7 +109,7 @@ export default function FitFilter({
                         },
                       ]}
                       onPress={() => onTopChipChange?.(opt.value)}
-                      accessibilityRole="button"
+                      accessibilityRole={topChipAccessibilityRole}
                       accessibilityLabel={`${topChipLabel}: ${opt.label}`}
                       accessibilityState={{ selected: isActive }}
                     >

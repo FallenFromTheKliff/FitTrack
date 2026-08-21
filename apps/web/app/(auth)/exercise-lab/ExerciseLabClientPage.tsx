@@ -12,7 +12,6 @@ import {
   ExerciseLabPageProvider,
   useExerciseLabPage,
 } from "@/components/exercise-lab/ExerciseLabPageContext";
-import { ExerciseLabReviewSurface } from "@/components/exercise-lab/ExerciseLabReviewSurface";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useFadeIn } from "@/hooks/animations/useFadeIn";
@@ -24,10 +23,9 @@ export default function ExerciseLabClientPage() {
   const help = (
     <FloatingHelpButton
       title="Exercise Lab"
-      description="This page manages exercise catalog entries, muscle maps, and review queues for movement data."
+      description="This page manages exercise catalog entries and muscle maps for movement data."
       terms={[
         { label: "Exercise library", value: "Approved movement records used by workout and coaching features." },
-        { label: "Review queue", value: "Submitted or detected movements that need staff review before publishing." },
         { label: "Muscle map", value: "Canonical muscle definitions used to classify movement records." },
       ]}
     />
@@ -289,9 +287,7 @@ function ExerciseLabPageBody() {
           </div>
         ) : null}
 
-        {mode === "review" ? (
-          <ExerciseLabReviewSurface />
-        ) : mode === "muscles" ? (
+        {mode === "muscles" ? (
           <ExerciseLabMuscleSurface />
         ) : (
           <ExerciseLabLibrarySurface />
@@ -320,31 +316,12 @@ function ExerciseLabPageStyles() {
           overflow: visible !important;
         }
 
-        .exercise-review-surface {
-          height: auto !important;
-          overflow: visible !important;
-        }
-
-        .exercise-review-surface > div {
-          height: auto !important;
-        }
-
-        .exercise-review-table-shell {
-          min-height: 400px !important;
-        }
       }
 
-      .exercise-lab-queue-card,
-      .exercise-lab-drawer-option,
       .exercise-lab-action-dock {
         transition:
           border-color 160ms ease,
           background-color 160ms ease;
-      }
-
-      .exercise-lab-queue-card--animated {
-        animation: exercise-lab-queue-in ${fullMotion ? 260 : 180}ms
-          cubic-bezier(0.18, 0.88, 0.24, 1) both;
       }
 
       .exercise-lab-workbench-body--animated {
@@ -355,22 +332,6 @@ function ExerciseLabPageStyles() {
       .exercise-lab-action-dock--animated {
         animation: exercise-lab-dock-in ${fullMotion ? 240 : 180}ms
           cubic-bezier(0.2, 0.8, 0.2, 1) ${fullMotion ? 80 : 40}ms both;
-      }
-
-      .exercise-lab-drawer-option--animated {
-        animation: exercise-lab-drawer-option-in ${fullMotion ? 220 : 160}ms
-          cubic-bezier(0.2, 0.8, 0.2, 1) both;
-      }
-
-      @keyframes exercise-lab-queue-in {
-        from {
-          opacity: 0;
-          transform: translateY(10px);
-        }
-        to {
-          opacity: 1;
-          transform: translateY(0);
-        }
       }
 
       @keyframes exercise-lab-workbench-in {
@@ -395,25 +356,10 @@ function ExerciseLabPageStyles() {
         }
       }
 
-      @keyframes exercise-lab-drawer-option-in {
-        from {
-          opacity: 0;
-          transform: translateY(8px);
-        }
-        to {
-          opacity: 1;
-          transform: translateY(0);
-        }
-      }
-
       @media (prefers-reduced-motion: reduce) {
-        .exercise-lab-queue-card,
-        .exercise-lab-drawer-option,
         .exercise-lab-action-dock,
-        .exercise-lab-queue-card--animated,
         .exercise-lab-workbench-body--animated,
-        .exercise-lab-action-dock--animated,
-        .exercise-lab-drawer-option--animated {
+        .exercise-lab-action-dock--animated {
           animation: none !important;
           transition: none !important;
           transform: none !important;

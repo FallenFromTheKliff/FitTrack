@@ -26,7 +26,6 @@ describe('GamificationAdminController', () => {
   const gamificationService = {
     getAdminOverview: jest.fn(),
     adminUpdateSeasonStatus: jest.fn(),
-    adminUpdateCreatorState: jest.fn(),
     adminVoidProgressionGrant: jest.fn(),
     adminRestoreProgressionGrant: jest.fn(),
     adminApplyRankingOverride: jest.fn(),
@@ -78,29 +77,6 @@ describe('GamificationAdminController', () => {
     );
   });
 
-  it('updates creator state through the service', async () => {
-    const user = { sub: 'admin-1' } as JwtPayload;
-    gamificationService.adminUpdateCreatorState.mockResolvedValue({
-      user_id: 'member-1',
-    });
-
-    await controller.updateCreatorState('member-1', user, {
-      state: 'approved',
-      rationale: 'Creator submissions look strong.',
-      admin_notes: 'Monitor next two submissions.',
-    });
-
-    expect(gamificationService.adminUpdateCreatorState).toHaveBeenCalledWith(
-      'admin-1',
-      'member-1',
-      {
-        state: 'approved',
-        rationale: 'Creator submissions look strong.',
-        admin_notes: 'Monitor next two submissions.',
-      },
-    );
-  });
-
   it('passes the multi-allocation grant and idempotency key to the service', async () => {
     const user = { sub: 'admin-1' } as JwtPayload;
     const dto = {
@@ -121,9 +97,7 @@ describe('GamificationAdminController', () => {
       '11111111-1111-4111-8111-111111111111',
     );
 
-    expect(
-      gamificationService.adminCreateManualExpGrant,
-    ).toHaveBeenCalledWith(
+    expect(gamificationService.adminCreateManualExpGrant).toHaveBeenCalledWith(
       'admin-1',
       dto,
       '11111111-1111-4111-8111-111111111111',

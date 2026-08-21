@@ -19,6 +19,11 @@ import {
 } from '../accounts';
 import { seedId } from '../ids';
 import { daysFrom, yearsAgo } from '../time';
+import {
+  physicalSnapshotAtWeight,
+  shouldSeedMemberQr,
+  shouldSeedRefreshToken,
+} from '../lifecycles-profiles';
 import type { DynamicSeedContext, SeedAccount } from '../types';
 import { activityDateFor, memberVolumeCount } from '../volumes';
 
@@ -40,8 +45,8 @@ function credentialHashFor(password: string) {
   return hashPromise;
 }
 
-function defaultGender(account: SeedAccount, index: number) {
-  return account.gender ?? (index % 2 === 0 ? Gender.female : Gender.male);
+function defaultGender(account: SeedAccount) {
+  return account.gender ?? Gender.other;
 }
 
 function defaultActivityLevel(account: SeedAccount) {
@@ -93,71 +98,83 @@ function privacyAcceptedAt(ctx: DynamicSeedContext, account: SeedAccount) {
   ) {
     return null;
   }
-  return daysFrom(ctx.config.anchorDate, -80 + ctx.rng.int(0, 40), 10);
+  const registeredAt = account.lifecycle?.registeredAt;
+  const verifiedAt = account.lifecycle?.verifiedAt;
+  if (!registeredAt || !verifiedAt) {
+    return null;
+  }
+  const candidate = new Date(
+    registeredAt.getTime() +
+      Math.min(
+        3 * 24 * 60 * 60 * 1_000,
+        Math.max(
+          60 * 60 * 1_000,
+          verifiedAt.getTime() - registeredAt.getTime(),
+        ),
+      ),
+  );
+  return candidate <= ctx.config.anchorDate ? candidate : null;
 }
 
-async function seedAccount(
-  ctx: DynamicSeedContext,
-  account: SeedAccount,
-  index: number,
-) {
-  const verifiedAt =
-    account.emailVerified === false
-      ? null
-      : daysFrom(ctx.config.anchorDate, -60 + (index % 30), 9);
+async function seedAccount(ctx: DynamicSeedContext, account: SeedAccount) {
+  const lifecycle = account.lifecycle;
+  if (!lifecycle) {
+    throw new Error(`Missing lifecycle context for ${account.key}`);
+  }
+  const verifiedAt = lifecycle.verifiedAt;
   const acceptedAt = privacyAcceptedAt(ctx, account);
   const userId = userIdFor(account.key);
   const credentialHash = await credentialHashFor(account.password);
   const status =
     account.status ??
     (account.emailVerified === false ? UserStatus.pending : UserStatus.active);
-  const deletedAt =
-    account.memberPersona === 'archived'
-      ? daysFrom(ctx.config.anchorDate, -45, 9)
-      : (account.deletedAt ?? null);
+  const deletedAt = lifecycle.deletedAt;
+  const qrEligible = shouldSeedMemberQr(account, status, verifiedAt, deletedAt);
+  const qrCodeExpiresAt = qrEligible
+    ? daysFrom(ctx.config.anchorDate, 365, 23, 59)
+    : null;
+  const qrCodeRotatedAt = qrEligible
+    ? new Date(
+        Math.max(
+          lifecycle.registeredAt.getTime(),
+          daysFrom(
+            ctx.config.anchorDate,
+            -7 - (Number.parseInt(hashValue(userId).slice(0, 2), 16) % 20),
+            8,
+          ).getTime(),
+        ),
+      )
+    : null;
+  const qrCodeToken = qrEligible
+    ? `dynqr_${hashValue(userId).slice(0, 32)}`
+    : null;
 
   await ctx.prisma.user.upsert({
     where: { id: userId },
     update: {
+      created_at: lifecycle.registeredAt,
       deletedAt,
       email_verified_at: verifiedAt,
       has_accepted_privacy: Boolean(acceptedAt),
       phone_verified_at: verifiedAt,
       privacy_accepted_at: acceptedAt,
-      qr_code_expires_at:
-        status === UserStatus.active
-          ? daysFrom(ctx.config.anchorDate, 365, 23, 59)
-          : null,
-      qr_code_rotated_at:
-        status === UserStatus.active
-          ? daysFrom(ctx.config.anchorDate, -7 - (index % 20), 8)
-          : null,
-      qr_code_token:
-        status === UserStatus.active
-          ? `dynqr_${hashValue(userId).slice(0, 32)}`
-          : null,
+      qr_code_expires_at: qrCodeExpiresAt,
+      qr_code_rotated_at: qrCodeRotatedAt,
+      qr_code_token: qrCodeToken,
       role: account.role,
       status,
     },
     create: {
       id: userId,
+      created_at: lifecycle.registeredAt,
       deletedAt,
       email_verified_at: verifiedAt,
       has_accepted_privacy: Boolean(acceptedAt),
       phone_verified_at: verifiedAt,
       privacy_accepted_at: acceptedAt,
-      qr_code_expires_at:
-        status === UserStatus.active
-          ? daysFrom(ctx.config.anchorDate, 365, 23, 59)
-          : null,
-      qr_code_rotated_at:
-        status === UserStatus.active
-          ? daysFrom(ctx.config.anchorDate, -7 - (index % 20), 8)
-          : null,
-      qr_code_token:
-        status === UserStatus.active
-          ? `dynqr_${hashValue(userId).slice(0, 32)}`
-          : null,
+      qr_code_expires_at: qrCodeExpiresAt,
+      qr_code_rotated_at: qrCodeRotatedAt,
+      qr_code_token: qrCodeToken,
       role: account.role,
       status,
     },
@@ -172,12 +189,14 @@ async function seedAccount(
       },
     },
     update: {
+      created_at: lifecycle.registeredAt,
       credential_hash: credentialHash,
       is_primary: true,
       verified_at: verifiedAt,
     },
     create: {
       credential_hash: credentialHash,
+      created_at: lifecycle.registeredAt,
       identifier: account.email,
       is_primary: true,
       provider: AuthProvider.email,
@@ -195,10 +214,12 @@ async function seedAccount(
       },
     },
     update: {
+      created_at: lifecycle.registeredAt,
       is_primary: false,
       verified_at: verifiedAt,
     },
     create: {
+      created_at: lifecycle.registeredAt,
       identifier: account.phone,
       is_primary: false,
       provider: AuthProvider.phone,
@@ -207,18 +228,23 @@ async function seedAccount(
     },
   });
 
-  const heightCm = account.heightCm ?? 154 + (index % 31);
-  const weightKg = account.weightKg ?? 55 + (index % 34);
+  const heightCm =
+    account.heightCm ?? account.physicalBaseline?.heightCm ?? 170;
+  const weightKg = account.weightKg ?? account.physicalBaseline?.weightKg ?? 70;
+  const profileCreatedAt = new Date(
+    lifecycle.registeredAt.getTime() + 60 * 60 * 1_000,
+  );
 
   await ctx.prisma.userProfile.upsert({
     where: { user_id: userId },
     update: {
       activity_level: defaultActivityLevel(account),
       avatar_url: null,
+      created_at: profileCreatedAt,
       date_of_birth: defaultDateOfBirth(ctx, account),
       first_name: account.firstName,
       fitness_goal: defaultFitnessGoal(account),
-      gender: defaultGender(account, index),
+      gender: defaultGender(account),
       height_cm: new Prisma.Decimal(heightCm),
       last_name: account.lastName,
       phone: account.phone,
@@ -228,10 +254,11 @@ async function seedAccount(
       id: seedId(`profile:${account.key}`),
       activity_level: defaultActivityLevel(account),
       avatar_url: null,
+      created_at: profileCreatedAt,
       date_of_birth: defaultDateOfBirth(ctx, account),
       first_name: account.firstName,
       fitness_goal: defaultFitnessGoal(account),
-      gender: defaultGender(account, index),
+      gender: defaultGender(account),
       height_cm: new Prisma.Decimal(heightCm),
       last_name: account.lastName,
       phone: account.phone,
@@ -242,7 +269,7 @@ async function seedAccount(
 
   await ctx.prisma.notificationPreference.upsert({
     where: { user_id: userId },
-    update: {},
+    update: { created_at: profileCreatedAt },
     create: {
       id: seedId(`notification-preference:${account.key}`),
       appointment_confirmed_sms: account.role === UserRole.coach,
@@ -251,6 +278,7 @@ async function seedAccount(
       payment_confirmed_email: true,
       rank_up_email: account.role === UserRole.member,
       subscription_expiring_sms: account.memberPersona === 'premium',
+      created_at: profileCreatedAt,
       user_id: userId,
     },
   });
@@ -261,162 +289,199 @@ async function seedSecondaryUserData(ctx: DynamicSeedContext) {
   const activityMemberKeys = [
     ...ctx.state.activeMemberKeys,
     ...ctx.state.historicalMemberKeys,
-  ];
-  const feedbackRows = ctx.state.accounts
-    .filter(
-      (account) =>
-        account.role !== UserRole.member ||
-        !ctx.state.restrictedMemberKeys.includes(account.key),
-    )
-    .slice(0, 48)
-    .map((account, index) => ({
-      id: seedId(`app-feedback:${account.key}:${index}`),
-      category:
-        index % 3 === 0 ? 'mobile' : index % 3 === 1 ? 'booking' : 'general',
-      created_at: daysFrom(ctx.config.anchorDate, -18 + (index % 12), 16),
-      message:
-        index % 2 === 0
-          ? 'Booking filters and payment states look realistic.'
-          : 'Profile and notification flows are ready for demo.',
-      user_id: ctx.state.userIds[account.key],
-    }));
-
-  const metricRows = activityMemberKeys.flatMap((memberKey, memberIndex) =>
-    [0, 1, 2].flatMap((metricIndex) => {
-      const recordedAt = activityDateFor(
-        ctx,
-        memberKey,
-        metricIndex,
-        3,
-        7,
-      );
-      return recordedAt
-        ? [
-            {
-              id: seedId(`progress-metric:${memberKey}:${metricIndex}`),
-              body_fat_pct: new Prisma.Decimal(
-                18 + ((memberIndex + metricIndex) % 10),
-              ),
-              chest_cm: new Prisma.Decimal(
-                82 + ((memberIndex + metricIndex) % 18),
-              ),
-              height_cm: new Prisma.Decimal(156 + (memberIndex % 24)),
-              muscle_mass_kg: new Prisma.Decimal(
-                28 + ((memberIndex + metricIndex) % 14),
-              ),
-              notes:
-                metricIndex === 2
-                  ? 'Trend check after seeded training block.'
-                  : 'Baseline measurement for demo analytics.',
-              recorded_at: recordedAt,
-              user_id: ctx.state.userIds[memberKey],
-              waist_cm: new Prisma.Decimal(
-                70 + ((memberIndex + metricIndex) % 16),
-              ),
-              weight_kg: new Prisma.Decimal(
-                55 + ((memberIndex + metricIndex) % 32),
-              ),
-            },
-          ]
-        : [];
-    }),
-  );
-
-  const attendanceRows = activityMemberKeys.flatMap((memberKey, memberIndex) => {
-    const attendanceCount = memberVolumeCount(
-      ctx,
-      memberKey,
-      'attendance',
-      'normal',
+  ].filter((memberKey) => {
+    const account = ctx.state.accounts.find(
+      (candidate) => candidate.key === memberKey,
     );
-    return Array.from({ length: attendanceCount }, (_, scanIndex) => {
-      const checkIn = activityDateFor(
-        ctx,
-        memberKey,
-        scanIndex,
-        attendanceCount,
-        6 + ((memberIndex + scanIndex) % 13),
-        scanIndex % 2 === 0 ? 15 : 45,
+    return account?.lifecycle?.activityStart && account.lifecycle.activityEnd;
+  });
+  const feedbackAccounts = ctx.state.accounts.filter((account) => {
+    const lifecycle = account.lifecycle;
+    if (
+      !lifecycle ||
+      account.emailVerified === false ||
+      account.memberPersona === 'unverified' ||
+      account.memberPersona === 'pending' ||
+      account.memberPersona === 'suspended' ||
+      (account.role === UserRole.member && lifecycle.activityStart === null)
+    ) {
+      return false;
+    }
+    return true;
+  });
+  const feedbackRows = ctx.state.accounts
+    .filter((account) => feedbackAccounts.includes(account))
+    .slice(0, 48)
+    .map((account, index) => {
+      const lifecycle = account.lifecycle!;
+      const start = lifecycle.activityStart ?? lifecycle.registeredAt;
+      const end = lifecycle.activityEnd ?? ctx.config.anchorDate;
+      const span = Math.max(60 * 60 * 1_000, end.getTime() - start.getTime());
+      const createdAt = new Date(
+        start.getTime() +
+          Math.min(span - 60 * 60 * 1_000, (index + 1) * 60 * 60 * 1_000),
       );
-      if (!checkIn) {
-        return null;
-      }
       return {
-        id: seedId(`attendance:${memberKey}:${scanIndex}`),
-        check_in_at: checkIn,
-        check_out_at: daysFrom(checkIn, 0, checkIn.getUTCHours() + 1, 35),
-        scanned_by: staffId,
-        user_id: ctx.state.userIds[memberKey],
+        id: seedId(`app-feedback:${account.key}:${index}`),
+        category:
+          index % 3 === 0 ? 'mobile' : index % 3 === 1 ? 'booking' : 'general',
+        created_at: createdAt,
+        message:
+          index % 2 === 0
+            ? 'Booking filters and payment states look realistic.'
+            : 'Profile and notification flows are ready for demo.',
+        user_id: ctx.state.userIds[account.key],
       };
-    }).filter((row): row is NonNullable<typeof row> => row !== null);
+    });
+
+  const metricRows = activityMemberKeys.flatMap((memberKey) => {
+    const account = ctx.state.accounts.find(
+      (candidate) => candidate.key === memberKey,
+    );
+    const baseline = account?.physicalBaseline;
+    if (!baseline) {
+      return [];
+    }
+    return [0, 1, 2].flatMap((metricIndex) => {
+      const recordedAt = activityDateFor(ctx, memberKey, metricIndex, 3, 7);
+      if (!recordedAt) {
+        return [];
+      }
+      const fraction = metricIndex / 2;
+      const weight =
+        baseline.baselineWeightKg +
+        (baseline.weightKg - baseline.baselineWeightKg) * fraction;
+      const snapshot = physicalSnapshotAtWeight(baseline, weight);
+      return [
+        {
+          id: seedId(`progress-metric:${memberKey}:${metricIndex}`),
+          body_fat_pct: new Prisma.Decimal(snapshot.bodyFatPct),
+          chest_cm: new Prisma.Decimal(snapshot.chestCm),
+          height_cm: new Prisma.Decimal(snapshot.heightCm),
+          muscle_mass_kg: new Prisma.Decimal(snapshot.muscleMassKg),
+          notes:
+            metricIndex === 2
+              ? 'Trend check after seeded training block.'
+              : 'Baseline measurement for demo analytics.',
+          recorded_at: recordedAt,
+          user_id: ctx.state.userIds[memberKey],
+          waist_cm: new Prisma.Decimal(snapshot.waistCm),
+          weight_kg: new Prisma.Decimal(snapshot.weightKg),
+        },
+      ];
+    });
   });
 
+  const attendanceRows = activityMemberKeys.flatMap(
+    (memberKey, memberIndex) => {
+      const attendanceCount = memberVolumeCount(
+        ctx,
+        memberKey,
+        'attendance',
+        'normal',
+      );
+      return Array.from({ length: attendanceCount }, (_, scanIndex) => {
+        const checkIn = activityDateFor(
+          ctx,
+          memberKey,
+          scanIndex,
+          attendanceCount,
+          6 + ((memberIndex + scanIndex) % 13),
+          scanIndex % 2 === 0 ? 15 : 45,
+        );
+        if (!checkIn) {
+          return null;
+        }
+        return {
+          id: seedId(`attendance:${memberKey}:${scanIndex}`),
+          check_in_at: checkIn,
+          check_out_at: daysFrom(checkIn, 0, checkIn.getUTCHours() + 1, 35),
+          scanned_by: staffId,
+          user_id: ctx.state.userIds[memberKey],
+        };
+      }).filter((row): row is NonNullable<typeof row> => row !== null);
+    },
+  );
+
   const deletionRequests = ctx.state.accounts
-    .filter((account) =>
-      ['archived', 'suspended', 'expired'].includes(
-        account.memberPersona ?? '',
-      ),
+    .filter(
+      (account) =>
+        account.lifecycle?.deletionRequestedAt !== null &&
+        account.lifecycle?.deletionRequestedAt !== undefined,
     )
-    .map((account, index) => ({
-      id: seedId(`deletion-request:${account.key}`),
-      createdAt: daysFrom(ctx.config.anchorDate, -12 + index, 9),
-      reason:
-        account.memberPersona === 'archived'
-          ? 'Archived account reviewed for account lifecycle coverage.'
-          : 'Edge-state account kept open for account review filters.',
-      reviewNotes:
-        account.memberPersona === 'archived'
-          ? 'Approved as part of seeded QA history.'
-          : 'Kept open for admin review demo.',
-      reviewedAt:
-        account.memberPersona === 'archived'
-          ? daysFrom(ctx.config.anchorDate, -9 + index, 11)
-          : null,
-      reviewedBy:
-        account.memberPersona === 'archived'
-          ? ctx.state.userIds[ctx.state.adminKeys[0]]
-          : null,
-      status:
-        account.memberPersona === 'archived'
-          ? AccountDeletionRequestStatus.approved
-          : AccountDeletionRequestStatus.pending,
-      userId: ctx.state.userIds[account.key],
-    }));
+    .map((account) => {
+      const lifecycle = account.lifecycle!;
+      return {
+        id: seedId(`deletion-request:${account.key}`),
+        createdAt: lifecycle.deletionRequestedAt!,
+        reason:
+          account.memberPersona === 'archived'
+            ? 'Archived account reviewed for account lifecycle coverage.'
+            : 'Edge-state account kept open for account review filters.',
+        reviewNotes:
+          account.memberPersona === 'archived'
+            ? 'Approved as part of seeded QA history.'
+            : 'Kept open for admin review demo.',
+        reviewedAt: lifecycle.deletionReviewedAt,
+        reviewedBy:
+          account.memberPersona === 'archived'
+            ? ctx.state.userIds[ctx.state.adminKeys[0]]
+            : null,
+        status:
+          account.memberPersona === 'archived'
+            ? AccountDeletionRequestStatus.approved
+            : AccountDeletionRequestStatus.pending,
+        userId: ctx.state.userIds[account.key],
+      };
+    });
 
   const refreshTokens = ctx.state.accounts
-    .filter((account) => account.isDemo)
-    .map((account, index) => ({
-      id: seedId(`refresh-token:${account.key}`),
-      created_at: daysFrom(ctx.config.anchorDate, -1, 8 + index),
-      device_info:
-        index % 2 === 0 ? 'Chrome on Windows QA laptop' : 'Expo Go QA device',
-      expires_at: daysFrom(ctx.config.anchorDate, 30, 8 + index),
-      ip_address: `127.0.0.${index + 10}`,
-      token_hash: hashValue(`refresh:${account.key}`),
-      user_id: ctx.state.userIds[account.key],
-    }));
+    .filter((account) => {
+      const lifecycle = account.lifecycle;
+      return account.isDemo && lifecycle && shouldSeedRefreshToken(account);
+    })
+    .map((account, index) => {
+      const lifecycle = account.lifecycle!;
+      const createdAt = new Date(
+        Math.max(
+          lifecycle.registeredAt.getTime() + 2 * 60 * 60 * 1_000,
+          ctx.config.anchorDate.getTime() - 24 * 60 * 60 * 1_000,
+        ),
+      );
+      return {
+        id: seedId(`refresh-token:${account.key}`),
+        created_at: createdAt,
+        device_info:
+          index % 2 === 0 ? 'Chrome on Windows QA laptop' : 'Expo Go QA device',
+        expires_at: daysFrom(ctx.config.anchorDate, 30, 8 + index),
+        ip_address: `127.0.0.${index + 10}`,
+        token_hash: hashValue(`refresh:${account.key}`),
+        user_id: ctx.state.userIds[account.key],
+      };
+    });
 
   const otpRows = ctx.state.accounts
     .filter(
       (account) =>
-        account.emailVerified === false || account.memberPersona === 'pending',
+        account.emailVerified === false ||
+        account.memberPersona === 'unverified',
     )
-    .map((account, index) => ({
-      id: seedId(`otp:${account.key}`),
-      attempts: index % 2,
-      channel: OtpChannel.email,
-      code_hash: hashValue(`000${index + 111}`),
-      consumed_at:
-        account.emailVerified === false
-          ? null
-          : daysFrom(ctx.config.anchorDate, -1),
-      expires_at: daysFrom(ctx.config.anchorDate, 1, 12),
-      purpose:
-        account.emailVerified === false
-          ? OtpPurpose.registration
-          : OtpPurpose.password_reset,
-      user_id: ctx.state.userIds[account.key],
-    }));
+    .map((account, index) => {
+      const createdAt = new Date(
+        account.lifecycle!.registeredAt.getTime() + 60 * 60 * 1_000,
+      );
+      return {
+        id: seedId(`otp:${account.key}`),
+        attempts: index % 2,
+        channel: OtpChannel.email,
+        code_hash: hashValue(`000${index + 111}`),
+        consumed_at: null,
+        created_at: createdAt,
+        expires_at: new Date(createdAt.getTime() + 10 * 60 * 1_000),
+        purpose: OtpPurpose.registration,
+        user_id: ctx.state.userIds[account.key],
+      };
+    });
 
   await ctx.prisma.appFeedback.createMany({
     data: feedbackRows,
@@ -448,8 +513,8 @@ export async function seedUsersAuthProfiles(ctx: DynamicSeedContext) {
   const accounts = buildSeedAccounts(ctx.config);
   populateAccountState(ctx.state, accounts);
 
-  for (const [index, account] of accounts.entries()) {
-    await seedAccount(ctx, account, index);
+  for (const account of accounts) {
+    await seedAccount(ctx, account);
   }
 
   await seedSecondaryUserData(ctx);

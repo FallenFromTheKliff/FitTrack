@@ -1,7 +1,6 @@
 import {
-  CreatorState,
+  AppointmentStatus,
   ExerciseCategory,
-  ExerciseReviewSubmissionStatus,
   FitnessGoal,
   IntegrityCaseStatus,
   IntegrityRiskLevel,
@@ -29,10 +28,14 @@ import {
 } from '@prisma/client';
 import { seedExternalId, seedId } from '../ids';
 import { daysFrom } from '../time';
-import type { DynamicSeedContext, SeedAccount } from '../types';
+import type {
+  DynamicSeedContext,
+  MemberEngagement,
+  SeedAccount,
+} from '../types';
 import {
   activityDateFor,
-  isMonthlyCoachingMember,
+  isRecurringCoachingMember,
   memberAccessWindow,
   memberVolumeCount,
 } from '../volumes';
@@ -41,228 +44,22 @@ import {
   DEFAULT_MUSCLE_ICON_KEY,
   evaluateExpRank,
 } from '../../../src/fitness/gamification/gamification.constants';
-import { buildFallbackPoseMovementContract } from '../../../../../packages/utils/pose';
+import {
+  CANONICAL_EXERCISE_CATALOG,
+  CANONICAL_LEGACY_POSE_EXERCISE_KEYS,
+  CANONICAL_MUSCLE_DEFINITIONS,
+  CANONICAL_POSE_EXERCISE_KEYS,
+} from '../../../../../packages/utils/fitness-catalog';
+import {
+  buildFallbackPoseMovementContract,
+  getPoseAutoRepCapability,
+  isValidPoseMovementContract,
+} from '../../../../../packages/utils/pose';
 
-const EXERCISE_SEEDS = [
-  {
-    key: 'squat',
-    category: ExerciseCategory.strength,
-    description:
-      'Compound lower-body lift for quads, glutes, and trunk control.',
-    muscleGroup: 'quads',
-    name: 'Barbell Back Squat',
-  },
-  {
-    key: 'bench',
-    category: ExerciseCategory.strength,
-    description: 'Horizontal press pattern for chest, shoulders, and triceps.',
-    muscleGroup: 'chest',
-    name: 'Dumbbell Bench Press',
-  },
-  {
-    key: 'barbell-bench',
-    category: ExerciseCategory.strength,
-    description:
-      'Classic horizontal barbell press for chest and triceps strength.',
-    muscleGroup: 'chest',
-    name: 'Barbell Bench Press',
-  },
-  {
-    key: 'incline-dumbbell-press',
-    category: ExerciseCategory.strength,
-    description: 'Incline chest press emphasizing upper chest and front delts.',
-    muscleGroup: 'upper chest',
-    name: 'Incline Dumbbell Press',
-  },
-  {
-    key: 'cable-fly',
-    category: ExerciseCategory.strength,
-    description: 'Cable chest isolation movement with constant tension.',
-    muscleGroup: 'chest',
-    name: 'Cable Fly',
-  },
-  {
-    key: 'shoulder-press',
-    category: ExerciseCategory.strength,
-    description:
-      'Vertical press pattern for shoulders, triceps, and trunk stability.',
-    muscleGroup: 'shoulders',
-    name: 'Seated Dumbbell Shoulder Press',
-  },
-  {
-    key: 'lateral-raise',
-    category: ExerciseCategory.strength,
-    description: 'Shoulder isolation movement for side-delt development.',
-    muscleGroup: 'shoulders',
-    name: 'Dumbbell Lateral Raise',
-  },
-  {
-    key: 'lat-pulldown',
-    category: ExerciseCategory.strength,
-    description: 'Vertical pull pattern for lats and upper-back strength.',
-    muscleGroup: 'lats',
-    name: 'Lat Pulldown',
-  },
-  {
-    key: 'barbell-row',
-    category: ExerciseCategory.strength,
-    description: 'Free-weight horizontal pull for back thickness and bracing.',
-    muscleGroup: 'upper back',
-    name: 'Barbell Row',
-  },
-  {
-    key: 'leg-press',
-    category: ExerciseCategory.strength,
-    description: 'Machine lower-body press for quad and glute volume.',
-    muscleGroup: 'quads',
-    name: 'Leg Press',
-  },
-  {
-    key: 'leg-extension',
-    category: ExerciseCategory.strength,
-    description: 'Machine knee-extension isolation for quad hypertrophy.',
-    muscleGroup: 'quads',
-    name: 'Leg Extension',
-  },
-  {
-    key: 'seated-leg-curl',
-    category: ExerciseCategory.strength,
-    description: 'Machine hamstring curl for posterior-chain accessory work.',
-    muscleGroup: 'hamstrings',
-    name: 'Seated Leg Curl',
-  },
-  {
-    key: 'calf-raise',
-    category: ExerciseCategory.strength,
-    description: 'Calf isolation movement for lower-leg strength and volume.',
-    muscleGroup: 'calves',
-    name: 'Standing Calf Raise',
-  },
-  {
-    key: 'biceps-curl',
-    category: ExerciseCategory.strength,
-    description: 'Elbow-flexion accessory for biceps development.',
-    muscleGroup: 'biceps',
-    name: 'Dumbbell Biceps Curl',
-  },
-  {
-    key: 'hammer-curl',
-    category: ExerciseCategory.strength,
-    description: 'Neutral-grip curl emphasizing brachialis and forearms.',
-    muscleGroup: 'biceps',
-    name: 'Hammer Curl',
-  },
-  {
-    key: 'triceps-pushdown',
-    category: ExerciseCategory.strength,
-    description: 'Cable elbow-extension accessory for triceps volume.',
-    muscleGroup: 'triceps',
-    name: 'Cable Triceps Pushdown',
-  },
-  {
-    key: 'rope-face-pull',
-    category: ExerciseCategory.strength,
-    description: 'Cable upper-back and rear-delt movement for shoulder health.',
-    muscleGroup: 'rear delts',
-    name: 'Rope Face Pull',
-  },
-  {
-    key: 'hip-thrust',
-    category: ExerciseCategory.strength,
-    description:
-      'Glute-dominant hip extension movement for lower-body strength.',
-    muscleGroup: 'glutes',
-    name: 'Barbell Hip Thrust',
-  },
-  {
-    key: 'split-squat',
-    category: ExerciseCategory.strength,
-    description: 'Unilateral leg movement for quads, glutes, and balance.',
-    muscleGroup: 'quads',
-    name: 'Bulgarian Split Squat',
-  },
-  {
-    key: 'cable-crunch',
-    category: ExerciseCategory.strength,
-    description: 'Loaded trunk-flexion accessory for abdominal strength.',
-    muscleGroup: 'core',
-    name: 'Cable Crunch',
-  },
-  {
-    key: 'deadlift',
-    category: ExerciseCategory.strength,
-    description: 'Posterior-chain hinge pattern for strength blocks.',
-    muscleGroup: 'hamstrings',
-    name: 'Romanian Deadlift',
-  },
-  {
-    key: 'row',
-    category: ExerciseCategory.strength,
-    description: 'Upper-body pull for lats and upper-back development.',
-    muscleGroup: 'lats',
-    name: 'Seated Cable Row',
-  },
-  {
-    key: 'push-up',
-    category: ExerciseCategory.strength,
-    description: 'Bodyweight press with core stiffness and shoulder control.',
-    muscleGroup: 'chest',
-    name: 'Push Up',
-  },
-  {
-    key: 'dip',
-    category: ExerciseCategory.strength,
-    description: 'Bodyweight press for triceps, chest, and shoulder control.',
-    muscleGroup: 'triceps',
-    name: 'Parallel Bar Dip',
-  },
-  {
-    key: 'pull-up',
-    category: ExerciseCategory.strength,
-    description: 'Vertical bodyweight pull for lats and upper-back strength.',
-    muscleGroup: 'lats',
-    name: 'Pull Up',
-  },
-  {
-    key: 'run',
-    category: ExerciseCategory.cardio,
-    description: 'Steady-state conditioning for aerobic base work.',
-    muscleGroup: 'cardio',
-    name: 'Treadmill Run',
-  },
-  {
-    key: 'plank',
-    category: ExerciseCategory.balance,
-    description: 'Anti-extension core endurance and trunk control.',
-    muscleGroup: 'core',
-    name: 'Forearm Plank',
-  },
-  {
-    key: 'mobility-flow',
-    category: ExerciseCategory.flexibility,
-    description:
-      'Recovery sequence for hips, shoulders, and thoracic rotation.',
-    muscleGroup: 'mobility',
-    name: 'Mobility Flow',
-  },
-] as const;
+export const POSE_PROFILE_EXERCISE_KEYS = CANONICAL_POSE_EXERCISE_KEYS;
 
-export const POSE_PROFILE_EXERCISE_KEYS = [
-  'squat',
-  'barbell-bench',
-  'biceps-curl',
-  'dip',
-  'plank',
-  'pull-up',
-  'push-up',
-  'shoulder-press',
-] as const;
-
-export const LEGACY_POSE_PROFILE_EXERCISE_KEYS = [
-  'bench',
-  'deadlift',
-  'row',
-] as const;
+export const LEGACY_POSE_PROFILE_EXERCISE_KEYS =
+  CANONICAL_LEGACY_POSE_EXERCISE_KEYS;
 
 export function getLegacySeedPoseProfileRetirementWhere() {
   return {
@@ -274,18 +71,6 @@ export function getLegacySeedPoseProfileRetirementWhere() {
     profile_kind: PoseProfileKind.seed,
   };
 }
-
-const MUSCLE_DEFINITIONS = [
-  ['chest', 'Chest', 'upper_body_push'],
-  ['quads', 'Quads', 'lower_body'],
-  ['hamstrings', 'Hamstrings', 'lower_body'],
-  ['glutes', 'Glutes', 'lower_body'],
-  ['lats', 'Lats', 'upper_body_pull'],
-  ['core', 'Core', 'core'],
-  ['shoulders', 'Shoulders', 'shoulders'],
-  ['cardio', 'Cardio', 'conditioning'],
-  ['mobility', 'Mobility', 'recovery'],
-] as const;
 
 const DYNAMIC_MILESTONES = [
   {
@@ -331,11 +116,12 @@ const DYNAMIC_MILESTONES = [
 ] as const;
 
 async function seedExerciseBackbone(ctx: DynamicSeedContext) {
-  for (const [index, [key, name, bodyRegion]] of MUSCLE_DEFINITIONS.entries()) {
+  for (const muscle of CANONICAL_MUSCLE_DEFINITIONS) {
+    const { key, name, bodyRegion, aliases, sortOrder } = muscle;
     await ctx.prisma.muscleDefinition.upsert({
       where: { key },
       update: {
-        aliases: [name.toLowerCase(), key],
+        aliases: [...aliases, key],
         body_region: bodyRegion,
         icon_asset_key: null,
         icon_key: DEFAULT_MUSCLE_ICON_KEY,
@@ -343,11 +129,11 @@ async function seedExerciseBackbone(ctx: DynamicSeedContext) {
         is_active: true,
         is_system: true,
         name,
-        sort_order: 10 + index,
+        sort_order: sortOrder,
       },
       create: {
         id: seedId(`muscle-definition:${key}`),
-        aliases: [name.toLowerCase(), key],
+        aliases: [...aliases, key],
         body_region: bodyRegion,
         icon_asset_key: null,
         icon_key: DEFAULT_MUSCLE_ICON_KEY,
@@ -356,18 +142,18 @@ async function seedExerciseBackbone(ctx: DynamicSeedContext) {
         is_system: true,
         key,
         name,
-        sort_order: 10 + index,
+        sort_order: sortOrder,
       },
     });
   }
 
-  for (const exercise of EXERCISE_SEEDS) {
+  for (const exercise of CANONICAL_EXERCISE_CATALOG) {
     const exerciseId = seedId(`exercise:${exercise.key}`);
     ctx.state.exerciseIds[exercise.key] = exerciseId;
     await ctx.prisma.exerciseCatalog.upsert({
       where: { id: exerciseId },
       update: {
-        category: exercise.category,
+        category: exercise.category as ExerciseCategory,
         description: exercise.description,
         hand_shape_profile: {
           grip: exercise.key === 'run' ? 'none' : 'neutral',
@@ -391,7 +177,7 @@ async function seedExerciseBackbone(ctx: DynamicSeedContext) {
       },
       create: {
         id: exerciseId,
-        category: exercise.category,
+        category: exercise.category as ExerciseCategory,
         description: exercise.description,
         hand_shape_profile: {
           grip: exercise.key === 'run' ? 'none' : 'neutral',
@@ -417,7 +203,9 @@ async function seedExerciseBackbone(ctx: DynamicSeedContext) {
   }
 
   const poseProfileExercises = POSE_PROFILE_EXERCISE_KEYS.map((key) => {
-    const exercise = EXERCISE_SEEDS.find((candidate) => candidate.key === key);
+    const exercise = CANONICAL_EXERCISE_CATALOG.find(
+      (candidate) => candidate.key === key,
+    );
     if (!exercise) {
       throw new Error(`Missing seeded pose exercise "${key}".`);
     }
@@ -425,10 +213,13 @@ async function seedExerciseBackbone(ctx: DynamicSeedContext) {
   });
 
   for (const exercise of poseProfileExercises) {
-    const contract = buildFallbackPoseMovementContract(exercise.name);
-    if (!contract) {
+    const capability = getPoseAutoRepCapability(exercise.key);
+    const contract = capability
+      ? buildFallbackPoseMovementContract(capability.contractExercise)
+      : null;
+    if (!capability || !contract || !isValidPoseMovementContract(contract)) {
       throw new Error(
-        `Missing canonical pose movement contract for "${exercise.name}".`,
+        `Missing compatible canonical pose movement contract for "${exercise.key}".`,
       );
     }
     const trackingRequirements = contract.trackingRequirements;
@@ -468,9 +259,21 @@ async function seedExerciseBackbone(ctx: DynamicSeedContext) {
       },
       profile_kind: PoseProfileKind.seed,
       rep_rules: {
-        count: contract.repModel === 'static_hold' ? 'static_hold' : 'phase_crossing',
+        count:
+          contract.repModel === 'static_hold'
+            ? 'static_hold'
+            : 'phase_crossing',
+        contract_version: contract.contractVersion,
+        hold_duration_seconds: contract.holdDurationSeconds ?? null,
         minimum_visibility: trackingRequirements?.minConfidence ?? 0.6,
+        primary_joints: contract.primaryJoints ?? [],
         required_sides: contract.requiredSides,
+        phase_order: contract.phaseOrder ?? [],
+        rep_model: contract.repModel,
+        secondary_check: contract.secondaryCheck,
+        secondary_joints: contract.secondaryJoints ?? [],
+        spatial_requirements: contract.spatialRequirements ?? null,
+        tracking_requirements: trackingRequirements ?? null,
       },
       rep_thresholds: {
         down: contract.repThresholds.down,
@@ -489,7 +292,7 @@ async function seedExerciseBackbone(ctx: DynamicSeedContext) {
     const { id: poseProfileId, ...poseProfileUpdate } = poseProfile;
     await ctx.prisma.poseExerciseProfile.upsert({
       where: { id: poseProfileId },
-      update: poseProfileUpdate,
+      update: { ...poseProfileUpdate, is_active: true },
       create: poseProfile,
     });
   }
@@ -509,11 +312,292 @@ type SeedPlanExerciseDescriptor = {
   exerciseId: string;
   exerciseKey: string;
   planExerciseId: string;
+  weekNumber: number;
   reps: number | null;
   scheduleDayId: string;
   sets: number;
   weightKg: number | null;
 };
+
+type SeedTrainingFocus =
+  | 'conditioning'
+  | 'full_body'
+  | 'legs'
+  | 'lower'
+  | 'pull'
+  | 'push'
+  | 'recovery'
+  | 'upper';
+
+type SeedSplitTemplate = {
+  daysPerWeek: number;
+  durationWeeks: number;
+  focusByDay: readonly SeedTrainingFocus[];
+  key: string;
+  title: string;
+};
+
+const SEED_SPLIT_TEMPLATES: readonly SeedSplitTemplate[] = [
+  {
+    daysPerWeek: 6,
+    durationWeeks: 8,
+    focusByDay: ['push', 'pull', 'legs', 'recovery', 'push', 'pull', 'legs'],
+    key: 'ppl-rest',
+    title: 'Push Pull Legs + Recovery',
+  },
+  {
+    daysPerWeek: 4,
+    durationWeeks: 8,
+    focusByDay: [
+      'upper',
+      'lower',
+      'recovery',
+      'upper',
+      'lower',
+      'recovery',
+      'recovery',
+    ],
+    key: 'upper-lower',
+    title: 'Upper / Lower Strength Builder',
+  },
+  {
+    daysPerWeek: 3,
+    durationWeeks: 8,
+    focusByDay: [
+      'full_body',
+      'recovery',
+      'full_body',
+      'recovery',
+      'conditioning',
+      'recovery',
+      'recovery',
+    ],
+    key: 'full-body-conditioning',
+    title: 'Full Body + Conditioning',
+  },
+];
+
+const SEED_EXERCISES_BY_FOCUS: Record<
+  Exclude<SeedTrainingFocus, 'recovery'>,
+  readonly string[]
+> = {
+  push: [
+    'barbell-bench',
+    'incline-dumbbell-press',
+    'shoulder-press',
+    'cable-fly',
+    'triceps-pushdown',
+    'lateral-raise',
+  ],
+  pull: [
+    'lat-pulldown',
+    'barbell-row',
+    'row',
+    'rope-face-pull',
+    'biceps-curl',
+    'hammer-curl',
+  ],
+  legs: [
+    'squat',
+    'leg-press',
+    'deadlift',
+    'seated-leg-curl',
+    'hip-thrust',
+    'calf-raise',
+  ],
+  upper: [
+    'barbell-bench',
+    'lat-pulldown',
+    'shoulder-press',
+    'barbell-row',
+    'biceps-curl',
+    'triceps-pushdown',
+  ],
+  lower: [
+    'squat',
+    'leg-press',
+    'deadlift',
+    'seated-leg-curl',
+    'hip-thrust',
+    'calf-raise',
+  ],
+  full_body: [
+    'squat',
+    'barbell-bench',
+    'lat-pulldown',
+    'hip-thrust',
+    'cable-crunch',
+  ],
+  conditioning: ['run', 'plank', 'mobility-flow'],
+};
+
+const BODYWEIGHT_OR_DURATION_EXERCISES = new Set([
+  'dip',
+  'mobility-flow',
+  'plank',
+  'pull-up',
+  'push-up',
+  'run',
+]);
+
+const COMPOUND_EXERCISES = new Set([
+  'barbell-bench',
+  'barbell-row',
+  'deadlift',
+  'hip-thrust',
+  'lat-pulldown',
+  'leg-press',
+  'row',
+  'shoulder-press',
+  'squat',
+]);
+
+const EXTERNAL_WEIGHT_RATIOS: Record<string, number> = {
+  'barbell-bench': 0.55,
+  'barbell-row': 0.5,
+  bench: 0.45,
+  'biceps-curl': 0.2,
+  'cable-crunch': 0.2,
+  'cable-fly': 0.2,
+  'calf-raise': 0.6,
+  deadlift: 0.9,
+  'hammer-curl': 0.22,
+  'hip-thrust': 0.8,
+  'incline-dumbbell-press': 0.38,
+  'lateral-raise': 0.1,
+  'lat-pulldown': 0.55,
+  'leg-extension': 0.35,
+  'leg-press': 1.2,
+  'rope-face-pull': 0.18,
+  row: 0.45,
+  'seated-leg-curl': 0.4,
+  'shoulder-press': 0.3,
+  'split-squat': 0.3,
+  squat: 0.85,
+  'triceps-pushdown': 0.2,
+};
+
+function stableSeedFraction(value: string) {
+  let hash = 2_166_136_261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16_777_619);
+  }
+  return (hash >>> 0) / 4_294_967_296;
+}
+
+function memberEngagementFor(account: SeedAccount): MemberEngagement {
+  return (
+    account.memberEngagement ?? account.scenario?.memberEngagement ?? 'regular'
+  );
+}
+
+function memberTrainingMultiplier(engagement: MemberEngagement) {
+  switch (engagement) {
+    case 'gym_rat':
+      return 1.12;
+    case 'frequent':
+      return 1.04;
+    case 'regular':
+      return 0.94;
+    case 'casual':
+      return 0.82;
+    case 'lazy':
+      return 0.7;
+    case 'zero_use':
+      return 0.6;
+  }
+}
+
+function roundSeedNumber(value: number, digits = 1) {
+  const factor = 10 ** digits;
+  return Math.round(value * factor) / factor;
+}
+
+function clampSeedNumber(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function exercisePrescriptionFor(
+  account: SeedAccount,
+  exerciseKey: string,
+  weekNumber: number,
+) {
+  const engagement = memberEngagementFor(account);
+  const experience = memberTrainingMultiplier(engagement);
+  const progression = 1 + Math.min(0.16, Math.max(0, weekNumber - 1) * 0.02);
+  const isDurationExercise =
+    exerciseKey === 'run' || exerciseKey === 'mobility-flow';
+  const isStaticHold = exerciseKey === 'plank';
+  const isBodyweight = BODYWEIGHT_OR_DURATION_EXERCISES.has(exerciseKey);
+  const canonicalExercise = CANONICAL_EXERCISE_CATALOG.find(
+    (exercise) => exercise.key === exerciseKey,
+  );
+  if (!canonicalExercise) {
+    throw new Error(
+      `Missing canonical exercise prescription for "${exerciseKey}".`,
+    );
+  }
+
+  if (isDurationExercise || isStaticHold) {
+    return {
+      durationSeconds:
+        exerciseKey === 'run'
+          ? 600 + Math.min(360, (weekNumber - 1) * 30)
+          : exerciseKey === 'mobility-flow'
+            ? 480 + Math.min(240, (weekNumber - 1) * 20)
+            : 30 + Math.min(30, (weekNumber - 1) * 3),
+      reps: null,
+      restSeconds: exerciseKey === 'run' ? 90 : 30,
+      sets: exerciseKey === 'run' ? 1 : 3,
+      weightKg: null,
+    };
+  }
+
+  const baselineWeightKg = clampSeedNumber(
+    account.physicalBaseline?.weightKg ?? account.weightKg ?? 70,
+    45,
+    140,
+  );
+  const ratio = EXTERNAL_WEIGHT_RATIOS[exerciseKey] ?? 0.25;
+  const jitter =
+    stableSeedFraction(`${account.key}:${exerciseKey}`) * 0.12 - 0.06;
+  const weightKg = isBodyweight
+    ? null
+    : roundSeedNumber(
+        clampSeedNumber(
+          baselineWeightKg * ratio * experience * progression * (1 + jitter),
+          COMPOUND_EXERCISES.has(exerciseKey) ? 10 : 2.5,
+          180,
+        ),
+        1,
+      );
+  const compound = COMPOUND_EXERCISES.has(exerciseKey);
+  const reps = clampSeedNumber(
+    (compound ? 6 : 8) +
+      (engagement === 'gym_rat' || engagement === 'frequent' ? 1 : 0) +
+      Math.floor((weekNumber - 1) / 3),
+    compound ? 5 : 8,
+    compound ? 12 : 16,
+  );
+  return {
+    durationSeconds: null,
+    reps,
+    restSeconds: compound ? 105 : 75,
+    sets: compound ? 4 : 3,
+    weightKg,
+  };
+}
+
+function exerciseKeysForFocus(focus: SeedTrainingFocus) {
+  return focus === 'recovery' ? [] : SEED_EXERCISES_BY_FOCUS[focus].slice(0, 3);
+}
+
+function requiredExerciseLogCount(
+  exercises: readonly Pick<SeedPlanExerciseDescriptor, 'sets'>[],
+) {
+  return exercises.reduce((total, exercise) => total + exercise.sets, 0);
+}
 
 export function getRepresentativeLifetimeXp(
   account: Pick<SeedAccount, 'role'>,
@@ -557,17 +641,70 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
     ...ctx.state.activeMemberKeys,
     ...ctx.state.historicalMemberKeys,
   ];
-  const coachKeys = ctx.state.coachAccountKeys;
-  const coachedMemberKeys = new Set(
-    memberKeys.filter((memberKey) => isMonthlyCoachingMember(ctx, memberKey)),
+  const accountByKey = new Map(
+    ctx.state.accounts.map((account) => [account.key, account]),
   );
-  const exerciseKeys = EXERCISE_SEEDS.map((exercise) => exercise.key);
+  const coachKeys = ctx.state.coachAccountKeys;
+  const [coachingPlans, coachProfiles, coachingAppointments] =
+    await Promise.all([
+      ctx.prisma.recurringCoachingPlan.findMany({
+        select: { coach_id: true, member_id: true },
+      }),
+      ctx.prisma.coachProfile.findMany({
+        select: { id: true, user_id: true },
+      }),
+      ctx.prisma.coachAppointment.findMany({
+        select: {
+          completed_at: true,
+          id: true,
+          recurring_plan_id: true,
+          scheduled_at: true,
+          status: true,
+          user_id: true,
+        },
+      }),
+    ]);
+  const coachUserIdByProfileId = new Map(
+    coachProfiles.map((profile) => [profile.id, profile.user_id]),
+  );
+  const coachingCoachByMemberId = new Map(
+    coachingPlans.map((plan) => [
+      plan.member_id,
+      coachUserIdByProfileId.get(plan.coach_id),
+    ]),
+  );
+  const completedRecurringAppointmentsByMember = new Map<
+    string,
+    Array<{
+      completed_at: Date | null;
+      id: string;
+      scheduled_at: Date;
+    }>
+  >();
+  for (const appointment of coachingAppointments) {
+    if (
+      appointment.recurring_plan_id === null ||
+      appointment.status !== AppointmentStatus.completed
+    ) {
+      continue;
+    }
+    const rows =
+      completedRecurringAppointmentsByMember.get(appointment.user_id) ?? [];
+    rows.push({
+      completed_at: appointment.completed_at,
+      id: appointment.id,
+      scheduled_at: appointment.scheduled_at,
+    });
+    completedRecurringAppointmentsByMember.set(appointment.user_id, rows);
+  }
+  const coachedMemberKeys = new Set(
+    memberKeys.filter((memberKey) => isRecurringCoachingMember(ctx, memberKey)),
+  );
   const scheduleRows: Prisma.TrainingScheduleDayCreateManyInput[] = [];
   const planExerciseRows: Prisma.PlanExerciseCreateManyInput[] = [];
   const sessionRows: Prisma.WorkoutSessionCreateManyInput[] = [];
   const exerciseLogRows: Prisma.ExerciseLogCreateManyInput[] = [];
   const poseRows: Prisma.PoseSessionCreateManyInput[] = [];
-  const reviewRows: Prisma.ExerciseReviewSubmissionCreateManyInput[] = [];
   const activePlanExercisesByMember = new Map<
     string,
     SeedPlanExerciseDescriptor[]
@@ -582,19 +719,36 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
 
   for (const [memberIndex, memberKey] of memberKeys.entries()) {
     const userId = ctx.state.userIds[memberKey];
+    const account = accountByKey.get(memberKey);
+    if (!account || !userId) {
+      continue;
+    }
     // Luca is the demo member used in the member portal walkthrough. Keep this
     // explicit so her active PPL plan is always a real Seed Coach assignment,
     // rather than an AI draft that happens to share the same title.
     const isLucaDemoMember = memberKey === 'member-premium';
     const isQaOneTimeMember = memberKey === 'member-active';
-    const coachKey = isLucaDemoMember || isQaOneTimeMember
-      ? 'coach'
-      : coachKeys[memberIndex % coachKeys.length];
+    const coachingCoachUserId = coachingCoachByMemberId.get(userId);
+    const coachingCoachKey = coachKeys.find(
+      (coachKey) => ctx.state.userIds[coachKey] === coachingCoachUserId,
+    );
+    const coachKey =
+      isLucaDemoMember || isQaOneTimeMember
+        ? 'coach'
+        : (coachingCoachKey ?? coachKeys[memberIndex % coachKeys.length]);
     const activePlanId = seedId(`training-plan:${memberKey}`);
-    const planCreatedAt = daysFrom(
-      memberAccessWindow(ctx, memberKey).startsAt ?? ctx.config.anchorDate,
+    const accessWindow = memberAccessWindow(ctx, memberKey);
+    const proposedPlanCreatedAt = daysFrom(
+      accessWindow.startsAt ?? ctx.config.anchorDate,
       -7,
       8,
+    );
+    const planCreatedAt = new Date(
+      Math.max(
+        proposedPlanCreatedAt.getTime(),
+        account.lifecycle?.registeredAt?.getTime() ??
+          proposedPlanCreatedAt.getTime(),
+      ),
     );
 
     for (
@@ -602,6 +756,11 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
       presetIndex < presetsPerMember;
       presetIndex += 1
     ) {
+      const template =
+        SEED_SPLIT_TEMPLATES[presetIndex] ??
+        SEED_SPLIT_TEMPLATES[SEED_SPLIT_TEMPLATES.length - 1];
+      const durationWeeks =
+        presetIndex === 0 && isQaOneTimeMember ? 1 : template.durationWeeks;
       const planId =
         presetIndex === 0
           ? activePlanId
@@ -623,20 +782,14 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
             memberKey,
             presetIndex,
             source: 'dynamic-seed',
-            style:
-              presetIndex === 0
-                ? 'ppl-rest-ppl'
-                : presetIndex === 1
-                  ? 'upper-lower'
-                  : 'conditioning',
+            style: template.key,
           },
           coach_id:
             source === PlanSource.coach_assigned
               ? ctx.state.userIds[coachKey]
               : null,
-          days_per_week: presetIndex === 2 ? 4 : 3,
-          duration_weeks:
-            presetIndex === 0 && isQaOneTimeMember ? 1 : 8,
+          days_per_week: template.daysPerWeek,
+          duration_weeks: durationWeeks,
           goal:
             memberIndex % 3 === 0
               ? FitnessGoal.bulking
@@ -649,11 +802,9 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
           is_template: false,
           source,
           title:
-            presetIndex === 0
+            presetIndex === 0 && isLucaDemoMember
               ? 'Active PPL Rest Split'
-              : presetIndex === 1
-                ? 'Upper Lower Backup Split'
-                : 'Conditioning Preset',
+              : template.title,
           created_at: planCreatedAt,
         },
         create: {
@@ -662,20 +813,14 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
             memberKey,
             presetIndex,
             source: 'dynamic-seed',
-            style:
-              presetIndex === 0
-                ? 'ppl-rest-ppl'
-                : presetIndex === 1
-                  ? 'upper-lower'
-                  : 'conditioning',
+            style: template.key,
           },
           coach_id:
             source === PlanSource.coach_assigned
               ? ctx.state.userIds[coachKey]
               : null,
-          days_per_week: presetIndex === 2 ? 4 : 3,
-          duration_weeks:
-            presetIndex === 0 && isQaOneTimeMember ? 1 : 8,
+          days_per_week: template.daysPerWeek,
+          duration_weeks: durationWeeks,
           goal:
             memberIndex % 3 === 0
               ? FitnessGoal.bulking
@@ -688,25 +833,18 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
           is_template: false,
           source,
           title:
-            presetIndex === 0
+            presetIndex === 0 && isLucaDemoMember
               ? 'Active PPL Rest Split'
-              : presetIndex === 1
-                ? 'Upper Lower Backup Split'
-                : 'Conditioning Preset',
+              : template.title,
           created_at: planCreatedAt,
           user_id: userId,
         },
       });
 
-      const populatedWeeks = isLucaDemoMember
-        ? 8
-        : isQaOneTimeMember
-          ? 1
-          : 1;
-      for (let weekNumber = 1; weekNumber <= populatedWeeks; weekNumber += 1) {
+      for (let weekNumber = 1; weekNumber <= durationWeeks; weekNumber += 1) {
         for (let dayIndex = 0; dayIndex < 7; dayIndex += 1) {
-          const isRestDay =
-            presetIndex === 0 ? dayIndex === 3 : dayIndex % 3 === 2;
+          const focus = template.focusByDay[dayIndex] ?? 'recovery';
+          const isRestDay = focus === 'recovery';
           const weekSuffix = weekNumber === 1 ? '' : `:week:${weekNumber}`;
           const scheduleDayId = seedId(
             `schedule-day:${memberKey}:${presetIndex}:${dayIndex}${weekSuffix}`,
@@ -715,17 +853,16 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
             id: scheduleDayId,
             day_of_week: dayIndex,
             focus_label: isRestDay
-              ? 'Rest'
-              : presetIndex === 0
-                ? ['Push', 'Pull', 'Legs', 'Rest', 'Push', 'Pull', 'Legs'][
-                    dayIndex
-                  ]
-                : dayIndex % 2 === 0
-                  ? 'Upper'
-                  : 'Lower',
+              ? 'Recovery'
+              : focus === 'full_body'
+                ? 'Full Body'
+                : focus === 'conditioning'
+                  ? 'Conditioning'
+                  : focus[0].toUpperCase() + focus.slice(1),
             notes: isRestDay
-              ? 'Rest day in the recurring weekly split.'
-              : 'Training day prepared for plan detail review.',
+              ? 'Recovery day with no exercises in the recurring weekly split.'
+              : `Seeded ${focus.replace('_', ' ')} training day.`,
+            is_rest_day: isRestDay,
             plan_id: planId,
             created_at: planCreatedAt,
             week_number: weekNumber,
@@ -735,37 +872,37 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
             continue;
           }
 
-          for (let orderIndex = 0; orderIndex < 3; orderIndex += 1) {
-            const exerciseKey =
-              exerciseKeys[
-                (memberIndex + presetIndex + dayIndex + orderIndex) %
-                  exerciseKeys.length
-              ];
+          for (const [orderIndex, exerciseKey] of exerciseKeysForFocus(
+            focus,
+          ).entries()) {
+            const exerciseId = ctx.state.exerciseIds[exerciseKey];
+            if (!exerciseId) {
+              throw new Error(
+                `Missing seeded exercise id for "${exerciseKey}".`,
+              );
+            }
+            const prescription = exercisePrescriptionFor(
+              account,
+              exerciseKey,
+              weekNumber,
+            );
             const planExerciseId = seedId(
               `plan-exercise:${memberKey}:${presetIndex}:${dayIndex}:${orderIndex}${weekSuffix}`,
             );
-            const reps = exerciseKey === 'run' ? null : 8 + orderIndex * 2;
-            const sets = exerciseKey === 'run' ? 1 : 3;
-            const durationSeconds =
-              exerciseKey === 'run' || exerciseKey === 'plank'
-                ? 600 + orderIndex * 60
-                : null;
-            const weightKg =
-              exerciseKey === 'run' || exerciseKey === 'plank'
-                ? null
-                : 25 + memberIndex + orderIndex * 5;
             planExerciseRows.push({
               id: planExerciseId,
-              duration_seconds: durationSeconds,
-              exercise_id: ctx.state.exerciseIds[exerciseKey],
+              duration_seconds: prescription.durationSeconds,
+              exercise_id: exerciseId,
               notes: 'Plan exercise with realistic set prescription.',
               order_index: orderIndex,
-              reps,
-              rest_seconds: exerciseKey === 'run' ? 90 : 75,
+              reps: prescription.reps,
+              rest_seconds: prescription.restSeconds,
               schedule_day_id: scheduleDayId,
-              sets,
+              sets: prescription.sets,
               weight_kg_target:
-                weightKg == null ? null : new Prisma.Decimal(weightKg),
+                prescription.weightKg == null
+                  ? null
+                  : new Prisma.Decimal(prescription.weightKg),
               created_at: planCreatedAt,
             });
 
@@ -774,14 +911,15 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
                 activePlanExercisesByMember.get(memberKey) ?? [];
               activePlanExercises.push({
                 dayOfWeek: dayIndex,
-                durationSeconds,
-                exerciseId: ctx.state.exerciseIds[exerciseKey],
+                durationSeconds: prescription.durationSeconds,
+                exerciseId,
                 exerciseKey,
                 planExerciseId,
-                reps,
+                reps: prescription.reps,
                 scheduleDayId,
-                sets,
-                weightKg,
+                sets: prescription.sets,
+                weekNumber,
+                weightKg: prescription.weightKg,
               });
               activePlanExercisesByMember.set(memberKey, activePlanExercises);
             }
@@ -792,17 +930,34 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
 
     const activePlanExercises =
       activePlanExercisesByMember.get(memberKey) ?? [];
-    const activePlanDays = [
-      ...activePlanExercises.reduce<Map<string, SeedPlanExerciseDescriptor[]>>(
-        (days, exercise) => {
-          const dayExercises = days.get(exercise.scheduleDayId) ?? [];
-          dayExercises.push(exercise);
-          days.set(exercise.scheduleDayId, dayExercises);
-          return days;
-        },
-        new Map(),
-      ),
-    ].map(([, dayExercises]) => dayExercises);
+    const activePlanDaysByWeek = new Map<
+      number,
+      SeedPlanExerciseDescriptor[][]
+    >();
+    for (const exercise of activePlanExercises) {
+      const weekDays = activePlanDaysByWeek.get(exercise.weekNumber) ?? [];
+      const dayExercises = weekDays.find(
+        (candidate) => candidate[0]?.scheduleDayId === exercise.scheduleDayId,
+      );
+      if (dayExercises) {
+        dayExercises.push(exercise);
+      } else {
+        weekDays.push([exercise]);
+      }
+      activePlanDaysByWeek.set(exercise.weekNumber, weekDays);
+    }
+    const activePlanDays = [...activePlanDaysByWeek.values()].flat();
+    const weekOnePlanDays = activePlanDaysByWeek.get(1) ?? [];
+    const completedAppointments =
+      completedRecurringAppointmentsByMember.get(userId) ?? [];
+    const coachingFallbackDays = completedAppointments.map(
+      (_appointment, index) =>
+        weekOnePlanDays[index % Math.max(1, weekOnePlanDays.length)] ?? [],
+    );
+    const coachingLogRequirement = coachingFallbackDays.reduce(
+      (total, day) => total + requiredExerciseLogCount(day),
+      0,
+    );
     const sessionsForMember = memberVolumeCount(
       ctx,
       memberKey,
@@ -815,16 +970,39 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
       'exerciseLogs',
       ctx.config.workoutDensity,
     );
-    let exerciseLogsCreated = 0;
+    const normalExerciseLogBudget = Math.max(
+      0,
+      exerciseLogBudget - coachingLogRequirement,
+    );
+    let normalExerciseLogsCreated = 0;
 
     for (
       let sessionIndex = 0;
       sessionIndex < sessionsForMember;
       sessionIndex += 1
     ) {
-      const selectedExercises = isLucaDemoMember
-        ? activePlanDays[sessionIndex % activePlanDays.length]
-        : ctx.rng.pick(activePlanDays);
+      if (activePlanDays.length === 0) {
+        break;
+      }
+      const activeDurationWeeks = isQaOneTimeMember
+        ? 1
+        : SEED_SPLIT_TEMPLATES[0].durationWeeks;
+      const sessionWeek = Math.min(
+        activeDurationWeeks,
+        1 + Math.floor(sessionIndex / SEED_SPLIT_TEMPLATES[0].daysPerWeek),
+      );
+      const weekPlanDays =
+        activePlanDaysByWeek.get(sessionWeek) ?? weekOnePlanDays;
+      const selectedExercises =
+        weekPlanDays[sessionIndex % Math.max(1, weekPlanDays.length)] ?? [];
+      const requiredLogs = requiredExerciseLogCount(selectedExercises);
+      if (
+        selectedExercises.length === 0 ||
+        requiredLogs === 0 ||
+        normalExerciseLogsCreated + requiredLogs > normalExerciseLogBudget
+      ) {
+        break;
+      }
       const sessionId = seedId(`workout-session:${memberKey}:${sessionIndex}`);
       const startedAt = activityDateFor(
         ctx,
@@ -836,34 +1014,81 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
       if (!startedAt) {
         continue;
       }
-      const durationSeconds = ctx.rng.int(2_400, 4_500);
+      const requestedDurationSeconds =
+        2_400 +
+        Math.floor(
+          stableSeedFraction(
+            `${ctx.config.seed}:${memberKey}:session:${sessionIndex}`,
+          ) * 2_101,
+        );
+      const activityEnd = memberAccessWindow(ctx, memberKey).activityEnd;
+      const availableDurationSeconds = activityEnd
+        ? Math.floor((activityEnd.getTime() - startedAt.getTime()) / 1_000)
+        : requestedDurationSeconds;
+      const durationSeconds = Math.min(
+        requestedDurationSeconds,
+        availableDurationSeconds,
+      );
+      if (durationSeconds < 60) {
+        continue;
+      }
       const completedAt = new Date(
         startedAt.getTime() + durationSeconds * 1_000,
       );
       let totalVolumeKg = 0;
       const firstLogIdByExercise = new Map<string, string>();
+      const poseExercise = selectedExercises.find((exercise) =>
+        poseProfileKeyByExerciseId.has(exercise.exerciseId),
+      );
+      const profileKey = poseExercise
+        ? poseProfileKeyByExerciseId.get(poseExercise.exerciseId)
+        : undefined;
+      const poseCapability = profileKey
+        ? getPoseAutoRepCapability(profileKey)
+        : null;
+      const poseContract = poseCapability
+        ? buildFallbackPoseMovementContract(poseCapability.contractExercise)
+        : null;
+      const poseCountedReps =
+        poseContract && poseContract.repModel !== 'static_hold'
+          ? (poseExercise?.reps ??
+            8 +
+              Math.floor(
+                stableSeedFraction(
+                  `${ctx.config.seed}:${memberKey}:pose-reps:${sessionIndex}`,
+                ) * 8,
+              ))
+          : null;
 
       for (const [exerciseIndex, exercise] of selectedExercises.entries()) {
-        const performanceDelta = isLucaDemoMember
-          ? 2
-          : ctx.rng.pick([-1, 0, 0, 1, 1, 2]);
+        const performanceDelta =
+          stableSeedFraction(
+            `${ctx.config.seed}:${memberKey}:${sessionIndex}:${exercise.exerciseKey}:reps`,
+          ) > 0.6
+            ? 1
+            : 0;
         const completedReps =
           exercise.reps == null
             ? null
-            : Math.max(1, exercise.reps + performanceDelta);
+            : clampSeedNumber(exercise.reps + performanceDelta, 1, 30);
         const completedWeightKg =
           exercise.weightKg == null
             ? null
-            : Math.max(
+            : roundSeedNumber(
+                clampSeedNumber(
+                  exercise.weightKg +
+                    (stableSeedFraction(
+                      `${ctx.config.seed}:${memberKey}:${sessionIndex}:${exercise.exerciseKey}:weight`,
+                    ) > 0.65
+                      ? 1
+                      : 0),
+                  1,
+                  180,
+                ),
                 1,
-                exercise.weightKg +
-                  (isLucaDemoMember ? 0 : ctx.rng.pick([-1, 0, 0, 1])),
               );
 
         for (let setIndex = 0; setIndex < exercise.sets; setIndex += 1) {
-          if (exerciseLogsCreated >= exerciseLogBudget) {
-            continue;
-          }
           const exerciseLogId = seedId(
             `exercise-log:${memberKey}:${sessionIndex}:${exercise.planExerciseId}:${setIndex}`,
           );
@@ -871,17 +1096,27 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
             exercise.exerciseId,
             firstLogIdByExercise.get(exercise.exerciseId) ?? exerciseLogId,
           );
+          const isPoseCountedLog =
+            poseExercise?.exerciseId === exercise.exerciseId &&
+            setIndex === 0 &&
+            poseContract !== null;
           exerciseLogRows.push({
             id: exerciseLogId,
             created_at: new Date(
-              startedAt.getTime() +
-                (10 + exerciseIndex * 12 + setIndex * 3) * 60_000,
+              Math.min(
+                completedAt.getTime() - 1_000,
+                startedAt.getTime() +
+                  (10 + exerciseIndex * 12 + setIndex * 3) * 60_000,
+              ),
             ),
             duration_seconds:
               completedReps == null ? exercise.durationSeconds : null,
             exercise_id: exercise.exerciseId,
             plan_exercise_id: exercise.planExerciseId,
-            reps_ai_counted: completedReps,
+            reps_ai_counted:
+              isPoseCountedLog && poseContract?.repModel !== 'static_hold'
+                ? poseCountedReps
+                : null,
             reps_completed: completedReps,
             reps_target: exercise.reps,
             session_id: sessionId,
@@ -892,7 +1127,7 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
                 ? null
                 : new Prisma.Decimal(completedWeightKg),
           });
-          exerciseLogsCreated += 1;
+          normalExerciseLogsCreated += 1;
 
           if (completedWeightKg != null && completedReps != null) {
             totalVolumeKg += completedWeightKg * completedReps;
@@ -903,7 +1138,7 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
       sessionRows.push({
         id: sessionId,
         completed_at: completedAt,
-        created_at: daysFrom(startedAt, -1, 9),
+        created_at: startedAt,
         duration_seconds: durationSeconds,
         last_activity_at: completedAt,
         plan_id: activePlanId,
@@ -913,83 +1148,140 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
         user_id: userId,
       });
 
-      const poseExercise = selectedExercises.find((exercise) =>
-        poseProfileKeyByExerciseId.has(exercise.exerciseId),
-      );
-      const profileKey = poseExercise
-        ? poseProfileKeyByExerciseId.get(poseExercise.exerciseId)
-        : undefined;
       const poseExerciseLogId = poseExercise
         ? firstLogIdByExercise.get(poseExercise.exerciseId)
         : undefined;
 
-      if (poseExercise && profileKey && poseExerciseLogId) {
+      if (poseExercise && profileKey && poseExerciseLogId && poseContract) {
         const poseSessionId = seedId(
           `pose-session:${memberKey}:${sessionIndex}`,
         );
-        const countedReps = poseExercise.reps ?? ctx.rng.int(8, 15);
+        const countedReps =
+          poseContract.repModel === 'static_hold' ? 0 : (poseCountedReps ?? 0);
+        const holdSeconds =
+          poseContract.repModel === 'static_hold'
+            ? (poseExercise.durationSeconds ??
+              poseContract.holdDurationSeconds ??
+              30)
+            : null;
         poseRows.push({
           id: poseSessionId,
           analysis_summary: {
             countedReps,
-            issues: memberIndex % 5 === 0 ? ['depth variance'] : [],
+            holdSeconds,
+            issues:
+              stableSeedFraction(
+                `${ctx.config.seed}:${memberKey}:pose-issues`,
+              ) > 0.8
+                ? ['depth variance']
+                : [],
             source: 'dynamic-seed',
           },
           classification_confidence: new Prisma.Decimal('0.810'),
           confidence_avg: new Prisma.Decimal('0.840'),
-          detected_exercise_name: profileKey,
+          detected_exercise_name: poseContract.exercise,
           detected_profile_id: seedId(`pose-profile:${profileKey}`),
           ended_at: completedAt,
-          exercise_hint: poseExercise.exerciseKey,
+          exercise_hint: poseContract.exercise,
           exercise_log_id: poseExerciseLogId,
           rep_count_ai: countedReps,
           started_at: startedAt,
           subject_lock_confidence: new Prisma.Decimal('0.780'),
           user_id: userId,
         });
+      }
+    }
 
-        if (memberIndex < 8 && sessionIndex === 1) {
-          reviewRows.push({
-            id: seedId(`exercise-review:${memberKey}`),
-            category: ExerciseCategory.strength,
-            description:
-              'Movement submitted from pose finalization for admin review.',
-            evidence_bars: [
-              { label: 'visibility', value: 0.82 },
-              { label: 'phase', value: 0.77 },
-            ],
-            hand_shape_profile: { grip: 'neutral' },
-            instructions:
-              'Review movement and map it to the current exercise catalog.',
-            match_hint: `Looks close to the seeded ${profileKey} profile.`,
-            movement_profile: { pattern: 'seeded_history_movement' },
-            muscle_group: 'general',
-            muscle_targets: ['primary'],
-            origin_label: 'client custom',
-            pose_session_id: poseSessionId,
-            proposed_name: `Review ${profileKey}`,
-            published_exercise_id:
-              memberIndex % 3 === 0 ? poseExercise.exerciseId : null,
-            queue_tag: 'needs match',
-            review_notes:
-              memberIndex % 3 === 0
-                ? 'Mapped to an exercise selected from the current catalog.'
-                : null,
-            reviewed_at:
-              memberIndex % 3 === 0
-                ? daysFrom(ctx.config.anchorDate, -2, 12)
-                : null,
-            source_label: 'detected workout movement',
-            status:
-              memberIndex % 3 === 0
-                ? ExerciseReviewSubmissionStatus.published
-                : ExerciseReviewSubmissionStatus.pending,
-            summary: 'Seeded movement review backed by workout history.',
-            title: 'Review seeded workout movement',
-            trigger_label: 'history fixture review',
+    // Reconciliation links completed recurring appointments to completed
+    // assignments. Ensure every such appointment has a real completed session
+    // even when a low/zero workout-history density would otherwise leave the
+    // normal history generator short.
+    const existingSessionCount = sessionRows.filter(
+      (session) => session.user_id === userId,
+    ).length;
+    const missingSessionCount = Math.max(
+      0,
+      completedAppointments.length - existingSessionCount,
+    );
+    for (
+      let fallbackIndex = 0;
+      fallbackIndex < missingSessionCount;
+      fallbackIndex += 1
+    ) {
+      const appointment =
+        completedAppointments[existingSessionCount + fallbackIndex];
+      if (!appointment) continue;
+      const fallbackStartedAt = appointment.scheduled_at;
+      const fallbackCompletedAt =
+        appointment.completed_at ??
+        new Date(fallbackStartedAt.getTime() + 3_600_000);
+      const fallbackSessionId = seedId(
+        `workout-session:${memberKey}:coaching:${appointment.id}`,
+      );
+      const fallbackExercises =
+        coachingFallbackDays[existingSessionCount + fallbackIndex] ?? [];
+      const fallbackDurationSeconds = Math.max(
+        60,
+        Math.floor(
+          (fallbackCompletedAt.getTime() - fallbackStartedAt.getTime()) / 1_000,
+        ),
+      );
+      let fallbackTotalVolumeKg = 0;
+      sessionRows.push({
+        id: fallbackSessionId,
+        completed_at: fallbackCompletedAt,
+        created_at: fallbackStartedAt,
+        duration_seconds: fallbackDurationSeconds,
+        last_activity_at: fallbackCompletedAt,
+        plan_id: activePlanId,
+        started_at: fallbackStartedAt,
+        status: SessionStatus.completed,
+        total_volume_kg: new Prisma.Decimal(0),
+        user_id: userId,
+      });
+      for (const fallbackExercise of fallbackExercises) {
+        for (
+          let setIndex = 0;
+          setIndex < fallbackExercise.sets;
+          setIndex += 1
+        ) {
+          const completedReps = fallbackExercise.reps;
+          const completedWeightKg = fallbackExercise.weightKg;
+          exerciseLogRows.push({
+            id: seedId(
+              `exercise-log:${memberKey}:coaching:${appointment.id}:${fallbackExercise.planExerciseId}:${setIndex}`,
+            ),
+            created_at: new Date(
+              Math.min(
+                fallbackCompletedAt.getTime() - 1_000,
+                fallbackStartedAt.getTime() + (10 + setIndex * 3) * 60_000,
+              ),
+            ),
+            duration_seconds:
+              completedReps == null ? fallbackExercise.durationSeconds : null,
+            exercise_id: fallbackExercise.exerciseId,
+            plan_exercise_id: fallbackExercise.planExerciseId,
+            reps_ai_counted: null,
+            reps_completed: completedReps,
+            reps_target: fallbackExercise.reps,
+            session_id: fallbackSessionId,
+            set_number: setIndex + 1,
             user_id: userId,
+            weight_kg:
+              completedWeightKg == null
+                ? null
+                : new Prisma.Decimal(completedWeightKg),
           });
+          if (completedWeightKg != null && completedReps != null) {
+            fallbackTotalVolumeKg += completedWeightKg * completedReps;
+          }
         }
+      }
+      const fallbackSessionRow = sessionRows.at(-1);
+      if (fallbackSessionRow) {
+        fallbackSessionRow.total_volume_kg = new Prisma.Decimal(
+          fallbackTotalVolumeKg,
+        );
       }
     }
   }
@@ -1012,10 +1304,6 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
   });
   await ctx.prisma.poseSession.createMany({
     data: poseRows,
-    skipDuplicates: true,
-  });
-  await ctx.prisma.exerciseReviewSubmission.createMany({
-    data: reviewRows,
     skipDuplicates: true,
   });
 }
@@ -1310,39 +1598,6 @@ async function seedGamification(ctx: DynamicSeedContext) {
         user_id: userId,
       },
     });
-    await ctx.prisma.creatorProfile.upsert({
-      where: { user_id: userId },
-      update: {
-        admin_notes:
-          account.memberPersona === 'premium'
-            ? 'Premium member candidate for creator review.'
-            : null,
-        last_state_changed_at:
-          account.memberPersona === 'premium'
-            ? daysFrom(ctx.config.anchorDate, -3, 10)
-            : null,
-        state:
-          account.memberPersona === 'premium'
-            ? CreatorState.candidate
-            : CreatorState.none,
-      },
-      create: {
-        id: seedId(`creator-profile:${account.key}`),
-        admin_notes:
-          account.memberPersona === 'premium'
-            ? 'Premium member candidate for creator review.'
-            : null,
-        last_state_changed_at:
-          account.memberPersona === 'premium'
-            ? daysFrom(ctx.config.anchorDate, -3, 10)
-            : null,
-        state:
-          account.memberPersona === 'premium'
-            ? CreatorState.candidate
-            : CreatorState.none,
-        user_id: userId,
-      },
-    });
   }
 
   for (const [index, memberKey] of activeMemberKeys.entries()) {
@@ -1482,7 +1737,9 @@ async function seedGamification(ctx: DynamicSeedContext) {
   const completedWorkouts = await ctx.prisma.workoutSession.findMany({
     where: {
       status: SessionStatus.completed,
-      user_id: { in: historyMemberKeys.map((memberKey) => ctx.state.userIds[memberKey]) },
+      user_id: {
+        in: historyMemberKeys.map((memberKey) => ctx.state.userIds[memberKey]),
+      },
     },
     orderBy: [{ user_id: 'asc' }, { completed_at: 'asc' }],
     select: {
@@ -1500,21 +1757,23 @@ async function seedGamification(ctx: DynamicSeedContext) {
       return [];
     }
     sourceCounts.set(workout.user_id, sourceCount + 1);
-    return [{
-      id: seedId(`progression-source:workout:${workout.id}`),
-      created_at: workout.completed_at ?? workout.started_at,
-      processed_at: workout.completed_at ?? workout.started_at,
-      source_context: {
-        source: 'dynamic-seed',
-        workoutSessionId: workout.id,
+    return [
+      {
+        id: seedId(`progression-source:workout:${workout.id}`),
+        created_at: workout.completed_at ?? workout.started_at,
+        processed_at: workout.completed_at ?? workout.started_at,
+        source_context: {
+          source: 'dynamic-seed',
+          workoutSessionId: workout.id,
+        },
+        source_id: seedExternalId(`source:workout:${workout.id}`),
+        source_status: ProgressionSourceStatus.applied,
+        source_type: ProgressionSourceType.workout_session_completed,
+        user_id: workout.user_id,
+        workoutId: workout.id,
+        volume: Number(workout.total_volume_kg ?? 0),
       },
-      source_id: seedExternalId(`source:workout:${workout.id}`),
-      source_status: ProgressionSourceStatus.applied,
-      source_type: ProgressionSourceType.workout_session_completed,
-      user_id: workout.user_id,
-      workoutId: workout.id,
-      volume: Number(workout.total_volume_kg ?? 0),
-    }];
+    ];
   });
   const sourceEventIdByUser = new Map<string, string>();
   for (const source of sourceRows) {
@@ -1541,7 +1800,7 @@ async function seedGamification(ctx: DynamicSeedContext) {
 
     const grants = [
       {
-        id: seedId(`progression-grant:${source.workoutId}:xp`),
+        id: seedId(`progression-grant:${workoutId}:xp`),
         amount: Math.max(80, Math.min(260, 80 + Math.round(volume / 18))),
         created_at: source.created_at,
         grant_status: ProgressionGrantStatus.applied,
@@ -1555,7 +1814,7 @@ async function seedGamification(ctx: DynamicSeedContext) {
         user_id: source.user_id,
       },
       {
-        id: seedId(`progression-grant:${source.workoutId}:season`),
+        id: seedId(`progression-grant:${workoutId}:season`),
         amount: 45 + (index % 5) * 5,
         created_at: source.created_at,
         grant_status: ProgressionGrantStatus.applied,
@@ -1591,7 +1850,9 @@ async function seedGamification(ctx: DynamicSeedContext) {
 
   const seededGrants = sourceRows.length
     ? await ctx.prisma.progressionGrantLedger.findMany({
-        where: { source_event_id: { in: sourceRows.map((source) => source.id) } },
+        where: {
+          source_event_id: { in: sourceRows.map((source) => source.id) },
+        },
         select: {
           amount: true,
           created_at: true,
@@ -1664,7 +1925,8 @@ async function seedGamification(ctx: DynamicSeedContext) {
       },
     });
 
-    const muscleTotals = muscleXpByUser.get(userId) ?? new Map<string, number>();
+    const muscleTotals =
+      muscleXpByUser.get(userId) ?? new Map<string, number>();
     for (const { key: muscle } of activeMuscles) {
       const xpPoints = muscleTotals.get(muscle) ?? 0;
       await ctx.prisma.muscleMasteryProgress.upsert({
@@ -1696,7 +1958,8 @@ async function seedGamification(ctx: DynamicSeedContext) {
   for (const [memberIndex, memberKey] of activeMemberKeys.entries()) {
     const userId = ctx.state.userIds[memberKey];
     const seasonPoints = seasonPointsByUser.get(userId) ?? 0;
-    const muscleTotals = muscleXpByUser.get(userId) ?? new Map<string, number>();
+    const muscleTotals =
+      muscleXpByUser.get(userId) ?? new Map<string, number>();
     await ctx.prisma.seasonalStanding.updateMany({
       where: { season_id: activeSeasonId, user_id: userId },
       data: {
@@ -1733,55 +1996,48 @@ async function seedGamification(ctx: DynamicSeedContext) {
       (completedWorkoutCountByUser.get(workout.user_id) ?? 0) + 1,
     );
   }
-  const milestoneProgressRows = historyMemberKeys
-    .flatMap((memberKey, index) =>
-      milestoneKeys.map((milestoneKey, milestoneIndex) => {
-        const milestone = DYNAMIC_MILESTONES[milestoneIndex];
-        const isLifetimeXpMilestone = milestone.metric === 'total_xp';
-        const lifetimeXp =
-          totalXpByUser.get(ctx.state.userIds[memberKey]) ?? 0;
-        const progressValue =
-          milestone.metric === 'completed_workout_sessions'
-            ? completedWorkoutCountByUser.get(ctx.state.userIds[memberKey]) ?? 0
-            : isLifetimeXpMilestone
-              ? lifetimeXp
-              : milestoneIndex === 1
-                ? Math.min(milestone.target, index % 5)
-                : index % 2;
-        const automaticallyUnlocked =
-          progressValue >= milestone.target;
-        const isClaimed =
-          milestoneIndex === 0 || (automaticallyUnlocked && index % 3 === 0);
+  const milestoneProgressRows = historyMemberKeys.flatMap((memberKey, index) =>
+    milestoneKeys.map((milestoneKey, milestoneIndex) => {
+      const milestone = DYNAMIC_MILESTONES[milestoneIndex];
+      const isLifetimeXpMilestone = milestone.metric === 'total_xp';
+      const lifetimeXp = totalXpByUser.get(ctx.state.userIds[memberKey]) ?? 0;
+      const progressValue =
+        milestone.metric === 'completed_workout_sessions'
+          ? (completedWorkoutCountByUser.get(ctx.state.userIds[memberKey]) ?? 0)
+          : isLifetimeXpMilestone
+            ? lifetimeXp
+            : milestoneIndex === 1
+              ? Math.min(milestone.target, index % 5)
+              : index % 2;
+      const automaticallyUnlocked = progressValue >= milestone.target;
+      const isClaimed =
+        milestoneIndex === 0 || (automaticallyUnlocked && index % 3 === 0);
 
-        return {
-          id: seedId(`milestone-progress:${memberKey}:${milestoneKey}`),
-          claimed_at: isClaimed
-            ? daysFrom(ctx.config.anchorDate, -1, 10)
+      return {
+        id: seedId(`milestone-progress:${memberKey}:${milestoneKey}`),
+        claimed_at: isClaimed ? daysFrom(ctx.config.anchorDate, -1, 10) : null,
+        milestone_definition_id: seedId(`milestone-definition:${milestoneKey}`),
+        progress_payload: {
+          memberKey,
+          source: 'dynamic-seed',
+        },
+        progress_value: progressValue,
+        reward_granted_at: isClaimed
+          ? daysFrom(ctx.config.anchorDate, -1, 10)
+          : null,
+        status: isClaimed
+          ? MilestoneProgressStatus.claimed
+          : automaticallyUnlocked || index % 2 === 0
+            ? MilestoneProgressStatus.unlocked
+            : MilestoneProgressStatus.in_progress,
+        unlocked_at:
+          isClaimed || automaticallyUnlocked || index % 2 === 0
+            ? daysFrom(ctx.config.anchorDate, -2, 9)
             : null,
-          milestone_definition_id: seedId(
-            `milestone-definition:${milestoneKey}`,
-          ),
-          progress_payload: {
-            memberKey,
-            source: 'dynamic-seed',
-          },
-          progress_value: progressValue,
-          reward_granted_at: isClaimed
-            ? daysFrom(ctx.config.anchorDate, -1, 10)
-            : null,
-          status: isClaimed
-            ? MilestoneProgressStatus.claimed
-            : automaticallyUnlocked || index % 2 === 0
-              ? MilestoneProgressStatus.unlocked
-              : MilestoneProgressStatus.in_progress,
-          unlocked_at:
-            isClaimed || automaticallyUnlocked || index % 2 === 0
-              ? daysFrom(ctx.config.anchorDate, -2, 9)
-              : null,
-          user_id: ctx.state.userIds[memberKey],
-        };
-      }),
-    );
+        user_id: ctx.state.userIds[memberKey],
+      };
+    }),
+  );
 
   for (const progress of milestoneProgressRows) {
     await ctx.prisma.userMilestoneProgress.upsert({
@@ -1882,7 +2138,8 @@ async function seedGamification(ctx: DynamicSeedContext) {
       reason_code: index === 0 ? 'suspicious_spike' : 'manual_review',
       risk_level:
         index === 0 ? IntegrityRiskLevel.high : IntegrityRiskLevel.medium,
-      source_event_id: sourceEventIdByUser.get(ctx.state.userIds[memberKey]) ?? null,
+      source_event_id:
+        sourceEventIdByUser.get(ctx.state.userIds[memberKey]) ?? null,
       user_id: ctx.state.userIds[memberKey],
     })),
     skipDuplicates: true,
@@ -1901,7 +2158,8 @@ async function seedGamification(ctx: DynamicSeedContext) {
       integrity_case_id: seedId(`integrity-case:${memberKey}`),
       rationale: 'Moderation action for governance audit.',
       season_id: activeSeasonId,
-      source_event_id: sourceEventIdByUser.get(ctx.state.userIds[memberKey]) ?? null,
+      source_event_id:
+        sourceEventIdByUser.get(ctx.state.userIds[memberKey]) ?? null,
       target_user_id: ctx.state.userIds[memberKey],
     })),
     skipDuplicates: true,
@@ -1924,7 +2182,7 @@ export async function seedFitnessGamification(ctx: DynamicSeedContext) {
 
   return {
     counts: {
-      exercises: EXERCISE_SEEDS.length,
+      exercises: CANONICAL_EXERCISE_CATALOG.length,
       trainingMembers: [
         ...ctx.state.activeMemberKeys,
         ...ctx.state.historicalMemberKeys,

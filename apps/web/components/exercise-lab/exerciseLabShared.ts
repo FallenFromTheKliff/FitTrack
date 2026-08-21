@@ -3,14 +3,9 @@ import type {
   ExerciseHandShapeProfileRecord,
   ExerciseMovementProfileRecord,
   ExerciseMuscleTargetRecord,
-  ExerciseReviewEvidenceRecord,
-  ExerciseReviewSubmissionRecord,
-  ExerciseReviewSubmissionStatus,
-  FitnessCreatorState,
   FitnessExerciseCategory,
   FitnessExerciseRecord,
 } from "@fittrack/api-client";
-import type { ThemeColors } from "@fittrack/types";
 import {
   getPrimaryExerciseMuscleGroup,
   normalizeExerciseHandShapeProfile,
@@ -18,7 +13,7 @@ import {
   normalizeExerciseMuscleTargets,
 } from "@fittrack/utils";
 
-export type SurfaceMode = "library" | "muscles" | "review";
+export type SurfaceMode = "library" | "muscles";
 export type LibraryScope = "active" | "all";
 export type MuscleDefinitionDraft = {
   aliases: string;
@@ -27,15 +22,12 @@ export type MuscleDefinitionDraft = {
   name: string;
   sortOrder: number;
 };
-export type ExerciseReviewCandidateLike = ExerciseReviewSubmissionRecord;
 export type SheetState =
   | { mode: "create" }
-  | { candidateId: string; mode: "publish" }
   | { exercise: FitnessExerciseRecord; mode: "edit" }
   | null;
 export type ConfirmationState =
   | { mode: "archive"; exercise: FitnessExerciseRecord; nextActive: boolean }
-  | { candidate: ExerciseReviewCandidateLike; mode: "leave-private" }
   | { mode: "discard-sheet" }
   | null;
 export type ExerciseDraft = {
@@ -48,47 +40,16 @@ export type ExerciseDraft = {
   muscleGroup: string;
   muscleTargets: ExerciseMuscleTargetRecord[];
   name: string;
-  publishNote: string;
   videoUrl: string;
 };
 
 export const DRAWER_WIDTH = 420;
-export const EMPTY_REVIEW_CANDIDATES: ExerciseReviewSubmissionRecord[] = [];
 export const EMPTY_LIBRARY_EXERCISES: FitnessExerciseRecord[] = [];
 export const MUSCLE_LIBRARY_PAGE_SIZE = 8;
 export const SURFACE_MODE_OPTIONS: Array<{ label: string; value: SurfaceMode }> = [
-  { label: "Review queue", value: "review" },
   { label: "Exercise library", value: "library" },
   { label: "Muscle groups", value: "muscles" },
 ];
-export const CREATOR_STATE_OPTIONS = [
-  { label: "None", value: "none" },
-  { label: "Candidate", value: "candidate" },
-  { label: "Pending review", value: "pending_review" },
-  { label: "Approved", value: "approved" },
-  { label: "Suspended", value: "suspended" },
-  { label: "Revoked", value: "revoked" },
-] as const;
-export const REVIEW_STATUS_OPTIONS = [
-  { label: "Pending", value: "pending" },
-  { label: "All statuses", value: "" },
-  { label: "Published", value: "published" },
-  { label: "Left private", value: "left_private" },
-  { label: "Rejected", value: "rejected" },
-] as const;
-export const CREATOR_DECISION_STATES = new Set<FitnessCreatorState>([
-  "approved",
-  "suspended",
-  "revoked",
-]);
-
-export function getCreatorStateTone(state: FitnessCreatorState) {
-  if (state === "approved") return "success";
-  if (state === "suspended" || state === "revoked") return "danger";
-  if (state === "pending_review") return "warning";
-  if (state === "candidate") return "brand";
-  return "muted";
-}
 
 export function getErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message.trim()) {
@@ -113,107 +74,9 @@ export function formatDate(value: string) {
   });
 }
 
-export function formatDateTime(value?: string) {
-  if (!value) return "Not reviewed yet";
-  return new Date(value).toLocaleString("en-PH", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-function tokenize(value: string) {
-  return value
-    .toLowerCase()
-    .split(/[^a-z0-9]+/g)
-    .filter(Boolean);
-}
-
-export function scoreExerciseMatch(
-  candidate: ExerciseReviewCandidateLike,
-  exercise: FitnessExerciseRecord,
-) {
-  const normalizedMatchHint = candidate.matchHint?.trim().toLowerCase() ?? "";
-  const candidateTokens = new Set(
-    tokenize(
-      [
-        candidate.title,
-        candidate.proposedName,
-        candidate.matchHint ?? "",
-        candidate.muscleGroup,
-        candidate.description ?? "",
-      ].join(" "),
-    ),
-  );
-  const exerciseTokens = tokenize(
-    [exercise.name, exercise.muscleGroup, exercise.description ?? ""].join(" "),
-  );
-
-  let score = 0;
-  for (const token of exerciseTokens) {
-    if (candidateTokens.has(token)) score += token.length > 5 ? 10 : 6;
-  }
-
-  if (exercise.category === candidate.category) score += 18;
-  if (
-    exercise.muscleGroup.toLowerCase() === candidate.muscleGroup.toLowerCase()
-  )
-    score += 12;
-  if (
-    normalizedMatchHint &&
-    exercise.name.toLowerCase() === normalizedMatchHint
-  )
-    score += 22;
-  if (
-    normalizedMatchHint &&
-    exercise.name.toLowerCase().includes(normalizedMatchHint)
-  )
-    score += 10;
-
-  return score;
-}
-
-export function getEvidenceBars(evidence: ExerciseReviewEvidenceRecord | null) {
-  if (Array.isArray(evidence)) return evidence;
-  return [];
-}
-
-export function getEvidenceSummary(evidence: ExerciseReviewEvidenceRecord | null) {
-  if (Array.isArray(evidence)) {
-    return `${evidence.length} evidence bars`;
-  }
-  if (evidence && typeof evidence === "object") {
-    const capturedReps =
-      "captured_reps" in evidence && typeof evidence.captured_reps === "number"
-        ? evidence.captured_reps
-        : "repCount" in evidence && typeof evidence.repCount === "number"
-          ? evidence.repCount
-          : null;
-    const confidence =
-      "confidence_avg" in evidence && typeof evidence.confidence_avg === "number"
-        ? evidence.confidence_avg
-        : "confidence" in evidence && typeof evidence.confidence === "number"
-          ? evidence.confidence
-          : null;
-    const confidenceLabel =
-      confidence !== null ? ` / ${Math.round(confidence * 100)}% confidence` : "";
-    return capturedReps !== null
-      ? `${capturedReps} reps${confidenceLabel}`
-      : `Structured evidence${confidenceLabel}`;
-  }
-  return "Evidence pending";
-}
-
-export function getReviewStatusColor(status: ExerciseReviewSubmissionStatus, colors: ThemeColors) {
-  if (status === "published") return colors.success;
-  if (status === "rejected") return colors.danger;
-  if (status === "left_private") return colors.warning;
-  return colors.brand;
-}
-
-export function filterEmptyExerciseDraft(draft: ExerciseDraft): CreateFitnessExerciseInput {
+export function filterEmptyExerciseDraft(
+  draft: ExerciseDraft,
+): CreateFitnessExerciseInput {
   const muscleTargets = normalizeExerciseMuscleTargets(
     draft.muscleTargets,
     draft.muscleGroup,

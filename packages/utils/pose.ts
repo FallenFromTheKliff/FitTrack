@@ -9,6 +9,11 @@ import type {
   PoseSequenceSignalsRecord,
   PoseTrackingRequirementsRecord,
 } from "@fittrack/types";
+import {
+  CANONICAL_POSE_CAPABILITIES,
+  CANONICAL_POSE_EXERCISE_KEYS,
+  getCanonicalPoseCapabilityByLabel,
+} from "./fitness-catalog";
 
 type JointIndexes = {
   a: number;
@@ -98,55 +103,37 @@ const PUSH_UP_SYMMETRY_TOLERANCE = 85;
 const PULL_UP_SIDE_ANGLE_CONFIDENCE = 0.3;
 const PULL_UP_SYMMETRY_TOLERANCE = 60;
 const MIN_RELIABLE_FRAME_LANDMARKS = 12;
-const POSE_EXERCISE_ALIAS_GROUPS = [
-  {
-    canonical: "push_up",
-    aliases: ["push up", "push-up", "pushup", "push_up"],
-  },
-  {
-    canonical: "pull_up",
-    aliases: [
-      "pull up",
-      "pull-up",
-      "pullup",
-      "pull_up",
-      "chin up",
-      "chin-up",
-      "chinup",
-    ],
-  },
-  { canonical: "squat", aliases: ["squat", "back squat"] },
-  {
-    canonical: "bicep_curl",
-    aliases: [
-      "dumbbell bicep curl",
-      "dumbbell biceps curl",
-      "dumbbell curl",
-      "bicep curl",
-      "biceps curl",
-      "curl",
-      "bicep_curl",
-    ],
-  },
-  {
-    canonical: "dip",
-    aliases: [
-      "dip",
-      "tricep dip",
-      "bench dip",
-      "assisted dip",
-      "parallel bar dip",
-    ],
-  },
-  {
-    canonical: "shoulder_press",
-    aliases: ["shoulder press", "shoulder_press"],
-  },
-  { canonical: "plank", aliases: ["plank"] },
-  { canonical: "bench_press", aliases: ["bench press", "bench_press"] },
-] as const;
-
 export const POSE_MOVEMENT_CONTRACT_VERSION = "pose_movement_contract_v2";
+
+export const POSE_AUTO_REP_EXERCISE_KEYS = CANONICAL_POSE_EXERCISE_KEYS;
+export const POSE_AUTO_REP_CAPABILITIES = CANONICAL_POSE_CAPABILITIES;
+
+export type PoseAutoRepExerciseKey =
+  (typeof POSE_AUTO_REP_EXERCISE_KEYS)[number];
+
+export function getPoseAutoRepCapability(exerciseKey: string) {
+  return (
+    POSE_AUTO_REP_CAPABILITIES.find(
+      (capability) => capability.exerciseKey === exerciseKey,
+    ) ?? null
+  );
+}
+
+export function getPoseAutoRepCapabilityForLabel(
+  exerciseLabel: string | null | undefined,
+) {
+  const catalogCapability = getCanonicalPoseCapabilityByLabel(exerciseLabel);
+  if (catalogCapability) {
+    return catalogCapability;
+  }
+
+  const canonical = toCanonicalPoseExerciseLabel(exerciseLabel);
+  return (
+    POSE_AUTO_REP_CAPABILITIES.find(
+      (capability) => capability.poseExercise === canonical,
+    ) ?? null
+  );
+}
 
 const POSE_BODY_ORIENTATION_BY_EXERCISE: Record<string, PoseBodyOrientation> = {
   bench_press: "horizontal",
@@ -252,6 +239,7 @@ const FALLBACK_POSE_MOVEMENT_CONTRACTS: Record<
       "hip_swing_over_tolerance",
     ],
     oscillatingJoints: ["elbow"],
+    phaseOrder: ["setup", "down", "up"],
     primaryJoints: ["left_elbow", "right_elbow"],
     repThresholds: {
       down: { angle: 150, tolerance: 12 },
@@ -306,6 +294,8 @@ const FALLBACK_POSE_MOVEMENT_CONTRACTS: Record<
     exercise: "plank",
     holdDurationSeconds: 30,
     oscillatingJoints: ["hip", "shoulder"],
+    phaseOrder: ["setup", "hold", "release"],
+    primaryJoints: ["left_hip", "right_hip"],
     repThresholds: {
       down: { angle: 165, tolerance: 8 },
       up: { angle: 178, tolerance: 8 },
@@ -618,19 +608,7 @@ export function toCanonicalPoseExerciseLabel(
     return null;
   }
 
-  let bestMatch: { aliasLength: number; canonical: string } | null = null;
-  for (const group of POSE_EXERCISE_ALIAS_GROUPS) {
-    for (const alias of group.aliases) {
-      if (
-        normalized.includes(alias) &&
-        (!bestMatch || alias.length > bestMatch.aliasLength)
-      ) {
-        bestMatch = { aliasLength: alias.length, canonical: group.canonical };
-      }
-    }
-  }
-
-  return bestMatch?.canonical ?? null;
+  return getCanonicalPoseCapabilityByLabel(normalized)?.poseExercise ?? null;
 }
 
 function cloneTrackingRequirements(
@@ -645,7 +623,7 @@ function cloneTrackingRequirements(
       Math.round(requirements.minReliableFrameLandmarks),
     ),
     requiredLandmarks: [...requirements.requiredLandmarks],
-    ...(requirements.requiredSides ?? requiredSides
+    ...((requirements.requiredSides ?? requiredSides)
       ? { requiredSides: requirements.requiredSides ?? requiredSides }
       : {}),
   } satisfies PoseTrackingRequirementsRecord;
@@ -714,7 +692,9 @@ export function normalizePoseMovementContract(
     trackingRequirements: cloneTrackingRequirements(
       record.trackingRequirements ??
         fallbackDefaults?.trackingRequirements ??
-        (canonical ? POSE_TRACKING_REQUIREMENTS_BY_EXERCISE[canonical] : undefined),
+        (canonical
+          ? POSE_TRACKING_REQUIREMENTS_BY_EXERCISE[canonical]
+          : undefined),
       record.requiredSides ?? fallback?.requiredSides,
     ),
     partialRepPolicy:
@@ -734,11 +714,15 @@ export function normalizePoseMovementContract(
               ) || 30,
             ),
           )
-        : record.holdDurationSeconds ?? fallbackDefaults?.holdDurationSeconds ?? null,
+        : (record.holdDurationSeconds ??
+          fallbackDefaults?.holdDurationSeconds ??
+          null),
     oscillatingJoints: [
-      ...(record.oscillatingJoints ?? fallbackDefaults?.oscillatingJoints ?? []),
+      ...(record.oscillatingJoints ??
+        fallbackDefaults?.oscillatingJoints ??
+        []),
     ],
-    ...(record.degradedConditions ?? fallbackDefaults?.degradedConditions
+    ...((record.degradedConditions ?? fallbackDefaults?.degradedConditions)
       ? {
           degradedConditions: [
             ...(record.degradedConditions ??
@@ -747,7 +731,7 @@ export function normalizePoseMovementContract(
           ],
         }
       : {}),
-    ...(record.noCountConditions ?? fallbackDefaults?.noCountConditions
+    ...((record.noCountConditions ?? fallbackDefaults?.noCountConditions)
       ? {
           noCountConditions: [
             ...(record.noCountConditions ??
@@ -756,29 +740,30 @@ export function normalizePoseMovementContract(
           ],
         }
       : {}),
-    ...(record.phaseOrder ?? fallbackDefaults?.phaseOrder
+    ...((record.phaseOrder ?? fallbackDefaults?.phaseOrder)
       ? {
           phaseOrder: [
             ...(record.phaseOrder ?? fallbackDefaults?.phaseOrder ?? []),
           ],
         }
       : {}),
-    ...(record.primaryJoints ?? fallbackDefaults?.primaryJoints
+    ...((record.primaryJoints ?? fallbackDefaults?.primaryJoints)
       ? {
           primaryJoints: [
             ...(record.primaryJoints ?? fallbackDefaults?.primaryJoints ?? []),
           ],
         }
       : {}),
-    ...(record.secondaryJoints ?? fallbackDefaults?.secondaryJoints
+    ...((record.secondaryJoints ?? fallbackDefaults?.secondaryJoints)
       ? {
           secondaryJoints: [
-            ...(record.secondaryJoints ?? fallbackDefaults?.secondaryJoints ??
+            ...(record.secondaryJoints ??
+              fallbackDefaults?.secondaryJoints ??
               []),
           ],
         }
       : {}),
-    ...(record.spatialRequirements ?? fallbackDefaults?.spatialRequirements
+    ...((record.spatialRequirements ?? fallbackDefaults?.spatialRequirements)
       ? {
           spatialRequirements: {
             ...(fallbackDefaults?.spatialRequirements ?? {}),
@@ -813,6 +798,182 @@ export function buildFallbackPoseMovementContract(
 
   const contract = FALLBACK_POSE_MOVEMENT_CONTRACTS[canonical];
   return contract ? normalizePoseMovementContract(contract, canonical) : null;
+}
+
+export type PoseMovementContractValidation = {
+  errors: string[];
+  normalized: PoseMovementContractRecord | null;
+  valid: boolean;
+};
+
+/**
+ * Validate an explicit profile against the reviewed shared movement contract.
+ * Seed/runtime callers use this gate before enabling automatic counting; an
+ * invalid or unknown movement therefore remains manual-only.
+ */
+export function validatePoseMovementContract(
+  value: unknown,
+  exerciseLabel?: string | null,
+): PoseMovementContractValidation {
+  const rawRecord =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : null;
+  const normalized = normalizePoseMovementContract(value, exerciseLabel);
+  const errors: string[] = [];
+  if (!normalized) {
+    return {
+      errors: ["movement_contract_missing"],
+      normalized: null,
+      valid: false,
+    };
+  }
+
+  if (rawRecord?.exercise) {
+    const thresholds = rawRecord.repThresholds;
+    const thresholdRecord =
+      thresholds && typeof thresholds === "object" && !Array.isArray(thresholds)
+        ? (thresholds as Record<string, unknown>)
+        : null;
+    const hasThreshold = (entry: unknown) => {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+        return false;
+      }
+      const record = entry as Record<string, unknown>;
+      return (
+        typeof record.angle === "number" &&
+        Number.isFinite(record.angle) &&
+        typeof record.tolerance === "number" &&
+        Number.isFinite(record.tolerance)
+      );
+    };
+    const tracking =
+      rawRecord.trackingRequirements &&
+      typeof rawRecord.trackingRequirements === "object" &&
+      !Array.isArray(rawRecord.trackingRequirements)
+        ? (rawRecord.trackingRequirements as Record<string, unknown>)
+        : null;
+    const incomplete =
+      typeof rawRecord.dominantJoint !== "string" ||
+      typeof rawRecord.secondaryCheck !== "string" ||
+      !Array.isArray(rawRecord.oscillatingJoints) ||
+      rawRecord.oscillatingJoints.length === 0 ||
+      !thresholdRecord ||
+      !hasThreshold(thresholdRecord.down) ||
+      !hasThreshold(thresholdRecord.up) ||
+      typeof rawRecord.repModel !== "string" ||
+      typeof rawRecord.requiredSides !== "string" ||
+      typeof rawRecord.bodyOrientation !== "string" ||
+      typeof rawRecord.contractVersion !== "string" ||
+      !Array.isArray(rawRecord.primaryJoints) ||
+      !Array.isArray(rawRecord.phaseOrder) ||
+      !tracking ||
+      typeof tracking.minConfidence !== "number" ||
+      typeof tracking.minReliableFrameLandmarks !== "number" ||
+      !Array.isArray(tracking.requiredLandmarks) ||
+      tracking.requiredLandmarks.length === 0;
+    if (incomplete) {
+      return {
+        errors: ["movement_contract_incomplete"],
+        normalized,
+        valid: false,
+      };
+    }
+  }
+
+  const capability = getPoseAutoRepCapabilityForLabel(normalized.exercise);
+  const fallback = buildFallbackPoseMovementContract(normalized.exercise);
+  if (!capability || !fallback) {
+    errors.push("exercise_not_supported_for_auto_rep");
+    return { errors, normalized, valid: false };
+  }
+
+  if (normalized.dominantJoint !== fallback.dominantJoint) {
+    errors.push("dominant_joint_mismatch");
+  }
+  if ((normalized.repModel ?? "unknown") !== (fallback.repModel ?? "unknown")) {
+    errors.push("rep_model_mismatch");
+  }
+  if (
+    (normalized.requiredSides ?? "either") !==
+    (fallback.requiredSides ?? "either")
+  ) {
+    errors.push("required_sides_mismatch");
+  }
+  if (normalized.bodyOrientation !== fallback.bodyOrientation) {
+    errors.push("body_orientation_mismatch");
+  }
+  if (normalized.secondaryCheck !== fallback.secondaryCheck) {
+    errors.push("secondary_check_mismatch");
+  }
+
+  const sameStringArray = (
+    left: string[] | undefined,
+    right: string[] | undefined,
+  ) => JSON.stringify(left ?? []) === JSON.stringify(right ?? []);
+  if (!sameStringArray(normalized.primaryJoints, fallback.primaryJoints)) {
+    errors.push("primary_joints_mismatch");
+  }
+  if (!sameStringArray(normalized.phaseOrder, fallback.phaseOrder)) {
+    errors.push("phase_order_mismatch");
+  }
+  if (
+    !sameStringArray(
+      normalized.trackingRequirements?.requiredLandmarks,
+      fallback.trackingRequirements?.requiredLandmarks,
+    )
+  ) {
+    errors.push("required_landmarks_mismatch");
+  }
+  if (
+    normalized.trackingRequirements?.minConfidence !==
+      fallback.trackingRequirements?.minConfidence ||
+    normalized.trackingRequirements?.minReliableFrameLandmarks !==
+      fallback.trackingRequirements?.minReliableFrameLandmarks
+  ) {
+    errors.push("tracking_requirements_mismatch");
+  }
+
+  const thresholdsMatch = (key: "down" | "up") => {
+    const actual = normalized.repThresholds?.[key];
+    const expected = fallback.repThresholds?.[key];
+    return (
+      !!actual &&
+      !!expected &&
+      actual.angle === expected.angle &&
+      actual.tolerance === expected.tolerance
+    );
+  };
+  if (!thresholdsMatch("down") || !thresholdsMatch("up")) {
+    errors.push("rep_thresholds_mismatch");
+  }
+  if (normalized.repModel === "static_hold") {
+    const holdDuration = normalized.holdDurationSeconds;
+    if (
+      typeof holdDuration !== "number" ||
+      !Number.isFinite(holdDuration) ||
+      holdDuration < 20 ||
+      holdDuration > 60
+    ) {
+      errors.push("hold_semantics_mismatch");
+    }
+  }
+  if (normalized.contractVersion !== fallback.contractVersion) {
+    errors.push("contract_version_mismatch");
+  }
+
+  return {
+    errors: Array.from(new Set(errors)),
+    normalized,
+    valid: errors.length === 0,
+  };
+}
+
+export function isValidPoseMovementContract(
+  value: unknown,
+  exerciseLabel?: string | null,
+) {
+  return validatePoseMovementContract(value, exerciseLabel).valid;
 }
 
 export function getPoseJointAngle(

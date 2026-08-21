@@ -20,19 +20,13 @@ export class ActivityLevelService {
     const windowStart = new Date();
     windowStart.setDate(windowStart.getDate() - ACTIVITY_WINDOW_DAYS);
 
-    const [completedSessions, exerciseLabEntries, attendanceCheckIns] =
+    const [completedSessions, attendanceCheckIns] =
       await Promise.all([
         this.prisma.workoutSession.count({
           where: {
             user_id: userId,
             status: SessionStatus.completed,
             completed_at: { gte: windowStart },
-          },
-        }),
-        this.prisma.exerciseReviewSubmission.count({
-          where: {
-            user_id: userId,
-            updated_at: { gte: windowStart },
           },
         }),
         this.prisma.attendanceLog.count({
@@ -43,7 +37,7 @@ export class ActivityLevelService {
         }),
       ]);
     const nextActivityLevel = resolveActivityLevel(
-      completedSessions + exerciseLabEntries + attendanceCheckIns,
+      completedSessions + attendanceCheckIns,
     );
 
     await this.prisma.userProfile.update({

@@ -1,21 +1,26 @@
-import {
-  ActivityLevel,
-  FitnessGoal,
-  Gender,
-  UserRole,
-  UserStatus,
-} from '@prisma/client';
+import { FitnessGoal, UserRole, UserStatus } from '@prisma/client';
 import { seedId } from './ids';
 import { SeedRandom, slugify } from './random';
-import { yearsAgo } from './time';
+import {
+  assignScenarioDimensions,
+  normalizeSeedAccountScenario,
+  scenarioDimensionCounts,
+} from './scenarios';
+import { deriveSeedAccountContexts } from './lifecycles-profiles';
 import { buildMemberCohortMap } from './volumes';
 import type {
   DynamicSeedConfig,
-  MemberPersona,
   SeedAccount,
   SeedCredential,
   SeedState,
 } from './types';
+
+export type SeedRoleTargets = {
+  admin: number;
+  coach: number;
+  member: number;
+  staff: number;
+};
 
 export const DYNAMIC_SEED_PASSWORD = 'SeedMember!2026';
 
@@ -38,6 +43,8 @@ export const DEMO_ACCOUNTS: readonly SeedAccount[] = [
     lastName: 'Admin',
     password: DEFAULT_PASSWORDS.admin,
     phone: '+639110000001',
+    fixedScenario: 'seed_admin',
+    pinned: true,
     role: UserRole.admin,
   },
   {
@@ -49,6 +56,8 @@ export const DEMO_ACCOUNTS: readonly SeedAccount[] = [
     lastName: 'Floor',
     password: DEFAULT_PASSWORDS.staff,
     phone: '+639110000002',
+    fixedScenario: 'seed_staff',
+    pinned: true,
     role: UserRole.staff,
   },
   {
@@ -61,6 +70,13 @@ export const DEMO_ACCOUNTS: readonly SeedAccount[] = [
     lastName: 'Coach',
     password: DEFAULT_PASSWORDS.coach,
     phone: '+639110000003',
+    coachLifecycle: 'active',
+    coachQuality: 'excellent',
+    coachWorkload: 'high',
+    canAcceptFutureBookings: true,
+    futureBookingAcceptance: true,
+    fixedScenario: 'seed_coach',
+    pinned: true,
     role: UserRole.coach,
   },
   {
@@ -74,6 +90,17 @@ export const DEMO_ACCOUNTS: readonly SeedAccount[] = [
     memberPersona: 'active',
     password: DEFAULT_PASSWORDS.member,
     phone: '+639110000005',
+    memberEngagement: 'frequent',
+    membershipLifecycle: 'active',
+    bookingProfile: 'regular',
+    coachingProfile: 'one_time',
+    paymentProfile: 'reliable',
+    hasCompletedHistory: true,
+    hasCurrentAccess: true,
+    currentAccess: true,
+    hasFutureBookings: true,
+    fixedScenario: 'active_member',
+    pinned: true,
     role: UserRole.member,
     status: UserStatus.active,
   },
@@ -88,6 +115,17 @@ export const DEMO_ACCOUNTS: readonly SeedAccount[] = [
     memberPersona: 'premium',
     password: DEFAULT_PASSWORDS.member,
     phone: '+639110000006',
+    memberEngagement: 'gym_rat',
+    membershipLifecycle: 'active',
+    bookingProfile: 'heavy',
+    coachingProfile: 'recurring_active',
+    paymentProfile: 'reliable',
+    hasCompletedHistory: true,
+    hasCurrentAccess: true,
+    currentAccess: true,
+    hasFutureBookings: true,
+    fixedScenario: 'premium_member',
+    pinned: true,
     role: UserRole.member,
     status: UserStatus.active,
   },
@@ -101,6 +139,17 @@ export const DEMO_ACCOUNTS: readonly SeedAccount[] = [
     lastName: 'Santos',
     password: DEFAULT_PASSWORDS.member,
     phone: '+639110000017',
+    memberEngagement: 'zero_use',
+    membershipLifecycle: 'none_or_pending',
+    bookingProfile: 'none',
+    coachingProfile: 'checkout_failed',
+    paymentProfile: 'abandoned_or_failed',
+    hasCompletedHistory: false,
+    hasCurrentAccess: false,
+    currentAccess: false,
+    hasFutureBookings: false,
+    fixedScenario: 'checkout_abandoned_member',
+    pinned: true,
     role: UserRole.member,
     status: UserStatus.active,
   },
@@ -114,6 +163,17 @@ export const DEMO_ACCOUNTS: readonly SeedAccount[] = [
     memberPersona: 'frozen',
     password: DEFAULT_PASSWORDS.member,
     phone: '+639110000007',
+    memberEngagement: 'regular',
+    membershipLifecycle: 'frozen',
+    bookingProfile: 'occasional',
+    coachingProfile: 'recurring_former',
+    paymentProfile: 'failed_then_successful',
+    hasCompletedHistory: true,
+    hasCurrentAccess: false,
+    currentAccess: false,
+    hasFutureBookings: false,
+    fixedScenario: 'frozen_member',
+    pinned: true,
     role: UserRole.member,
   },
   {
@@ -126,6 +186,17 @@ export const DEMO_ACCOUNTS: readonly SeedAccount[] = [
     memberPersona: 'pending',
     password: DEFAULT_PASSWORDS.member,
     phone: '+639110000008',
+    memberEngagement: 'zero_use',
+    membershipLifecycle: 'none_or_pending',
+    bookingProfile: 'none',
+    coachingProfile: 'none',
+    paymentProfile: 'abandoned_or_failed',
+    hasCompletedHistory: false,
+    hasCurrentAccess: false,
+    currentAccess: false,
+    hasFutureBookings: false,
+    fixedScenario: 'pending_member',
+    pinned: true,
     role: UserRole.member,
   },
   {
@@ -138,6 +209,17 @@ export const DEMO_ACCOUNTS: readonly SeedAccount[] = [
     memberPersona: 'expired',
     password: DEFAULT_PASSWORDS.member,
     phone: '+639110000009',
+    memberEngagement: 'regular',
+    membershipLifecycle: 'expired',
+    bookingProfile: 'occasional',
+    coachingProfile: 'recurring_former',
+    paymentProfile: 'reliable',
+    hasCompletedHistory: true,
+    hasCurrentAccess: false,
+    currentAccess: false,
+    hasFutureBookings: false,
+    fixedScenario: 'expired_member',
+    pinned: true,
     role: UserRole.member,
   },
   {
@@ -151,6 +233,17 @@ export const DEMO_ACCOUNTS: readonly SeedAccount[] = [
     memberPersona: 'unverified',
     password: DEFAULT_PASSWORDS.member,
     phone: '+639110000011',
+    memberEngagement: 'zero_use',
+    membershipLifecycle: 'none_or_pending',
+    bookingProfile: 'none',
+    coachingProfile: 'none',
+    paymentProfile: 'abandoned_or_failed',
+    hasCompletedHistory: false,
+    hasCurrentAccess: false,
+    currentAccess: false,
+    hasFutureBookings: false,
+    fixedScenario: 'unverified_member',
+    pinned: true,
     role: UserRole.member,
     status: UserStatus.pending,
   },
@@ -165,6 +258,17 @@ export const DEMO_ACCOUNTS: readonly SeedAccount[] = [
     memberPersona: 'archived',
     password: DEFAULT_PASSWORDS.member,
     phone: '+639110000012',
+    memberEngagement: 'lazy',
+    membershipLifecycle: 'cancelled_former',
+    bookingProfile: 'none',
+    coachingProfile: 'recurring_former',
+    paymentProfile: 'reliable',
+    hasCompletedHistory: true,
+    hasCurrentAccess: false,
+    currentAccess: false,
+    hasFutureBookings: false,
+    fixedScenario: 'archived_member',
+    pinned: true,
     role: UserRole.member,
   },
   {
@@ -177,6 +281,17 @@ export const DEMO_ACCOUNTS: readonly SeedAccount[] = [
     memberPersona: 'suspended',
     password: DEFAULT_PASSWORDS.member,
     phone: '+639110000016',
+    memberEngagement: 'zero_use',
+    membershipLifecycle: 'frozen',
+    bookingProfile: 'none',
+    coachingProfile: 'checkout_failed',
+    paymentProfile: 'failed_then_successful',
+    hasCompletedHistory: false,
+    hasCurrentAccess: false,
+    currentAccess: false,
+    hasFutureBookings: false,
+    fixedScenario: 'suspended_member',
+    pinned: true,
     role: UserRole.member,
     status: UserStatus.suspended,
   },
@@ -262,13 +377,70 @@ const LAST_NAMES = [
   'Lorenzo',
 ] as const;
 
-function roleTargets(totalUsers: number) {
-  const admin = Math.max(3, Math.round(totalUsers * 0.03));
-  const staff = Math.max(8, Math.round(totalUsers * 0.08));
-  const coach = Math.max(16, Math.round(totalUsers * 0.16));
-  const member = Math.max(0, totalUsers - admin - staff - coach);
-  return { admin, coach, member, staff };
+const ROLE_RATES: Record<keyof SeedRoleTargets, number> = {
+  admin: 0.015,
+  staff: 0.05,
+  coach: 0.1,
+  member: 0,
+};
+
+const FIXED_ROLE_COUNTS: SeedRoleTargets = {
+  admin: DEMO_ACCOUNTS.filter((account) => account.role === UserRole.admin)
+    .length,
+  coach: DEMO_ACCOUNTS.filter((account) => account.role === UserRole.coach)
+    .length,
+  member: DEMO_ACCOUNTS.filter((account) => account.role === UserRole.member)
+    .length,
+  staff: DEMO_ACCOUNTS.filter((account) => account.role === UserRole.staff)
+    .length,
+};
+
+/**
+ * Calculate role targets for the full account total. Role floors preserve the
+ * fixed QA population; the rest follows the documented 1.5%/5%/10% split.
+ */
+export function calculateRoleTargets(totalUsers: number): SeedRoleTargets {
+  const total = Math.max(DEMO_ACCOUNTS.length, Math.floor(totalUsers));
+  const targets: SeedRoleTargets = {
+    admin: Math.max(
+      FIXED_ROLE_COUNTS.admin,
+      Math.round(total * ROLE_RATES.admin),
+    ),
+    coach: Math.max(
+      FIXED_ROLE_COUNTS.coach,
+      Math.round(total * ROLE_RATES.coach),
+    ),
+    member: FIXED_ROLE_COUNTS.member,
+    staff: Math.max(
+      FIXED_ROLE_COUNTS.staff,
+      Math.round(total * ROLE_RATES.staff),
+    ),
+  };
+  const nonMembers = targets.admin + targets.staff + targets.coach;
+  if (nonMembers + FIXED_ROLE_COUNTS.member > total) {
+    const reducible = (['coach', 'staff', 'admin'] as const).filter(
+      (role) => targets[role] > FIXED_ROLE_COUNTS[role],
+    );
+    let overflow = nonMembers + FIXED_ROLE_COUNTS.member - total;
+    for (const role of reducible) {
+      const reduction = Math.min(
+        overflow,
+        targets[role] - FIXED_ROLE_COUNTS[role],
+      );
+      targets[role] -= reduction;
+      overflow -= reduction;
+      if (overflow === 0) break;
+    }
+  }
+  targets.member = Math.max(
+    FIXED_ROLE_COUNTS.member,
+    total - targets.admin - targets.staff - targets.coach,
+  );
+  return targets;
 }
+
+// Keep the concise historical name available to nearby seed tooling.
+export const roleTargets = calculateRoleTargets;
 
 function uniqueIdentityFactory(rng: SeedRandom) {
   const usedEmails = new Set(DEMO_ACCOUNTS.map((account) => account.email));
@@ -288,6 +460,16 @@ function uniqueIdentityFactory(rng: SeedRandom) {
         namePool.push({ firstName, lastName });
       }
     }
+  }
+
+  // Shuffle the available identity pool with the seed. Fixed QA identities
+  // are excluded above, so changing the seed only changes generated users.
+  for (let index = namePool.length - 1; index > 0; index -= 1) {
+    const swapIndex = rng.int(0, index);
+    [namePool[index], namePool[swapIndex]] = [
+      namePool[swapIndex],
+      namePool[index],
+    ];
   }
 
   return (role: UserRole) => {
@@ -313,7 +495,7 @@ function uniqueIdentityFactory(rng: SeedRandom) {
 function buildGeneratedAccounts(config: DynamicSeedConfig) {
   const rng = new SeedRandom(config.seed + 17);
   const nextIdentity = uniqueIdentityFactory(rng);
-  const targets = roleTargets(config.users);
+  const targets = calculateRoleTargets(config.users);
   const demoByRole = {
     admin: DEMO_ACCOUNTS.filter((account) => account.role === UserRole.admin)
       .length,
@@ -344,7 +526,6 @@ function buildGeneratedAccounts(config: DynamicSeedConfig) {
     Math.max(0, targets.admin - demoByRole.admin),
     (identity, index) => ({
       ...identity,
-      dateOfBirth: yearsAgo(config.anchorDate, 34 + index),
       firstName: identity.firstName,
       isDemo: false,
       key: `admin-ops-${index + 1}`,
@@ -361,9 +542,6 @@ function buildGeneratedAccounts(config: DynamicSeedConfig) {
     Math.max(0, targets.staff - demoByRole.staff),
     (identity, index) => ({
       ...identity,
-      activityLevel: ActivityLevel.moderate,
-      dateOfBirth: yearsAgo(config.anchorDate, 23 + (index % 12)),
-      gender: index % 2 === 0 ? Gender.female : Gender.male,
       isDemo: false,
       key: `staff-ops-${index + 1}`,
       label: `Staff Ops ${index + 1}`,
@@ -377,63 +555,26 @@ function buildGeneratedAccounts(config: DynamicSeedConfig) {
     Math.max(0, targets.coach - demoByRole.coach),
     (identity, index) => ({
       ...identity,
-      activityLevel:
-        index % 3 === 0 ? ActivityLevel.very_active : ActivityLevel.active,
-      dateOfBirth: yearsAgo(config.anchorDate, 27 + (index % 14)),
-      fitnessGoal: FitnessGoal.sport_specific,
-      gender: index % 2 === 0 ? Gender.male : Gender.female,
-      heightCm: 163 + (index % 22),
       isDemo: false,
       key: `coach-team-${index + 1}`,
       label: `Coach Team ${index + 1}`,
       password: DEFAULT_PASSWORDS.coach,
       role: UserRole.coach,
-      weightKg: 61 + (index % 24),
     }),
   );
-
-  const memberPersonas: MemberPersona[] = [
-    'premium',
-    'active',
-    'active',
-    'active',
-    'trial',
-    'pending',
-    'expired',
-    'frozen',
-  ];
 
   addRoleAccounts(
     UserRole.member,
     Math.max(0, targets.member - demoByRole.member),
     (identity, index) => {
-      const persona = memberPersonas[index % memberPersonas.length];
       return {
         ...identity,
-        activityLevel:
-          persona === 'premium' || persona === 'active'
-            ? ActivityLevel.active
-            : ActivityLevel.light,
-        dateOfBirth: yearsAgo(config.anchorDate, 20 + (index % 26)),
-        fitnessGoal:
-          index % 3 === 0
-            ? FitnessGoal.bulking
-            : index % 3 === 1
-              ? FitnessGoal.cutting
-              : FitnessGoal.maintenance,
-        gender: index % 2 === 0 ? Gender.female : Gender.male,
-        heightCm: 150 + (index % 36),
         isDemo: false,
         key: `member-community-${String(index + 1).padStart(3, '0')}`,
         label: `Community Member ${index + 1}`,
-        memberPersona: persona,
         password: DEFAULT_PASSWORDS.member,
         role: UserRole.member,
-        status:
-          persona === 'pending' || persona === 'unverified'
-            ? UserStatus.pending
-            : UserStatus.active,
-        weightKg: 51 + (index % 38),
+        status: UserStatus.active,
       };
     },
   );
@@ -442,135 +583,88 @@ function buildGeneratedAccounts(config: DynamicSeedConfig) {
 }
 
 export function buildSeedAccounts(config: DynamicSeedConfig) {
-  const accounts = [...DEMO_ACCOUNTS, ...buildGeneratedAccounts(config)].slice(
-    0,
-    config.users,
+  const targetUsers = Math.max(DEMO_ACCOUNTS.length, config.users);
+  const generated = buildGeneratedAccounts({ ...config, users: targetUsers });
+  // Fixed QA accounts are always retained; generated accounts fill the target.
+  const accounts = [...DEMO_ACCOUNTS, ...generated];
+  if (accounts.length !== targetUsers) {
+    throw new Error(
+      `Dynamic seed account target mismatch: generated ${accounts.length}, expected ${targetUsers}.`,
+    );
+  }
+  return deriveSeedAccountContexts(
+    assignScenarioDimensions(accounts, config.seed),
+    config,
   );
-  const memberKeys = accounts
-    .filter((account) => account.role === UserRole.member)
-    .map((account) => account.key);
-  const cohorts = buildMemberCohortMap(memberKeys);
-  let generatedRestrictedIndex = 0;
-
-  return accounts.map((account) => {
-    if (account.role !== UserRole.member) {
-      return account;
-    }
-    if (account.key === 'member-checkout-abandoned') {
-      return {
-        ...account,
-        emailVerified: true,
-        status: UserStatus.active,
-      };
-    }
-    const cohort = cohorts[account.key];
-    if (cohort === 'power') {
-      return {
-        ...account,
-        memberPersona: 'premium' as const,
-        status: UserStatus.active,
-      };
-    }
-    if (cohort === 'frequent' || cohort === 'regular') {
-      return {
-        ...account,
-        memberPersona: 'active' as const,
-        status: UserStatus.active,
-      };
-    }
-    if (cohort === 'light_trial') {
-      return {
-        ...account,
-        memberPersona: 'trial' as const,
-        status: UserStatus.active,
-      };
-    }
-    if (cohort === 'historical_only') {
-      const memberPersona = ['frozen', 'expired', 'archived'].includes(
-        account.memberPersona ?? '',
-      )
-        ? account.memberPersona
-        : 'expired';
-      return { ...account, memberPersona, status: UserStatus.active };
-    }
-
-    const memberPersona = ['pending', 'unverified', 'suspended'].includes(
-      account.memberPersona ?? '',
-    )
-      ? account.memberPersona
-      : generatedRestrictedIndex++ % 7 === 0
-        ? 'suspended'
-        : generatedRestrictedIndex % 5 === 0
-          ? 'unverified'
-          : 'pending';
-    return {
-      ...account,
-      emailVerified: memberPersona !== 'unverified',
-      memberPersona,
-      status:
-        memberPersona === 'suspended' ? UserStatus.suspended : UserStatus.pending,
-    };
-  });
 }
 
 export function populateAccountState(
   state: SeedState,
   accounts: SeedAccount[],
 ) {
-  state.accounts = accounts;
+  const normalizedAccounts = accounts.map((account) =>
+    normalizeSeedAccountScenario(account, accounts),
+  );
+  state.accounts = normalizedAccounts;
+  state.roleCounts = Object.fromEntries(
+    Object.values(UserRole).map((role) => [
+      role,
+      normalizedAccounts.filter((account) => account.role === role).length,
+    ]),
+  );
+  state.scenarioCounts = scenarioDimensionCounts(normalizedAccounts);
   state.memberCohorts = buildMemberCohortMap(
-    accounts
+    normalizedAccounts
       .filter((account) => account.role === UserRole.member)
       .map((account) => account.key),
+    normalizedAccounts,
   );
-  state.demoCredentials = accounts
+  state.demoCredentials = normalizedAccounts
     .filter((account) => account.isDemo)
     .map(toSeedCredential);
   state.userIds = Object.fromEntries(
-    accounts.map((account) => [account.key, userIdFor(account.key)]),
+    normalizedAccounts.map((account) => [account.key, userIdFor(account.key)]),
   );
-  state.adminKeys = accounts
+  state.adminKeys = normalizedAccounts
     .filter((account) => account.role === UserRole.admin)
     .map((account) => account.key);
-  state.staffKeys = accounts
+  state.staffKeys = normalizedAccounts
     .filter((account) => account.role === UserRole.staff)
     .map((account) => account.key);
-  state.coachAccountKeys = accounts
+  state.coachAccountKeys = normalizedAccounts
     .filter((account) => account.role === UserRole.coach)
     .map((account) => account.key);
-  state.memberKeys = accounts
+  state.memberKeys = normalizedAccounts
     .filter((account) => account.role === UserRole.member)
     .map((account) => account.key);
-  state.activeMemberKeys = accounts
+  state.activeMemberKeys = normalizedAccounts
     .filter(
       (account) =>
-        account.role === UserRole.member &&
-        ['power', 'frequent', 'regular', 'light_trial'].includes(
-          state.memberCohorts[account.key] ?? '',
-        ),
+        account.role === UserRole.member && account.hasCurrentAccess === true,
     )
     .map((account) => account.key);
-  state.historicalMemberKeys = accounts
+  state.historicalMemberKeys = normalizedAccounts
     .filter(
       (account) =>
         account.role === UserRole.member &&
-        state.memberCohorts[account.key] === 'historical_only',
+        account.hasCurrentAccess !== true &&
+        account.hasCompletedHistory === true,
     )
     .map((account) => account.key);
-  state.restrictedMemberKeys = accounts
+  state.restrictedMemberKeys = normalizedAccounts
     .filter(
       (account) =>
         account.role === UserRole.member &&
-        state.memberCohorts[account.key] === 'pending_unverified_suspended',
+        !state.activeMemberKeys.includes(account.key) &&
+        !state.historicalMemberKeys.includes(account.key),
     )
     .map((account) => account.key);
-  state.premiumMemberKeys = accounts
+  state.premiumMemberKeys = normalizedAccounts
     .filter(
       (account) =>
         account.role === UserRole.member &&
-        ['power', 'frequent', 'regular', 'light_trial'].includes(
-          state.memberCohorts[account.key] ?? '',
-        ),
+        (account.memberPersona === 'premium' ||
+          account.coachingProfile === 'recurring_active'),
     )
     .map((account) => account.key);
 }

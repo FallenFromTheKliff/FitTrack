@@ -25,8 +25,6 @@ import type { JwtPayload } from '../../auth/types/jwt-payload.type';
 import { CurrentUser, Roles } from '../../common/decorators';
 import { JwtAuthGuard, RolesGuard } from '../../common/guards';
 import {
-  AdminCreatorStateDTO,
-  AdminCreatorStateResponseDTO,
   AdminGamificationOverviewResponseDTO,
   AdminGamificationSeasonListItemDTO,
   AdminGrantModerationDTO,
@@ -95,7 +93,6 @@ function paginatedEnvelopeSchema(itemSchemaRef: string) {
   AdminManualExpGrantDTO,
   AdminSeasonGovernanceResponseDTO,
   AdminSeasonStandingRowDTO,
-  AdminCreatorStateResponseDTO,
   AdminProgressionGrantResponseDTO,
   AdminRankingOverrideResponseDTO,
   AdminIntegrityCaseResponseDTO,
@@ -397,27 +394,6 @@ export class GamificationAdminController {
     return this.gamificationService.adminUpdateSeasonStatus(
       user.sub,
       seasonId,
-      dto,
-    );
-  }
-
-  @Patch('creators/:userId')
-  @ApiOperation({
-    summary: 'Update a member creator-governance state.',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Creator governance state updated.',
-    schema: singleEnvelopeSchema(getSchemaPath(AdminCreatorStateResponseDTO)),
-  })
-  updateCreatorState(
-    @Param('userId', ParseUUIDPipe) targetUserId: string,
-    @CurrentUser() user: JwtPayload,
-    @Body() dto: AdminCreatorStateDTO,
-  ) {
-    return this.gamificationService.adminUpdateCreatorState(
-      user.sub,
-      targetUserId,
       dto,
     );
   }

@@ -7,10 +7,8 @@ import {
   BookingStatus,
   ChatContext,
   ChatRole,
-  CreatorState,
   EquipmentStatus,
   ExerciseCategory,
-  ExerciseReviewSubmissionStatus,
   FitnessGoal,
   Gender,
   GymChatRole,
@@ -75,7 +73,15 @@ import {
   toManifestCredentials,
   writeTestDataManifest,
 } from './test-data/manifest';
-import { EXERCISE_REVIEW_SUBMISSION_SEEDS } from './test-data/exercise-review-submission-seeds';
+import {
+  CANONICAL_EXERCISE_CATALOG,
+  CANONICAL_POSE_CAPABILITIES,
+  getCanonicalExercise,
+} from '../../../packages/utils/fitness-catalog';
+import {
+  buildFallbackPoseMovementContract,
+  isValidPoseMovementContract,
+} from '../../../packages/utils/pose';
 
 const PASSWORD_HASH_ROUNDS = 12;
 
@@ -766,7 +772,6 @@ async function cleanupUsersOutsideBaseline(
   await prisma.progressionSourceEvent.deleteMany({});
   await prisma.userProgressionProfile.deleteMany({});
   await prisma.muscleMasteryProgress.deleteMany({});
-  await prisma.exerciseReviewSubmission.deleteMany({});
   await prisma.poseSession.deleteMany({});
   await prisma.exerciseLog.deleteMany({});
   await prisma.workoutSession.deleteMany({});
@@ -3494,6 +3499,7 @@ async function ensureMasteryProgress(
 
 async function ensureWorkoutFixtures(
   ensuredAccounts: readonly EnsuredAccount[],
+  mode: TestDataSeedMode,
 ) {
   const memberActiveId =
     ensuredAccounts.find(({ account }) => account.key === 'member-active')
@@ -3503,530 +3509,194 @@ async function ensureWorkoutFixtures(
     return;
   }
 
-  const exerciseSeeds = [
-    {
-      key: 'squat',
-      name: 'Barbell Back Squat',
-      muscleGroup: 'Legs',
-      category: ExerciseCategory.strength,
-      description:
-        'Primary lower-body compound lift for the seeded workout happy path.',
-      instructions:
-        'Brace the core, keep the chest tall, and drive through the mid-foot on every rep.',
-      videoUrl: null,
-      imageUrl: null,
-    },
-    {
-      key: 'bench',
-      name: 'Dumbbell Bench Press',
-      muscleGroup: 'Chest',
-      category: ExerciseCategory.strength,
-      description:
-        'Press variation used to keep the seeded catalog broad enough for manual selection.',
-      instructions:
-        'Lower with control, keep forearms stacked, and press until the dumbbells meet above the chest.',
-      videoUrl: null,
-      imageUrl: null,
-    },
-    {
-      key: 'push',
-      name: 'Push-Up',
-      muscleGroup: 'Chest',
-      category: ExerciseCategory.strength,
-      description:
-        'Bodyweight horizontal press seeded so live pose tracking can select and log push-up sessions explicitly.',
-      instructions:
-        'Keep a straight body line, lower with the elbows bending back, and press without letting the hips sag.',
-      videoUrl: null,
-      imageUrl: null,
-    },
-    {
-      key: 'dip',
-      name: 'Dip',
-      muscleGroup: 'Chest',
-      category: ExerciseCategory.strength,
-      description:
-        'Bodyweight vertical press seeded so bilateral arm-motion tuning can be verified with dip-specific thresholds.',
-      instructions:
-        'Lower until the elbows bend deeply, keep both arms moving together, and press to a tall lockout without shrugging.',
-      videoUrl: null,
-      imageUrl: null,
-    },
-    {
-      key: 'pull',
-      name: 'Pull-Up',
-      muscleGroup: 'Back',
-      category: ExerciseCategory.strength,
-      description:
-        'Bodyweight vertical pull seeded so pull-up pose tracking and back mastery can be tested end to end.',
-      instructions:
-        'Start from a controlled hang, pull until the elbows flex and the chest rises, then lower without swinging.',
-      videoUrl: null,
-      imageUrl: null,
-    },
-    {
-      key: 'curl',
-      name: 'Dumbbell Bicep Curl',
-      muscleGroup: 'Arms',
-      category: ExerciseCategory.strength,
-      description:
-        'Dumbbell curl seeded so pose tracking can test equipment-aware elbow flexion.',
-      instructions:
-        'Stand tall, hold a dumbbell in each hand, curl without swinging the hips, and lower under control.',
-      videoUrl: null,
-      imageUrl: null,
-    },
-    {
-      key: 'row',
-      name: 'Seated Cable Row',
-      muscleGroup: 'Back',
-      category: ExerciseCategory.strength,
-      description:
-        'Upper-back pull seeded so the workout picker is not a single-exercise stub.',
-      instructions:
-        'Stay tall, pull the handle to the lower ribs, and squeeze the shoulder blades together.',
-      videoUrl: null,
-      imageUrl: null,
-    },
-    {
-      key: 'rope',
-      name: 'Jump Rope',
-      muscleGroup: 'Cardio',
-      category: ExerciseCategory.cardio,
-      description:
-        'Light conditioning option so the shared catalog includes more than pure strength work.',
-      instructions:
-        'Stay light on the feet, keep the elbows in, and rotate from the wrists.',
-      videoUrl: null,
-      imageUrl: null,
-    },
-  ] as const;
+  const exerciseByKey = new Map(
+    CANONICAL_EXERCISE_CATALOG.map((exercise) => [
+      exercise.key,
+      {
+        ...exercise,
+        id: seedId(`exercise:${exercise.key}`),
+      },
+    ]),
+  );
+  const poseProfileByExerciseKey = new Map(
+    CANONICAL_POSE_CAPABILITIES.map((capability) => {
+      const exercise = getCanonicalExercise(capability.exerciseKey);
+      const contract = buildFallbackPoseMovementContract(
+        capability.contractExercise,
+      );
+      if (!exercise || !contract || !isValidPoseMovementContract(contract)) {
+        throw new Error(
+          `Invalid canonical test pose contract for ${capability.exerciseKey}.`,
+        );
+      }
+      return [
+        capability.exerciseKey,
+        {
+          capability,
+          contract,
+          exercise,
+          id: seedId(`pose-profile:${capability.exerciseKey}`),
+        },
+      ];
+    }),
+  );
 
-  const poseProfileSeeds = [
-    {
-      canonicalName: 'barbell back squat',
-      exerciseKey: 'squat',
-      landmarkSignature: {
-        anchors: ['hips', 'knees', 'ankles'],
-        stance: 'shoulder_width',
+  for (const exercise of exerciseByKey.values()) {
+    const exerciseData = {
+      category: exercise.category as ExerciseCategory,
+      description: exercise.description,
+      image_url: null,
+      instructions:
+        'Warm up, keep control through the full range, and stop if pain changes the movement.',
+      is_active: true,
+      muscle_group: exercise.muscleGroup,
+      muscle_targets: {
+        primary: [exercise.muscleGroup],
+        secondary: ['core'],
       } as Prisma.InputJsonValue,
-      angleSignature: {
-        bottom: { hip: [65, 95], knee: [60, 90] },
-        top: { hip: [155, 180], knee: [155, 180] },
+      movement_profile: {
+        pattern:
+          exercise.category === 'cardio'
+            ? 'cyclic'
+            : exercise.category === 'flexibility'
+              ? 'flow'
+              : 'strength_reps',
       } as Prisma.InputJsonValue,
-      repRules: {
-        ascent: 'hips_and_shoulders_rise_together',
-        depth: 'hip_below_knee',
-      } as Prisma.InputJsonValue,
-      orientationSignature: {
-        body_orientation: 'upright',
-        nose_to_hip_vector: { x: 0.01, y: 0.84 },
-        torso_slope_range: [76, 96],
-      } as Prisma.InputJsonValue,
-      movementPattern: {
-        oscillating_landmarks: [
-          'left_hip',
-          'right_hip',
-          'left_knee',
-          'right_knee',
-        ],
-        stable_landmarks: ['left_ankle', 'right_ankle'],
-        tracked_joint: 'hip_knee_ankle',
-      } as Prisma.InputJsonValue,
-      visibilityPattern: {
-        min_visibility: 0.5,
-        required_landmarks: [
-          'left_shoulder',
-          'right_shoulder',
-          'left_ankle',
-          'right_ankle',
-        ],
-      } as Prisma.InputJsonValue,
-    },
-    {
-      canonicalName: 'dumbbell bench press',
-      exerciseKey: 'bench',
-      landmarkSignature: {
-        anchors: ['shoulders', 'elbows', 'wrists'],
-        setup: 'supine_press',
-      } as Prisma.InputJsonValue,
-      angleSignature: {
-        bottom: { elbow: [65, 95] },
-        top: { elbow: [155, 180] },
-      } as Prisma.InputJsonValue,
-      repRules: {
-        lockout: 'arms_extended_over_chest',
-        descent: 'upper_arm_below_torso_line',
-      } as Prisma.InputJsonValue,
-      orientationSignature: {
-        body_orientation: 'supine',
-        nose_to_hip_vector: { x: 0.0, y: 0.18 },
-        torso_slope_range: [0, 16],
-      } as Prisma.InputJsonValue,
-      movementPattern: {
-        oscillating_landmarks: [
-          'left_wrist',
-          'right_wrist',
-          'left_elbow',
-          'right_elbow',
-        ],
-        stable_landmarks: [
-          'left_hip',
-          'right_hip',
-          'left_shoulder',
-          'right_shoulder',
-        ],
-        tracked_joint: 'shoulder_elbow_wrist',
-      } as Prisma.InputJsonValue,
-      visibilityPattern: {
-        min_visibility: 0.45,
-        required_landmarks: [
-          'left_shoulder',
-          'right_shoulder',
-          'left_elbow',
-          'right_elbow',
-        ],
-      } as Prisma.InputJsonValue,
-    },
-    {
-      canonicalName: 'push_up',
-      exerciseKey: 'push',
-      landmarkSignature: {
-        anchors: ['shoulders', 'elbows', 'wrists', 'hips', 'ankles'],
-        setup: 'prone_press',
-      } as Prisma.InputJsonValue,
-      angleSignature: {
-        bottom: { elbow: [95, 155] },
-        top: { elbow: [142, 178] },
-      } as Prisma.InputJsonValue,
-      repRules: {
-        body_line: 'shoulders_hips_ankles_stacked',
-        depth: 'chest_between_hands',
-        partials_allowed: true,
-        no_count_conditions: [
-          'bilateral_arm_motion_unconfirmed',
-          'push_up_body_not_horizontal',
-          'left_right_phase_desync',
-        ],
-      } as Prisma.InputJsonValue,
-      orientationSignature: {
-        body_orientation: 'prone_horizontal',
-        nose_to_hip_vector: { x: 0.02, y: 0.16 },
-        torso_slope_range: [0, 88],
-      } as Prisma.InputJsonValue,
-      movementPattern: {
-        oscillating_landmarks: [
-          'left_wrist',
-          'right_wrist',
-          'left_elbow',
-          'right_elbow',
-        ],
-        stable_landmarks: [
-          'left_hip',
-          'right_hip',
-          'left_ankle',
-          'right_ankle',
-        ],
-        tracked_joint: 'elbow_wrist',
-      } as Prisma.InputJsonValue,
-      visibilityPattern: {
-        min_visibility: 0.4,
-        required_landmarks: [
-          'left_shoulder',
-          'right_shoulder',
-          'left_hip',
-          'right_hip',
-        ],
-      } as Prisma.InputJsonValue,
-    },
-    {
-      canonicalName: 'dip',
-      exerciseKey: 'dip',
-      landmarkSignature: {
-        anchors: ['shoulders', 'elbows', 'wrists', 'hips'],
-        setup: 'upright_vertical_press',
-      } as Prisma.InputJsonValue,
-      angleSignature: {
-        bottom: { elbow: [72, 104] },
-        top: { elbow: [144, 172] },
-      } as Prisma.InputJsonValue,
-      repRules: {
-        bilateral_control: 'both_elbows_extend_together',
-        no_count_conditions: [
-          'bilateral_arm_motion_unconfirmed',
-          'body_y_travel_below_min',
-          'left_right_phase_desync',
-        ],
-      } as Prisma.InputJsonValue,
-      orientationSignature: {
-        body_orientation: 'upright_vertical',
-        nose_to_hip_vector: { x: 0.01, y: 0.82 },
-        torso_slope_range: [60, 108],
-      } as Prisma.InputJsonValue,
-      movementPattern: {
-        oscillating_landmarks: [
-          'left_wrist',
-          'right_wrist',
-          'left_elbow',
-          'right_elbow',
-        ],
-        stable_landmarks: [
-          'left_hip',
-          'right_hip',
-          'left_shoulder',
-          'right_shoulder',
-        ],
-        tracked_joint: 'shoulder_elbow_wrist',
-      } as Prisma.InputJsonValue,
-      visibilityPattern: {
-        min_visibility: 0.42,
-        required_landmarks: [
-          'left_shoulder',
-          'right_shoulder',
-          'left_elbow',
-          'right_elbow',
-        ],
-      } as Prisma.InputJsonValue,
-    },
-    {
-      canonicalName: 'pull_up',
-      exerciseKey: 'pull',
-      landmarkSignature: {
-        anchors: ['shoulders', 'elbows', 'wrists', 'hips'],
-        setup: 'upright_vertical_pull',
-      } as Prisma.InputJsonValue,
-      angleSignature: {
-        bottom: { elbow: [128, 178] },
-        top: { elbow: [70, 135] },
-      } as Prisma.InputJsonValue,
-      repRules: {
-        partials_allowed: true,
-        vertical_pull: 'elbows_flex_as_chest_rises',
-        no_count_conditions: [
-          'insufficient_elbow_rom',
-          'body_swing_over_tolerance',
-        ],
-      } as Prisma.InputJsonValue,
-      orientationSignature: {
-        body_orientation: 'upright_vertical',
-        nose_to_hip_vector: { x: 0.01, y: 0.82 },
-        torso_slope_range: [58, 108],
-      } as Prisma.InputJsonValue,
-      movementPattern: {
-        oscillating_landmarks: [
-          'left_wrist',
-          'right_wrist',
-          'left_elbow',
-          'right_elbow',
-          'left_shoulder',
-          'right_shoulder',
-        ],
-        stable_landmarks: ['left_hip', 'right_hip'],
-        tracked_joint: 'shoulder_elbow_wrist',
-      } as Prisma.InputJsonValue,
-      visibilityPattern: {
-        min_visibility: 0.38,
-        required_landmarks: [
-          'left_shoulder',
-          'right_shoulder',
-          'left_elbow',
-          'right_elbow',
-          'left_wrist',
-          'right_wrist',
-        ],
-      } as Prisma.InputJsonValue,
-    },
-    {
-      canonicalName: 'bicep_curl',
-      exerciseKey: 'curl',
-      landmarkSignature: {
-        anchors: ['shoulders', 'elbows', 'wrists', 'hips'],
-        setup: 'standing_weighted_curl',
-      } as Prisma.InputJsonValue,
-      angleSignature: {
-        bottom: { elbow: [112, 176] },
-        top: { elbow: [70, 128] },
-      } as Prisma.InputJsonValue,
-      repRules: {
-        equipment_required: 'dumbbell_or_weight_in_hand',
-        no_count_conditions: ['equipment_required', 'hip_swing_over_tolerance'],
-        partials_allowed: true,
-      } as Prisma.InputJsonValue,
-      orientationSignature: {
-        body_orientation: 'upright',
-        nose_to_hip_vector: { x: 0.01, y: 0.86 },
-        torso_slope_range: [64, 102],
-      } as Prisma.InputJsonValue,
-      movementPattern: {
-        oscillating_landmarks: [
-          'left_wrist',
-          'right_wrist',
-          'left_elbow',
-          'right_elbow',
-        ],
-        stable_landmarks: [
-          'left_hip',
-          'right_hip',
-          'left_shoulder',
-          'right_shoulder',
-        ],
-        tracked_joint: 'shoulder_elbow_wrist',
-      } as Prisma.InputJsonValue,
-      visibilityPattern: {
-        min_visibility: 0.42,
-        required_landmarks: [
-          'left_shoulder',
-          'right_shoulder',
-          'left_elbow',
-          'right_elbow',
-          'left_wrist',
-          'right_wrist',
-        ],
-      } as Prisma.InputJsonValue,
-    },
-  ] as const;
+      name: exercise.name,
+      video_url: null,
+    };
+    await prisma.exerciseCatalog.upsert({
+      where: { id: exercise.id },
+      update: exerciseData,
+      create: { id: exercise.id, ...exerciseData },
+    });
+  }
 
-  const lowerDayId = randomUUID();
-  const upperDayId = randomUUID();
-  const squatPlanExerciseId = randomUUID();
-  const rowPlanExerciseId = randomUUID();
-  const benchPlanExerciseId = randomUUID();
-  const curlPlanExerciseId = randomUUID();
-  const ropePlanExerciseId = randomUUID();
+  const supportedExerciseIds = [...poseProfileByExerciseKey.values()].map(
+    ({ exercise }) =>
+      exerciseByKey.get(exercise.key)?.id ?? seedId(`exercise:${exercise.key}`),
+  );
+  await prisma.poseExerciseProfile.updateMany({
+    where: {
+      profile_kind: PoseProfileKind.seed,
+      is_active: true,
+      OR: [
+        { exercise_id: null },
+        { exercise_id: { notIn: supportedExerciseIds } },
+      ],
+    },
+    data: { is_active: false },
+  });
 
-  const squatSessionId = randomUUID();
-  const squatLogId = randomUUID();
-  const squatPoseSessionId = randomUUID();
+  for (const {
+    contract,
+    exercise,
+    id: profileId,
+  } of poseProfileByExerciseKey.values()) {
+    const tracking = contract.trackingRequirements;
+    const profileData = {
+      angle_signature: {
+        contract_version: contract.contractVersion,
+        dominant_joint: contract.dominantJoint,
+        down: contract.repThresholds.down,
+        up: contract.repThresholds.up,
+      } as Prisma.InputJsonValue,
+      canonical_name: contract.exercise,
+      confidence_threshold: new Prisma.Decimal(
+        (tracking?.minConfidence ?? 0.6).toFixed(3),
+      ),
+      dominant_joint: contract.dominantJoint,
+      exercise_id: exerciseByKey.get(exercise.key)?.id ?? null,
+      is_active: true,
+      landmark_signature: {
+        anchors: contract.primaryJoints ?? [],
+        required_landmarks: tracking?.requiredLandmarks ?? [],
+        source: 'seed-test-data',
+      } as Prisma.InputJsonValue,
+      movement_pattern: {
+        no_count_conditions: contract.noCountConditions ?? [],
+        oscillating_landmarks: contract.oscillatingJoints,
+        phase_order: contract.phaseOrder ?? [],
+        rep_model: contract.repModel,
+        tracked_joint: contract.primaryJoints ?? [contract.dominantJoint],
+      } as Prisma.InputJsonValue,
+      orientation_signature: {
+        body_orientation: contract.bodyOrientation ?? 'any',
+        contract_version: contract.contractVersion,
+      } as Prisma.InputJsonValue,
+      profile_kind: PoseProfileKind.seed,
+      rep_rules: {
+        count:
+          contract.repModel === 'static_hold'
+            ? 'static_hold'
+            : 'phase_crossing',
+        contract_version: contract.contractVersion,
+        hold_duration_seconds: contract.holdDurationSeconds ?? null,
+        minimum_visibility: tracking?.minConfidence ?? 0.6,
+        primary_joints: contract.primaryJoints ?? [],
+        required_sides: contract.requiredSides,
+        phase_order: contract.phaseOrder ?? [],
+        rep_model: contract.repModel,
+        secondary_check: contract.secondaryCheck,
+        secondary_joints: contract.secondaryJoints ?? [],
+        spatial_requirements: contract.spatialRequirements ?? null,
+        tracking_requirements: tracking ?? null,
+      } as Prisma.InputJsonValue,
+      rep_thresholds: {
+        down: contract.repThresholds.down,
+        up: contract.repThresholds.up,
+      } as Prisma.InputJsonValue,
+      sample_count: 15,
+      tolerance: new Prisma.Decimal(
+        (
+          (contract.repThresholds.down.tolerance +
+            contract.repThresholds.up.tolerance) /
+          2
+        ).toFixed(2),
+      ),
+      visibility_pattern: {
+        min_visibility: tracking?.minConfidence ?? 0.6,
+        min_reliable_frame_landmarks: tracking?.minReliableFrameLandmarks ?? 12,
+        required_landmarks: tracking?.requiredLandmarks ?? [],
+      } as Prisma.InputJsonValue,
+    };
+    await prisma.poseExerciseProfile.upsert({
+      where: { id: profileId },
+      update: profileData,
+      create: { id: profileId, ...profileData },
+    });
+  }
 
-  const benchSessionId = randomUUID();
-  const benchLogId = randomUUID();
-  const benchPoseSessionId = randomUUID();
-
+  const planId = seedId('workout-plan:member-active:strength');
+  const lowerDayId = seedId('workout-day:member-active:lower');
+  const upperDayId = seedId('workout-day:member-active:upper');
+  const planExerciseIds = {
+    squat: seedId('workout-plan-exercise:member-active:squat'),
+    row: seedId('workout-plan-exercise:member-active:row'),
+    bench: seedId('workout-plan-exercise:member-active:barbell-bench'),
+    curl: seedId('workout-plan-exercise:member-active:biceps-curl'),
+    plank: seedId('workout-plan-exercise:member-active:plank'),
+    run: seedId('workout-plan-exercise:member-active:run'),
+  };
   const now = new Date();
   const squatStartedAt = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
-  const squatCompletedAt = new Date(squatStartedAt.getTime() + 42 * 60 * 1000);
-  const squatPoseStartedAt = new Date(
-    squatStartedAt.getTime() + 11 * 60 * 1000,
-  );
-  const squatPoseEndedAt = new Date(squatPoseStartedAt.getTime() + 95 * 1000);
-
   const benchStartedAt = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-  const benchCompletedAt = new Date(benchStartedAt.getTime() + 36 * 60 * 1000);
-  const benchPoseStartedAt = new Date(benchStartedAt.getTime() + 9 * 60 * 1000);
-  const benchPoseEndedAt = new Date(benchPoseStartedAt.getTime() + 80 * 1000);
+  const plankStartedAt = new Date(now.getTime() - 12 * 60 * 60 * 1000);
 
-  await prisma.poseSession.deleteMany({
-    where: {
-      user_id: memberActiveId,
-    },
-  });
-  await prisma.exerciseLog.deleteMany({
-    where: {
-      user_id: memberActiveId,
-    },
-  });
-  await prisma.workoutSession.deleteMany({
-    where: {
-      user_id: memberActiveId,
-    },
-  });
-  await prisma.trainingPlan.deleteMany({
-    where: {
-      user_id: memberActiveId,
-    },
-  });
-
-  await prisma.poseExerciseProfile.deleteMany({
-    where: {
-      canonical_name: {
-        in: poseProfileSeeds.map((profile) => profile.canonicalName),
-      },
-    },
-  });
-  const existingSeedExerciseIds = (
-    await prisma.exerciseCatalog.findMany({
-      where: {
-        name: {
-          in: exerciseSeeds.map((exercise) => exercise.name),
-        },
-      },
-      select: {
-        id: true,
-      },
-    })
-  ).map(({ id }) => id);
-
-  if (existingSeedExerciseIds.length) {
-    await prisma.exerciseLog.deleteMany({
-      where: {
-        exercise_id: {
-          in: existingSeedExerciseIds,
-        },
-      },
+  if (mode === 'reset') {
+    await prisma.poseSession.deleteMany({ where: { user_id: memberActiveId } });
+    await prisma.exerciseLog.deleteMany({ where: { user_id: memberActiveId } });
+    await prisma.workoutSession.deleteMany({
+      where: { user_id: memberActiveId },
     });
-
-    await prisma.planExercise.deleteMany({
-      where: {
-        exercise_id: {
-          in: existingSeedExerciseIds,
-        },
-      },
+    await prisma.trainingPlan.deleteMany({
+      where: { user_id: memberActiveId },
     });
   }
 
-  await prisma.exerciseCatalog.deleteMany({
-    where: {
-      name: {
-        in: exerciseSeeds.map((exercise) => exercise.name),
-      },
-    },
-  });
-
-  const exerciseIds = new Map<string, string>();
-  for (const exercise of exerciseSeeds) {
-    const created = await prisma.exerciseCatalog.create({
-      data: {
-        id: randomUUID(),
-        category: exercise.category,
-        description: exercise.description,
-        image_url: exercise.imageUrl,
-        instructions: exercise.instructions,
-        is_active: true,
-        muscle_group: exercise.muscleGroup,
-        name: exercise.name,
-        video_url: exercise.videoUrl,
-      },
-      select: { id: true },
-    });
-    exerciseIds.set(exercise.key, created.id);
-  }
-
-  const poseProfileIds = new Map<string, string>();
-  for (const profile of poseProfileSeeds) {
-    const created = await prisma.poseExerciseProfile.create({
-      data: {
-        id: randomUUID(),
-        angle_signature: profile.angleSignature,
-        canonical_name: profile.canonicalName,
-        confidence_threshold: new Prisma.Decimal('0.750'),
-        exercise_id: exerciseIds.get(profile.exerciseKey) ?? null,
-        is_active: true,
-        landmark_signature: profile.landmarkSignature,
-        movement_pattern: profile.movementPattern,
-        orientation_signature: profile.orientationSignature,
-        profile_kind: PoseProfileKind.seed,
-        rep_rules: profile.repRules,
-        sample_count: 3,
-        visibility_pattern: profile.visibilityPattern,
-      },
-      select: { id: true },
-    });
-    poseProfileIds.set(profile.exerciseKey, created.id);
-  }
-
-  const createdPlan = await prisma.trainingPlan.create({
-    data: {
-      id: randomUUID(),
+  await prisma.trainingPlan.upsert({
+    where: { id: planId },
+    update: {
       user_id: memberActiveId,
       source: PlanSource.self_created,
       title: 'Strength Foundations Split',
@@ -4037,195 +3707,341 @@ async function ensureWorkoutFixtures(
       is_template: false,
       ai_generation_prompt: {
         source: 'seed-test-data',
-        note: 'Queue 3 workout seed for active member verification.',
+        note: 'Canonical exercise and pose fixture for manual and camera QA.',
       } as Prisma.InputJsonValue,
     },
-    select: { id: true },
+    create: {
+      id: planId,
+      user_id: memberActiveId,
+      source: PlanSource.self_created,
+      title: 'Strength Foundations Split',
+      goal: FitnessGoal.bulking,
+      duration_weeks: 4,
+      days_per_week: 3,
+      is_active: true,
+      is_template: false,
+      ai_generation_prompt: {
+        source: 'seed-test-data',
+        note: 'Canonical exercise and pose fixture for manual and camera QA.',
+      } as Prisma.InputJsonValue,
+    },
   });
-  const planId = createdPlan.id;
 
-  await prisma.trainingScheduleDay.createMany({
-    data: [
-      {
-        id: lowerDayId,
+  for (const day of [
+    {
+      id: lowerDayId,
+      day_of_week: 1,
+      focus_label: 'Lower Body Power',
+      notes: 'Canonical squat, row, and static-hold manual fallback coverage.',
+    },
+    {
+      id: upperDayId,
+      day_of_week: 3,
+      focus_label: 'Upper Push + Finish',
+      notes: 'Canonical bench, curl, and conditioning picker coverage.',
+    },
+  ]) {
+    await prisma.trainingScheduleDay.upsert({
+      where: { id: day.id },
+      update: {
         plan_id: planId,
         week_number: 1,
-        day_of_week: 1,
-        focus_label: 'Lower Body Power',
-        notes:
-          'Lower-body day connected to the mobile workout page first exercise.',
+        day_of_week: day.day_of_week,
+        focus_label: day.focus_label,
+        notes: day.notes,
       },
-      {
-        id: upperDayId,
+      create: {
+        id: day.id,
         plan_id: planId,
         week_number: 1,
-        day_of_week: 3,
-        focus_label: 'Upper Push + Finish',
-        notes:
-          'Secondary seeded day used for history and shared exercise picker coverage.',
+        day_of_week: day.day_of_week,
+        focus_label: day.focus_label,
+        notes: day.notes,
       },
-    ],
-  });
+    });
+  }
 
-  await prisma.planExercise.createMany({
-    data: [
-      {
-        id: squatPlanExerciseId,
-        schedule_day_id: lowerDayId,
-        exercise_id: exerciseIds.get('squat')!,
-        sets: 4,
-        reps: 8,
-        rest_seconds: 120,
-        weight_kg_target: new Prisma.Decimal('55'),
-        notes: 'Use this as the primary live-tracking reference exercise.',
-        order_index: 0,
-      },
-      {
-        id: rowPlanExerciseId,
-        schedule_day_id: lowerDayId,
-        exercise_id: exerciseIds.get('row')!,
-        sets: 3,
-        reps: 12,
-        rest_seconds: 90,
-        notes:
-          'Accessory pull to make the first schedule day feel like a real plan.',
-        order_index: 1,
-      },
-      {
-        id: benchPlanExerciseId,
-        schedule_day_id: upperDayId,
-        exercise_id: exerciseIds.get('bench')!,
-        sets: 4,
-        reps: 10,
-        rest_seconds: 90,
-        weight_kg_target: new Prisma.Decimal('22.5'),
-        notes:
-          'Upper-body push day reference used by the seeded history entry.',
-        order_index: 0,
-      },
-      {
-        id: curlPlanExerciseId,
-        schedule_day_id: upperDayId,
-        exercise_id: exerciseIds.get('curl')!,
-        sets: 3,
-        reps: 12,
-        rest_seconds: 75,
-        weight_kg_target: new Prisma.Decimal('8'),
-        notes:
-          'Equipment-aware curl test exercise for live pose and object-context gating.',
-        order_index: 1,
-      },
-      {
-        id: ropePlanExerciseId,
-        schedule_day_id: upperDayId,
-        exercise_id: exerciseIds.get('rope')!,
-        sets: 2,
-        duration_seconds: 60,
-        rest_seconds: 45,
-        notes: 'Short finisher to keep the plan from looking single-purpose.',
-        order_index: 2,
-      },
-    ],
-  });
+  const planExercises = [
+    {
+      id: planExerciseIds.squat,
+      schedule_day_id: lowerDayId,
+      exercise_id: exerciseByKey.get('squat')!.id,
+      sets: 4,
+      reps: 8,
+      rest_seconds: 120,
+      weight_kg_target: new Prisma.Decimal('55'),
+      notes: 'Primary live-tracking reference exercise.',
+      order_index: 0,
+    },
+    {
+      id: planExerciseIds.row,
+      schedule_day_id: lowerDayId,
+      exercise_id: exerciseByKey.get('row')!.id,
+      sets: 3,
+      reps: 12,
+      rest_seconds: 90,
+      notes: 'Manual-only accessory; no AI rep or pose history is seeded.',
+      order_index: 1,
+    },
+    {
+      id: planExerciseIds.plank,
+      schedule_day_id: lowerDayId,
+      exercise_id: exerciseByKey.get('plank')!.id,
+      sets: 1,
+      reps: null,
+      duration_seconds: 30,
+      rest_seconds: 60,
+      notes: 'Static hold uses duration semantics.',
+      order_index: 2,
+    },
+    {
+      id: planExerciseIds.bench,
+      schedule_day_id: upperDayId,
+      exercise_id: exerciseByKey.get('barbell-bench')!.id,
+      sets: 4,
+      reps: 10,
+      rest_seconds: 90,
+      weight_kg_target: new Prisma.Decimal('22.5'),
+      notes:
+        'Canonical barbell bench reference; dumbbell bench remains manual.',
+      order_index: 0,
+    },
+    {
+      id: planExerciseIds.curl,
+      schedule_day_id: upperDayId,
+      exercise_id: exerciseByKey.get('biceps-curl')!.id,
+      sets: 3,
+      reps: 12,
+      rest_seconds: 75,
+      weight_kg_target: new Prisma.Decimal('8'),
+      notes:
+        'Supported canonical curl; pose history is intentionally absent here.',
+      order_index: 1,
+    },
+    {
+      id: planExerciseIds.run,
+      schedule_day_id: upperDayId,
+      exercise_id: exerciseByKey.get('run')!.id,
+      sets: 1,
+      reps: null,
+      duration_seconds: 600,
+      rest_seconds: 45,
+      notes: 'Manual-only conditioning exercise.',
+      order_index: 2,
+    },
+  ] satisfies Prisma.PlanExerciseCreateManyInput[];
 
-  await prisma.workoutSession.createMany({
-    data: [
-      {
-        id: squatSessionId,
+  for (const planExercise of planExercises) {
+    await prisma.planExercise.upsert({
+      where: { id: planExercise.id },
+      update: planExercise,
+      create: planExercise,
+    });
+  }
+
+  const sessionDefinitions = [
+    {
+      id: seedId('workout-session:member-active:squat'),
+      started_at: squatStartedAt,
+      plan_id: planId,
+      duration_seconds: 42 * 60,
+      total_volume_kg: new Prisma.Decimal('1320'),
+    },
+    {
+      id: seedId('workout-session:member-active:bench'),
+      started_at: benchStartedAt,
+      plan_id: planId,
+      duration_seconds: 36 * 60,
+      total_volume_kg: new Prisma.Decimal('900'),
+    },
+    {
+      id: seedId('workout-session:member-active:plank'),
+      started_at: plankStartedAt,
+      plan_id: planId,
+      duration_seconds: 30,
+      total_volume_kg: new Prisma.Decimal('0'),
+    },
+  ] as const;
+  for (const session of sessionDefinitions) {
+    const completedAt = new Date(
+      session.started_at.getTime() + session.duration_seconds * 1000,
+    );
+    await prisma.workoutSession.upsert({
+      where: { id: session.id },
+      update: {
         user_id: memberActiveId,
-        plan_id: planId,
+        plan_id: session.plan_id,
         status: SessionStatus.completed,
-        started_at: squatStartedAt,
-        completed_at: squatCompletedAt,
-        duration_seconds: 42 * 60,
-        total_volume_kg: new Prisma.Decimal('1320'),
-        last_activity_at: squatCompletedAt,
+        started_at: session.started_at,
+        completed_at: completedAt,
+        duration_seconds: session.duration_seconds,
+        total_volume_kg: session.total_volume_kg,
+        last_activity_at: completedAt,
       },
-      {
-        id: benchSessionId,
+      create: {
+        id: session.id,
         user_id: memberActiveId,
-        plan_id: planId,
+        plan_id: session.plan_id,
         status: SessionStatus.completed,
-        started_at: benchStartedAt,
-        completed_at: benchCompletedAt,
-        duration_seconds: 36 * 60,
-        total_volume_kg: new Prisma.Decimal('900'),
-        last_activity_at: benchCompletedAt,
+        started_at: session.started_at,
+        completed_at: completedAt,
+        duration_seconds: session.duration_seconds,
+        total_volume_kg: session.total_volume_kg,
+        last_activity_at: completedAt,
       },
-    ],
-  });
+    });
+  }
 
-  await prisma.exerciseLog.createMany({
-    data: [
-      {
-        id: squatLogId,
-        session_id: squatSessionId,
-        user_id: memberActiveId,
-        plan_exercise_id: squatPlanExerciseId,
-        exercise_id: exerciseIds.get('squat')!,
-        set_number: 1,
-        reps_target: 8,
-        reps_completed: 8,
-        reps_ai_counted: 8,
-        weight_kg: new Prisma.Decimal('55'),
-        duration_seconds: 70,
-      },
-      {
-        id: benchLogId,
-        session_id: benchSessionId,
-        user_id: memberActiveId,
-        plan_exercise_id: benchPlanExerciseId,
-        exercise_id: exerciseIds.get('bench')!,
-        set_number: 1,
-        reps_target: 10,
-        reps_completed: 10,
-        reps_ai_counted: 10,
-        weight_kg: new Prisma.Decimal('22.5'),
-        duration_seconds: 60,
-      },
-    ],
-  });
+  const logDefinitions = [
+    {
+      id: seedId('exercise-log:member-active:squat'),
+      session_id: seedId('workout-session:member-active:squat'),
+      user_id: memberActiveId,
+      plan_exercise_id: planExerciseIds.squat,
+      exercise_id: exerciseByKey.get('squat')!.id,
+      set_number: 1,
+      reps_target: 8,
+      reps_completed: 8,
+      reps_ai_counted: 8,
+      weight_kg: new Prisma.Decimal('55'),
+      duration_seconds: 70,
+    },
+    {
+      id: seedId('exercise-log:member-active:bench'),
+      session_id: seedId('workout-session:member-active:bench'),
+      user_id: memberActiveId,
+      plan_exercise_id: planExerciseIds.bench,
+      exercise_id: exerciseByKey.get('barbell-bench')!.id,
+      set_number: 1,
+      reps_target: 10,
+      reps_completed: 10,
+      reps_ai_counted: 10,
+      weight_kg: new Prisma.Decimal('22.5'),
+      duration_seconds: 60,
+    },
+    {
+      id: seedId('exercise-log:member-active:plank'),
+      session_id: seedId('workout-session:member-active:plank'),
+      user_id: memberActiveId,
+      plan_exercise_id: planExerciseIds.plank,
+      exercise_id: exerciseByKey.get('plank')!.id,
+      set_number: 1,
+      reps_target: null,
+      reps_completed: null,
+      reps_ai_counted: null,
+      weight_kg: null,
+      duration_seconds: 30,
+    },
+    {
+      id: seedId('exercise-log:member-active:row-manual'),
+      session_id: seedId('workout-session:member-active:squat'),
+      user_id: memberActiveId,
+      plan_exercise_id: planExerciseIds.row,
+      exercise_id: exerciseByKey.get('row')!.id,
+      set_number: 2,
+      reps_target: 12,
+      reps_completed: 12,
+      reps_ai_counted: null,
+      weight_kg: new Prisma.Decimal('35'),
+      duration_seconds: null,
+    },
+  ] satisfies Prisma.ExerciseLogCreateManyInput[];
 
-  await prisma.poseSession.createMany({
-    data: [
-      {
-        id: squatPoseSessionId,
-        user_id: memberActiveId,
-        exercise_log_id: squatLogId,
-        exercise_hint: 'Barbell Back Squat',
-        rep_count_ai: 8,
-        confidence_avg: new Prisma.Decimal('0.924'),
-        detected_exercise_name: 'Barbell Back Squat',
-        detected_profile_id: poseProfileIds.get('squat')!,
-        classification_confidence: new Prisma.Decimal('0.962'),
-        subject_lock_confidence: new Prisma.Decimal('0.951'),
-        analysis_summary: {
-          form_feedback: ['Stable torso', 'Consistent squat depth'],
-          stage_sequence: ['descent', 'ascent'],
-        } as Prisma.InputJsonValue,
-        started_at: squatPoseStartedAt,
-        ended_at: squatPoseEndedAt,
+  for (const log of logDefinitions) {
+    await prisma.exerciseLog.upsert({
+      where: { id: log.id },
+      update: log,
+      create: log,
+    });
+  }
+
+  const poseHistory = [
+    {
+      exerciseKey: 'squat',
+      logId: seedId('exercise-log:member-active:squat'),
+      sessionId: seedId('pose-session:member-active:squat'),
+      repCount: 8,
+      startedAt: squatStartedAt,
+      holdSeconds: null,
+      summary: {
+        source: 'seed-test-data',
+        form_feedback: ['Stable torso', 'Consistent squat depth'],
+        counted_reps: 8,
       },
-      {
-        id: benchPoseSessionId,
-        user_id: memberActiveId,
-        exercise_log_id: benchLogId,
-        exercise_hint: 'Dumbbell Bench Press',
-        rep_count_ai: 10,
-        confidence_avg: new Prisma.Decimal('0.911'),
-        detected_exercise_name: 'Dumbbell Bench Press',
-        detected_profile_id: poseProfileIds.get('bench')!,
-        classification_confidence: new Prisma.Decimal('0.944'),
-        subject_lock_confidence: new Prisma.Decimal('0.938'),
-        analysis_summary: {
-          form_feedback: ['Strong lockout', 'Controlled lowering phase'],
-          stage_sequence: ['eccentric', 'concentric'],
-        } as Prisma.InputJsonValue,
-        started_at: benchPoseStartedAt,
-        ended_at: benchPoseEndedAt,
+    },
+    {
+      exerciseKey: 'barbell-bench',
+      logId: seedId('exercise-log:member-active:bench'),
+      sessionId: seedId('pose-session:member-active:bench'),
+      repCount: 10,
+      startedAt: benchStartedAt,
+      holdSeconds: null,
+      summary: {
+        source: 'seed-test-data',
+        form_feedback: ['Controlled lowering', 'Stable lockout'],
+        counted_reps: 10,
       },
-    ],
-  });
+    },
+    {
+      exerciseKey: 'plank',
+      logId: seedId('exercise-log:member-active:plank'),
+      sessionId: seedId('pose-session:member-active:plank'),
+      repCount: 0,
+      startedAt: plankStartedAt,
+      holdSeconds: 30,
+      summary: {
+        source: 'seed-test-data',
+        form_feedback: ['Stable body line'],
+        hold_seconds: 30,
+        counted_reps: 0,
+      },
+    },
+  ] as const;
+
+  for (const history of poseHistory) {
+    const profile = poseProfileByExerciseKey.get(history.exerciseKey);
+    const contract = profile?.contract;
+    const exercise = exerciseByKey.get(history.exerciseKey);
+    if (!profile || !contract || !exercise) {
+      continue;
+    }
+    const endedAt = new Date(
+      history.startedAt.getTime() +
+        (history.holdSeconds ?? (history.repCount > 0 ? 95 : 30)) * 1000,
+    );
+    await prisma.poseSession.upsert({
+      where: { id: history.sessionId },
+      update: {
+        user_id: memberActiveId,
+        exercise_log_id: history.logId,
+        exercise_hint: contract.exercise,
+        rep_count_ai: history.repCount,
+        confidence_avg: new Prisma.Decimal('0.91'),
+        detected_exercise_name: contract.exercise,
+        detected_profile_id: profile.id,
+        classification_confidence: new Prisma.Decimal('0.94'),
+        subject_lock_confidence: new Prisma.Decimal('0.93'),
+        analysis_summary: history.summary as Prisma.InputJsonValue,
+        started_at: history.startedAt,
+        ended_at: endedAt,
+      },
+      create: {
+        id: history.sessionId,
+        user_id: memberActiveId,
+        exercise_log_id: history.logId,
+        exercise_hint: contract.exercise,
+        rep_count_ai: history.repCount,
+        confidence_avg: new Prisma.Decimal('0.91'),
+        detected_exercise_name: contract.exercise,
+        detected_profile_id: profile.id,
+        classification_confidence: new Prisma.Decimal('0.94'),
+        subject_lock_confidence: new Prisma.Decimal('0.93'),
+        analysis_summary: history.summary as Prisma.InputJsonValue,
+        started_at: history.startedAt,
+        ended_at: endedAt,
+      },
+    });
+  }
 }
 
 async function ensureFeatureCoverageFixtures(
@@ -4285,7 +4101,6 @@ async function ensureFeatureCoverageFixtures(
   await prisma.progressionGrantLedger.deleteMany({});
   await prisma.progressionSourceEvent.deleteMany({});
   await prisma.userProgressionProfile.deleteMany({});
-  await prisma.exerciseReviewSubmission.deleteMany({});
   await prisma.recurringCoachingBillingCycle.deleteMany({});
   await prisma.recurringCoachingPlan.deleteMany({});
   await prisma.coachClientRelationship.deleteMany({});
@@ -4322,42 +4137,6 @@ async function ensureFeatureCoverageFixtures(
     milestones.map((milestone) => [milestone.key, milestone.id]),
   );
   const activeSeasonId = activeSeason?.id ?? null;
-
-  for (const [key, state] of [
-    ['member-active', CreatorState.candidate],
-    ['member-premium', CreatorState.approved],
-    ['member-pending', CreatorState.pending_review],
-    ['member-frozen', CreatorState.suspended],
-    ['member-expired', CreatorState.none],
-    ['member-nomembership', CreatorState.none],
-  ] as const) {
-    const userId = userIdByKey(key);
-    if (!userId) {
-      continue;
-    }
-
-    await prisma.creatorProfile.upsert({
-      where: { user_id: userId },
-      update: {
-        admin_notes:
-          state === CreatorState.approved
-            ? 'Creator-approved member for mobile exercise draft flows.'
-            : 'Creator governance state for Exercise Lab coverage.',
-        last_state_changed_at: analyticsAt({ daysAgo: 1, hour: 10 }),
-        state,
-      },
-      create: {
-        id: seedId(`creator-profile:${key}`),
-        admin_notes:
-          state === CreatorState.approved
-            ? 'Creator-approved member for mobile exercise draft flows.'
-            : 'Creator governance state for Exercise Lab coverage.',
-        last_state_changed_at: analyticsAt({ daysAgo: 1, hour: 10 }),
-        state,
-        user_id: userId,
-      },
-    });
-  }
 
   if (staffCoachId) {
     await prisma.coachClientRelationship.createMany({
@@ -4448,69 +4227,6 @@ async function ensureFeatureCoverageFixtures(
       ],
     });
   }
-
-  await prisma.exerciseReviewSubmission.createMany({
-    data: EXERCISE_REVIEW_SUBMISSION_SEEDS.map((seed) => {
-      const userId = userIdByKey(seed.creatorKey);
-      if (!userId) {
-        throw new Error(
-          `Missing creator account for exercise review seed ${seed.key}.`,
-        );
-      }
-
-      return {
-        id: seedId(`exercise-review:${seed.key}`),
-        category: seed.category,
-        created_at: analyticsAt({ daysAgo: seed.daysAgo, hour: seed.hour }),
-        description: seed.description,
-        evidence_bars: seed.evidenceBars as Prisma.InputJsonValue,
-        hand_shape_profile: {
-          exerciseRequirement:
-            seed.category === ExerciseCategory.strength
-              ? 'grip_optional'
-              : 'none',
-          targetLockGesture: 'rock_sign',
-        } as Prisma.InputJsonValue,
-        instructions: seed.instructions,
-        match_hint: seed.matchHint ?? null,
-        movement_profile: {
-          movementType:
-            seed.category === ExerciseCategory.balance
-              ? 'static_hold'
-              : 'dynamic_rep',
-          rigSource: 'seeded_creator_capture',
-          thresholds: { downAngle: 145, tolerance: 18, upAngle: 92 },
-        } as Prisma.InputJsonValue,
-        muscle_group: seed.muscleGroup,
-        muscle_targets: seed.muscleTargets as Prisma.InputJsonValue,
-        origin_label: seed.originLabel,
-        pose_session_id:
-          seed.key === 'member-active:rotational-press'
-            ? (activePose?.id ?? null)
-            : null,
-        proposed_name: seed.proposedName,
-        published_exercise_id:
-          seed.status === ExerciseReviewSubmissionStatus.published
-            ? (curlExercise?.id ?? null)
-            : null,
-        queue_tag: seed.queueTag,
-        reviewed_at:
-          seed.status === ExerciseReviewSubmissionStatus.pending
-            ? null
-            : analyticsAt({
-                daysAgo: seed.reviewedDaysAgo ?? 1,
-                hour: seed.hour,
-              }),
-        review_notes: seed.reviewNotes ?? null,
-        source_label: seed.sourceLabel,
-        status: seed.status,
-        summary: seed.summary,
-        title: seed.title,
-        trigger_label: seed.triggerLabel,
-        user_id: userId,
-      };
-    }),
-  });
 
   await prisma.userProgressionProfile.createMany({
     data: [
@@ -5259,16 +4975,6 @@ async function ensureFeatureCoverageFixtures(
   await prisma.auditLog.createMany({
     data: [
       {
-        id: seedId('audit:member-premium:creator-approved'),
-        action: 'CREATOR_PROFILE_APPROVED',
-        after: { state: 'approved' } as Prisma.InputJsonValue,
-        before: { state: 'pending_review' } as Prisma.InputJsonValue,
-        entity: 'CreatorProfile',
-        entity_id: seedId('creator-profile:member-premium'),
-        ip_address: '127.0.0.1',
-        user_id: adminUserId,
-      },
-      {
         id: seedId('audit:equipment:writeoff'),
         action: 'EQUIPMENT_WRITE_OFF_CREATED',
         after: { quantity_current: 18 } as Prisma.InputJsonValue,
@@ -5277,15 +4983,6 @@ async function ensureFeatureCoverageFixtures(
         entity_id: seedId('analytics-equipment:hex-dumbbell-set'),
         ip_address: '127.0.0.1',
         user_id: staffUserId,
-      },
-      {
-        id: seedId('audit:exercise-review:hammer-curl'),
-        action: 'EXERCISE_REVIEW_QUEUED',
-        after: { status: 'pending' } as Prisma.InputJsonValue,
-        entity: 'ExerciseReviewSubmission',
-        entity_id: seedId('exercise-review:member-premium:hammer-curl'),
-        ip_address: '127.0.0.1',
-        user_id: memberPremiumId,
       },
     ],
   });
@@ -5415,7 +5112,6 @@ async function buildCounts() {
     businessInsightRuns,
     coachClientRelationships,
     equipmentWriteOffs,
-    exerciseReviewSubmissions,
     facilityFloorPlans,
     gymChatSessions,
     gymEquipment,
@@ -5468,7 +5164,6 @@ async function buildCounts() {
     prisma.businessInsightRun.count(),
     prisma.coachClientRelationship.count(),
     prisma.equipmentWriteOff.count(),
-    prisma.exerciseReviewSubmission.count(),
     prisma.facilityFloorPlanMedia.count(),
     prisma.gymChatSession.count(),
     prisma.gymEquipment.count(),
@@ -5526,7 +5221,6 @@ async function buildCounts() {
     fitness: {
       exerciseCatalog,
       exerciseLogs,
-      exerciseReviewSubmissions,
       muscleMastery,
       poseProfiles,
       poseSessions,
@@ -5570,23 +5264,27 @@ async function main() {
 
   const bootstrapSummary = await bootstrapDefaults(prisma);
   await ensureMembershipPlans();
-  await cleanupDeprecatedCoachSeeds();
-  await cleanupGymOperationsData();
-  await cleanupPreviousSeedAnalyticsData();
+  if (mode === 'reset') {
+    await cleanupDeprecatedCoachSeeds();
+    await cleanupGymOperationsData();
+    await cleanupPreviousSeedAnalyticsData();
+  }
 
   const ensuredAccounts: EnsuredAccount[] = [];
   for (const account of BASELINE_TEST_ACCOUNTS) {
     ensuredAccounts.push(await ensureTestAccount(account));
   }
 
-  await cleanupUsersOutsideBaseline(ensuredAccounts);
+  if (mode === 'reset') {
+    await cleanupUsersOutsideBaseline(ensuredAccounts);
+  }
   await ensureMemberStates(ensuredAccounts);
   await ensureNutritionFixtures(ensuredAccounts);
   const coachProfiles = await ensureCoachProfiles(ensuredAccounts);
   await ensureGymOperationsVenueBookings(ensuredAccounts, coachProfiles);
   await ensureAnalyticsFixtures(ensuredAccounts, coachProfiles);
   await ensureMasteryProgress(ensuredAccounts);
-  await ensureWorkoutFixtures(ensuredAccounts);
+  await ensureWorkoutFixtures(ensuredAccounts, mode);
   await ensureFeatureCoverageFixtures(ensuredAccounts, coachProfiles);
 
   const counts = await buildCounts();

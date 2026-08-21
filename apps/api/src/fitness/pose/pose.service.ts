@@ -77,7 +77,10 @@ import type {
   PoseConnectionState,
   PoseFrameProcessingResult,
 } from './pose.types';
-import { buildFallbackPoseMovementContract } from '../../../../../packages/utils/pose';
+import {
+  buildFallbackPoseMovementContract,
+  isValidPoseMovementContract,
+} from '../../../../../packages/utils/pose';
 
 const poseContractConfidenceThreshold = 0.8;
 const defaultPoseTolerance = 12;
@@ -169,19 +172,6 @@ function normalizeProviderBoxDimension(
 function normalizeUnitBoxValue(value: unknown): number | null {
   const numberValue = toOptionalNumber(value);
   return numberValue === null ? null : clampUnit(numberValue);
-}
-
-function averageNumbers(values: Array<number | null | undefined>): number {
-  const finiteValues = values.filter(
-    (value): value is number =>
-      typeof value === 'number' && Number.isFinite(value),
-  );
-  if (finiteValues.length === 0) {
-    return 0;
-  }
-  return (
-    finiteValues.reduce((sum, value) => sum + value, 0) / finiteValues.length
-  );
 }
 
 function hasFrameBase64(value: AnalyzePoseSequenceDTO['frame_b64']): boolean {
@@ -826,7 +816,9 @@ function enrichMovementContract(
         source?.hold_duration_seconds ??
           source?.holdDurationSeconds ??
           contract.hold_duration_seconds,
-      ) ?? canonicalContract?.holdDurationSeconds ?? null,
+      ) ??
+      canonicalContract?.holdDurationSeconds ??
+      null,
     spatial_requirements: toSpatialRequirements(
       spatialSource,
       contract.spatial_requirements ?? defaults.spatialRequirements,
@@ -887,9 +879,11 @@ function buildMovementContractFromProfile(
     | 'canonical_name'
     | 'dominant_joint'
     | 'movement_pattern'
+    | 'orientation_signature'
     | 'rep_rules'
     | 'rep_thresholds'
     | 'tolerance'
+    | 'visibility_pattern'
   >,
 ): PoseMovementContractValue | null {
   const tolerance = toDecimalNumber(profile.tolerance) ?? defaultPoseTolerance;
@@ -898,10 +892,80 @@ function buildMovementContractFromProfile(
   const repThresholdsObject = toOptionalJsonObject(profile.rep_thresholds);
   const angleSignature = toOptionalJsonObject(profile.angle_signature) ?? {};
   const repRules = toOptionalJsonObject(profile.rep_rules);
+  const visibilityPattern =
+    toOptionalJsonObject(profile.visibility_pattern) ?? {};
+  const orientationSignature =
+    toOptionalJsonObject(profile.orientation_signature) ?? {};
   const contractSource = {
     ...movementPattern,
     ...(repRules ?? {}),
   };
+  const fallbackContract = buildFallbackPoseMovementContract(
+    profile.canonical_name,
+  );
+
+  // A profile can be active in storage while still being an incomplete
+  // editor draft.  Require the persisted contract fields before applying the
+  // compatibility normalizer; otherwise defaults could accidentally turn a
+  // malformed profile into an auto-rep profile.
+  const trackingRequirements = isRecord(repRules?.tracking_requirements)
+    ? repRules.tracking_requirements
+    : null;
+  const hasExplicitContract =
+    fallbackContract !== null &&
+    configuredJoint === fallbackContract.dominantJoint &&
+    explicitRepThresholdsAreComplete(repThresholdsObject) &&
+    Array.isArray(
+      movementPattern.oscillating_landmarks ??
+        movementPattern.oscillating_joints,
+    ) &&
+    isRecord(repRules) &&
+    Array.isArray(visibilityPattern.required_landmarks) &&
+    visibilityPattern.required_landmarks.length > 0 &&
+    typeof orientationSignature.body_orientation === 'string';
+
+  if (!hasExplicitContract) {
+    return null;
+  }
+  const hasCanonicalRules =
+    typeof repRules.secondary_check !== 'string' ||
+    (typeof repRules.rep_model === 'string' &&
+      typeof repRules.required_sides === 'string' &&
+      typeof repRules.contract_version === 'string' &&
+      typeof repRules.body_orientation === 'string' &&
+      Array.isArray(repRules.primary_joints) &&
+      Array.isArray(repRules.phase_order) &&
+      isRecord(trackingRequirements) &&
+      typeof trackingRequirements.min_confidence === 'number' &&
+      typeof trackingRequirements.min_reliable_frame_landmarks === 'number' &&
+      Array.isArray(trackingRequirements.required_landmarks));
+  if (!hasCanonicalRules) {
+    return null;
+  }
+  if (
+    typeof repRules.rep_model === 'string' &&
+    repRules.rep_model !== fallbackContract?.repModel
+  ) {
+    return null;
+  }
+  if (
+    typeof repRules.required_sides === 'string' &&
+    repRules.required_sides !== fallbackContract?.requiredSides
+  ) {
+    return null;
+  }
+  if (
+    typeof repRules.contract_version === 'string' &&
+    repRules.contract_version !== fallbackContract?.contractVersion
+  ) {
+    return null;
+  }
+  if (
+    typeof repRules.body_orientation === 'string' &&
+    repRules.body_orientation !== fallbackContract?.bodyOrientation
+  ) {
+    return null;
+  }
   const dominantJoint =
     configuredJoint ??
     normalizeJointLabel(movementPattern.tracked_joint) ??
@@ -933,7 +997,7 @@ function buildMovementContractFromProfile(
     return null;
   }
 
-  return enrichMovementContract(
+  const enriched = enrichMovementContract(
     {
       exercise: profile.canonical_name,
       dominant_joint: dominantJoint,
@@ -953,6 +1017,72 @@ function buildMovementContractFromProfile(
     },
     contractSource,
   );
+
+  return typeof repRules.secondary_check === 'string'
+    ? isValidPoseMovementContract(toSharedMovementContract(enriched))
+      ? enriched
+      : null
+    : enriched;
+}
+
+function explicitRepThresholdsAreComplete(
+  value: Record<string, unknown> | null,
+) {
+  return (
+    value !== null &&
+    toThreshold(value.down, defaultPoseTolerance) !== null &&
+    toThreshold(value.up, defaultPoseTolerance) !== null
+  );
+}
+
+function toSharedMovementContract(value: PoseMovementContractValue) {
+  const spatial = value.spatial_requirements;
+  const tracking = value.tracking_requirements;
+  return {
+    exercise: value.exercise,
+    dominantJoint: value.dominant_joint,
+    secondaryCheck: value.secondary_check,
+    oscillatingJoints: value.oscillating_joints,
+    repThresholds: value.rep_thresholds,
+    repModel: value.rep_model,
+    requiredSides: value.required_sides,
+    primaryJoints: value.primary_joints,
+    phaseOrder: value.phase_order,
+    bodyOrientation: value.body_orientation,
+    contractVersion: value.contract_version,
+    holdDurationSeconds: value.hold_duration_seconds,
+    spatialRequirements: spatial
+      ? {
+          bodyLineTolerance: spatial.body_line_tolerance,
+          bodyXDriftMax: spatial.body_x_drift_max,
+          bodyYTravelMin: spatial.body_y_travel_min,
+          hipYTravelMin: spatial.hip_y_travel_min,
+          leftRightSymmetryTolerance: spatial.left_right_symmetry_tolerance,
+          phaseSyncToleranceMs: spatial.phase_sync_tolerance_ms,
+          shoulderHipTravelMin: spatial.shoulder_hip_travel_min,
+          shoulderYTravelMin: spatial.shoulder_y_travel_min,
+          torsoSlopeMaxDeg: spatial.torso_slope_max_deg,
+          torsoSlopeMinDeg: spatial.torso_slope_min_deg,
+          wristAnchorDriftMax: spatial.wrist_anchor_drift_max,
+        }
+      : null,
+    trackingRequirements: tracking
+      ? {
+          minConfidence: tracking.min_confidence,
+          minReliableFrameLandmarks: tracking.min_reliable_frame_landmarks,
+          requiredLandmarks: tracking.required_landmarks,
+          requiredSides: tracking.required_sides,
+        }
+      : undefined,
+  };
+}
+
+function filterUsableBootstrapProfiles(
+  profiles: PoseBootstrapProfileRecord[],
+): PoseBootstrapProfileRecord[] {
+  return profiles.filter((profile) =>
+    buildMovementContractFromProfile(profile),
+  );
 }
 
 function buildMovementContractFromAnalysis(
@@ -965,7 +1095,7 @@ function buildMovementContractFromAnalysis(
   }
   const extendedValue = value as unknown as Partial<PoseMovementContractValue>;
 
-  return enrichMovementContract({
+  const enriched = enrichMovementContract({
     exercise: value.exercise,
     dominant_joint: value.dominant_joint,
     rep_thresholds: value.rep_thresholds,
@@ -985,6 +1115,10 @@ function buildMovementContractFromAnalysis(
     hold_duration_seconds: extendedValue.hold_duration_seconds,
     tracking_requirements: extendedValue.tracking_requirements,
   });
+
+  return isValidPoseMovementContract(toSharedMovementContract(enriched))
+    ? enriched
+    : null;
 }
 
 function toRepThresholdsJson(
@@ -1087,98 +1221,6 @@ function getPoseJointRange(
     return 0;
   }
   return Math.max(...values) - Math.min(...values);
-}
-
-function getAveragePoseJointAngle(
-  signals: PoseAnalyzeSignalsValue,
-  joint: PoseContractJoint,
-): number {
-  const values = signals.angles
-    .map((entry) => entry[joint])
-    .filter((value): value is number => typeof value === 'number');
-  if (!values.length) {
-    return 120;
-  }
-  return values.reduce((sum, value) => sum + value, 0) / values.length;
-}
-
-function buildGeneratedMovementContract(
-  exerciseName: string,
-  signals: PoseAnalyzeSignalsValue,
-): PoseMovementContractValue | null {
-  const canonicalContract = buildFallbackPoseMovementContract(exerciseName);
-  if (!canonicalContract) {
-    // Unsupported classifier labels stay manual-only instead of inheriting a
-    // squat contract by accident.
-    return null;
-  }
-  const canonicalExercise = canonicalContract.exercise;
-  const contractDefaults = getMovementContractDefaults(canonicalExercise);
-  const dominantJoint = canonicalContract.dominantJoint;
-  const dominantRange = getPoseJointRange(signals, dominantJoint);
-  const dominantAverage = getAveragePoseJointAngle(signals, dominantJoint);
-  const hasReliableRange = dominantRange >= 18;
-  const baselineDown = canonicalContract.repThresholds.down;
-  const baselineUp = canonicalContract.repThresholds.up;
-  const progressDirection =
-    baselineUp.angle >= baselineDown.angle ? 'increase' : 'decrease';
-  const tolerance = Number(
-    Math.max(
-      baselineDown.tolerance,
-      baselineUp.tolerance,
-      dominantRange / 3,
-    ).toFixed(3),
-  );
-  const observedDown =
-    progressDirection === 'increase'
-      ? Math.max(35, dominantAverage - dominantRange / 2)
-      : Math.min(178, dominantAverage + dominantRange / 2);
-  const observedUp =
-    progressDirection === 'increase'
-      ? Math.min(178, dominantAverage + dominantRange / 2 + 10)
-      : Math.max(35, dominantAverage - dominantRange / 2 - 10);
-  const downAngle = Number(
-    (hasReliableRange
-      ? (baselineDown.angle + observedDown) / 2
-      : baselineDown.angle
-    ).toFixed(3),
-  );
-  const upAngle = Number(
-    (hasReliableRange
-      ? (baselineUp.angle + observedUp) / 2
-      : baselineUp.angle
-    ).toFixed(3),
-  );
-
-  return enrichMovementContract({
-    exercise: canonicalExercise,
-    dominant_joint: dominantJoint,
-    rep_thresholds: {
-      down: {
-        angle: downAngle,
-        tolerance,
-      },
-      up: {
-        angle: upAngle,
-        tolerance,
-      },
-    },
-    secondary_check: canonicalContract.secondaryCheck,
-    oscillating_joints: Array.from(
-      new Set([
-        ...canonicalContract.oscillatingJoints,
-        ...toOscillatingJoints(signals.temporal.oscillating_joints),
-      ]),
-    ),
-    rep_model: contractDefaults.repModel,
-    required_sides: contractDefaults.requiredSides,
-    primary_joints: contractDefaults.primaryJoints,
-    secondary_joints: contractDefaults.secondaryJoints,
-    phase_order: contractDefaults.phaseOrder,
-    spatial_requirements: contractDefaults.spatialRequirements,
-    no_count_conditions: contractDefaults.noCountConditions,
-    degraded_conditions: contractDefaults.degradedConditions,
-  });
 }
 
 function scoreBootstrapProfile(
@@ -1751,10 +1793,12 @@ export class PoseService {
       exerciseHint,
       startedAt: new Date(),
     });
-    const candidateProfiles = await this.repo.listBootstrapPoseProfiles({
-      exerciseHint: null,
-      canonicalHint: null,
-    });
+    const candidateProfiles = filterUsableBootstrapProfiles(
+      await this.repo.listBootstrapPoseProfiles({
+        exerciseHint: null,
+        canonicalHint: null,
+      }),
+    );
     try {
       const bootstrap = await this.aiClient.bootstrapPoseSession({
         poseSessionId: started.id,
@@ -1855,10 +1899,12 @@ export class PoseService {
     const requestedExerciseHint =
       dto.exercise_hint ?? session.exercise_hint ?? null;
     const canonicalHint = toCanonicalPoseExerciseHint(requestedExerciseHint);
-    const presetCandidates = await this.repo.listBootstrapPoseProfiles({
-      exerciseHint: null,
-      canonicalHint: null,
-    });
+    const presetCandidates = filterUsableBootstrapProfiles(
+      await this.repo.listBootstrapPoseProfiles({
+        exerciseHint: null,
+        canonicalHint: null,
+      }),
+    );
     const frameBase64 = hasFrameBase64(dto.frame_b64)
       ? (dto.frame_b64?.trim() ?? null)
       : null;
@@ -1888,13 +1934,18 @@ export class PoseService {
                 toCanonicalPoseExerciseHint(detectedExerciseName),
             ) ?? null)
           : null);
+      if (matchedProfileId && !matchedProfileCandidate) {
+        matchedProfileId = null;
+      }
       const movementContract =
-        buildMovementContractFromAnalysis(analysis.movement_contract) ??
+        (matchedProfileCandidate
+          ? buildMovementContractFromAnalysis(analysis.movement_contract)
+          : null) ??
         (matchedProfileCandidate
           ? buildMovementContractFromProfile(matchedProfileCandidate)
           : null);
       const needsConfirmation =
-        analysis.needs_confirmation ?? movementContract === null;
+        analysis.needs_confirmation === true || movementContract === null;
       const subjectLocked =
         dto.subject_locked ?? analysis.subject_locked ?? null;
       const subjectLockConfidence =
@@ -2200,9 +2251,6 @@ export class PoseService {
       analysis.matched_profile_id ?? session.detected_profile_id ?? null;
     let detectedExerciseName =
       analysis.exercise_class ?? session.detected_exercise_name ?? null;
-    let movementContract = buildMovementContractFromAnalysis(
-      analysis.movement_contract,
-    );
     let needsConfirmation = analysis.needs_confirmation ?? false;
     const matchedProfileCandidate =
       presetCandidates.find((profile) => profile.id === matchedProfileId) ??
@@ -2213,6 +2261,12 @@ export class PoseService {
               toCanonicalPoseExerciseHint(detectedExerciseName),
           ) ?? null)
         : null);
+    if (matchedProfileId && !matchedProfileCandidate) {
+      matchedProfileId = null;
+    }
+    let movementContract = matchedProfileCandidate
+      ? buildMovementContractFromAnalysis(analysis.movement_contract)
+      : null;
 
     if (
       !detectedExerciseName &&
@@ -2229,9 +2283,9 @@ export class PoseService {
         movementContract ??
         (matchedProfileCandidate
           ? buildMovementContractFromProfile(matchedProfileCandidate)
-          : null) ??
-        buildGeneratedMovementContract(detectedExerciseName, dto.signals);
+          : null);
     }
+    needsConfirmation = needsConfirmation || movementContract === null;
 
     if (
       needsConfirmation &&
@@ -2708,19 +2762,6 @@ export class PoseService {
       sessionQualityState: quality.sessionQualityState,
       subjectLockConfidence: input.subjectLockConfidence,
     });
-    const exerciseCreationCandidate = this.buildExerciseCreationCandidate({
-      averageConfidence: input.averageConfidence,
-      classificationConfidence: input.classificationConfidence,
-      detectedExerciseName: input.detectedExerciseName,
-      equipment,
-      existingSummary: input.existingSummary,
-      finalRepCount: input.finalRepCount,
-      movementContract: activeMovementContract,
-      needsConfirmation,
-      rawAngleData: input.rawAngleData,
-      subjectLockConfidence: input.subjectLockConfidence,
-    });
-
     return {
       ...input.existingSummary,
       average_confidence: input.averageConfidence,
@@ -2738,7 +2779,6 @@ export class PoseService {
       equipment_confidence: equipment.equipmentConfidence,
       equipment_conflicts: equipment.equipmentConflicts,
       exercise_hint: input.exerciseHint,
-      exercise_creation_candidate: exerciseCreationCandidate,
       fallback_used: fallbackUsed,
       final_rep_count: input.finalRepCount,
       form_feedback: input.formFeedback,
@@ -2762,193 +2802,6 @@ export class PoseService {
       weight_input_kg:
         input.weightInputKg ??
         toOptionalNumber(input.existingSummary.weight_input_kg),
-    };
-  }
-
-  private buildExerciseCreationCandidate(input: {
-    averageConfidence: number | null;
-    classificationConfidence: number | null;
-    detectedExerciseName: string | null;
-    equipment: PoseEquipmentResolution;
-    existingSummary: Record<string, unknown>;
-    finalRepCount: number;
-    movementContract: PoseMovementContractValue | null;
-    needsConfirmation: boolean;
-    rawAngleData: FinalizePoseSessionDTO['raw_angle_data'];
-    subjectLockConfidence: number | null;
-  }): Record<string, unknown> {
-    const canonicalKnownName =
-      toCanonicalPoseExerciseHint(input.detectedExerciseName) ??
-      toCanonicalPoseExerciseHint(input.movementContract?.exercise ?? null);
-    const proposedName =
-      canonicalKnownName ??
-      toNullableString(input.detectedExerciseName) ??
-      toNullableString(input.movementContract?.exercise);
-    const subjectLocked =
-      toOptionalBoolean(input.existingSummary.subject_locked) ??
-      (input.subjectLockConfidence !== null &&
-        input.subjectLockConfidence >= 0.6);
-    const evidenceFlags: string[] = [];
-
-    if (!subjectLocked) {
-      evidenceFlags.push('subject_not_locked');
-    }
-    if (input.finalRepCount < 3 || input.rawAngleData.length < 3) {
-      evidenceFlags.push('requires_three_representative_reps');
-    }
-    if (!input.movementContract) {
-      evidenceFlags.push('missing_movement_contract');
-    }
-    if (input.needsConfirmation) {
-      evidenceFlags.push('needs_human_exercise_confirmation');
-    }
-    if (
-      input.subjectLockConfidence !== null &&
-      input.subjectLockConfidence < 0.6
-    ) {
-      evidenceFlags.push('weak_subject_lock');
-    }
-
-    const hasKnownExercise = canonicalKnownName !== null;
-    const hasCreateReadyEvidence =
-      evidenceFlags.length === 0 &&
-      input.movementContract !== null &&
-      input.finalRepCount >= 3 &&
-      input.rawAngleData.length >= 3;
-    const decision = hasKnownExercise
-      ? 'match_existing'
-      : hasCreateReadyEvidence
-        ? 'create_candidate'
-        : evidenceFlags.includes('missing_movement_contract')
-          ? 'reject'
-          : 'needs_more_evidence';
-    const overallConfidence = Math.min(
-      0.99,
-      Math.max(
-        0,
-        averageNumbers([
-          input.averageConfidence,
-          input.classificationConfidence,
-          input.subjectLockConfidence,
-          input.movementContract ? 0.82 : null,
-        ]),
-      ),
-    );
-    const repModel = input.movementContract?.rep_model ?? 'unknown';
-    const equipmentRequired =
-      input.movementContract?.no_count_conditions?.includes(
-        'equipment_required',
-      ) ?? false;
-    let difficultyTier = 'unknown';
-    if (proposedName === 'push_up') {
-      difficultyTier =
-        repModel === 'unilateral_left' || repModel === 'unilateral_right'
-          ? 'advanced'
-          : 'intermediate';
-    } else if (
-      proposedName === 'bench_press' ||
-      proposedName === 'shoulder_press' ||
-      proposedName === 'dip' ||
-      proposedName === 'pull_up'
-    ) {
-      difficultyTier = 'intermediate';
-    } else if (proposedName === 'bicep_curl' || proposedName === 'plank') {
-      difficultyTier = 'beginner';
-    }
-    const unilateralMultiplier =
-      repModel === 'unilateral_left' || repModel === 'unilateral_right'
-        ? 1.2
-        : repModel === 'alternating'
-          ? 1.08
-          : 1;
-    const suggestedExpMultiplier = Number(
-      (
-        unilateralMultiplier *
-        (difficultyTier === 'advanced'
-          ? 1.18
-          : difficultyTier === 'intermediate'
-            ? 1.08
-            : 1)
-      ).toFixed(2),
-    );
-    const reviewReasonCodes = Array.from(
-      new Set([...evidenceFlags, ...input.equipment.equipmentConflicts]),
-    );
-    const safetyConfidence = Math.min(
-      0.99,
-      Math.max(
-        0,
-        averageNumbers([
-          input.averageConfidence,
-          input.subjectLockConfidence,
-          equipmentRequired ? input.equipment.equipmentConfidence : 0.84,
-        ]),
-      ),
-    );
-    const displayName =
-      input.detectedExerciseName ??
-      input.movementContract?.exercise?.replaceAll('_', ' ') ??
-      'Unknown exercise';
-    const canonicalName =
-      proposedName ??
-      toNullableString(input.existingSummary.exercise_hint) ??
-      'unknown_exercise';
-
-    return {
-      schema_version: 'fittrack.exercise_creation.v1',
-      decision,
-      canonical_name: canonicalName,
-      display_name: displayName,
-      matched_existing_exercise_id: null,
-      movement_contract: input.movementContract,
-      difficulty: {
-        rationale:
-          repModel === 'unilateral_left' || repModel === 'unilateral_right'
-            ? 'Unilateral evidence should carry a higher review and effort multiplier.'
-            : repModel === 'alternating'
-              ? 'Alternating side evidence is harder than perfectly symmetric bilateral motion.'
-              : 'Difficulty stays at the base tier until admin review confirms the candidate.',
-        suggested_exp_multiplier: suggestedExpMultiplier,
-        tier: difficultyTier,
-        unilateral_multiplier: unilateralMultiplier,
-      },
-      equipment: {
-        confidence: input.equipment.equipmentConfidence,
-        context: input.equipment.equipmentContext ?? 'unknown',
-        labels: input.equipment.equipmentContext
-          ? [input.equipment.equipmentContext]
-          : [],
-        required: equipmentRequired,
-      },
-      evidence: {
-        equipment_confidence: input.equipment.equipmentConfidence,
-        equipment_conflicts: input.equipment.equipmentConflicts,
-        equipment_context: input.equipment.equipmentContext,
-        equipment_source: input.equipment.equipmentSource,
-        raw_angle_samples: input.rawAngleData.length,
-        reps_analyzed: input.finalRepCount,
-        subject_lock_confidence: input.subjectLockConfidence,
-        subject_locked: subjectLocked,
-      },
-      confidence: {
-        classification: input.classificationConfidence,
-        movement_contract: input.movementContract ? 0.82 : null,
-        overall: Number(overallConfidence.toFixed(3)),
-        safety: Number(safetyConfidence.toFixed(3)),
-        subject_lock: input.subjectLockConfidence,
-      },
-      review: {
-        flags: reviewReasonCodes,
-        notes:
-          reviewReasonCodes.length > 0
-            ? `Needs review: ${reviewReasonCodes.join(', ')}`
-            : 'Ready for deterministic backend validation.',
-        reason_codes: reviewReasonCodes,
-        requires_admin_review:
-          decision === 'create_candidate' ||
-          decision === 'needs_more_evidence' ||
-          reviewReasonCodes.length > 0,
-      },
     };
   }
 

@@ -8,8 +8,6 @@ import {
   AppointmentStatus,
   AuthProvider,
   BookingStatus,
-  CreatorState,
-  ExerciseReviewSubmissionStatus,
   IntegrityCaseStatus,
   IntegrityRiskLevel,
   MasteryRank,
@@ -333,18 +331,6 @@ export interface AdminOverviewRankingProfileRecord {
   visibility: RankingVisibility;
 }
 
-export interface AdminOverviewCreatorProfileRecord {
-  admin_notes: string | null;
-  last_state_changed_at: Date | null;
-  state: CreatorState;
-  user: NamedUserRecord & {
-    exercise_review_submissions: {
-      status: ExerciseReviewSubmissionStatus;
-    }[];
-  };
-  user_id: string;
-}
-
 export interface AdminOverviewModerationActionRecord {
   action_type: ModerationActionType;
   created_at: Date;
@@ -359,8 +345,6 @@ export interface AdminOverviewModerationActionRecord {
 
 export interface AdminGamificationOverviewRecord {
   activeSeason: AdminOverviewSeasonRecord | null;
-  creatorCounts: Record<CreatorState, number>;
-  creatorProfiles: AdminOverviewCreatorProfileRecord[];
   escalatedCaseCount: number;
   governedRankingCount: number;
   highRiskProfileCount: number;
@@ -453,15 +437,6 @@ export interface SeasonHistoryRecord {
 export interface SeasonLifecycleSweepResult {
   closedSeasonIds: string[];
   startedSeasonId: string | null;
-}
-
-export interface CreatorStateUpdateResult {
-  adminNotes: string | null;
-  lastStateChangedAt: Date | null;
-  moderationActionId: string | null;
-  state: CreatorState;
-  userId: string;
-  userName: string;
 }
 
 interface DerivedStreakState {
@@ -1195,8 +1170,6 @@ export class GamificationRepository extends BaseRepository {
       hiddenRankingCount,
       disqualifiedRankingCount,
       rankingProfiles,
-      creatorProfiles,
-      creatorStateRows,
       recentCorrectionCount,
       recentModerationActions,
     ] = await Promise.all([
@@ -1300,34 +1273,6 @@ export class GamificationRepository extends BaseRepository {
           },
         },
       }),
-      this.prisma.creatorProfile.findMany({
-        where: {
-          state: { not: CreatorState.none },
-        },
-        orderBy: [{ last_state_changed_at: 'desc' }, { updated_at: 'desc' }],
-        take: 8,
-        include: {
-          user: {
-            select: {
-              profile: {
-                select: {
-                  first_name: true,
-                  last_name: true,
-                },
-              },
-              exercise_review_submissions: {
-                select: {
-                  status: true,
-                },
-              },
-            },
-          },
-        },
-      }),
-      this.prisma.creatorProfile.groupBy({
-        by: ['state'],
-        _count: { _all: true },
-      }),
       this.prisma.moderationActionRecord.count(),
       this.prisma.moderationActionRecord.findMany({
         orderBy: [{ created_at: 'desc' }],
@@ -1347,23 +1292,8 @@ export class GamificationRepository extends BaseRepository {
       }),
     ]);
 
-    const creatorCounts = {
-      [CreatorState.none]: 0,
-      [CreatorState.candidate]: 0,
-      [CreatorState.pending_review]: 0,
-      [CreatorState.approved]: 0,
-      [CreatorState.suspended]: 0,
-      [CreatorState.revoked]: 0,
-    } satisfies Record<CreatorState, number>;
-
-    for (const row of creatorStateRows) {
-      creatorCounts[row.state] = row._count._all;
-    }
-
     return {
       activeSeason,
-      creatorCounts,
-      creatorProfiles,
       disqualifiedRankingCount,
       escalatedCaseCount,
       governedRankingCount,
@@ -2313,82 +2243,6 @@ export class GamificationRepository extends BaseRepository {
       return {
         closedSeasonIds,
         startedSeasonId: seasonToStart.id,
-      };
-    });
-  }
-
-  async updateCreatorState(input: {
-    actorUserId: string;
-    adminNotes: string | null;
-    rationale: string;
-    state: CreatorState;
-    targetUserId: string;
-  }): Promise<CreatorStateUpdateResult> {
-    return this.prisma.$transaction(async (tx) => {
-      const now = new Date();
-      const targetUser = await tx.user.findUniqueOrThrow({
-        where: { id: input.targetUserId },
-        select: {
-          profile: {
-            select: {
-              first_name: true,
-              last_name: true,
-            },
-          },
-        },
-      });
-      const existingProfile = await tx.creatorProfile.findUnique({
-        where: { user_id: input.targetUserId },
-      });
-      const stateChanged = existingProfile?.state !== input.state;
-      const profile = await tx.creatorProfile.upsert({
-        where: { user_id: input.targetUserId },
-        create: {
-          user_id: input.targetUserId,
-          state: input.state,
-          last_state_changed_at: now,
-          admin_notes: input.adminNotes,
-        },
-        update: {
-          state: input.state,
-          ...(stateChanged ? { last_state_changed_at: now } : {}),
-          admin_notes: input.adminNotes,
-        },
-      });
-
-      const moderationActionType =
-        input.state === CreatorState.approved
-          ? ModerationActionType.approve_creator
-          : input.state === CreatorState.suspended
-            ? ModerationActionType.suspend_creator
-            : input.state === CreatorState.revoked
-              ? ModerationActionType.revoke_creator
-              : null;
-      const moderationAction =
-        moderationActionType && stateChanged
-          ? await tx.moderationActionRecord.create({
-              data: {
-                actor_user_id: input.actorUserId,
-                target_user_id: input.targetUserId,
-                action_type: moderationActionType,
-                rationale: input.rationale,
-                before_state: {
-                  creator_state: existingProfile?.state ?? CreatorState.none,
-                } satisfies Prisma.JsonObject,
-                after_state: {
-                  creator_state: profile.state,
-                } satisfies Prisma.JsonObject,
-              },
-            })
-          : null;
-
-      return {
-        adminNotes: profile.admin_notes ?? null,
-        lastStateChangedAt: profile.last_state_changed_at,
-        moderationActionId: moderationAction?.id ?? null,
-        state: profile.state,
-        userId: profile.user_id,
-        userName: formatUserName(targetUser),
       };
     });
   }
@@ -5058,14 +4912,6 @@ export class GamificationRepository extends BaseRepository {
           create: {
             user_id: input.userId,
             risk_level: IntegrityRiskLevel.low,
-          },
-          update: {},
-        }),
-        tx.creatorProfile.upsert({
-          where: { user_id: input.userId },
-          create: {
-            user_id: input.userId,
-            state: CreatorState.none,
           },
           update: {},
         }),

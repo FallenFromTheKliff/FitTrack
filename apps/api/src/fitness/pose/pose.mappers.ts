@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 
-import { poseExerciseAliasMap } from './pose.constants';
+import { poseStarterCatalog } from './pose.constants';
+import { toCanonicalPoseExerciseLabel } from '../../../../../packages/utils/pose';
 import type {
   PoseProfileResponseDTO,
   PoseSessionResponseDTO,
@@ -29,19 +30,17 @@ export function normalizePoseExerciseHint(value: unknown): string | null {
 export function toCanonicalPoseExerciseHint(
   exerciseHint: string | null,
 ): string | null {
-  const normalized = exerciseHint
-    ?.trim()
-    .toLowerCase()
-    .replace(/[_\-\s]+/g, '_');
-
-  if (!normalized) {
+  const canonical = toCanonicalPoseExerciseLabel(exerciseHint);
+  if (!canonical) {
     return null;
   }
 
-  for (const [canonicalName, aliases] of Object.entries(poseExerciseAliasMap)) {
-    if (aliases.some((alias) => normalized.includes(alias))) {
-      return canonicalName;
-    }
+  if (
+    poseStarterCatalog.includes(
+      canonical as (typeof poseStarterCatalog)[number],
+    )
+  ) {
+    return canonical;
   }
 
   return null;

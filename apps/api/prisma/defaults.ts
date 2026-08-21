@@ -1,7 +1,6 @@
 import {
   AmenityType,
   AuthProvider,
-  CreatorState,
   IntegrityRiskLevel,
   MilestoneCategory,
   MilestoneDefinitionStatus,
@@ -18,230 +17,46 @@ import {
 } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { randomUUID } from 'node:crypto';
+import { seedId } from './dynamic-seed/ids';
+import {
+  CANONICAL_AMENITIES,
+  CANONICAL_MUSCLE_DEFINITIONS,
+  resolveCanonicalReferenceId,
+} from '../../../packages/utils/fitness-catalog';
 
-const DEFAULT_AMENITIES = [
-  {
-    name: 'Basketball Court',
-    type: AmenityType.basketball_court,
-    description:
-      'Full-sized indoor basketball court with hardwood flooring and adjustable hoops.',
-    capacity: 10,
-    hourly_rate: new Prisma.Decimal(153),
-    minimum_hours: 1,
-    icon_key: 'basketball',
-    grid_column: 9,
-    grid_row: 1,
-    grid_width: 6,
-    grid_height: 4,
-    is_reservable: true,
-    display_order: 3,
-    floor_id: 'floor-1',
-    requires_subscription: false,
+const DEFAULT_AMENITIES = CANONICAL_AMENITIES.map((amenity) => {
+  const [grid_column, grid_row, grid_width, grid_height] = amenity.grid;
+  return {
+    id: seedId(`amenity:${amenity.key}`),
+    capacity: amenity.capacity,
+    description: amenity.description,
+    display_order: amenity.displayOrder,
+    floor_id: amenity.floorId,
+    grid_column,
+    grid_height,
+    grid_row,
+    grid_width,
+    hourly_rate: new Prisma.Decimal(amenity.hourlyRate),
+    icon_key: amenity.iconKey,
     is_active: true,
-  },
-  {
-    name: 'Boxing Ring',
-    type: AmenityType.boxing_ring,
-    description:
-      'Professional boxing ring for sparring, pad work, and coached sessions.',
-    capacity: 4,
-    hourly_rate: new Prisma.Decimal(29),
-    minimum_hours: 1,
-    icon_key: 'boxing',
-    grid_column: 3,
-    grid_row: 3,
-    grid_width: 5,
-    grid_height: 4,
     is_reservable: true,
-    display_order: 1,
-    floor_id: 'floor-2',
-    requires_subscription: false,
-    is_active: true,
-  },
-  {
-    name: 'Multi-Purpose Studio',
-    type: AmenityType.other,
-    description:
-      'Flexible studio space for classes, warmups, and small-group training.',
-    capacity: 16,
-    hourly_rate: new Prisma.Decimal(75),
-    minimum_hours: 1,
-    icon_key: 'yoga',
-    grid_column: 4,
-    grid_row: 2,
-    grid_width: 8,
-    grid_height: 6,
-    is_reservable: true,
-    display_order: 1,
-    floor_id: 'floor-3',
-    requires_subscription: true,
-    is_active: true,
-  },
-] as const satisfies ReadonlyArray<Prisma.AmenityCreateInput>;
+    minimum_hours: amenity.minimumHours,
+    name: amenity.name,
+    requires_subscription: amenity.requiresSubscription,
+    type: amenity.type as AmenityType,
+  } satisfies Prisma.AmenityCreateInput;
+});
 
-const DEFAULT_MUSCLE_DEFINITIONS = [
-  {
-    aliases: ['pecs', 'pectorals'],
-    body_region: 'upper_body_push',
-    key: 'chest',
-    name: 'Chest',
-    sort_order: 10,
-  },
-  {
-    aliases: ['upper chest'],
-    body_region: 'upper_body_push',
-    key: 'upper_chest',
-    name: 'Upper Chest',
-    sort_order: 11,
-  },
-  {
-    aliases: ['latissimus dorsi'],
-    body_region: 'upper_body_pull',
-    key: 'lats',
-    name: 'Lats',
-    sort_order: 20,
-  },
-  {
-    aliases: ['mid back', 'rhomboids'],
-    body_region: 'upper_body_pull',
-    key: 'upper_back',
-    name: 'Upper Back',
-    sort_order: 21,
-  },
-  {
-    aliases: ['trapezius'],
-    body_region: 'upper_body_pull',
-    key: 'traps',
-    name: 'Traps',
-    sort_order: 22,
-  },
-  {
-    aliases: ['delts', 'deltoids'],
-    body_region: 'shoulders',
-    key: 'shoulders',
-    name: 'Shoulders',
-    sort_order: 30,
-  },
-  {
-    aliases: ['anterior delts'],
-    body_region: 'shoulders',
-    key: 'front_delts',
-    name: 'Front Delts',
-    sort_order: 31,
-  },
-  {
-    aliases: ['lateral delts'],
-    body_region: 'shoulders',
-    key: 'side_delts',
-    name: 'Side Delts',
-    sort_order: 32,
-  },
-  {
-    aliases: ['posterior delts'],
-    body_region: 'shoulders',
-    key: 'rear_delts',
-    name: 'Rear Delts',
-    sort_order: 33,
-  },
-  {
-    aliases: ['bis'],
-    body_region: 'arms',
-    key: 'biceps',
-    name: 'Biceps',
-    sort_order: 40,
-  },
-  {
-    aliases: ['tris'],
-    body_region: 'arms',
-    key: 'triceps',
-    name: 'Triceps',
-    sort_order: 41,
-  },
-  {
-    aliases: ['grip'],
-    body_region: 'arms',
-    key: 'forearms',
-    name: 'Forearms',
-    sort_order: 42,
-  },
-  {
-    aliases: ['abdominals'],
-    body_region: 'core',
-    key: 'abs',
-    name: 'Abs',
-    sort_order: 50,
-  },
-  {
-    aliases: ['side abs'],
-    body_region: 'core',
-    key: 'obliques',
-    name: 'Obliques',
-    sort_order: 51,
-  },
-  {
-    aliases: ['trunk'],
-    body_region: 'core',
-    key: 'core',
-    name: 'Core',
-    sort_order: 52,
-  },
-  {
-    aliases: ['spinal erectors', 'erectors'],
-    body_region: 'core',
-    key: 'lower_back',
-    name: 'Lower Back',
-    sort_order: 53,
-  },
-  {
-    aliases: ['butt', 'gluteals'],
-    body_region: 'lower_body',
-    key: 'glutes',
-    name: 'Glutes',
-    sort_order: 60,
-  },
-  {
-    aliases: ['quadriceps'],
-    body_region: 'lower_body',
-    key: 'quads',
-    name: 'Quads',
-    sort_order: 61,
-  },
-  {
-    aliases: ['hams'],
-    body_region: 'lower_body',
-    key: 'hamstrings',
-    name: 'Hamstrings',
-    sort_order: 62,
-  },
-  {
-    aliases: ['gastroc', 'soleus'],
-    body_region: 'lower_body',
-    key: 'calves',
-    name: 'Calves',
-    sort_order: 63,
-  },
-  {
-    aliases: ['inner thighs'],
-    body_region: 'lower_body',
-    key: 'adductors',
-    name: 'Adductors',
-    sort_order: 64,
-  },
-  {
-    aliases: ['outer hips'],
-    body_region: 'lower_body',
-    key: 'abductors',
-    name: 'Abductors',
-    sort_order: 65,
-  },
-  {
-    aliases: ['iliopsoas'],
-    body_region: 'lower_body',
-    key: 'hip_flexors',
-    name: 'Hip Flexors',
-    sort_order: 66,
-  },
-] as const;
+const DEFAULT_MUSCLE_DEFINITIONS = CANONICAL_MUSCLE_DEFINITIONS.map(
+  (muscle) => ({
+    aliases: [...muscle.aliases, muscle.key],
+    body_region: muscle.bodyRegion,
+    id: seedId(`muscle-definition:${muscle.key}`),
+    key: muscle.key,
+    name: muscle.name,
+    sort_order: muscle.sortOrder,
+  }),
+);
 
 const ADMIN_EMAIL = 'sertfitadmin@gmail.com';
 const ADMIN_PASSWORD = 'aNYTIMEaNYWHERE2@';
@@ -375,34 +190,40 @@ async function ensureDemoMember(prisma: PrismaClient) {
 }
 
 async function ensureDefaultAmenities(prisma: PrismaClient) {
-  const existingAmenities = await prisma.amenity.findMany({
-    where: {
-      name: {
-        in: DEFAULT_AMENITIES.map((amenity) => amenity.name),
-      },
-    },
-    select: {
-      id: true,
-      name: true,
-      is_active: true,
-    },
-  });
-  const existingAmenityByName = new Map(
-    existingAmenities.map((amenity) => [amenity.name, amenity]),
-  );
-
   let createdCount = 0;
   let existingCount = 0;
   let reactivatedCount = 0;
 
   for (const amenity of DEFAULT_AMENITIES) {
-    const existingAmenity = existingAmenityByName.get(amenity.name);
+    const existingById = await prisma.amenity.findUnique({
+      where: { id: amenity.id },
+      select: { id: true, is_active: true },
+    });
+    const existingByName = await prisma.amenity.findFirst({
+      where: { name: amenity.name },
+      orderBy: { created_at: 'asc' },
+      select: { id: true, is_active: true },
+    });
+    const resolvedId = resolveCanonicalReferenceId(
+      amenity.id,
+      existingById,
+      existingByName,
+    );
+    const existingAmenity =
+      resolvedId === amenity.id ? existingById : existingByName;
 
     if (!existingAmenity) {
       await prisma.amenity.create({
         data: amenity,
       });
       createdCount += 1;
+      continue;
+    }
+
+    // A same-name row with a different ID may be a legitimate admin-created
+    // record. Preserve it and let downstream seed domains use its actual ID.
+    if (existingAmenity.id !== amenity.id) {
+      existingCount += 1;
       continue;
     }
 
@@ -838,14 +659,6 @@ async function ensureDefaultGamificationProfiles(prisma: PrismaClient) {
       create: {
         user_id: user.id,
         risk_level: IntegrityRiskLevel.low,
-      },
-    });
-    await prisma.creatorProfile.upsert({
-      where: { user_id: user.id },
-      update: {},
-      create: {
-        user_id: user.id,
-        state: CreatorState.none,
       },
     });
   }

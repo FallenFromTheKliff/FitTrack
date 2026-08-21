@@ -5,7 +5,7 @@ import { SURFACE_MODE_OPTIONS } from "@/components/exercise-lab/exerciseLabShare
 import { useExerciseLabPage } from "./ExerciseLabPageContext";
 
 export function ExerciseLabModeNavigation() {
-  const { colors, handleModeChange, mode, reviewMeta } = useExerciseLabPage();
+  const { colors, handleModeChange, mode } = useExerciseLabPage();
 
   return (
     <div
@@ -21,9 +21,6 @@ export function ExerciseLabModeNavigation() {
     >
       {SURFACE_MODE_OPTIONS.map((option) => {
         const isActive = mode === option.value;
-        const reviewCount =
-          option.value === "review" ? (reviewMeta?.total ?? 0) : 0;
-
         return (
           <button
             key={option.value}
@@ -48,7 +45,7 @@ export function ExerciseLabModeNavigation() {
               gap: 8,
               justifyContent: "center",
               minHeight: 36,
-              minWidth: option.value === "review" ? 128 : 120,
+              minWidth: 120,
               padding: "7px 14px",
               transition:
                 "background-color 150ms ease, border-color 150ms ease, color 150ms ease",
@@ -56,31 +53,6 @@ export function ExerciseLabModeNavigation() {
             }}
           >
             <span>{option.label}</span>
-            {reviewCount > 0 ? (
-              <span
-                aria-label={`${reviewCount} review submissions`}
-                style={{
-                  alignItems: "center",
-                  backgroundColor: isActive
-                    ? `${colors.onBrand}24`
-                    : `${colors.brand}18`,
-                  border: `1px solid ${
-                    isActive ? `${colors.onBrand}55` : `${colors.brand}66`
-                  }`,
-                  borderRadius: 5,
-                  color: isActive ? colors.onBrand : colors.brand,
-                  display: "inline-flex",
-                  fontSize: 11,
-                  fontWeight: 900,
-                  height: 22,
-                  justifyContent: "center",
-                  minWidth: 22,
-                  paddingInline: 5,
-                }}
-              >
-                {reviewCount}
-              </span>
-            ) : null}
           </button>
         );
       })}

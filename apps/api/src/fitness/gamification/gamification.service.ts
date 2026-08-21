@@ -7,8 +7,6 @@ import {
 } from '@nestjs/common';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import {
-  CreatorState,
-  ExerciseReviewSubmissionStatus,
   IntegrityCaseStatus,
   IntegrityRiskLevel,
   type MasteryRank,
@@ -44,8 +42,6 @@ import {
   type PoseSessionFinalizedEvent,
 } from '../pose/events/pose-session-finalized.event';
 import {
-  AdminCreatorStateDTO,
-  AdminCreatorStateResponseDTO,
   AdminGamificationOverviewResponseDTO,
   AdminGamificationSeasonListItemDTO,
   AdminGrantModerationDTO,
@@ -111,7 +107,6 @@ import {
   type AdminMilestoneDefinitionRecord,
   type AdminSeasonListRecord,
   type AdminSeasonStandingRecord,
-  type CreatorStateUpdateResult,
   type GrantModerationResult,
   type IntegrityCaseMutationResult,
   type IntegritySummaryRecord,
@@ -139,15 +134,6 @@ export interface MuscleMasteryDelta {
 }
 
 const DEFAULT_ANONYMOUS_DISPLAY_NAME = 'Anonymous Athlete';
-
-const CREATOR_STATE_LABELS: Record<CreatorState, string> = {
-  [CreatorState.none]: 'None',
-  [CreatorState.candidate]: 'Candidate',
-  [CreatorState.pending_review]: 'Pending review',
-  [CreatorState.approved]: 'Approved',
-  [CreatorState.suspended]: 'Suspended',
-  [CreatorState.revoked]: 'Revoked',
-};
 
 const SEASON_STATUS_TRANSITIONS: Record<SeasonStatus, SeasonStatus[]> = {
   [SeasonStatus.draft]: [SeasonStatus.active, SeasonStatus.archived],
@@ -910,34 +896,6 @@ export class GamificationService {
     return this.toAdminSeasonGovernanceResponse(result);
   }
 
-  async adminUpdateCreatorState(
-    actorUserId: string,
-    targetUserId: string,
-    dto: AdminCreatorStateDTO,
-  ): Promise<AdminCreatorStateResponseDTO> {
-    const result = await this.repo.updateCreatorState({
-      actorUserId,
-      targetUserId,
-      state: dto.state,
-      rationale: dto.rationale,
-      adminNotes: dto.admin_notes ?? null,
-    });
-
-    this.emitAudit({
-      userId: actorUserId,
-      action: 'GAMIFICATION_CREATOR_STATE_UPDATED',
-      entity: 'CreatorProfile',
-      entityId: targetUserId,
-      after: {
-        admin_notes: dto.admin_notes ?? null,
-        rationale: dto.rationale,
-        state: dto.state,
-      },
-    });
-
-    return this.toAdminCreatorStateResponse(result);
-  }
-
   async adminVoidProgressionGrant(
     actorUserId: string,
     grantId: string,
@@ -1690,28 +1648,6 @@ export class GamificationService {
           };
         }),
       },
-      creators: {
-        candidate_count: record.creatorCounts[CreatorState.candidate],
-        pending_review_count: record.creatorCounts[CreatorState.pending_review],
-        approved_count: record.creatorCounts[CreatorState.approved],
-        suspended_count: record.creatorCounts[CreatorState.suspended],
-        revoked_count: record.creatorCounts[CreatorState.revoked],
-        profiles: record.creatorProfiles.map((profile) => ({
-          user_id: profile.user_id,
-          member_name: this.formatUserName(profile.user),
-          state: profile.state,
-          state_label: this.toCreatorStateLabel(profile.state),
-          admin_notes: profile.admin_notes,
-          submission_count: profile.user.exercise_review_submissions.length,
-          published_submission_count:
-            profile.user.exercise_review_submissions.filter(
-              (submission) =>
-                submission.status === ExerciseReviewSubmissionStatus.published,
-            ).length,
-          last_state_changed_at:
-            profile.last_state_changed_at?.toISOString() ?? null,
-        })),
-      },
       audit: {
         recent_correction_count: record.recentCorrectionCount,
         recent_actions: record.recentModerationActions.map((action) => ({
@@ -1855,20 +1791,6 @@ export class GamificationService {
     ) {
       throw new BadRequestException('Season end must be after its start.');
     }
-  }
-
-  private toAdminCreatorStateResponse(
-    result: CreatorStateUpdateResult,
-  ): AdminCreatorStateResponseDTO {
-    return {
-      user_id: result.userId,
-      member_name: result.userName,
-      state: result.state,
-      state_label: this.toCreatorStateLabel(result.state),
-      admin_notes: result.adminNotes,
-      last_state_changed_at: result.lastStateChangedAt?.toISOString() ?? null,
-      moderation_action_id: result.moderationActionId,
-    };
   }
 
   private toAdminProgressionGrantResponse(
@@ -2420,10 +2342,6 @@ export class GamificationService {
       default:
         return 1;
     }
-  }
-
-  private toCreatorStateLabel(state: CreatorState): string {
-    return CREATOR_STATE_LABELS[state];
   }
 
   private readMilestoneTargetValue(value: Prisma.JsonValue | null): number {

@@ -122,18 +122,6 @@ export type PoseSessionEndReason =
   | "client_disconnect"
   | "manual_stop"
   | "session_completed";
-export type ExerciseReviewSubmissionStatus =
-  | "left_private"
-  | "pending"
-  | "published"
-  | "rejected";
-export type FitnessCreatorState =
-  | "none"
-  | "candidate"
-  | "pending_review"
-  | "approved"
-  | "suspended"
-  | "revoked";
 export type FitnessSeasonStatus = "draft" | "active" | "closed" | "archived";
 export type FitnessMilestoneCategory =
   | "training"
@@ -229,9 +217,6 @@ export type FitnessModerationActionType =
   | "restore_progression_grant"
   | "hide_from_rankings"
   | "disqualify_active_season"
-  | "approve_creator"
-  | "suspend_creator"
-  | "revoke_creator"
   | "resolve_integrity_case_valid"
   | "resolve_integrity_case_invalid";
 
@@ -281,14 +266,6 @@ export type UpdateMuscleDefinitionInput =
     isActive?: boolean;
   };
 
-export type FitnessExerciseReviewSubmissionListParams = {
-  category?: FitnessExerciseCategory;
-  limit?: number;
-  muscleGroup?: string;
-  page?: number;
-  search?: string;
-  status?: ExerciseReviewSubmissionStatus;
-};
 
 export type CreateFitnessExerciseInput = {
   category: FitnessExerciseCategory;
@@ -307,33 +284,6 @@ export type UpdateFitnessExerciseInput = Partial<CreateFitnessExerciseInput> & {
   isActive?: boolean;
 };
 
-export type UpdateExerciseReviewSubmissionInput = {
-  creatorGovernanceNote?: string;
-  creatorState?: FitnessCreatorState;
-  publishedExerciseId?: string;
-  reviewNotes?: string;
-  status?: ExerciseReviewSubmissionStatus;
-};
-
-export type CreateExerciseReviewSubmissionInput = {
-  category: FitnessExerciseCategory;
-  description?: string;
-  evidenceBars?: ExerciseReviewEvidenceRecord | null;
-  handShapeProfile?: ExerciseHandShapeProfileRecord | null;
-  instructions?: string;
-  matchHint?: string;
-  movementProfile?: ExerciseMovementProfileRecord | null;
-  muscleGroup: string;
-  muscleTargets?: ExerciseMuscleTargetRecord[];
-  originLabel?: string;
-  poseSessionId?: string | null;
-  proposedName: string;
-  queueTag?: string;
-  sourceLabel?: string;
-  summary: string;
-  title?: string;
-  triggerLabel?: string;
-};
 
 export type TrainingPlanListParams = {
   limit?: number;
@@ -425,11 +375,6 @@ export type AdminGamificationSeasonCreateInput = {
 export type AdminGamificationSeasonUpdateInput =
   Partial<AdminGamificationSeasonCreateInput>;
 
-export type AdminGamificationCreatorStateInput = {
-  adminNotes?: string | null;
-  rationale: string;
-  state: FitnessCreatorState;
-};
 
 export type AdminGamificationRankingOverrideInput = {
   adminNote?: string | null;
@@ -496,44 +441,6 @@ export type FitnessExerciseRecord = {
   videoUrl: string | null;
 };
 
-export type ExerciseReviewSubmissionRecord = {
-  category: FitnessExerciseCategory;
-  creatorCandidateScore: number;
-  creatorDisplayName: string | null;
-  creatorEmail: string | null;
-  creatorGovernanceNote: string | null;
-  creatorLastStateChangedAt: string | null;
-  creatorProfileUpdatedAt: string | null;
-  creatorPublishedCount: number;
-  creatorRejectedCount: number;
-  creatorState: FitnessCreatorState;
-  creatorStateLabel: string;
-  creatorSubmissionCount: number;
-  createdAt: string;
-  description: string | null;
-  evidenceBars: ExerciseReviewEvidenceRecord | null;
-  handShapeProfile: ExerciseHandShapeProfileRecord | null;
-  id: string;
-  instructions: string | null;
-  matchHint: string | null;
-  movementProfile: ExerciseMovementProfileRecord | null;
-  muscleGroup: string;
-  muscleTargets: ExerciseMuscleTargetRecord[];
-  originLabel: string;
-  poseSessionId: string | null;
-  proposedName: string;
-  publishedExerciseId: string | null;
-  queueTag: string;
-  reviewNotes: string | null;
-  reviewedAt: string | null;
-  sourceLabel: string;
-  status: ExerciseReviewSubmissionStatus;
-  summary: string;
-  title: string;
-  triggerLabel: string;
-  updatedAt: string;
-  userId: string;
-};
 
 export type TrainingPlanExerciseRecord = {
   category: FitnessExerciseCategory;
@@ -1020,52 +927,6 @@ export type ExerciseHandShapeProfileRecord = {
   warnings: string[];
 };
 
-export type ExerciseAiDraftEvidenceRecord = {
-  confidence: number | null;
-  integrityNotes: string[];
-  movementContract: PoseMovementContractRecord | null;
-  promptContractVersion: "exercise_creation_v1";
-  repCount: number;
-  rig: ExerciseRigRecord | null;
-  schemaVersion: "exercise_ai_draft_v1";
-  source: "mobile_pose_session";
-};
-
-export type ExerciseReviewEvidenceRecord =
-  | number[]
-  | ExerciseAiDraftEvidenceRecord;
-
-export type ExerciseDraftProposalSource = "ai" | "deterministic_fallback";
-
-export type CreateExerciseDraftProposalInput = {
-  category?: FitnessExerciseCategory;
-  description?: string;
-  evidence?: ExerciseAiDraftEvidenceRecord | null;
-  handShapeProfile?: ExerciseHandShapeProfileRecord | null;
-  instructions?: string;
-  movementProfile?: ExerciseMovementProfileRecord | null;
-  muscleGroup?: string;
-  muscleTargets?: ExerciseMuscleTargetRecord[];
-  poseSessionId?: string | null;
-  proposedName?: string;
-  summary?: string;
-};
-
-export type ExerciseDraftProposalRecord = {
-  category: FitnessExerciseCategory;
-  confidence: number;
-  description: string;
-  evidence: ExerciseAiDraftEvidenceRecord;
-  handShapeProfile: ExerciseHandShapeProfileRecord;
-  instructions: string;
-  movementProfile: ExerciseMovementProfileRecord;
-  muscleGroup: string;
-  muscleTargets: ExerciseMuscleTargetRecord[];
-  proposalSource: ExerciseDraftProposalSource;
-  proposedName: string;
-  reviewWarnings: string[];
-  summary: string;
-};
 
 export type PoseAnalyzeProcessingMode = "legacy_frame" | "sequence";
 
@@ -1518,25 +1379,6 @@ export type AdminGamificationRankingSectionRecord = {
   profiles: AdminGamificationRankingProfileRecord[];
 };
 
-export type AdminGamificationCreatorProfileRecord = {
-  adminNotes: string | null;
-  lastStateChangedAt: string | null;
-  memberName: string;
-  publishedSubmissionCount: number;
-  state: FitnessCreatorState;
-  stateLabel: string;
-  submissionCount: number;
-  userId: string;
-};
-
-export type AdminGamificationCreatorSectionRecord = {
-  approvedCount: number;
-  candidateCount: number;
-  pendingReviewCount: number;
-  profiles: AdminGamificationCreatorProfileRecord[];
-  revokedCount: number;
-  suspendedCount: number;
-};
 
 export type AdminGamificationAuditActionRecord = {
   actionType: FitnessModerationActionType;
@@ -1558,7 +1400,6 @@ export type AdminGamificationAuditSectionRecord = {
 export type AdminGamificationOverviewRecord = {
   activeSeason: AdminGamificationSeasonSummaryRecord | null;
   audit: AdminGamificationAuditSectionRecord;
-  creators: AdminGamificationCreatorSectionRecord;
   generatedAt: string;
   integrity: AdminGamificationIntegritySectionRecord;
   rankings: AdminGamificationRankingSectionRecord;
@@ -1574,15 +1415,6 @@ export type AdminGamificationSeasonGovernanceRecord = {
   title: string;
 };
 
-export type AdminGamificationCreatorStateRecord = {
-  adminNotes: string | null;
-  lastStateChangedAt: string | null;
-  memberName: string;
-  moderationActionId: string | null;
-  state: FitnessCreatorState;
-  stateLabel: string;
-  userId: string;
-};
 
 export type AdminGamificationRankingOverrideRecord = {
   adminNote: string | null;

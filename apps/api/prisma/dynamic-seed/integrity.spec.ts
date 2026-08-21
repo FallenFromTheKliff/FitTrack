@@ -13,6 +13,9 @@ import {
   assertNoNonFullProductPayments,
   assertNoProhibitedProductPaymentStates,
   assertNoTerminalCheckoutHoldProductReferences,
+  assertCoachingCommerceLineage,
+  assertMembershipCommerceLineage,
+  hasKeyedIntervalOverlap,
   isLegalCheckoutHoldEvidence,
   SEED_SCENARIO_MATRIX,
 } from './integrity';
@@ -216,14 +219,272 @@ void test('keyed interval allocator atomically reserves amenity and member keys'
     true,
   );
   assert.equal(
-    allocator.tryAllocateMany(
-      ['amenity:two', 'member:one'],
-      start,
-      end,
-    ),
+    allocator.tryAllocateMany(['amenity:two', 'member:one'], start, end),
     false,
   );
   assert.equal(allocator.tryAllocate('amenity:two', start, end), true);
+});
+
+void test('membership interval integrity permits adjacent 30-day cycles and rejects overlaps', () => {
+  const anchor = new Date('2026-08-21T09:00:00.000Z');
+  const firstEnd = daysFrom(anchor, -14);
+  const currentEnd = daysFrom(anchor, 16);
+  assert.equal(
+    hasKeyedIntervalOverlap([
+      { key: 'member:premium', start: daysFrom(anchor, -44), end: firstEnd },
+      { key: 'member:premium', start: firstEnd, end: currentEnd },
+    ]),
+    false,
+  );
+  assert.equal(
+    hasKeyedIntervalOverlap([
+      { key: 'member:premium', start: daysFrom(anchor, -44), end: firstEnd },
+      {
+        key: 'member:premium',
+        start: daysFrom(anchor, -15),
+        end: currentEnd,
+      },
+    ]),
+    true,
+  );
+});
+
+void test('membership commerce lineage requires consumed holds and exact plan linkage', () => {
+  const anchor = new Date('2026-08-21T09:00:00.000Z');
+  const startsAt = new Date('2026-08-01T09:00:00.000Z');
+  const holdCreatedAt = new Date('2026-08-01T08:30:00.000Z');
+  const paymentCreatedAt = new Date('2026-08-01T08:50:00.000Z');
+  const paymentId = 'payment-subscription';
+  const holdId = 'hold-subscription';
+  const valid = {
+    anchor,
+    cards: [],
+    holds: [
+      {
+        amount: 1999,
+        appointment_id: null,
+        booking_id: null,
+        consumed_at: startsAt,
+        created_at: holdCreatedAt,
+        currency: 'PHP',
+        expires_at: new Date('2026-08-01T09:15:00.000Z'),
+        failure_reason: null,
+        id: holdId,
+        kind: 'subscription',
+        membership_card_id: null,
+        membership_plan_id: 'plan-premium',
+        payment_id: paymentId,
+        recurring_plan_id: null,
+        released_at: null,
+        status: 'consumed',
+        subscription_id: 'subscription-1',
+        user_id: 'user-1',
+      },
+    ],
+    payments: [
+      {
+        amount: 1999,
+        created_at: paymentCreatedAt,
+        currency: 'PHP',
+        gateway_event_id: 'event-subscription',
+        gateway_metadata: { hold_id: holdId },
+        id: paymentId,
+        payable_id: holdId,
+        payable_type: 'commerce_checkout_hold',
+        payment_stage: 'full',
+        provider: 'paymongo',
+        provider_ref: 'checkout-subscription',
+        status: 'completed',
+        user_id: 'user-1',
+        verified_at: startsAt,
+      },
+    ],
+    subscriptions: [
+      {
+        expires_at: new Date('2026-08-31T09:00:00.000Z'),
+        id: 'subscription-1',
+        payment_id: paymentId,
+        plan_id: 'plan-premium',
+        plan: { price: 1999 },
+        starts_at: startsAt,
+        user_id: 'user-1',
+      },
+    ],
+  };
+  assert.doesNotThrow(() => assertMembershipCommerceLineage(valid));
+  const wrongPlan = {
+    ...valid,
+    holds: valid.holds.map((hold) => ({
+      ...hold,
+      membership_plan_id: 'plan-starter',
+    })),
+  };
+  assert.throws(
+    () => assertMembershipCommerceLineage(wrongPlan),
+    /membership commerce lineage failed/,
+  );
+});
+
+void test('coaching commerce lineage requires one-time holds and recurring cycle payables', () => {
+  const anchor = new Date('2026-08-21T09:00:00.000Z');
+  const oneTimeAppointment = {
+    id: 'appointment-one-time',
+    recurring_plan_id: null,
+    scheduled_at: new Date('2026-08-22T02:00:00.000Z'),
+    status: 'confirmed',
+    total_amount: 450,
+    user_id: 'member-one',
+  };
+  const oneTimeHold = {
+    amount: 450,
+    appointment_id: oneTimeAppointment.id,
+    consumed_at: new Date('2026-08-20T09:00:00.000Z'),
+    created_at: new Date('2026-08-20T08:30:00.000Z'),
+    expires_at: new Date('2026-08-20T09:15:00.000Z'),
+    failure_reason: null,
+    id: 'hold-one-time',
+    kind: 'one_time',
+    payment_id: 'payment-one-time',
+    recurring_plan_id: null,
+    released_at: null,
+    status: 'consumed',
+    user_id: 'member-one',
+  };
+  const monthlyHold = {
+    amount: 1800,
+    appointment_id: null,
+    consumed_at: new Date('2026-08-01T09:00:00.000Z'),
+    created_at: new Date('2026-08-01T08:30:00.000Z'),
+    expires_at: new Date('2026-08-01T09:15:00.000Z'),
+    failure_reason: null,
+    id: 'hold-monthly',
+    kind: 'monthly',
+    payment_id: 'payment-monthly',
+    recurring_plan_id: 'plan-recurring',
+    released_at: null,
+    status: 'consumed',
+    user_id: 'member-recurring',
+  };
+  const failedHold = {
+    amount: 1800,
+    appointment_id: null,
+    consumed_at: null,
+    created_at: new Date('2026-08-10T08:30:00.000Z'),
+    expires_at: new Date('2026-08-10T09:15:00.000Z'),
+    failure_reason: 'PayMongo authorization failed.',
+    id: 'hold-failed',
+    kind: 'monthly',
+    payment_id: 'payment-failed',
+    recurring_plan_id: null,
+    released_at: new Date('2026-08-10T09:15:00.000Z'),
+    status: 'failed',
+    user_id: 'member-failed',
+  };
+  const valid = {
+    anchor,
+    appointments: [oneTimeAppointment],
+    billingCycles: [
+      {
+        amount: 1800,
+        cycle_end_date: new Date('2026-08-30T00:00:00.000Z'),
+        cycle_start_date: new Date('2026-08-01T00:00:00.000Z'),
+        id: 'cycle-first',
+        paid_at: new Date('2026-08-01T09:00:00.000Z'),
+        payment_id: 'payment-monthly',
+        recurring_plan_id: 'plan-recurring',
+        status: 'paid',
+      },
+      {
+        amount: 1800,
+        cycle_end_date: new Date('2026-09-29T00:00:00.000Z'),
+        cycle_start_date: new Date('2026-08-31T00:00:00.000Z'),
+        id: 'cycle-second',
+        paid_at: new Date('2026-08-31T09:00:00.000Z'),
+        payment_id: 'payment-cycle-second',
+        recurring_plan_id: 'plan-recurring',
+        status: 'paid',
+      },
+    ],
+    holds: [oneTimeHold, monthlyHold, failedHold],
+    payments: [
+      {
+        amount: 450,
+        created_at: new Date('2026-08-20T08:50:00.000Z'),
+        gateway_event_id: 'event-one-time',
+        gateway_metadata: { hold_id: oneTimeHold.id },
+        id: 'payment-one-time',
+        payable_id: oneTimeHold.id,
+        payable_type: 'commerce_checkout_hold',
+        payment_stage: 'full',
+        provider: 'paymongo',
+        provider_ref: 'paymongo-one-time',
+        status: 'completed',
+        user_id: 'member-one',
+        verified_at: oneTimeHold.consumed_at,
+      },
+      {
+        amount: 1800,
+        created_at: new Date('2026-08-01T08:50:00.000Z'),
+        gateway_event_id: 'event-monthly',
+        gateway_metadata: { hold_id: monthlyHold.id },
+        id: 'payment-monthly',
+        payable_id: monthlyHold.id,
+        payable_type: 'commerce_checkout_hold',
+        payment_stage: 'full',
+        provider: 'paymongo',
+        provider_ref: 'paymongo-monthly',
+        status: 'completed',
+        user_id: 'member-recurring',
+        verified_at: monthlyHold.consumed_at,
+      },
+      {
+        amount: 1800,
+        created_at: new Date('2026-08-31T08:50:00.000Z'),
+        gateway_event_id: 'event-cycle-second',
+        gateway_metadata: { cycle_id: 'cycle-second' },
+        id: 'payment-cycle-second',
+        payable_id: 'cycle-second',
+        payable_type: 'recurring_coaching',
+        payment_stage: 'full',
+        provider: 'paymongo',
+        provider_ref: 'paymongo-cycle-second',
+        status: 'completed',
+        user_id: 'member-recurring',
+        verified_at: new Date('2026-08-31T09:00:00.000Z'),
+      },
+      {
+        amount: 1800,
+        created_at: new Date('2026-08-10T08:50:00.000Z'),
+        gateway_event_id: 'event-failed',
+        gateway_metadata: { hold_id: failedHold.id },
+        id: 'payment-failed',
+        payable_id: failedHold.id,
+        payable_type: 'commerce_checkout_hold',
+        payment_stage: 'full',
+        provider: 'paymongo',
+        provider_ref: 'paymongo-failed',
+        status: 'failed',
+        user_id: 'member-failed',
+        verified_at: null,
+      },
+    ],
+    plans: [
+      {
+        id: 'plan-recurring',
+        member_id: 'member-recurring',
+        quoted_amount: 1800,
+      },
+    ],
+  };
+  assert.doesNotThrow(() => assertCoachingCommerceLineage(valid));
+  assert.throws(
+    () =>
+      assertCoachingCommerceLineage({
+        ...valid,
+        appointments: [{ ...oneTimeAppointment, id: 'appointment-bad' }],
+      }),
+    /coaching commerce lineage failed/,
+  );
 });
 
 void test('manifest invalidation removes stale pass while failed report state stays current', async () => {
