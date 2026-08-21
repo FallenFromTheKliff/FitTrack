@@ -104,6 +104,21 @@ export type ModelCoverageStatus =
 
 export type DynamicSeedIntegrityStatus = 'passed' | 'failed';
 
+const DERIVED_MODEL_DELEGATES = new Set<string>([
+  'progressionSourceEvent',
+  'progressionGrantLedger',
+  'userProgressionProfile',
+  'seasonalStanding',
+  'seasonalMuscleStanding',
+  'userMilestoneProgress',
+  'macroTarget',
+  'saleTransactionItem',
+  'aiInteractionLog',
+  'notification',
+  'gymChatInteractionLog',
+  'businessInsightRun',
+]);
+
 export type DynamicSeedIntegrityViolation = {
   category: string;
   detail: string;
@@ -113,8 +128,66 @@ export const MODEL_COVERAGE: Record<
   (typeof MODEL_DELEGATES)[number],
   ModelCoverageStatus
 > = Object.fromEntries(
-  MODEL_DELEGATES.map((delegate) => [delegate, 'seeded']),
+  MODEL_DELEGATES.map((delegate) => [
+    delegate,
+    DERIVED_MODEL_DELEGATES.has(delegate) ? 'derived' : 'seeded',
+  ]),
 ) as Record<(typeof MODEL_DELEGATES)[number], ModelCoverageStatus>;
+
+export type DynamicSeedCoverageCategory = {
+  modelCount: number;
+  models: string[];
+  rowCount: number;
+};
+
+export type DynamicSeedCoverageSummary = {
+  derived: DynamicSeedCoverageCategory;
+  externalOnly: DynamicSeedCoverageCategory;
+  intentionallyEmpty: DynamicSeedCoverageCategory;
+  seeded: DynamicSeedCoverageCategory;
+  totalModelCount: number;
+  totalRowCount: number;
+};
+
+export function buildModelCoverageSummary(
+  counts: Record<string, number>,
+): DynamicSeedCoverageSummary {
+  const summary: DynamicSeedCoverageSummary = {
+    derived: { modelCount: 0, models: [], rowCount: 0 },
+    externalOnly: { modelCount: 0, models: [], rowCount: 0 },
+    intentionallyEmpty: { modelCount: 0, models: [], rowCount: 0 },
+    seeded: { modelCount: 0, models: [], rowCount: 0 },
+    totalModelCount: MODEL_DELEGATES.length,
+    totalRowCount: 0,
+  };
+
+  for (const delegate of MODEL_DELEGATES) {
+    const status = MODEL_COVERAGE[delegate];
+    const rowCount = counts[delegate] ?? 0;
+    const categoryKey =
+      status === 'external-only'
+        ? 'externalOnly'
+        : status === 'intentionally-empty'
+          ? 'intentionallyEmpty'
+          : status;
+    const category = summary[categoryKey];
+    category.models.push(delegate);
+    category.modelCount += 1;
+    category.rowCount += rowCount;
+    summary.totalRowCount += rowCount;
+  }
+
+  for (const category of [
+    summary.seeded,
+    summary.derived,
+    summary.intentionallyEmpty,
+    summary.externalOnly,
+  ]) {
+    category.models.sort();
+  }
+
+  return summary;
+}
 
 export type DynamicSeedIntegritySummary = {
   actuals: Record<string, number>;
@@ -162,6 +235,7 @@ export type DynamicSeedManifest = {
   credentials: SeedCredential[];
   integrity: DynamicSeedIntegritySummary;
   modelCoverage: typeof MODEL_COVERAGE;
+  coverage: DynamicSeedCoverageSummary;
   manifestPath: string;
   notableIds: Record<string, string>;
   roleCounts: Record<string, number>;
@@ -212,7 +286,9 @@ export async function readCurrentDynamicSeedManifest(
     raw = await readFile(manifestPath, 'utf8');
   } catch (error) {
     if ((error as { code?: string }).code === 'ENOENT') {
-      throw noSuccessfulManifestError('the manifest is missing or was invalidated');
+      throw noSuccessfulManifestError(
+        'the manifest is missing or was invalidated',
+      );
     }
     throw error;
   }
@@ -241,7 +317,9 @@ export async function buildModelCounts(prisma: PrismaClient) {
   const rows = await Promise.all(
     MODEL_DELEGATES.map(async (delegateName) => {
       const delegate = delegateSource[delegateName];
-      return delegate ? ([delegateName, await delegate.count()] as const) : null;
+      return delegate
+        ? ([delegateName, await delegate.count()] as const)
+        : null;
     }),
   );
   for (const row of rows) {
@@ -289,6 +367,7 @@ export async function writeDynamicSeedManifest(args: {
     integrity: args.integrity,
     manifestPath: DYNAMIC_SEED_MANIFEST_PATH,
     modelCoverage: MODEL_COVERAGE,
+    coverage: buildModelCoverageSummary(args.counts),
     notableIds: args.notableIds,
     roleCounts: args.roleCounts ?? args.integrity.roleCounts,
     scenarioCounts: args.scenarioCounts ?? args.integrity.scenarioCounts,

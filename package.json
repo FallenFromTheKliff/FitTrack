@@ -35,6 +35,8 @@
     "db:seed:realistic": "pnpm seed:realistic 180",
     "db:seed:dynamic": "pnpm --filter @fittrack/api exec node -r ts-node/register prisma/seed-dynamic.ts --target=local --mode=reset --users=180",
     "db:seed:dynamic:additive": "pnpm --filter @fittrack/api exec node -r ts-node/register prisma/seed-dynamic.ts --target=local --mode=additive --users=180",
+    "db:seed:body-nutrition": "pnpm --filter @fittrack/api exec node -r ts-node/register prisma/seed-dynamic.ts --target=local --mode=additive --scope=body-nutrition --users=180",
+    "db:seed:coaching-payments": "pnpm --filter @fittrack/api exec node -r ts-node/register prisma/seed-dynamic.ts --target=local --mode=additive --scope=coaching-payments --users=180",
     "db:seed:dynamic:railway": "railway run pnpm --filter @fittrack/api exec node -r ts-node/register prisma/seed-dynamic.ts --target=railway --mode=additive --users=180",
     "db:seed:defense-demo": "pnpm --filter @fittrack/api exec node -r ts-node/register prisma/seed-defense-demo-data.ts",
     "db:seed:test": "pnpm --filter @fittrack/api exec node -r ts-node/register prisma/seed-test-data.ts --mode=reset",

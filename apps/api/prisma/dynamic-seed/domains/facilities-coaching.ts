@@ -117,6 +117,18 @@ function dateOnly(value: Date) {
   return new Date(wall.getTime() - GYM_TIMEZONE_OFFSET_MINUTES * 60_000);
 }
 
+/**
+ * Prisma serializes @db.Date values by their UTC calendar component. Keep the
+ * comparison used to decide whether an active appointment needs a later paid
+ * cycle in that same calendar space; otherwise a local-midnight date can be
+ * persisted one day before the timestamp that the appointment allocator sees.
+ */
+function persistedDate(value: Date) {
+  const target = new Date(value);
+  target.setUTCHours(0, 0, 0, 0);
+  return target;
+}
+
 function monthlyOfferForCoach(index: number, workload?: string) {
   if (workload === 'high') return { rate: 1_100, sessions: 12 };
   if (workload === 'low') return { rate: 700, sessions: 4 };
@@ -963,10 +975,19 @@ async function seedRelationshipsPlansAndAppointments(ctx: DynamicSeedContext) {
     });
     let cycleIndex = 1;
     let nextStart = dateOnly(shiftGymDate(cycleStart, 30));
+
+    const hasAppointmentInPersistedCycle = (cycleStartDate: Date) =>
+      appointmentRows.some(
+        (appointment) =>
+          appointment.recurring_plan_id === plan.planId &&
+          appointment.scheduled_at >= persistedDate(cycleStartDate),
+      );
+
     while (
       nextStart < plan.endDate &&
       (plan.status !== RecurringCoachingPlanStatus.active ||
-        nextStart < anchorDate)
+        nextStart < anchorDate ||
+        hasAppointmentInPersistedCycle(nextStart))
     ) {
       const nextEnd = dateOnly(
         new Date(
@@ -979,7 +1000,11 @@ async function seedRelationshipsPlansAndAppointments(ctx: DynamicSeedContext) {
       const cyclePaymentId = seedId(
         `payment:recurring-coaching:${plan.memberKey}:${cycleIndex}`,
       );
-      const cyclePaidAt = gymDateAt(nextStart, 11);
+      const cyclePaidAt =
+        plan.status === RecurringCoachingPlanStatus.active &&
+        nextStart >= anchorDate
+          ? daysFrom(anchorDate, -2, 10)
+          : gymDateAt(nextStart, 11);
       billingRows.push({
         id: seedId(`recurring-cycle:${plan.memberKey}:${cycleIndex}`),
         amount: plan.quotedAmount,
@@ -2015,6 +2040,211 @@ export async function seedCheckoutHolds(ctx: DynamicSeedContext) {
   );
   ctx.notableIds.qaCheckoutAbandonedMemberId =
     ctx.state.userIds['member-checkout-abandoned'];
+}
+
+function utcDateOnly(value: Date) {
+  return new Date(
+    Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()),
+  );
+}
+
+/**
+ * Repair only deterministic recurring-coaching cycles that do not cover one
+ * of their existing seeded appointments. Active plans may contain a confirmed
+ * session at the next calendar boundary; that session is already paid by the
+ * seed contract, so create the missing settled cycle/payment rather than
+ * deleting the appointment or broadening the integrity rule.
+ */
+export async function repairSeededCoachingBilling(ctx: DynamicSeedContext) {
+  const memberKeys = ctx.state.accounts
+    .filter(
+      (account) =>
+        account.coachingProfile === 'recurring_active' ||
+        account.coachingProfile === 'recurring_former',
+    )
+    .map((account) => account.key);
+  const planIds = memberKeys.map((memberKey) =>
+    seedId(`recurring-plan:${memberKey}`),
+  );
+  if (planIds.length === 0) {
+    return { counts: { billingCycles: 0, payments: 0 } };
+  }
+
+  const [plans, appointments, existingCycles] = await Promise.all([
+    ctx.prisma.recurringCoachingPlan.findMany({
+      where: { id: { in: planIds } },
+      select: {
+        end_date: true,
+        id: true,
+        member_id: true,
+        quoted_amount: true,
+      },
+    }),
+    ctx.prisma.coachAppointment.findMany({
+      where: { recurring_plan_id: { in: planIds } },
+      orderBy: { scheduled_at: 'asc' },
+      select: { id: true, recurring_plan_id: true, scheduled_at: true },
+    }),
+    ctx.prisma.recurringCoachingBillingCycle.findMany({
+      where: { recurring_plan_id: { in: planIds } },
+      orderBy: { cycle_start_date: 'asc' },
+      select: {
+        amount: true,
+        cycle_end_date: true,
+        cycle_start_date: true,
+        id: true,
+        payment_id: true,
+        recurring_plan_id: true,
+        status: true,
+      },
+    }),
+  ]);
+  const planById = new Map(plans.map((plan) => [plan.id, plan]));
+  const memberKeyById = new Map(
+    memberKeys.map((memberKey) => [ctx.state.userIds[memberKey], memberKey]),
+  );
+  const cyclesByPlan = new Map<string, typeof existingCycles>();
+  for (const cycle of existingCycles) {
+    const rows = cyclesByPlan.get(cycle.recurring_plan_id) ?? [];
+    rows.push(cycle);
+    cyclesByPlan.set(cycle.recurring_plan_id, rows);
+  }
+
+  const coveredByCycle = (
+    appointment: (typeof appointments)[number],
+    cycles: typeof existingCycles,
+  ) =>
+    cycles.find(
+      (cycle) =>
+        cycle.cycle_start_date <= appointment.scheduled_at &&
+        cycle.cycle_end_date.getTime() + DAY_MS >
+          appointment.scheduled_at.getTime(),
+    );
+
+  let billingCycles = 0;
+  let payments = 0;
+  for (const appointment of appointments) {
+    if (!appointment.recurring_plan_id) continue;
+    const plan = planById.get(appointment.recurring_plan_id);
+    const memberKey = plan ? memberKeyById.get(plan.member_id) : undefined;
+    if (!plan || !memberKey) {
+      throw new Error(
+        `[dynamic-seed] deterministic coaching appointment ${appointment.id} has no seeded recurring owner`,
+      );
+    }
+    const cycles = cyclesByPlan.get(plan.id) ?? [];
+    if (coveredByCycle(appointment, cycles)) continue;
+    if (cycles.length === 0) {
+      throw new Error(
+        `[dynamic-seed] recurring plan ${plan.id} is missing its first paid enrollment cycle`,
+      );
+    }
+
+    let repairGuard = 0;
+    while (!coveredByCycle(appointment, cycles)) {
+      if (repairGuard++ >= 12) {
+        throw new Error(
+          `[dynamic-seed] could not create a paid cycle covering appointment ${appointment.id}`,
+        );
+      }
+      cycles.sort(
+        (left, right) =>
+          left.cycle_start_date.getTime() - right.cycle_start_date.getTime(),
+      );
+      const lastCycle = cycles[cycles.length - 1];
+      const appointmentDate = utcDateOnly(appointment.scheduled_at);
+      const nextDate = new Date(lastCycle.cycle_end_date.getTime() + DAY_MS);
+      const cycleStartDate =
+        appointmentDate > nextDate ? appointmentDate : nextDate;
+      if (cycleStartDate > plan.end_date) {
+        throw new Error(
+          `[dynamic-seed] appointment ${appointment.id} falls after its recurring plan end date`,
+        );
+      }
+      const cycleEndDate = new Date(
+        Math.min(
+          cycleStartDate.getTime() + 29 * DAY_MS,
+          plan.end_date.getTime(),
+        ),
+      );
+      const existingAtStart = cycles.find(
+        (cycle) =>
+          cycle.cycle_start_date.getTime() === cycleStartDate.getTime(),
+      );
+      const cycleIndex = existingAtStart
+        ? cycles.indexOf(existingAtStart)
+        : cycles.length;
+      const cycleId =
+        existingAtStart?.id ??
+        seedId(`recurring-cycle:${memberKey}:${cycleIndex}`);
+      const paymentId = seedId(
+        `payment:recurring-coaching:${memberKey}:${cycleIndex}`,
+      );
+      const paidAt = daysFrom(ctx.config.anchorDate, -2, 10);
+      const paymentRow: Prisma.PaymentCreateManyInput = {
+        amount: plan.quoted_amount,
+        currency: 'PHP',
+        created_at: new Date(paidAt.getTime() - 60 * 60_000),
+        gateway_event_id: seedExternalId(`gateway:${paymentId}`),
+        gateway_metadata: {
+          cycle_id: cycleId,
+          payment_id: paymentId,
+          provider: PaymentProvider.paymongo,
+          recurring_plan_id: plan.id,
+          source: 'recurring-coaching',
+        },
+        id: paymentId,
+        idempotency_key: seedExternalId(
+          `payment:recurring-coaching:${memberKey}:${cycleIndex}`,
+        ),
+        payable_id: cycleId,
+        payable_type: PayableType.recurring_coaching,
+        payment_stage: PaymentStage.full,
+        provider: PaymentProvider.paymongo,
+        provider_ref: seedExternalId(
+          `paymongo:recurring-coaching:${memberKey}:${cycleIndex}`,
+        ),
+        status: PaymentStatus.completed,
+        user_id: plan.member_id,
+        verified_at: paidAt,
+        verified_by: null,
+      };
+      const paymentUpdate = { ...paymentRow, id: undefined };
+      await ctx.prisma.payment.upsert({
+        where: { id: paymentId },
+        update: paymentUpdate,
+        create: paymentRow,
+      });
+      payments += 1;
+
+      const cycleRow = {
+        amount: plan.quoted_amount,
+        cycle_end_date: cycleEndDate,
+        cycle_start_date: cycleStartDate,
+        due_date: cycleStartDate,
+        grace_period_ends_at: new Date(paidAt.getTime() + 7 * DAY_MS),
+        id: cycleId,
+        paid_at: paidAt,
+        payment_id: paymentId,
+        recurring_plan_id: plan.id,
+        status: RecurringCoachingBillingCycleStatus.paid,
+      };
+      const cycleUpdate = { ...cycleRow, id: undefined };
+      await ctx.prisma.recurringCoachingBillingCycle.upsert({
+        where: { id: cycleId },
+        update: cycleUpdate,
+        create: cycleRow,
+      });
+      billingCycles += 1;
+      if (existingAtStart) {
+        Object.assign(existingAtStart, cycleRow);
+      } else {
+        cycles.push(cycleRow);
+      }
+    }
+  }
+
+  return { counts: { billingCycles, payments } };
 }
 
 export async function seedFacilitiesCoaching(ctx: DynamicSeedContext) {

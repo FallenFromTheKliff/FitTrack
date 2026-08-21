@@ -57,6 +57,26 @@ void test('dynamic seed preserves local and railway CLI options', () => {
   assert.equal(railway.exerciseHistory, 100);
   assert.equal(railway.allowRemoteReset, true);
   assert.equal(railway.confirmRemoteReset, 'RESET_REMOTE_DYNAMIC_SEED');
+  assert.equal(
+    parseDynamicSeedConfig([
+      'node',
+      'seed-dynamic.ts',
+      '--target=local',
+      '--mode=additive',
+      '--scope=body-nutrition',
+    ]).scope,
+    'body-nutrition',
+  );
+  assert.equal(
+    parseDynamicSeedConfig([
+      'node',
+      'seed-dynamic.ts',
+      '--target=local',
+      '--mode=additive',
+      '--scope=coaching-payments',
+    ]).scope,
+    'coaching-payments',
+  );
 });
 
 void test('realistic seed accounts use role-scoped credentials and stable keys', () => {

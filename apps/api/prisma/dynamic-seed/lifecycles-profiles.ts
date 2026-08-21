@@ -530,6 +530,112 @@ export function physicalSnapshotAtWeight(
   };
 }
 
+export function progressionMetricCount(account: SeedAccount) {
+  const lifecycle = account.lifecycle;
+  if (
+    !lifecycle?.activityStart ||
+    !lifecycle.activityEnd ||
+    account.role !== UserRole.member ||
+    account.emailVerified === false ||
+    account.memberPersona === 'pending' ||
+    account.memberPersona === 'unverified' ||
+    account.memberPersona === 'suspended'
+  ) {
+    return 0;
+  }
+  const engagement =
+    account.memberEngagement ?? account.scenario?.memberEngagement ?? 'regular';
+  // A zero-use member with a valid activity window gets only a current
+  // snapshot so the profile remains inspectable without inventing progress.
+  if (engagement === 'zero_use') {
+    return 1;
+  }
+  const cadenceDays =
+    engagement === 'gym_rat'
+      ? 28
+      : engagement === 'frequent'
+        ? 42
+        : engagement === 'regular'
+          ? 56
+          : engagement === 'casual'
+            ? 90
+            : engagement === 'lazy'
+              ? 120
+              : Number.POSITIVE_INFINITY;
+  if (!Number.isFinite(cadenceDays)) {
+    return 0;
+  }
+  const spanDays = Math.max(
+    1,
+    (lifecycle.activityEnd.getTime() - lifecycle.activityStart.getTime()) /
+      DAY_MS,
+  );
+  const count = Math.max(1, Math.ceil(spanDays / cadenceDays) + 1);
+  const trial =
+    account.memberPersona === 'trial' ||
+    account.membershipLifecycle === 'trial_or_new';
+  return Math.min(trial ? 2 : 18, count);
+}
+
+export function progressionDateAt(
+  config: DynamicSeedConfig,
+  account: SeedAccount,
+  index: number,
+  total: number,
+  hour = 9,
+) {
+  const lifecycle = account.lifecycle;
+  if (!lifecycle?.activityStart || !lifecycle.activityEnd || total <= 0) {
+    return null;
+  }
+  const start = new Date(
+    Math.max(
+      config.historyStartDate.getTime(),
+      lifecycle.activityStart.getTime(),
+    ),
+  );
+  const end = new Date(
+    Math.min(
+      config.anchorDate.getTime(),
+      config.historyEndDate.getTime(),
+      lifecycle.activityEnd.getTime(),
+    ),
+  );
+  if (end < start) {
+    return null;
+  }
+  const fraction = total === 1 ? 1 : index / (total - 1);
+  const target = new Date(
+    start.getTime() + (end.getTime() - start.getTime()) * fraction,
+  );
+  target.setUTCHours(hour, 0, 0, 0);
+  return clampDate(target, start, end);
+}
+
+export function progressionWeightAt(
+  baseline: SeedPhysicalBaseline,
+  account: SeedAccount,
+  index: number,
+  total: number,
+) {
+  const fraction = total <= 1 ? 1 : index / (total - 1);
+  const startWeight = baseline.baselineWeightKg;
+  const currentWeight = baseline.weightKg;
+  const engagement =
+    account.memberEngagement ?? account.scenario?.memberEngagement ?? 'regular';
+  const maintenanceVariance =
+    baseline.trend === 'maintenance'
+      ? Math.sin((index + 1) * 1.7 + baseline.heightCm) *
+        0.35 *
+        (engagement === 'lazy' ? 0.5 : 1)
+      : 0;
+  const interpolated =
+    startWeight +
+    (currentWeight - startWeight) * fraction +
+    (fraction >= 1 ? 0 : maintenanceVariance);
+  return round(clamp(interpolated, 40, 150), 1);
+}
+
 export function deriveSeedAccountContext(
   account: SeedAccount,
   config: DynamicSeedConfig,

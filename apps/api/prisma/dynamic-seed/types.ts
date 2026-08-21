@@ -10,6 +10,7 @@ import type { SeedRandom } from './random';
 
 export type DynamicSeedMode = 'additive' | 'reset';
 export type DynamicSeedTarget = 'local' | 'railway';
+export type DynamicSeedScope = 'all' | 'body-nutrition' | 'coaching-payments';
 
 export type MemberCohort =
   | 'power'
@@ -35,6 +36,7 @@ export type DynamicSeedConfig = {
   pendingPaymentRate: number;
   seed: number;
   sessionDensity: 'low' | 'normal' | 'high';
+  scope: DynamicSeedScope;
   splitPresetsPerMember: number;
   target: DynamicSeedTarget;
   users: number;

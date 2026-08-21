@@ -1,22 +1,33 @@
 import {
   AppointmentStatus,
+  ActivityLevel,
   AuthProvider,
   CommerceCheckoutHoldKind,
   BookingStatus,
   CommerceCheckoutHoldStatus,
   EquipmentStatus,
+  FitnessGoal,
+  Gender,
   MembershipCardStatus,
+  NotificationStatus,
   PaymentProvider,
   PaymentStage,
   PaymentStatus,
   PayableType,
   PlanSource,
+  Prisma,
+  ProgressionGrantStatus,
+  ProgressionGrantType,
+  ProgressionSourceStatus,
+  ProgressionSourceType,
   RecurringCoachingBillingCycleStatus,
   RecurringCoachingFrequency,
   RecurringCoachingPlanStatus,
   RecurringCoachingScheduleItemStatus,
   RelationshipStatus,
+  SaleStatus,
   SessionStatus,
+  SeasonStatus,
   SubscriptionStatus,
   UserRole,
   UserStatus,
@@ -36,14 +47,25 @@ import type {
 import type { DynamicSeedContext } from './types';
 import { validateSeedScenarioCompatibility } from './scenarios';
 import {
+  progressionMetricCount,
   shouldSeedMemberQr,
   validateSeedAccountContext,
 } from './lifecycles-profiles';
+import {
+  EQUIPMENT_ITEMS,
+  FOOD_ITEMS,
+  PRODUCT_RESTOCK_SEEDS,
+  PRODUCT_SEEDS,
+  expectedOpeningStock,
+  expectedRestockQuantity,
+} from './domains/nutrition-inventory';
+import { GYM_EQUIPMENT } from './domains/ai-gym-analytics';
 import {
   COHORT_ORDER,
   HARD_CAPS,
   cohortForMember,
   memberAccessWindow,
+  memberVolumeCount,
   volumeBandForMember,
   type VolumeDomain,
 } from './volumes';
@@ -52,9 +74,58 @@ import {
   CANONICAL_POSE_CAPABILITIES,
 } from '../../../../packages/utils/fitness-catalog';
 import { isValidPoseMovementContract } from '../../../../packages/utils/pose';
+import { calculateWorkoutProgressionDelta } from '../../src/fitness/gamification/gamification.constants';
 
 type IntegrityViolation = DynamicSeedIntegrityViolation;
 const DAY_MS = 24 * 60 * 60 * 1_000;
+
+const FOOD_BY_ITEM = new Map<string, (typeof FOOD_ITEMS)[number]>(
+  FOOD_ITEMS.map((food) => [food[1], food] as const),
+);
+
+/** Nutrition logs persist as @db.Date, so audit their calendar day rather than
+ * comparing a midnight date value with a timestamped TDEE/lifecycle boundary. */
+export function nutritionCalendarDay(value: Date) {
+  return Date.UTC(
+    value.getUTCFullYear(),
+    value.getUTCMonth(),
+    value.getUTCDate(),
+  );
+}
+
+function nutritionActivityMultiplier(activity: string) {
+  switch (activity) {
+    case ActivityLevel.sedentary:
+      return 1.2;
+    case ActivityLevel.light:
+      return 1.375;
+    case ActivityLevel.moderate:
+      return 1.55;
+    case ActivityLevel.very_active:
+      return 1.725;
+    case ActivityLevel.active:
+    default:
+      return 1.65;
+  }
+}
+
+function nutritionBmr(
+  age: number,
+  gender: string,
+  heightCm: number,
+  weightKg: number,
+) {
+  const base = 10 * weightKg + 6.25 * heightCm - 5 * age;
+  return gender === Gender.female ? base - 161 : base + 5;
+}
+
+function nutritionGoalCalories(tdee: number, goal: string) {
+  return goal === FitnessGoal.cutting
+    ? tdee - 250
+    : goal === FitnessGoal.bulking
+      ? tdee + 250
+      : tdee;
+}
 
 export class SeedIntegrityError extends Error {
   constructor(readonly outcome: DynamicSeedIntegritySummary) {
@@ -255,16 +326,38 @@ export function hasVenueCapacityOverflow(
 ) {
   const byAmenity = new Map<string, VenueCapacityInterval[]>();
   for (const row of rows) {
+    const start = row.start.getTime();
+    const end = row.end.getTime();
+    if (
+      !Number.isFinite(start) ||
+      !Number.isFinite(end) ||
+      end <= start ||
+      !Number.isFinite(row.capacity) ||
+      row.capacity < 0
+    ) {
+      return true;
+    }
     const amenityRows = byAmenity.get(row.amenityId) ?? [];
     amenityRows.push(row);
     byAmenity.set(row.amenityId, amenityRows);
   }
   for (const amenityRows of byAmenity.values()) {
-    for (const row of amenityRows) {
-      const concurrent = amenityRows.filter((candidate) =>
-        overlaps(candidate.start, candidate.end, row.start, row.end),
-      ).length;
-      if (concurrent > row.capacity) return true;
+    // Booking intervals are half-open: [start, end). End events must be
+    // applied before start events at the same instant so adjacent bookings
+    // do not falsely consume two capacity slots. The sweep is O(n log n) and
+    // catches staggered intervals that neighbour-only checks miss.
+    const events = amenityRows.flatMap((row) => [
+      { at: row.start.getTime(), delta: 1 },
+      { at: row.end.getTime(), delta: -1 },
+    ]);
+    events.sort(
+      (left, right) => left.at - right.at || left.delta - right.delta,
+    );
+    const capacity = Math.min(...amenityRows.map((row) => row.capacity));
+    let concurrent = 0;
+    for (const event of events) {
+      concurrent += event.delta;
+      if (concurrent > capacity) return true;
     }
   }
   return false;
@@ -1123,6 +1216,621 @@ function isDynamicSeedSummary(value: unknown) {
   return jsonRecord(value).source === 'dynamic-seed';
 }
 
+type BusinessIntegrityCheck = (
+  condition: boolean,
+  category: string,
+  detail: string,
+) => void;
+
+async function runBusinessEcosystemIntegrity(
+  ctx: DynamicSeedContext,
+  anchor: Date,
+  check: BusinessIntegrityCheck,
+) {
+  const productIds = PRODUCT_SEEDS.map(([key]) =>
+    seedId(`retail-product:${key}`),
+  );
+  const equipmentItemIds = EQUIPMENT_ITEMS.map(([key]) =>
+    seedId(`equipment-item:${key}`),
+  );
+  const layoutIds = GYM_EQUIPMENT.map(([key]) =>
+    seedId(`gym-equipment:${key}`),
+  );
+  const seededUserIds = ctx.state.accounts.map(
+    (account) => ctx.state.userIds[account.key],
+  );
+  const seedSaleIds = new Set<string>();
+  const seedPaymentIds = new Set<string>();
+  for (const account of ctx.state.accounts) {
+    const saleCount =
+      account.role === 'member'
+        ? memberVolumeCount(ctx, account.key, 'sales')
+        : 0;
+    for (let saleIndex = 0; saleIndex < saleCount; saleIndex += 1) {
+      seedSaleIds.add(seedId(`sale:${account.key}:${saleIndex}`));
+      seedPaymentIds.add(seedId(`payment:product:${account.key}:${saleIndex}`));
+    }
+  }
+  const canonicalAiSessionIds = new Set<string>();
+  const eligibleAccounts = ctx.state.accounts.filter(
+    (account) =>
+      account.role !== 'member' ||
+      !ctx.state.restrictedMemberKeys.includes(account.key),
+  );
+  let aiIndex = 0;
+  for (const account of eligibleAccounts) {
+    const threadCount =
+      account.role === 'member'
+        ? Math.max(
+            1,
+            Math.floor(memberVolumeCount(ctx, account.key, 'chats') / 4),
+          )
+        : 3;
+    for (let threadIndex = 0; threadIndex < threadCount; threadIndex += 1) {
+      const context =
+        aiIndex % 3 === 0
+          ? 'training_plan'
+          : aiIndex % 3 === 1
+            ? 'nutrition'
+            : 'general';
+      canonicalAiSessionIds.add(
+        seedId(`ai-session:${account.key}:${context}:${threadIndex}`),
+      );
+      aiIndex += 1;
+    }
+  }
+  const canonicalGymSessionIds = new Set<string>();
+  for (const account of ctx.state.accounts.filter(
+    (candidate) => candidate.role === 'member',
+  )) {
+    const chatBudget = memberVolumeCount(ctx, account.key, 'chats');
+    const aiMessageCount = ctx.state.restrictedMemberKeys.includes(account.key)
+      ? 0
+      : Math.floor(chatBudget / 4) * 2;
+    const gymTurns = Math.max(
+      1,
+      Math.floor(Math.max(2, chatBudget - aiMessageCount) / 2),
+    );
+    for (let threadIndex = 0; threadIndex < gymTurns; threadIndex += 1) {
+      canonicalGymSessionIds.add(
+        seedId(`gym-chat-session:${account.key}:${threadIndex}`),
+      );
+    }
+  }
+  const restockAuditIds = PRODUCT_RESTOCK_SEEDS.map(([key], index) =>
+    seedId(`audit:product-restock:${key}:${index}`),
+  );
+  const maintenanceAuditIds = [
+    seedId('audit:equipment-maintenance:bike-1:started'),
+    seedId('audit:equipment-maintenance:treadmill-1:completed'),
+  ];
+
+  const [
+    products,
+    saleTransactions,
+    saleItems,
+    payments,
+    equipmentItems,
+    writeOffs,
+    layouts,
+    audits,
+    notifications,
+    aiSessions,
+    aiMessages,
+    gymSessions,
+    gymMessages,
+    specialSchedules,
+    promotions,
+    insightRuns,
+  ] = await Promise.all([
+    ctx.prisma.retailProduct.findMany({
+      where: { id: { in: productIds } },
+      select: {
+        id: true,
+        last_low_stock_alert_at: true,
+        name: true,
+        reorder_threshold: true,
+        stock_quantity: true,
+      },
+    }),
+    ctx.prisma.saleTransaction.findMany({
+      select: {
+        id: true,
+        payment_id: true,
+        status: true,
+        total_amount: true,
+      },
+    }),
+    ctx.prisma.saleTransactionItem.findMany({
+      select: {
+        product_id: true,
+        quantity: true,
+        subtotal: true,
+        transaction_id: true,
+        unit_price: true,
+      },
+    }),
+    ctx.prisma.payment.findMany({
+      where: {
+        OR: [
+          { payable_type: PayableType.product },
+          { id: { in: [...seedPaymentIds] } },
+        ],
+      },
+      select: {
+        amount: true,
+        id: true,
+        payable_id: true,
+        payable_type: true,
+        payment_stage: true,
+        status: true,
+      },
+    }),
+    ctx.prisma.gymEquipmentItem.findMany({
+      where: { id: { in: equipmentItemIds } },
+      select: { id: true, quantity_current: true, quantity_total: true },
+    }),
+    ctx.prisma.equipmentWriteOff.findMany({
+      where: { equipment_id: { in: equipmentItemIds } },
+      select: {
+        equipment_id: true,
+        quantity_before: true,
+        quantity_lost: true,
+        quantity_set_to: true,
+      },
+    }),
+    ctx.prisma.gymEquipment.findMany({
+      where: { id: { in: layoutIds } },
+      select: { id: true, status: true },
+    }),
+    ctx.prisma.auditLog.findMany({
+      where: { id: { in: [...restockAuditIds, ...maintenanceAuditIds] } },
+      select: {
+        action: true,
+        after: true,
+        before: true,
+        entity: true,
+        entity_id: true,
+        user_id: true,
+      },
+    }),
+    ctx.prisma.notification.findMany({
+      where: { user_id: { in: seededUserIds } },
+      select: {
+        created_at: true,
+        data: true,
+        id: true,
+        read_at: true,
+        sent_at: true,
+        status: true,
+        user_id: true,
+      },
+    }),
+    ctx.prisma.aiChatSession.findMany({
+      where: { id: { in: [...canonicalAiSessionIds] } },
+      select: {
+        id: true,
+        is_active: true,
+        last_activity_at: true,
+        user_id: true,
+      },
+    }),
+    ctx.prisma.aiChatMessage.findMany({
+      where: { session_id: { in: [...canonicalAiSessionIds] } },
+      select: { created_at: true, id: true, session_id: true },
+    }),
+    ctx.prisma.gymChatSession.findMany({
+      where: { id: { in: [...canonicalGymSessionIds] } },
+      select: {
+        id: true,
+        is_active: true,
+        last_activity_at: true,
+        user_id: true,
+      },
+    }),
+    ctx.prisma.gymChatMessage.findMany({
+      where: { session_id: { in: [...canonicalGymSessionIds] } },
+      select: { content: true, created_at: true, id: true, session_id: true },
+    }),
+    ctx.prisma.gymSpecialSchedule.findMany({
+      where: {
+        id: {
+          in: [
+            seedId('special-schedule:maintenance-history'),
+            seedId('special-schedule:maintenance-night'),
+            seedId('special-schedule:holiday'),
+          ],
+        },
+      },
+      select: { ends_on: true, id: true, is_active: true, starts_on: true },
+    }),
+    ctx.prisma.gymPromotion.findMany({
+      where: {
+        id: {
+          in: [
+            seedId('promotion:premium-coaching-demo'),
+            seedId('promotion:amenity-bundle'),
+            seedId('promotion:expired-starter'),
+          ],
+        },
+      },
+      select: { ends_at: true, id: true, is_active: true, starts_at: true },
+    }),
+    ctx.prisma.businessInsightRun.findMany({
+      where: {
+        id: {
+          in: [
+            seedId('business-insight:overview:monthly'),
+            seedId('business-insight:inventory:weekly'),
+          ],
+        },
+      },
+      select: {
+        created_at: true,
+        end_date: true,
+        id: true,
+        insight_payload: true,
+        request_payload: true,
+        start_date: true,
+      },
+    }),
+  ]);
+
+  const saleById = new Map(saleTransactions.map((sale) => [sale.id, sale]));
+  const soldByProduct = new Map<string, number>();
+  const lineItemsBySale = new Map<string, typeof saleItems>();
+  for (const item of saleItems) {
+    const saleItemsForTransaction =
+      lineItemsBySale.get(item.transaction_id) ?? [];
+    saleItemsForTransaction.push(item);
+    lineItemsBySale.set(item.transaction_id, saleItemsForTransaction);
+    if (saleById.get(item.transaction_id)?.status === SaleStatus.completed) {
+      soldByProduct.set(
+        item.product_id,
+        (soldByProduct.get(item.product_id) ?? 0) + item.quantity,
+      );
+    }
+    check(
+      item.quantity > 0 && Number(item.subtotal) >= 0,
+      'business-ecosystem',
+      `sale line ${item.transaction_id}/${item.product_id} has invalid quantity or subtotal`,
+    );
+  }
+  const productById = new Map(products.map((product) => [product.id, product]));
+  for (const [key, , , , , openingStock] of PRODUCT_SEEDS) {
+    const productId = seedId(`retail-product:${key}`);
+    const product = productById.get(productId);
+    check(
+      Boolean(product),
+      'business-ecosystem',
+      `seed product ${key} is present`,
+    );
+    if (!product) continue;
+    const expectedStock = Math.max(
+      0,
+      (expectedOpeningStock(ctx, key) ?? openingStock) +
+        expectedRestockQuantity(key) -
+        (soldByProduct.get(productId) ?? 0),
+    );
+    check(
+      product.stock_quantity === expectedStock,
+      'business-ecosystem',
+      `${key} stock is ${product.stock_quantity}; expected ${expectedStock} after opening, restocks, and completed sales`,
+    );
+    check(
+      product.stock_quantity >= 0,
+      'business-ecosystem',
+      `${key} stock quantity is non-negative`,
+    );
+    check(
+      Boolean(product.last_low_stock_alert_at) ===
+        product.stock_quantity <= product.reorder_threshold,
+      'business-ecosystem',
+      `${key} low-stock alert reflects final stock state`,
+    );
+  }
+
+  const paymentByPayableId = new Map(
+    payments.map((payment) => [payment.payable_id, payment]),
+  );
+  for (const sale of saleTransactions.filter((candidate) =>
+    seedSaleIds.has(candidate.id),
+  )) {
+    const lineTotal = (lineItemsBySale.get(sale.id) ?? []).reduce(
+      (total, item) => total + Number(item.subtotal),
+      0,
+    );
+    check(
+      Math.abs(Number(sale.total_amount) - lineTotal) < 0.01,
+      'business-ecosystem',
+      `sale ${sale.id} total matches its line-item subtotals`,
+    );
+    if (sale.status === SaleStatus.completed) {
+      const payment = sale.payment_id
+        ? payments.find((candidate) => candidate.id === sale.payment_id)
+        : paymentByPayableId.get(sale.id);
+      check(
+        Boolean(payment) &&
+          payment?.status === PaymentStatus.completed &&
+          payment.payment_stage === PaymentStage.full &&
+          Math.abs(Number(payment.amount) - Number(sale.total_amount)) < 0.01,
+        'business-ecosystem',
+        `completed sale ${sale.id} has a matching full completed payment`,
+      );
+    }
+  }
+  for (const payment of payments.filter((candidate) =>
+    seedPaymentIds.has(candidate.id),
+  )) {
+    if (payment.status === PaymentStatus.failed) {
+      check(
+        !saleById.has(payment.payable_id),
+        'business-ecosystem',
+        `failed product payment ${payment.id} does not create a sale`,
+      );
+    }
+  }
+
+  const equipmentById = new Map(
+    equipmentItems.map((equipment) => [equipment.id, equipment]),
+  );
+  const writeOffByEquipment = new Map(
+    writeOffs.map((writeOff) => [writeOff.equipment_id, writeOff]),
+  );
+  for (const [key, , , quantityTotal, quantityCurrent] of EQUIPMENT_ITEMS) {
+    const id = seedId(`equipment-item:${key}`);
+    const equipment = equipmentById.get(id);
+    const writeOff = writeOffByEquipment.get(id);
+    check(
+      Boolean(equipment),
+      'business-ecosystem',
+      `equipment item ${key} is present`,
+    );
+    check(
+      equipment?.quantity_total === quantityTotal &&
+        equipment?.quantity_current === quantityCurrent &&
+        (equipment?.quantity_current ?? -1) >= 0 &&
+        (equipment?.quantity_current ?? -1) <=
+          (equipment?.quantity_total ?? -1),
+      'business-ecosystem',
+      `${key} equipment quantity is a legal current state`,
+    );
+    check(
+      writeOff?.quantity_before === quantityTotal &&
+        writeOff?.quantity_set_to === quantityCurrent &&
+        writeOff?.quantity_lost === quantityTotal - quantityCurrent,
+      'business-ecosystem',
+      `${key} has matching write-off evidence`,
+    );
+  }
+
+  const layoutById = new Map(layouts.map((layout) => [layout.id, layout]));
+  check(
+    layoutById.get(seedId('gym-equipment:bike-1'))?.status ===
+      EquipmentStatus.maintenance,
+    'business-ecosystem',
+    'bike layout remains in the current maintenance state',
+  );
+  check(
+    layoutById.get(seedId('gym-equipment:treadmill-1'))?.status ===
+      EquipmentStatus.available,
+    'business-ecosystem',
+    'treadmill layout is restored to an available state after maintenance',
+  );
+  const maintenanceAudits = audits.filter(
+    (audit) =>
+      audit.entity === 'GymEquipment' &&
+      (audit.action === 'EQUIPMENT_MAINTENANCE_STARTED' ||
+        audit.action === 'EQUIPMENT_MAINTENANCE_COMPLETED'),
+  );
+  check(
+    maintenanceAudits.some(
+      (audit) =>
+        audit.action === 'EQUIPMENT_MAINTENANCE_STARTED' &&
+        audit.entity_id === seedId('gym-equipment:bike-1') &&
+        jsonRecord(audit.after).status === EquipmentStatus.maintenance,
+    ),
+    'business-ecosystem',
+    'current maintenance status has a started maintenance audit',
+  );
+  check(
+    maintenanceAudits.some(
+      (audit) =>
+        audit.action === 'EQUIPMENT_MAINTENANCE_COMPLETED' &&
+        audit.entity_id === seedId('gym-equipment:treadmill-1') &&
+        jsonRecord(audit.after).status === EquipmentStatus.available,
+    ),
+    'business-ecosystem',
+    'historical maintenance completion restores an available layout state',
+  );
+  for (const layout of layouts) {
+    check(
+      Object.values(EquipmentStatus).includes(layout.status),
+      'business-ecosystem',
+      `equipment layout ${layout.id} has a legal status`,
+    );
+  }
+  const adminOrStaffIds = new Set([
+    ...ctx.state.adminKeys.map((key) => ctx.state.userIds[key]),
+    ...ctx.state.staffKeys.map((key) => ctx.state.userIds[key]),
+  ]);
+  for (const audit of audits) {
+    check(
+      audit.user_id !== null && adminOrStaffIds.has(audit.user_id),
+      'business-ecosystem',
+      `seed audit ${audit.action} has a staff/admin actor`,
+    );
+    if (audit.action === 'PRODUCT_RESTOCKED') {
+      check(
+        audit.entity === 'RetailProduct' &&
+          Number(jsonRecord(audit.after).quantity_added) > 0,
+        'business-ecosystem',
+        `restock audit ${audit.entity_id} records a positive replenishment`,
+      );
+    }
+  }
+
+  const accountById = new Map(
+    ctx.state.accounts.map((account) => [
+      ctx.state.userIds[account.key],
+      account,
+    ]),
+  );
+  const dynamicNotifications = notifications.filter(
+    (notification) => jsonRecord(notification.data).source === 'dynamic-seed',
+  );
+  const allowedNotificationSources = new Set([
+    'account',
+    'appointment',
+    'appointment-reminder',
+    'booking',
+    'booking-reminder',
+    'membership',
+    'milestone',
+    'payment',
+    'rank',
+    'stock',
+  ]);
+  for (const notification of dynamicNotifications) {
+    const data = jsonRecord(notification.data);
+    const source =
+      typeof data.event_source === 'string' ? data.event_source : '';
+    check(
+      notification.status === NotificationStatus.sent ||
+        notification.status === NotificationStatus.read,
+      'business-ecosystem',
+      `notification ${notification.id} is not left pending or failed`,
+    );
+    check(
+      allowedNotificationSources.has(source),
+      'business-ecosystem',
+      `notification ${notification.id} names an allowed source event`,
+    );
+    check(
+      Boolean(notification.sent_at) &&
+        notification.created_at <=
+          (notification.sent_at ?? notification.created_at) &&
+        (notification.read_at === null ||
+          (notification.sent_at !== null &&
+            notification.sent_at <= notification.read_at)),
+      'business-ecosystem',
+      `notification ${notification.id} has monotonic created/sent/read timestamps`,
+    );
+    check(
+      notification.created_at <= anchor &&
+        (notification.sent_at?.getTime() ?? anchor) <= anchor &&
+        (notification.read_at?.getTime() ?? anchor) <= anchor,
+      'business-ecosystem',
+      `notification ${notification.id} is not dated after the seed anchor`,
+    );
+    const account = accountById.get(notification.user_id);
+    if (account && ctx.state.restrictedMemberKeys.includes(account.key)) {
+      check(
+        source === 'account',
+        'business-ecosystem',
+        `restricted account ${account.key} receives only account-status notifications`,
+      );
+    }
+  }
+
+  const oldSessionCutoff = new Date(anchor.getTime() - 30 * DAY_MS);
+  for (const session of aiSessions) {
+    check(
+      session.last_activity_at <= anchor,
+      'business-ecosystem',
+      `AI session ${session.id} is not dated after the seed anchor`,
+    );
+    check(
+      !session.is_active || session.last_activity_at >= oldSessionCutoff,
+      'business-ecosystem',
+      `old AI session ${session.id} is terminalized`,
+    );
+  }
+  for (const message of aiMessages) {
+    check(
+      message.created_at <= anchor,
+      'business-ecosystem',
+      `AI message ${message.id} is not dated after the seed anchor`,
+    );
+  }
+  for (const session of gymSessions) {
+    check(
+      session.last_activity_at <= anchor,
+      'business-ecosystem',
+      `gym chat session ${session.id} is not dated after the seed anchor`,
+    );
+    check(
+      !session.is_active || session.last_activity_at >= oldSessionCutoff,
+      'business-ecosystem',
+      `old gym chat session ${session.id} is terminalized`,
+    );
+  }
+  const restrictedIds = new Set(
+    ctx.state.restrictedMemberKeys.map((key) => ctx.state.userIds[key]),
+  );
+  const gymSessionOwners = new Map(
+    gymSessions.map((session) => [session.id, session.user_id]),
+  );
+  for (const message of gymMessages) {
+    check(
+      message.created_at <= anchor,
+      'business-ecosystem',
+      `gym chat message ${message.id} is not dated after the seed anchor`,
+    );
+    if (restrictedIds.has(gymSessionOwners.get(message.session_id) ?? '')) {
+      check(
+        message.content.toLowerCase().includes('verification') ||
+          message.content.toLowerCase().includes('support'),
+        'business-ecosystem',
+        `restricted gym chat message ${message.id} stays within support/account scope`,
+      );
+    }
+  }
+
+  const anchorDay = new Date(anchor);
+  anchorDay.setUTCHours(0, 0, 0, 0);
+  for (const schedule of specialSchedules) {
+    check(
+      schedule.starts_on <= schedule.ends_on,
+      'business-ecosystem',
+      `special schedule ${schedule.id} has a valid date interval`,
+    );
+    check(
+      schedule.is_active === schedule.ends_on >= anchorDay,
+      'business-ecosystem',
+      `special schedule ${schedule.id} active state follows its dates`,
+    );
+  }
+  for (const promotion of promotions) {
+    check(
+      promotion.starts_at <= promotion.ends_at,
+      'business-ecosystem',
+      `promotion ${promotion.id} has a valid date interval`,
+    );
+    check(
+      promotion.is_active === promotion.ends_at >= anchor,
+      'business-ecosystem',
+      `promotion ${promotion.id} active state follows its dates`,
+    );
+  }
+  for (const insight of insightRuns) {
+    const payload = jsonRecord(insight.insight_payload);
+    const request = jsonRecord(insight.request_payload);
+    check(
+      insight.start_date <= insight.end_date &&
+        insight.end_date <= anchorDay &&
+        insight.created_at <= anchor,
+      'business-ecosystem',
+      `business insight ${insight.id} has a valid historical period`,
+    );
+    check(
+      payload.source === 'dynamic-seed' && request.source === 'dynamic-seed',
+      'business-ecosystem',
+      `business insight ${insight.id} records dynamic-seed provenance`,
+    );
+  }
+}
+
 function timeMinutes(value: Date) {
   return value.getUTCHours() * 60 + value.getUTCMinutes();
 }
@@ -1141,6 +1849,7 @@ function gymDayOfWeek(value: Date) {
 
 export async function runSeedIntegrityAudit(
   ctx: DynamicSeedContext,
+  options: { categories?: readonly string[] } = {},
 ): Promise<DynamicSeedIntegritySummary> {
   const ids = ctx.state.accounts.map(
     (account) => ctx.state.userIds[account.key],
@@ -1183,6 +1892,7 @@ export async function runSeedIntegrityAudit(
     saleItems,
     evidence,
     attendance,
+    progressMetrics,
     nutritionLogs,
     tdeeProfiles,
     macroTargets,
@@ -1623,25 +2333,63 @@ export async function runSeedIntegrityAudit(
         user_id: true,
       },
     }),
+    ctx.prisma.progressMetric.findMany({
+      where: { user_id: { in: ids } },
+      select: {
+        body_fat_pct: true,
+        chest_cm: true,
+        height_cm: true,
+        muscle_mass_kg: true,
+        recorded_at: true,
+        user_id: true,
+        waist_cm: true,
+        weight_kg: true,
+      },
+    }),
     ctx.prisma.nutritionLog.findMany({
       where: { user_id: { in: ids } },
       select: {
+        calories: true,
+        carbs_g: true,
         created_at: true,
+        fat_g: true,
+        food_item: true,
         log_date: true,
         macro_target_id: true,
+        meal_name: true,
+        protein_g: true,
+        quantity: true,
+        unit: true,
         user_id: true,
       },
     }),
     ctx.prisma.tdeeProfile.findMany({
       where: { user_id: { in: ids } },
-      select: { calculated_at: true, id: true, is_active: true, user_id: true },
+      select: {
+        activity_level: true,
+        age: true,
+        bmr_calories: true,
+        calculated_at: true,
+        fitness_goal: true,
+        gender: true,
+        height_cm: true,
+        id: true,
+        is_active: true,
+        tdee_calories: true,
+        user_id: true,
+        weight_kg: true,
+      },
     }),
     ctx.prisma.macroTarget.findMany({
       where: { user_id: { in: ids } },
       select: {
+        carbs_g: true,
         created_at: true,
+        fat_g: true,
         id: true,
         is_active: true,
+        protein_g: true,
+        target_calories: true,
         tdee_profile_id: true,
         user_id: true,
       },
@@ -1652,6 +2400,7 @@ export async function runSeedIntegrityAudit(
         created_at: true,
         id: true,
         processed_at: true,
+        source_context: true,
         source_id: true,
         source_status: true,
         source_type: true,
@@ -1666,10 +2415,12 @@ export async function runSeedIntegrityAudit(
         grant_status: true,
         grant_type: true,
         id: true,
+        metadata: true,
         muscle_group: true,
         season_id: true,
         source_event_id: true,
         user_id: true,
+        voided_at: true,
       },
     }),
     ctx.prisma.userProgressionProfile.findMany({
@@ -1696,13 +2447,25 @@ export async function runSeedIntegrityAudit(
     }),
     ctx.prisma.seasonalStanding.findMany({
       where: { user_id: { in: ids } },
-      select: { season_id: true, season_points: true, user_id: true },
+      select: {
+        is_disqualified: true,
+        is_hidden: true,
+        last_earned_at: true,
+        rank_position: true,
+        season_id: true,
+        season_points: true,
+        user_id: true,
+      },
     }),
     ctx.prisma.seasonalMuscleStanding.findMany({
       where: { user_id: { in: ids } },
       select: {
+        is_disqualified: true,
+        is_hidden: true,
+        last_earned_at: true,
         muscle_group: true,
         muscle_points: true,
+        rank_position: true,
         season_id: true,
         user_id: true,
       },
@@ -1710,7 +2473,9 @@ export async function runSeedIntegrityAudit(
     ctx.prisma.muscleMasteryProgress.findMany({
       where: { user_id: { in: ids } },
       select: {
+        last_ranked_at: true,
         muscle_group: true,
+        rank: true,
         total_volume_kg: true,
         user_id: true,
         xp_points: true,
@@ -1725,6 +2490,7 @@ export async function runSeedIntegrityAudit(
       select: {
         claimed_at: true,
         milestone_definition_id: true,
+        progress_payload: true,
         progress_value: true,
         reward_granted_at: true,
         status: true,
@@ -1839,7 +2605,15 @@ export async function runSeedIntegrityAudit(
   const violations: IntegrityViolation[] = [];
   const categoryCounts: Record<string, number> = {};
   let checks = 0;
+  const selectedCategories = options.categories
+    ? new Set(options.categories)
+    : null;
+  const shouldCheckCategory = (category: string) =>
+    selectedCategories === null || selectedCategories.has(category);
   const check = (condition: boolean, category: string, detail: string) => {
+    if (!shouldCheckCategory(category)) {
+      return;
+    }
     checks += 1;
     categoryCounts[category] = (categoryCounts[category] ?? 0) + 1;
     if (!condition) {
@@ -1847,6 +2621,9 @@ export async function runSeedIntegrityAudit(
     }
   };
   const recordAssertionFailure = (category: string, error: unknown) => {
+    if (!shouldCheckCategory(category)) {
+      return;
+    }
     checks += 1;
     categoryCounts[category] = (categoryCounts[category] ?? 0) + 1;
     violations.push({
@@ -1854,6 +2631,463 @@ export async function runSeedIntegrityAudit(
       detail: error instanceof Error ? error.message : String(error),
     });
   };
+
+  const seededMemberIds = new Set(
+    [...ctx.state.activeMemberKeys, ...ctx.state.historicalMemberKeys]
+      .map((key) => ctx.state.userIds[key])
+      .filter((id): id is string => Boolean(id)),
+  );
+  const canonicalMuscleKeys = muscleDefinitions.map(({ key }) =>
+    key.trim().toLowerCase(),
+  );
+  check(
+    new Set(canonicalMuscleKeys).size === canonicalMuscleKeys.length,
+    'gamification',
+    'active canonical muscle definitions are unique after normalization',
+  );
+  const canonicalMuscleSet = new Set(canonicalMuscleKeys);
+  const sourceById = new Map(
+    progressionSources.map((source) => [source.id, source]),
+  );
+  const seenSourceKeys = new Set<string>();
+  for (const source of progressionSources) {
+    const sourceKey = `${source.source_type}:${source.source_id}`;
+    check(
+      !seenSourceKeys.has(sourceKey),
+      'gamification',
+      `duplicate progression source key ${sourceKey}`,
+    );
+    seenSourceKeys.add(sourceKey);
+    if (
+      source.source_type === ProgressionSourceType.workout_session_completed
+    ) {
+      check(
+        source.processed_at !== null &&
+          (source.source_status === ProgressionSourceStatus.applied ||
+            source.source_status === ProgressionSourceStatus.blocked),
+        'gamification',
+        `workout source ${source.id} is not processed with a terminal status`,
+      );
+    }
+  }
+  const appliedXpByUser = new Map<string, number>();
+  const appliedSeasonPoints = new Map<string, Map<string, number>>();
+  const appliedXpBySeasonMuscle = new Map<
+    string,
+    Map<string, Map<string, number>>
+  >();
+  const seenAppliedGrantKeys = new Set<string>();
+  for (const grant of progressionGrants) {
+    check(
+      grant.amount > 0,
+      'gamification',
+      `progression grant ${grant.id} must have a positive amount`,
+    );
+    if (grant.grant_status !== ProgressionGrantStatus.applied) {
+      check(
+        grant.grant_status !== ProgressionGrantStatus.voided ||
+          grant.voided_at !== null,
+        'gamification',
+        `voided progression grant ${grant.id} must retain a voided timestamp`,
+      );
+      continue;
+    }
+    if (grant.source_event_id) {
+      const source = sourceById.get(grant.source_event_id);
+      check(
+        Boolean(source) && source?.user_id === grant.user_id,
+        'gamification',
+        `grant ${grant.id} does not reconcile to its source owner`,
+      );
+      check(
+        Boolean(source?.processed_at),
+        'gamification',
+        `grant ${grant.id} references an unprocessed source`,
+      );
+      check(
+        source?.source_status === ProgressionSourceStatus.applied,
+        'gamification',
+        `applied grant ${grant.id} references a non-applied source`,
+      );
+    }
+    if (grant.source_event_id) {
+      const grantKey = `${grant.source_event_id}:${grant.grant_type}:${
+        grant.muscle_group?.trim().toLowerCase() ?? ''
+      }`;
+      check(
+        !seenAppliedGrantKeys.has(grantKey),
+        'gamification',
+        `duplicate applied grant key ${grantKey}`,
+      );
+      seenAppliedGrantKeys.add(grantKey);
+    }
+    if (grant.grant_type === ProgressionGrantType.xp) {
+      check(
+        Boolean(grant.muscle_group) &&
+          canonicalMuscleSet.has(
+            grant.muscle_group?.trim().toLowerCase() ?? '',
+          ),
+        'gamification',
+        `XP grant ${grant.id} has a non-canonical muscle group`,
+      );
+      appliedXpByUser.set(
+        grant.user_id,
+        (appliedXpByUser.get(grant.user_id) ?? 0) + grant.amount,
+      );
+      if (grant.muscle_group) {
+        const muscle = grant.muscle_group.trim().toLowerCase();
+        if (grant.season_id) {
+          const seasonRows: Map<
+            string,
+            Map<string, number>
+          > = appliedXpBySeasonMuscle.get(grant.season_id) ??
+          new Map<string, Map<string, number>>();
+          const userRows: Map<string, number> =
+            seasonRows.get(grant.user_id) ?? new Map<string, number>();
+          userRows.set(muscle, (userRows.get(muscle) ?? 0) + grant.amount);
+          seasonRows.set(grant.user_id, userRows);
+          appliedXpBySeasonMuscle.set(grant.season_id, seasonRows);
+        }
+      }
+    }
+    if (grant.grant_type === ProgressionGrantType.season_points) {
+      check(
+        grant.muscle_group === null,
+        'gamification',
+        `season points grant ${grant.id} must not carry a muscle group`,
+      );
+      if (grant.season_id) {
+        const rows: Map<string, number> =
+          appliedSeasonPoints.get(grant.season_id) ?? new Map<string, number>();
+        rows.set(grant.user_id, (rows.get(grant.user_id) ?? 0) + grant.amount);
+        appliedSeasonPoints.set(grant.season_id, rows);
+      }
+    }
+  }
+
+  const completedWorkoutById = new Map(
+    workoutSessions
+      .filter(
+        (workout) =>
+          workout.status === SessionStatus.completed &&
+          seededMemberIds.has(workout.user_id),
+      )
+      .map((workout) => [workout.id, workout]),
+  );
+  for (const source of progressionSources) {
+    if (
+      seededMemberIds.has(source.user_id) &&
+      source.source_type === ProgressionSourceType.workout_session_completed &&
+      source.source_status === ProgressionSourceStatus.applied
+    ) {
+      check(
+        completedWorkoutById.has(source.source_id),
+        'gamification',
+        `workout progression source ${source.id} does not reference a completed seeded workout`,
+      );
+    }
+  }
+  const gamificationLogsBySession = new Map<string, typeof exerciseLogs>();
+  for (const log of exerciseLogs) {
+    const rows = gamificationLogsBySession.get(log.session_id) ?? [];
+    rows.push(log);
+    gamificationLogsBySession.set(log.session_id, rows);
+  }
+  const gamificationExerciseById = new Map(
+    exerciseCatalog.map((exercise) => [exercise.id, exercise]),
+  );
+  const expectedByUser = new Map<
+    string,
+    Map<string, { xp: number; volume: Prisma.Decimal }>
+  >();
+  for (const workout of completedWorkoutById.values()) {
+    for (const log of gamificationLogsBySession.get(workout.id) ?? []) {
+      const exercise = gamificationExerciseById.get(log.exercise_id);
+      if (!exercise) continue;
+      const explicitTargets = (
+        Array.isArray(exercise.muscle_targets) ? exercise.muscle_targets : []
+      )
+        .filter((value): value is string => typeof value === 'string')
+        .map((value) => value.trim().toLowerCase())
+        .filter(
+          (value, index, values) =>
+            canonicalMuscleSet.has(value) && values.indexOf(value) === index,
+        );
+      const fallback = exercise.muscle_group.trim().toLowerCase();
+      const targets = explicitTargets.length
+        ? explicitTargets
+        : canonicalMuscleSet.has(fallback)
+          ? [fallback]
+          : [];
+      const delta = calculateWorkoutProgressionDelta({
+        repsAiCounted: log.reps_ai_counted,
+        repsCompleted: log.reps_completed,
+        weightKg: log.weight_kg,
+      });
+      if (targets.length === 0 || delta.xp <= 0) continue;
+      const rows: Map<string, { xp: number; volume: Prisma.Decimal }> =
+        expectedByUser.get(workout.user_id) ??
+        new Map<string, { xp: number; volume: Prisma.Decimal }>();
+      const baseXp = Math.floor(delta.xp / targets.length);
+      const remainder = delta.xp % targets.length;
+      const volumeShare = delta.volumeKg.dividedBy(targets.length);
+      targets.forEach((muscle, index) => {
+        const current = rows.get(muscle) ?? {
+          xp: 0,
+          volume: new Prisma.Decimal(0),
+        };
+        rows.set(muscle, {
+          xp: current.xp + baseXp + (index < remainder ? 1 : 0),
+          volume: current.volume.plus(volumeShare),
+        });
+      });
+      expectedByUser.set(workout.user_id, rows);
+    }
+  }
+  for (const mastery of muscleMastery) {
+    const expected = expectedByUser
+      .get(mastery.user_id)
+      ?.get(mastery.muscle_group.trim().toLowerCase()) ?? {
+      xp: 0,
+      volume: new Prisma.Decimal(0),
+    };
+    const expectedVolume = new Prisma.Decimal(expected.volume.toFixed(2));
+    check(
+      mastery.xp_points === expected.xp,
+      'gamification',
+      `mastery ${mastery.user_id}/${mastery.muscle_group} XP does not match exercise logs`,
+    );
+    check(
+      new Prisma.Decimal(mastery.total_volume_kg).eq(expectedVolume),
+      'gamification',
+      `mastery ${mastery.user_id}/${mastery.muscle_group} volume does not match exercise logs`,
+    );
+  }
+  for (const profile of progressionProfiles) {
+    check(
+      profile.total_xp === (appliedXpByUser.get(profile.user_id) ?? 0),
+      'gamification',
+      `progression profile ${profile.user_id} total XP does not reconcile to applied grants`,
+    );
+    const activePoints = profile.active_season_id
+      ? (appliedSeasonPoints
+          .get(profile.active_season_id)
+          ?.get(profile.user_id) ?? 0)
+      : 0;
+    check(
+      profile.current_season_points === activePoints,
+      'gamification',
+      `progression profile ${profile.user_id} season points do not reconcile to applied grants`,
+    );
+  }
+  for (const standing of seasonalStandings) {
+    const expected =
+      appliedSeasonPoints.get(standing.season_id)?.get(standing.user_id) ?? 0;
+    check(
+      standing.season_points === expected,
+      'gamification',
+      `season standing ${standing.season_id}/${standing.user_id} is not ledger-derived`,
+    );
+    check(
+      standing.is_hidden || standing.is_disqualified
+        ? standing.rank_position === null
+        : standing.rank_position === null || standing.rank_position > 0,
+      'gamification',
+      `season standing ${standing.season_id}/${standing.user_id} has invalid visibility rank`,
+    );
+  }
+  for (const standing of seasonalMuscleStandings) {
+    const expected =
+      appliedXpBySeasonMuscle
+        .get(standing.season_id)
+        ?.get(standing.user_id)
+        ?.get(standing.muscle_group.trim().toLowerCase()) ?? 0;
+    check(
+      standing.muscle_points === expected,
+      'gamification',
+      `season muscle standing ${standing.season_id}/${standing.user_id}/${standing.muscle_group} is not ledger-derived`,
+    );
+    check(
+      standing.is_hidden || standing.is_disqualified
+        ? standing.rank_position === null
+        : standing.rank_position === null || standing.rank_position > 0,
+      'gamification',
+      `season muscle standing ${standing.season_id}/${standing.user_id}/${standing.muscle_group} has invalid visibility rank`,
+    );
+  }
+  const standingsBySeason = new Map<string, typeof seasonalStandings>();
+  for (const standing of seasonalStandings) {
+    const rows = standingsBySeason.get(standing.season_id) ?? [];
+    rows.push(standing);
+    standingsBySeason.set(standing.season_id, rows);
+  }
+  for (const [seasonId, rows] of standingsBySeason) {
+    const visible = rows
+      .filter((row) => !row.is_hidden && !row.is_disqualified)
+      .sort(
+        (left, right) =>
+          right.season_points - left.season_points ||
+          (right.last_earned_at?.getTime() ?? 0) -
+            (left.last_earned_at?.getTime() ?? 0) ||
+          left.user_id.localeCompare(right.user_id),
+      );
+    let previousPoints: number | null = null;
+    let previousRank = 0;
+    visible.forEach((row, index) => {
+      const expectedRank =
+        row.season_points === previousPoints ? previousRank : index + 1;
+      previousPoints = row.season_points;
+      previousRank = expectedRank;
+      check(
+        row.rank_position === expectedRank,
+        'gamification',
+        `season standing ${seasonId}/${row.user_id} is not sorted by production rank order`,
+      );
+    });
+  }
+  const muscleStandingsByKey = new Map<
+    string,
+    typeof seasonalMuscleStandings
+  >();
+  for (const standing of seasonalMuscleStandings) {
+    const key = `${standing.season_id}:${standing.muscle_group}`;
+    const rows = muscleStandingsByKey.get(key) ?? [];
+    rows.push(standing);
+    muscleStandingsByKey.set(key, rows);
+  }
+  for (const [key, rows] of muscleStandingsByKey) {
+    const visible = rows
+      .filter((row) => !row.is_hidden && !row.is_disqualified)
+      .sort(
+        (left, right) =>
+          right.muscle_points - left.muscle_points ||
+          (right.last_earned_at?.getTime() ?? 0) -
+            (left.last_earned_at?.getTime() ?? 0) ||
+          left.user_id.localeCompare(right.user_id),
+      );
+    let previousPoints: number | null = null;
+    let previousRank = 0;
+    visible.forEach((row, index) => {
+      const expectedRank =
+        row.muscle_points === previousPoints ? previousRank : index + 1;
+      previousPoints = row.muscle_points;
+      previousRank = expectedRank;
+      check(
+        row.rank_position === expectedRank,
+        'gamification',
+        `season muscle standing ${key}/${row.user_id} is not sorted by production rank order`,
+      );
+    });
+  }
+  const allSeasons = await ctx.prisma.seasonDefinition.findMany({
+    select: { ends_at: true, id: true, starts_at: true, status: true },
+  });
+  const dateValidActiveSeasons = allSeasons.filter(
+    (season) =>
+      season.status === SeasonStatus.active &&
+      season.starts_at <= ctx.config.anchorDate &&
+      season.ends_at >= ctx.config.anchorDate,
+  );
+  check(
+    dateValidActiveSeasons.length === 1,
+    'gamification',
+    `expected exactly one date-valid active season, found ${dateValidActiveSeasons.length}`,
+  );
+  const dynamicMilestones = await ctx.prisma.milestoneDefinition.findMany({
+    where: { key: { startsWith: 'dynamic-' } },
+    select: { condition_payload: true, id: true, key: true },
+  });
+  const dynamicMilestoneById = new Map(
+    dynamicMilestones.map((milestone) => [milestone.id, milestone]),
+  );
+  const workoutCountByUser = new Map<string, number>();
+  const bookingCountByUser = new Map<string, number>();
+  const coachingCountByUser = new Map<string, number>();
+  for (const workout of completedWorkoutById.values()) {
+    workoutCountByUser.set(
+      workout.user_id,
+      (workoutCountByUser.get(workout.user_id) ?? 0) + 1,
+    );
+  }
+  for (const booking of bookings.filter(
+    (row) => row.status === BookingStatus.completed,
+  )) {
+    bookingCountByUser.set(
+      booking.user_id,
+      (bookingCountByUser.get(booking.user_id) ?? 0) + 1,
+    );
+  }
+  for (const appointment of appointments.filter(
+    (row) => row.status === AppointmentStatus.completed,
+  )) {
+    coachingCountByUser.set(
+      appointment.user_id,
+      (coachingCountByUser.get(appointment.user_id) ?? 0) + 1,
+    );
+  }
+  for (const progress of milestoneProgress) {
+    const milestone = dynamicMilestoneById.get(
+      progress.milestone_definition_id,
+    );
+    if (!milestone || !seededMemberIds.has(progress.user_id)) continue;
+    const condition = jsonRecord(milestone.condition_payload);
+    const metric =
+      typeof condition.metric === 'string' ? condition.metric : null;
+    const target = typeof condition.target === 'number' ? condition.target : 0;
+    const observed =
+      metric === 'completed_workout_sessions'
+        ? (workoutCountByUser.get(progress.user_id) ?? 0)
+        : metric === 'completed_venue_bookings'
+          ? (bookingCountByUser.get(progress.user_id) ?? 0)
+          : metric === 'completed_coach_appointments'
+            ? (coachingCountByUser.get(progress.user_id) ?? 0)
+            : (appliedXpByUser.get(progress.user_id) ?? 0);
+    check(
+      progress.progress_value === observed,
+      'gamification',
+      `milestone progress ${progress.milestone_definition_id}/${progress.user_id} is not derived from actual evidence`,
+    );
+    check(
+      progress.status === 'in_progress' || observed >= target,
+      'gamification',
+      `milestone progress ${progress.milestone_definition_id}/${progress.user_id} is unlocked below target`,
+    );
+    check(
+      (progress.unlocked_at?.getTime() ?? 0) <=
+        ctx.config.anchorDate.getTime() &&
+        (progress.claimed_at?.getTime() ?? 0) <=
+          ctx.config.anchorDate.getTime() &&
+        (progress.reward_granted_at?.getTime() ?? 0) <=
+          ctx.config.anchorDate.getTime(),
+      'gamification',
+      `milestone progress ${progress.milestone_definition_id}/${progress.user_id} has a future timestamp`,
+    );
+  }
+  const progressByUser = new Map<string, typeof progressMetrics>();
+  const nutritionByUser = new Map<string, typeof nutritionLogs>();
+  const tdeeByUser = new Map<string, typeof tdeeProfiles>();
+  const macroByUser = new Map<string, typeof macroTargets>();
+  const macroById = new Map(macroTargets.map((row) => [row.id, row]));
+  for (const row of progressMetrics) {
+    const rows = progressByUser.get(row.user_id) ?? [];
+    rows.push(row);
+    progressByUser.set(row.user_id, rows);
+  }
+  for (const row of nutritionLogs) {
+    const rows = nutritionByUser.get(row.user_id) ?? [];
+    rows.push(row);
+    nutritionByUser.set(row.user_id, rows);
+  }
+  for (const row of tdeeProfiles) {
+    const rows = tdeeByUser.get(row.user_id) ?? [];
+    rows.push(row);
+    tdeeByUser.set(row.user_id, rows);
+  }
+  for (const row of macroTargets) {
+    const rows = macroByUser.get(row.user_id) ?? [];
+    rows.push(row);
+    macroByUser.set(row.user_id, rows);
+  }
   check(
     holds.every((hold) => hold.status !== CommerceCheckoutHoldStatus.held),
     'checkout-hold',
@@ -1954,6 +3188,9 @@ export async function runSeedIntegrityAudit(
     recordAssertionFailure('checkout-hold', error);
   }
   const anchor = ctx.config.anchorDate;
+  if (shouldCheckCategory('business-ecosystem')) {
+    await runBusinessEcosystemIntegrity(ctx, anchor, check);
+  }
   const userById = new Map(users.map((user) => [user.id, user]));
   const identityByUser = new Map(
     emailIdentities.map((identity) => [identity.user_id, identity]),
@@ -2406,6 +3643,227 @@ export async function runSeedIntegrityAudit(
           card?.status === MembershipCardStatus.revoked,
         'accounts',
         `${account.key} is not suspended with a revoked card`,
+      );
+    }
+  }
+
+  for (const account of ctx.state.accounts) {
+    const userId = ctx.state.userIds[account.key];
+    const metrics = [...(progressByUser.get(userId) ?? [])].sort(
+      (left, right) => left.recorded_at.getTime() - right.recorded_at.getTime(),
+    );
+    const logs = nutritionByUser.get(userId) ?? [];
+    const tdeeRows = [...(tdeeByUser.get(userId) ?? [])].sort(
+      (left, right) =>
+        left.calculated_at.getTime() - right.calculated_at.getTime(),
+    );
+    const macroRows = [...(macroByUser.get(userId) ?? [])].sort(
+      (left, right) => left.created_at.getTime() - right.created_at.getTime(),
+    );
+    if (account.role !== UserRole.member) {
+      check(
+        metrics.length === 0 &&
+          logs.length === 0 &&
+          tdeeRows.length === 0 &&
+          macroRows.length === 0,
+        'body-nutrition',
+        `${account.key} non-member received body or nutrition rows`,
+      );
+      continue;
+    }
+
+    const expectedMetrics = progressionMetricCount(account);
+    check(
+      metrics.length === expectedMetrics,
+      'body-nutrition',
+      `${account.key} has ${metrics.length} progress metrics; expected ${expectedMetrics}`,
+    );
+    const lifecycle = account.lifecycle;
+    const hasActivity = Boolean(
+      lifecycle?.activityStart && lifecycle.activityEnd,
+    );
+    if (!hasActivity) {
+      check(
+        metrics.length === 0 &&
+          logs.length === 0 &&
+          tdeeRows.length === 0 &&
+          macroRows.length === 0,
+        'body-nutrition',
+        `${account.key} restricted lifecycle received body or nutrition history`,
+      );
+      continue;
+    }
+
+    for (let index = 0; index < metrics.length; index += 1) {
+      const metric = metrics[index];
+      const height = Number(metric.height_cm);
+      const weight = Number(metric.weight_kg);
+      const bmi = (weight * 10_000) / (height * height);
+      const bodyFat = Number(metric.body_fat_pct);
+      const muscle = Number(metric.muscle_mass_kg);
+      const waist = Number(metric.waist_cm);
+      const chest = Number(metric.chest_cm);
+      check(
+        metric.recorded_at >= lifecycle!.activityStart! &&
+          metric.recorded_at <= lifecycle!.activityEnd! &&
+          height >= 150 &&
+          height <= 190 &&
+          weight >= 40 &&
+          weight <= 150 &&
+          Number.isFinite(bmi) &&
+          bmi >= 18.5 &&
+          bmi <= 35 &&
+          bodyFat >= 8 &&
+          bodyFat <= 35 &&
+          muscle >= 20 &&
+          muscle <= 85 &&
+          waist >= 60 &&
+          waist <= 120 &&
+          chest >= 75 &&
+          chest <= 125,
+        'body-nutrition',
+        `${account.key} progress metric ${index} is outside physical bounds or lifecycle`,
+      );
+      if (index > 0) {
+        check(
+          Math.abs(weight - Number(metrics[index - 1].weight_kg)) <= 5,
+          'body-nutrition',
+          `${account.key} progress weight delta is not gradual`,
+        );
+      }
+    }
+    const profile = users.find((candidate) => candidate.id === userId)?.profile;
+    const latestMetric = metrics.at(-1);
+    check(
+      Boolean(latestMetric) &&
+        Boolean(profile) &&
+        Math.abs(
+          Number(latestMetric?.weight_kg) - Number(profile?.weight_kg),
+        ) <= 0.5,
+      'body-nutrition',
+      `${account.key} latest progress weight disagrees with current profile`,
+    );
+    if (metrics.length > 1) {
+      const firstWeight = Number(metrics[0].weight_kg);
+      const lastWeight = Number(metrics.at(-1)!.weight_kg);
+      if (account.physicalBaseline?.trend === 'cutting') {
+        check(
+          lastWeight <= firstWeight + 0.5,
+          'body-nutrition',
+          `${account.key} cutting progress does not trend down`,
+        );
+      } else if (account.physicalBaseline?.trend === 'bulking') {
+        check(
+          lastWeight >= firstWeight - 0.5,
+          'body-nutrition',
+          `${account.key} bulking progress does not trend up`,
+        );
+      } else {
+        check(
+          Math.abs(lastWeight - firstWeight) <= 2.5,
+          'body-nutrition',
+          `${account.key} maintenance progress drifts too far`,
+        );
+      }
+    }
+
+    const expectedNutrition = memberVolumeCount(
+      ctx,
+      account.key,
+      'nutrition',
+      ctx.config.workoutDensity,
+    );
+    check(
+      logs.length === expectedNutrition,
+      'body-nutrition',
+      `${account.key} has ${logs.length} nutrition logs; expected ${expectedNutrition}`,
+    );
+    const tdeeByTargetId = new Map(tdeeRows.map((row) => [row.id, row]));
+    const activeTdee = tdeeRows.filter((row) => row.is_active);
+    const activeMacros = macroRows.filter((row) => row.is_active);
+    check(
+      tdeeRows.length > 0 && activeTdee.length === 1,
+      'body-nutrition',
+      `${account.key} must have one active TDEE and historical rows`,
+    );
+    check(
+      macroRows.length > 0 && activeMacros.length === 1,
+      'body-nutrition',
+      `${account.key} must have one active macro target and historical rows`,
+    );
+    for (const tdee of tdeeRows) {
+      const expectedBmr = nutritionBmr(
+        Number(tdee.age),
+        tdee.gender,
+        Number(tdee.height_cm),
+        Number(tdee.weight_kg),
+      );
+      const expectedTdee =
+        expectedBmr * nutritionActivityMultiplier(tdee.activity_level);
+      check(
+        Math.abs(Number(tdee.bmr_calories) - expectedBmr) <= 0.05 &&
+          Math.abs(Number(tdee.tdee_calories) - expectedTdee) <= 0.1 &&
+          Number(tdee.height_cm) ===
+            Number(profile?.height_cm ?? tdee.height_cm),
+        'body-nutrition',
+        `${account.key} TDEE/BMR math or stable height is invalid`,
+      );
+    }
+    for (const macro of macroRows) {
+      const tdee = tdeeByTargetId.get(macro.tdee_profile_id);
+      const calories =
+        4 * Number(macro.protein_g) +
+        4 * Number(macro.carbs_g) +
+        9 * Number(macro.fat_g);
+      check(
+        Boolean(tdee) &&
+          tdee!.user_id === userId &&
+          Math.abs(calories - Number(macro.target_calories)) <= 1.5 &&
+          Math.abs(
+            Number(macro.target_calories) -
+              nutritionGoalCalories(
+                Number(tdee!.tdee_calories),
+                tdee!.fitness_goal,
+              ),
+          ) <= 1.5,
+        'body-nutrition',
+        `${account.key} macro calories do not reconcile with its TDEE goal`,
+      );
+    }
+    for (const log of logs) {
+      const macro = macroById.get(log.macro_target_id ?? '');
+      const food = FOOD_BY_ITEM.get(log.food_item);
+      const quantity = Number(log.quantity);
+      const targetTdee = macro
+        ? tdeeByTargetId.get(macro.tdee_profile_id)
+        : undefined;
+      const logDay = nutritionCalendarDay(log.log_date);
+      const targetTdeeDay = targetTdee
+        ? nutritionCalendarDay(targetTdee.calculated_at)
+        : null;
+      check(
+        Boolean(macro) &&
+          macro!.user_id === userId &&
+          Boolean(targetTdee) &&
+          targetTdeeDay !== null &&
+          targetTdeeDay <= logDay &&
+          quantity > 0 &&
+          Boolean(food) &&
+          food![0] === log.meal_name &&
+          Math.abs(Number(log.calories) - food![2] * quantity) <= 0.05 &&
+          Math.abs(Number(log.protein_g) - food![3] * quantity) <= 0.05 &&
+          Math.abs(Number(log.carbs_g) - food![4] * quantity) <= 0.05 &&
+          Math.abs(Number(log.fat_g) - food![5] * quantity) <= 0.05 &&
+          Math.abs(
+            Number(log.calories) -
+              (4 * Number(log.protein_g) +
+                4 * Number(log.carbs_g) +
+                9 * Number(log.fat_g)),
+          ) <= 0.15 &&
+          logDay >= nutritionCalendarDay(lifecycle!.activityStart!) &&
+          logDay <= nutritionCalendarDay(lifecycle!.activityEnd!),
+        'body-nutrition',
+        `${account.key} nutrition log has invalid quantity scaling, target date, or lifecycle`,
       );
     }
   }

@@ -21,6 +21,9 @@ import { seedId } from '../ids';
 import { daysFrom, yearsAgo } from '../time';
 import {
   physicalSnapshotAtWeight,
+  progressionDateAt,
+  progressionMetricCount,
+  progressionWeightAt,
   shouldSeedMemberQr,
   shouldSeedRefreshToken,
 } from '../lifecycles-profiles';
@@ -342,15 +345,24 @@ async function seedSecondaryUserData(ctx: DynamicSeedContext) {
     if (!baseline) {
       return [];
     }
-    return [0, 1, 2].flatMap((metricIndex) => {
-      const recordedAt = activityDateFor(ctx, memberKey, metricIndex, 3, 7);
+    const metricCount = progressionMetricCount(account);
+    return Array.from({ length: metricCount }, (_, metricIndex) => {
+      const recordedAt = progressionDateAt(
+        ctx.config,
+        account,
+        metricIndex,
+        metricCount,
+        7,
+      );
       if (!recordedAt) {
         return [];
       }
-      const fraction = metricIndex / 2;
-      const weight =
-        baseline.baselineWeightKg +
-        (baseline.weightKg - baseline.baselineWeightKg) * fraction;
+      const weight = progressionWeightAt(
+        baseline,
+        account,
+        metricIndex,
+        metricCount,
+      );
       const snapshot = physicalSnapshotAtWeight(baseline, weight);
       return [
         {
@@ -369,7 +381,7 @@ async function seedSecondaryUserData(ctx: DynamicSeedContext) {
           weight_kg: new Prisma.Decimal(snapshot.weightKg),
         },
       ];
-    });
+    }).flat();
   });
 
   const attendanceRows = activityMemberKeys.flatMap(

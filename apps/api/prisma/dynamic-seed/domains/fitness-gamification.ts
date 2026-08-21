@@ -1,5 +1,6 @@
 import {
   AppointmentStatus,
+  BookingStatus,
   ExerciseCategory,
   FitnessGoal,
   IntegrityCaseStatus,
@@ -40,6 +41,7 @@ import {
   memberVolumeCount,
 } from '../volumes';
 import {
+  calculateWorkoutProgressionDelta,
   DEFAULT_MILESTONE_ICON_KEY,
   DEFAULT_MUSCLE_ICON_KEY,
   evaluateExpRank,
@@ -1318,6 +1320,28 @@ async function seedGamification(ctx: DynamicSeedContext) {
     ...ctx.state.activeMemberKeys,
     ...ctx.state.historicalMemberKeys,
   ];
+  const canRewriteSeedOwned = (
+    existingId: string | null | undefined,
+    expectedId: string,
+    legacyIds: readonly string[] = [],
+  ) =>
+    ctx.config.mode === 'reset' ||
+    !existingId ||
+    existingId === expectedId ||
+    legacyIds.includes(existingId);
+  const seedOwnedWorkoutIds = new Set(
+    historyMemberKeys.flatMap((memberKey) => {
+      const sessionCount = memberVolumeCount(
+        ctx,
+        memberKey,
+        'workouts',
+        ctx.config.workoutDensity,
+      );
+      return Array.from({ length: sessionCount }, (_, index) =>
+        seedId(`workout-session:${memberKey}:${index}`),
+      );
+    }),
+  );
   const activeMuscles = await ctx.prisma.muscleDefinition.findMany({
     where: { is_active: true },
     orderBy: [{ sort_order: 'asc' }, { key: 'asc' }],
@@ -1507,7 +1531,16 @@ async function seedGamification(ctx: DynamicSeedContext) {
     const memberIndex = memberKeys.indexOf(account.key);
     const points = account.role === 'admin' ? 0 : 150 + (memberIndex % 12) * 65;
     const totalXp = getRepresentativeLifetimeXp(account, memberIndex);
-    await ctx.prisma.userProgressionProfile.upsert({
+    const progressionProfileId = seedId(`progression-profile:${account.key}`);
+    const existingProgressionProfile =
+      await ctx.prisma.userProgressionProfile.findUnique({
+        where: { user_id: userId },
+        select: { id: true },
+      });
+    if (
+      canRewriteSeedOwned(existingProgressionProfile?.id, progressionProfileId)
+    ) {
+      await ctx.prisma.userProgressionProfile.upsert({
       where: { user_id: userId },
       update: {
         active_season_id: activeSeasonId,
@@ -1524,7 +1557,7 @@ async function seedGamification(ctx: DynamicSeedContext) {
         total_xp: totalXp,
       },
       create: {
-        id: seedId(`progression-profile:${account.key}`),
+          id: progressionProfileId,
         active_season_id: activeSeasonId,
         current_season_points: points,
         current_streak:
@@ -1539,35 +1572,50 @@ async function seedGamification(ctx: DynamicSeedContext) {
         total_xp: totalXp,
         user_id: userId,
       },
-    });
-    await ctx.prisma.rankingProfile.upsert({
+      });
+    }
+    const rankingProfileId = seedId(`ranking-profile:${account.key}`);
+    const existingRankingProfile = await ctx.prisma.rankingProfile.findUnique({
       where: { user_id: userId },
-      update: {
-        display_alias:
-          account.role === 'admin'
-            ? 'Admin Review'
-            : `${account.firstName} ${account.lastName.charAt(0)}.`,
-        governance_status:
-          account.memberPersona === 'suspended'
-            ? RankingGovernanceStatus.hidden_by_admin
-            : RankingGovernanceStatus.normal,
-        visibility: getSeedRankingVisibility(account),
-      },
-      create: {
-        id: seedId(`ranking-profile:${account.key}`),
-        display_alias:
-          account.role === 'admin'
-            ? 'Admin Review'
-            : `${account.firstName} ${account.lastName.charAt(0)}.`,
-        governance_status:
-          account.memberPersona === 'suspended'
-            ? RankingGovernanceStatus.hidden_by_admin
-            : RankingGovernanceStatus.normal,
-        user_id: userId,
-        visibility: getSeedRankingVisibility(account),
-      },
+      select: { id: true },
     });
-    await ctx.prisma.integrityProfile.upsert({
+    if (canRewriteSeedOwned(existingRankingProfile?.id, rankingProfileId)) {
+      await ctx.prisma.rankingProfile.upsert({
+        where: { user_id: userId },
+        update: {
+          display_alias:
+            account.role === 'admin'
+              ? 'Admin Review'
+              : `${account.firstName} ${account.lastName.charAt(0)}.`,
+          governance_status:
+            account.memberPersona === 'suspended'
+              ? RankingGovernanceStatus.hidden_by_admin
+              : RankingGovernanceStatus.normal,
+          visibility: getSeedRankingVisibility(account),
+        },
+        create: {
+          id: rankingProfileId,
+          display_alias:
+            account.role === 'admin'
+              ? 'Admin Review'
+              : `${account.firstName} ${account.lastName.charAt(0)}.`,
+          governance_status:
+            account.memberPersona === 'suspended'
+              ? RankingGovernanceStatus.hidden_by_admin
+              : RankingGovernanceStatus.normal,
+          user_id: userId,
+          visibility: getSeedRankingVisibility(account),
+        },
+      });
+    }
+    const integrityProfileId = seedId(`integrity-profile:${account.key}`);
+    const existingIntegrityProfile =
+      await ctx.prisma.integrityProfile.findUnique({
+        where: { user_id: userId },
+        select: { id: true },
+      });
+    if (canRewriteSeedOwned(existingIntegrityProfile?.id, integrityProfileId)) {
+      await ctx.prisma.integrityProfile.upsert({
       where: { user_id: userId },
       update: {
         last_flagged_at:
@@ -1583,7 +1631,7 @@ async function seedGamification(ctx: DynamicSeedContext) {
               : IntegrityRiskLevel.low,
       },
       create: {
-        id: seedId(`integrity-profile:${account.key}`),
+          id: integrityProfileId,
         last_flagged_at:
           account.memberPersona === 'suspended'
             ? daysFrom(ctx.config.anchorDate, -6, 9)
@@ -1597,7 +1645,8 @@ async function seedGamification(ctx: DynamicSeedContext) {
               : IntegrityRiskLevel.low,
         user_id: userId,
       },
-    });
+      });
+    }
   }
 
   for (const [index, memberKey] of activeMemberKeys.entries()) {
@@ -1613,7 +1662,7 @@ async function seedGamification(ctx: DynamicSeedContext) {
         season_points: 900 - index * 8,
       },
       {
-        id: seedId(`season-standing:previous:${memberKey}`),
+        id: seedId(`season-standing:${previousSeasonId}:${memberKey}`),
         is_disqualified: false,
         is_hidden: false,
         last_earned_at: daysFrom(ctx.config.anchorDate, -28 - (index % 8), 19),
@@ -1624,6 +1673,22 @@ async function seedGamification(ctx: DynamicSeedContext) {
     ];
 
     for (const standing of standings) {
+      const existingStanding = await ctx.prisma.seasonalStanding.findUnique({
+        where: {
+          season_id_user_id: {
+            season_id: standing.season_id,
+            user_id: userId,
+          },
+        },
+        select: { id: true },
+      });
+      const legacyIds =
+        standing.season_id === previousSeasonId
+          ? [seedId(`season-standing:previous:${memberKey}`)]
+          : [];
+      if (!canRewriteSeedOwned(existingStanding?.id, standing.id, legacyIds)) {
+        continue;
+      }
       await ctx.prisma.seasonalStanding.upsert({
         where: {
           season_id_user_id: {
@@ -1652,6 +1717,19 @@ async function seedGamification(ctx: DynamicSeedContext) {
       const totalVolumeKg = new Prisma.Decimal(
         4_500 + memberIndex * 125 + muscleIndex * 300,
       );
+      const masteryId = seedId(`mastery:${memberKey}:${muscle}`);
+      const existingMastery = await ctx.prisma.muscleMasteryProgress.findUnique(
+        {
+          where: {
+            user_id_muscle_group: {
+              muscle_group: muscle,
+              user_id: ctx.state.userIds[memberKey],
+            },
+          },
+          select: { id: true },
+        },
+      );
+      if (!canRewriteSeedOwned(existingMastery?.id, masteryId)) continue;
       await ctx.prisma.muscleMasteryProgress.upsert({
         where: {
           user_id_muscle_group: {
@@ -1666,7 +1744,7 @@ async function seedGamification(ctx: DynamicSeedContext) {
           xp_points: xpPoints,
         },
         create: {
-          id: seedId(`mastery:${memberKey}:${muscle}`),
+          id: masteryId,
           last_ranked_at: daysFrom(ctx.config.anchorDate, -2 - muscleIndex, 20),
           muscle_group: muscle,
           rank: evaluateExpRank(xpPoints),
@@ -1710,6 +1788,18 @@ async function seedGamification(ctx: DynamicSeedContext) {
       ];
 
       for (const row of rows) {
+        const existingStanding =
+          await ctx.prisma.seasonalMuscleStanding.findUnique({
+            where: {
+              season_id_user_id_muscle_group: {
+                muscle_group: row.muscle_group,
+                season_id: row.season_id,
+                user_id: ctx.state.userIds[memberKey],
+              },
+            },
+            select: { id: true },
+          });
+        if (!canRewriteSeedOwned(existingStanding?.id, row.id)) continue;
         await ctx.prisma.seasonalMuscleStanding.upsert({
           where: {
             season_id_user_id_muscle_group: {
@@ -1736,6 +1826,7 @@ async function seedGamification(ctx: DynamicSeedContext) {
 
   const completedWorkouts = await ctx.prisma.workoutSession.findMany({
     where: {
+      id: { in: [...seedOwnedWorkoutIds] },
       status: SessionStatus.completed,
       user_id: {
         in: historyMemberKeys.map((memberKey) => ctx.state.userIds[memberKey]),
@@ -1908,7 +1999,8 @@ async function seedGamification(ctx: DynamicSeedContext) {
     }
   }
 
-  for (const memberKey of historyMemberKeys) {
+  if (ctx.config.mode === 'reset') {
+    for (const memberKey of historyMemberKeys) {
     const userId = ctx.state.userIds[memberKey];
     const totalXp = totalXpByUser.get(userId) ?? 0;
     const seasonPoints = seasonPointsByUser.get(userId) ?? 0;
@@ -1954,8 +2046,8 @@ async function seedGamification(ctx: DynamicSeedContext) {
         },
       });
     }
-  }
-  for (const [memberIndex, memberKey] of activeMemberKeys.entries()) {
+    }
+    for (const [memberIndex, memberKey] of activeMemberKeys.entries()) {
     const userId = ctx.state.userIds[memberKey];
     const seasonPoints = seasonPointsByUser.get(userId) ?? 0;
     const muscleTotals =
@@ -1985,6 +2077,7 @@ async function seedGamification(ctx: DynamicSeedContext) {
           rank_position: memberIndex + 1,
         },
       });
+    }
     }
   }
 
@@ -2040,6 +2133,16 @@ async function seedGamification(ctx: DynamicSeedContext) {
   );
 
   for (const progress of milestoneProgressRows) {
+    const existingProgress = await ctx.prisma.userMilestoneProgress.findUnique({
+      where: {
+        user_id_milestone_definition_id: {
+          milestone_definition_id: progress.milestone_definition_id,
+          user_id: progress.user_id,
+        },
+      },
+      select: { id: true },
+    });
+    if (!canRewriteSeedOwned(existingProgress?.id, progress.id)) continue;
     await ctx.prisma.userMilestoneProgress.upsert({
       where: {
         user_id_milestone_definition_id: {
@@ -2166,10 +2269,1057 @@ async function seedGamification(ctx: DynamicSeedContext) {
   });
 }
 
+type SeedWorkoutMuscleDelta = {
+  xp: number;
+  volumeKg: Prisma.Decimal;
+};
+
+type SeedWorkoutDelta = {
+  byMuscle: Map<string, SeedWorkoutMuscleDelta>;
+  totalXp: number;
+  totalVolumeKg: Prisma.Decimal;
+};
+
+type SeedProgressionGrant = {
+  amount: number;
+  created_at: Date;
+  grant_status: ProgressionGrantStatus;
+  grant_type: ProgressionGrantType;
+  id: string;
+  metadata: Prisma.InputJsonObject;
+  muscle_group: string | null;
+  reason: string;
+  season_id: string | null;
+  source_event_id: string;
+  user_id: string;
+};
+
+export async function reconcileSeedGamification(ctx: DynamicSeedContext) {
+  const historyMemberKeys = [
+    ...ctx.state.activeMemberKeys,
+    ...ctx.state.historicalMemberKeys,
+  ];
+  const historyUserIds = historyMemberKeys
+    .map((key) => ctx.state.userIds[key])
+    .filter((id): id is string => Boolean(id));
+  if (historyUserIds.length === 0) return;
+
+  const expectedWorkoutIds = historyMemberKeys.flatMap((memberKey) => {
+    const sessionCount = memberVolumeCount(
+      ctx,
+      memberKey,
+      'workouts',
+      ctx.config.workoutDensity,
+    );
+    return Array.from({ length: sessionCount }, (_, index) =>
+      seedId(`workout-session:${memberKey}:${index}`),
+    );
+  });
+  const coachingAssignments = await ctx.prisma.coachWorkoutAssignment.findMany({
+    where: {
+      appointment: { user_id: { in: historyUserIds } },
+      workout_session_id: { not: null },
+    },
+    select: { workout_session_id: true },
+  });
+  const workoutIds = [
+    ...new Set([
+      ...expectedWorkoutIds,
+      ...coachingAssignments.flatMap((row) =>
+        row.workout_session_id ? [row.workout_session_id] : [],
+      ),
+    ]),
+  ];
+  if (workoutIds.length === 0) return;
+
+  const [activeMuscles, seasons, workouts, logs] = await Promise.all([
+    ctx.prisma.muscleDefinition.findMany({
+      where: { is_active: true },
+      orderBy: [{ sort_order: 'asc' }, { key: 'asc' }],
+      select: { key: true },
+    }),
+    ctx.prisma.seasonDefinition.findMany({
+      where: { status: { in: [SeasonStatus.active, SeasonStatus.closed] } },
+      orderBy: [{ starts_at: 'desc' }, { created_at: 'desc' }],
+      select: { ends_at: true, id: true, starts_at: true, status: true },
+    }),
+    ctx.prisma.workoutSession.findMany({
+      where: {
+        id: { in: workoutIds },
+        status: SessionStatus.completed,
+        user_id: { in: historyUserIds },
+      },
+      orderBy: [{ completed_at: 'asc' }, { started_at: 'asc' }, { id: 'asc' }],
+      select: { completed_at: true, id: true, started_at: true, user_id: true },
+    }),
+    ctx.prisma.exerciseLog.findMany({
+      where: {
+        session_id: { in: workoutIds },
+        user_id: { in: historyUserIds },
+      },
+      select: {
+        exercise_id: true,
+        reps_ai_counted: true,
+        reps_completed: true,
+        session_id: true,
+        weight_kg: true,
+      },
+    }),
+  ]);
+  const muscleKeys = [
+    ...new Set(activeMuscles.map(({ key }) => key.trim().toLowerCase())),
+  ];
+  const muscleSet = new Set(muscleKeys);
+  const exerciseIds = [...new Set(logs.map((log) => log.exercise_id))];
+  const exercises = exerciseIds.length
+    ? await ctx.prisma.exerciseCatalog.findMany({
+        where: { id: { in: exerciseIds } },
+        select: { id: true, muscle_group: true, muscle_targets: true },
+      })
+    : [];
+  const exerciseById = new Map(
+    exercises.map((exercise) => [exercise.id, exercise]),
+  );
+  const logsBySession = new Map<string, typeof logs>();
+  for (const log of logs) {
+    const rows = logsBySession.get(log.session_id) ?? [];
+    rows.push(log);
+    logsBySession.set(log.session_id, rows);
+  }
+
+  const deltasByWorkout = new Map<string, SeedWorkoutDelta>();
+  const deltasByUser = new Map<string, Map<string, SeedWorkoutMuscleDelta>>();
+  const completedDatesByUser = new Map<string, Date[]>();
+  for (const workout of workouts) {
+    const byMuscle = new Map<string, SeedWorkoutMuscleDelta>();
+    let totalXp = 0;
+    let totalVolumeKg = new Prisma.Decimal(0);
+    for (const log of logsBySession.get(workout.id) ?? []) {
+      const exercise = exerciseById.get(log.exercise_id);
+      if (!exercise) continue;
+      const explicitTargets = (
+        Array.isArray(exercise.muscle_targets) ? exercise.muscle_targets : []
+      )
+        .filter((value): value is string => typeof value === 'string')
+        .map((value) => value.trim().toLowerCase())
+        .filter(
+          (value, index, values) =>
+            muscleSet.has(value) && values.indexOf(value) === index,
+        );
+      const fallbackTarget = exercise.muscle_group.trim().toLowerCase();
+      const targets = explicitTargets.length
+        ? explicitTargets
+        : muscleSet.has(fallbackTarget)
+          ? [fallbackTarget]
+          : [];
+      const delta = calculateWorkoutProgressionDelta({
+        repsAiCounted: log.reps_ai_counted,
+        repsCompleted: log.reps_completed,
+        weightKg: log.weight_kg,
+      });
+      if (targets.length === 0 || delta.xp <= 0) continue;
+      totalXp += delta.xp;
+      totalVolumeKg = totalVolumeKg.plus(delta.volumeKg);
+      const baseXp = Math.floor(delta.xp / targets.length);
+      const remainder = delta.xp % targets.length;
+      const volumeShare = delta.volumeKg.dividedBy(targets.length);
+      targets.forEach((muscle, index) => {
+        const current = byMuscle.get(muscle) ?? {
+          xp: 0,
+          volumeKg: new Prisma.Decimal(0),
+        };
+        byMuscle.set(muscle, {
+          xp: current.xp + baseXp + (index < remainder ? 1 : 0),
+          volumeKg: current.volumeKg.plus(volumeShare),
+        });
+      });
+    }
+    const occurredAt = workout.completed_at ?? workout.started_at;
+    deltasByWorkout.set(workout.id, { byMuscle, totalXp, totalVolumeKg });
+    if (totalXp <= 0) continue;
+    const dates = completedDatesByUser.get(workout.user_id) ?? [];
+    dates.push(occurredAt);
+    completedDatesByUser.set(workout.user_id, dates);
+    const userMuscles =
+      deltasByUser.get(workout.user_id) ??
+      new Map<string, SeedWorkoutMuscleDelta>();
+    for (const [muscle, delta] of byMuscle) {
+      const current = userMuscles.get(muscle) ?? {
+        xp: 0,
+        volumeKg: new Prisma.Decimal(0),
+      };
+      userMuscles.set(muscle, {
+        xp: current.xp + delta.xp,
+        volumeKg: current.volumeKg.plus(delta.volumeKg),
+      });
+    }
+    deltasByUser.set(workout.user_id, userMuscles);
+  }
+
+  const activeSeason =
+    seasons.find(
+      (season) =>
+        season.status === SeasonStatus.active &&
+        season.starts_at <= ctx.config.anchorDate &&
+        season.ends_at >= ctx.config.anchorDate,
+    ) ??
+    seasons.find((season) => season.id === ctx.state.seasonId) ??
+    null;
+  const activeSeasonId = activeSeason?.id ?? ctx.state.seasonId ?? null;
+  const seasonFor = (date: Date) =>
+    seasons.find(
+      (season) => season.starts_at <= date && season.ends_at >= date,
+    ) ?? null;
+  const sourceIds = workouts.map((workout) =>
+    seedId(`progression-source:workout:${workout.id}`),
+  );
+  const canonicalGrantIds: string[] = [];
+  const totalXpByUser = new Map<string, number>();
+  const seasonPointsByUser = new Map<string, number>();
+  const seasonPointsBySeason = new Map<
+    string,
+    Map<string, { points: number; lastEarnedAt: Date | null }>
+  >();
+  const seasonMusclePoints = new Map<
+    string,
+    Map<string, Map<string, { points: number; lastEarnedAt: Date | null }>>
+  >();
+
+  for (const workout of workouts) {
+    const delta = deltasByWorkout.get(workout.id);
+    if (!delta) continue;
+    const occurredAt = workout.completed_at ?? workout.started_at;
+    const sourceEventId = seedId(`progression-source:workout:${workout.id}`);
+    const sourceData = {
+      created_at: occurredAt,
+      processed_at: occurredAt,
+      source_context: {
+        exercise_log_count: logsBySession.get(workout.id)?.length ?? 0,
+        muscle_groups: [...delta.byMuscle.keys()],
+        source: 'dynamic-seed',
+        source_rule: 'workout-log-muscle-targets-v1',
+        total_volume_kg: delta.totalVolumeKg.toFixed(2),
+        total_xp_granted: delta.totalXp,
+        workout_session_id: workout.id,
+      },
+      source_id: workout.id,
+      source_status:
+        delta.totalXp > 0
+          ? ProgressionSourceStatus.applied
+          : ProgressionSourceStatus.blocked,
+      source_type: ProgressionSourceType.workout_session_completed,
+      user_id: workout.user_id,
+    };
+    await ctx.prisma.progressionSourceEvent.upsert({
+      where: { id: sourceEventId },
+      update: sourceData,
+      create: { id: sourceEventId, ...sourceData },
+    });
+
+    const progressionSeason = seasonFor(occurredAt);
+    const grants: SeedProgressionGrant[] = [...delta.byMuscle.entries()]
+      .filter(([, muscle]) => muscle.xp > 0)
+      .map(([muscle, muscleDelta], index) => ({
+        amount: muscleDelta.xp,
+        created_at: occurredAt,
+        grant_status: ProgressionGrantStatus.applied,
+        grant_type: ProgressionGrantType.xp,
+        id:
+          index === 0
+            ? seedId(`progression-grant:${workout.id}:xp`)
+            : seedId(`progression-grant:${workout.id}:xp:${muscle}`),
+        metadata: {
+          muscle_group: muscle,
+          source: 'dynamic-seed',
+          total_volume_kg: muscleDelta.volumeKg.toFixed(2),
+        },
+        muscle_group: muscle,
+        reason: ProgressionSourceType.workout_session_completed,
+        season_id: progressionSeason?.id ?? null,
+        source_event_id: sourceEventId,
+        user_id: workout.user_id,
+      }));
+    if (progressionSeason && delta.totalXp > 0) {
+      grants.push({
+        amount: delta.totalXp,
+        created_at: occurredAt,
+        grant_status: ProgressionGrantStatus.applied,
+        grant_type: ProgressionGrantType.season_points,
+        id: seedId(`progression-grant:${workout.id}:season`),
+        metadata: {
+          grant_basis: 'mvp_total_xp_mirror',
+          source: 'dynamic-seed',
+        },
+        muscle_group: null,
+        reason: ProgressionSourceType.workout_session_completed,
+        season_id: progressionSeason.id,
+        source_event_id: sourceEventId,
+        user_id: workout.user_id,
+      });
+    }
+    for (const grant of grants) {
+      canonicalGrantIds.push(grant.id);
+      await ctx.prisma.progressionGrantLedger.upsert({
+        where: { id: grant.id },
+        update: {
+          amount: grant.amount,
+          created_at: grant.created_at,
+          grant_status: grant.grant_status,
+          grant_type: grant.grant_type,
+          metadata: grant.metadata,
+          muscle_group: grant.muscle_group,
+          reason: grant.reason,
+          season_id: grant.season_id,
+          source_event_id: grant.source_event_id,
+          user_id: grant.user_id,
+          voided_at: null,
+        },
+        create: grant,
+      });
+      if (grant.grant_type === ProgressionGrantType.xp) {
+        totalXpByUser.set(
+          grant.user_id,
+          (totalXpByUser.get(grant.user_id) ?? 0) + grant.amount,
+        );
+        if (grant.season_id && grant.muscle_group) {
+          const seasonRows =
+            seasonMusclePoints.get(grant.season_id) ??
+            new Map<
+              string,
+              Map<string, { points: number; lastEarnedAt: Date | null }>
+            >();
+          const userRows =
+            seasonRows.get(grant.user_id) ??
+            new Map<string, { points: number; lastEarnedAt: Date | null }>();
+          const current = userRows.get(grant.muscle_group) ?? {
+            points: 0,
+            lastEarnedAt: null,
+          };
+          userRows.set(grant.muscle_group, {
+            points: current.points + grant.amount,
+            lastEarnedAt:
+              !current.lastEarnedAt || grant.created_at > current.lastEarnedAt
+                ? grant.created_at
+                : current.lastEarnedAt,
+          });
+          seasonRows.set(grant.user_id, userRows);
+          seasonMusclePoints.set(grant.season_id, seasonRows);
+        }
+      }
+      if (
+        grant.grant_type === ProgressionGrantType.season_points &&
+        grant.season_id
+      ) {
+        if (grant.season_id === activeSeasonId) {
+          seasonPointsByUser.set(
+            grant.user_id,
+            (seasonPointsByUser.get(grant.user_id) ?? 0) + grant.amount,
+          );
+        }
+        const rows =
+          seasonPointsBySeason.get(grant.season_id) ??
+          new Map<string, { points: number; lastEarnedAt: Date | null }>();
+        const current = rows.get(grant.user_id) ?? {
+          points: 0,
+          lastEarnedAt: null,
+        };
+        rows.set(grant.user_id, {
+          points: current.points + grant.amount,
+          lastEarnedAt:
+            !current.lastEarnedAt || grant.created_at > current.lastEarnedAt
+              ? grant.created_at
+              : current.lastEarnedAt,
+        });
+        seasonPointsBySeason.set(grant.season_id, rows);
+      }
+    }
+  }
+
+  const canonicalSourceIdSet = new Set(sourceIds);
+  const existingSeedSources = await ctx.prisma.progressionSourceEvent.findMany({
+    where: {
+      source_type: ProgressionSourceType.workout_session_completed,
+      user_id: { in: historyUserIds },
+    },
+    select: { id: true, source_context: true },
+  });
+  const staleSeedSourceIds = existingSeedSources
+    .filter((source) => {
+      const context =
+        source.source_context &&
+        typeof source.source_context === 'object' &&
+        !Array.isArray(source.source_context)
+          ? (source.source_context as Record<string, unknown>)
+          : null;
+      return (
+        context?.source === 'dynamic-seed' &&
+        !canonicalSourceIdSet.has(source.id)
+      );
+    })
+    .map((source) => source.id);
+  for (const source of existingSeedSources) {
+    if (!staleSeedSourceIds.includes(source.id)) continue;
+    const context =
+      source.source_context &&
+      typeof source.source_context === 'object' &&
+      !Array.isArray(source.source_context)
+        ? (source.source_context as Record<string, unknown>)
+        : {};
+    await ctx.prisma.progressionSourceEvent.update({
+      where: { id: source.id },
+      data: {
+        source_context: {
+          ...context,
+          reconciliation: 'stale-dynamic-seed',
+        },
+        source_status: ProgressionSourceStatus.blocked,
+      },
+    });
+  }
+  const seedSourceIds = [...new Set([...sourceIds, ...staleSeedSourceIds])];
+  if (seedSourceIds.length) {
+    const staleGrants = await ctx.prisma.progressionGrantLedger.findMany({
+      where: {
+        source_event_id: { in: seedSourceIds },
+        grant_status: ProgressionGrantStatus.applied,
+        id: { notIn: canonicalGrantIds },
+      },
+      select: { id: true, metadata: true },
+    });
+    for (const grant of staleGrants) {
+      const metadata =
+        grant.metadata &&
+        typeof grant.metadata === 'object' &&
+        !Array.isArray(grant.metadata)
+          ? (grant.metadata as Record<string, unknown>)
+          : null;
+      if (ctx.config.mode === 'reset' || metadata?.source === 'dynamic-seed') {
+        await ctx.prisma.progressionGrantLedger.update({
+          where: { id: grant.id },
+          data: {
+            grant_status: ProgressionGrantStatus.voided,
+            reason: 'Reconciled stale dynamic-seed grant.',
+            voided_at: ctx.config.anchorDate,
+          },
+        });
+      }
+    }
+  }
+
+  const canRewrite = (
+    existingId: string | null | undefined,
+    expectedId: string,
+    legacyIds: readonly string[] = [],
+  ) =>
+    ctx.config.mode === 'reset' ||
+    !existingId ||
+    existingId === expectedId ||
+    legacyIds.includes(existingId);
+  const accountByKey = new Map(
+    ctx.state.accounts.map((account) => [account.key, account]),
+  );
+  const memberKeyFor = (userId: string) =>
+    historyMemberKeys.find((key) => ctx.state.userIds[key] === userId) ??
+    userId;
+  const rankingState = (userId: string) => {
+    const account = accountByKey.get(memberKeyFor(userId));
+    const visibility = account
+      ? getSeedRankingVisibility(account)
+      : RankingVisibility.public;
+    return {
+      hidden:
+        visibility !== RankingVisibility.public ||
+        account?.memberPersona === 'suspended',
+      disqualified: account?.memberPersona === 'suspended',
+    };
+  };
+  const daySpan = (dates: Date[]) => {
+    const days = [
+      ...new Set(
+        dates
+          .sort((left, right) => left.getTime() - right.getTime())
+          .map((date) => date.toISOString().slice(0, 10)),
+      ),
+    ];
+    let run = 0;
+    let longest = 0;
+    let previous = 0;
+    for (const day of days) {
+      const current = Date.parse(`${day}T00:00:00.000Z`);
+      run = previous && current - previous === 86_400_000 ? run + 1 : 1;
+      longest = Math.max(longest, run);
+      previous = current;
+    }
+    return { current: days.length ? run : 0, longest };
+  };
+
+  for (const memberKey of historyMemberKeys) {
+    const userId = ctx.state.userIds[memberKey];
+    if (!userId) continue;
+    const profileId = seedId(`progression-profile:${memberKey}`);
+    const existingProfile = await ctx.prisma.userProgressionProfile.findUnique({
+      where: { user_id: userId },
+      select: { id: true },
+    });
+    if (canRewrite(existingProfile?.id, profileId)) {
+      const dates = completedDatesByUser.get(userId) ?? [];
+      const streak = daySpan([...dates]);
+      await ctx.prisma.userProgressionProfile.upsert({
+        where: { user_id: userId },
+        update: {
+          active_season_id: activeSeasonId,
+          current_season_points: seasonPointsByUser.get(userId) ?? 0,
+          current_streak: streak.current,
+          last_progressed_at: dates.at(-1) ?? null,
+          longest_streak: streak.longest,
+          total_xp: totalXpByUser.get(userId) ?? 0,
+        },
+        create: {
+          active_season_id: activeSeasonId,
+          current_season_points: seasonPointsByUser.get(userId) ?? 0,
+          current_streak: streak.current,
+          id: profileId,
+          last_progressed_at: dates.at(-1) ?? null,
+          longest_streak: streak.longest,
+          total_xp: totalXpByUser.get(userId) ?? 0,
+          user_id: userId,
+        },
+      });
+    }
+
+    const muscleRows =
+      deltasByUser.get(userId) ?? new Map<string, SeedWorkoutMuscleDelta>();
+    for (const muscle of muscleKeys) {
+      const muscleDelta = muscleRows.get(muscle) ?? {
+        xp: 0,
+        volumeKg: new Prisma.Decimal(0),
+      };
+      const masteryId = seedId(`mastery:${memberKey}:${muscle}`);
+      const existingMastery = await ctx.prisma.muscleMasteryProgress.findUnique(
+        {
+          where: {
+            user_id_muscle_group: { muscle_group: muscle, user_id: userId },
+          },
+          select: { id: true },
+        },
+      );
+      if (!canRewrite(existingMastery?.id, masteryId)) continue;
+      await ctx.prisma.muscleMasteryProgress.upsert({
+        where: {
+          user_id_muscle_group: { muscle_group: muscle, user_id: userId },
+        },
+        update: {
+          last_ranked_at:
+            muscleDelta.xp > 0
+              ? (completedDatesByUser.get(userId)?.at(-1) ?? null)
+              : null,
+          rank: evaluateExpRank(muscleDelta.xp),
+          total_volume_kg: new Prisma.Decimal(muscleDelta.volumeKg.toFixed(2)),
+          xp_points: muscleDelta.xp,
+        },
+        create: {
+          id: masteryId,
+          last_ranked_at:
+            muscleDelta.xp > 0
+              ? (completedDatesByUser.get(userId)?.at(-1) ?? null)
+              : null,
+          muscle_group: muscle,
+          rank: evaluateExpRank(muscleDelta.xp),
+          total_volume_kg: new Prisma.Decimal(muscleDelta.volumeKg.toFixed(2)),
+          user_id: userId,
+          xp_points: muscleDelta.xp,
+        },
+      });
+    }
+  }
+
+  const rankRows = (
+    rows: Array<{
+      disqualified: boolean;
+      hidden: boolean;
+      lastEarnedAt: Date | null;
+      muscleGroup?: string;
+      points: number;
+      userId: string;
+    }>,
+  ) => {
+    const sorted = [...rows].sort((left, right) => {
+      if (right.points !== left.points) return right.points - left.points;
+      const rightTime = right.lastEarnedAt?.getTime() ?? 0;
+      const leftTime = left.lastEarnedAt?.getTime() ?? 0;
+      if (rightTime !== leftTime) return rightTime - leftTime;
+      return left.userId.localeCompare(right.userId);
+    });
+    let previousPoints: number | null = null;
+    let previousRank = 0;
+    let visibleIndex = 0;
+    return sorted.map((row) => {
+      const rank =
+        row.hidden || row.disqualified
+          ? null
+          : row.points === previousPoints
+            ? previousRank
+            : visibleIndex + 1;
+      if (rank !== null) {
+        visibleIndex += 1;
+        previousPoints = row.points;
+        previousRank = rank;
+      }
+      return { ...row, rank };
+    });
+  };
+  const touchedSeasonIds = [
+    ...new Set([
+      ...(activeSeasonId ? [activeSeasonId] : []),
+      seedId('season:dynamic-previous'),
+      ...seasonPointsBySeason.keys(),
+    ]),
+  ];
+  for (const seasonId of touchedSeasonIds) {
+    const seasonRows =
+      seasonPointsBySeason.get(seasonId) ??
+      new Map<string, { points: number; lastEarnedAt: Date | null }>();
+    const rows = historyUserIds.map((userId) => {
+      const current = seasonRows.get(userId) ?? {
+        points: 0,
+        lastEarnedAt: null,
+      };
+      const state = rankingState(userId);
+      return {
+        disqualified: state.disqualified,
+        hidden: state.hidden,
+        lastEarnedAt: current.lastEarnedAt,
+        points: current.points,
+        userId,
+      };
+    });
+    for (const row of rankRows(rows)) {
+      const standingId = seedId(
+        `season-standing:${seasonId}:${memberKeyFor(row.userId)}`,
+      );
+      const existingStanding = await ctx.prisma.seasonalStanding.findUnique({
+        where: {
+          season_id_user_id: { season_id: seasonId, user_id: row.userId },
+        },
+        select: { id: true },
+      });
+      const legacyStandingId =
+        seasonId === seedId('season:dynamic-previous')
+          ? seedId(`season-standing:previous:${memberKeyFor(row.userId)}`)
+          : null;
+      if (
+        !canRewrite(
+          existingStanding?.id,
+          standingId,
+          legacyStandingId ? [legacyStandingId] : [],
+        )
+      ) {
+        continue;
+      }
+      await ctx.prisma.seasonalStanding.upsert({
+        where: {
+          season_id_user_id: { season_id: seasonId, user_id: row.userId },
+        },
+        update: {
+          is_disqualified: row.disqualified,
+          is_hidden: row.hidden,
+          last_earned_at: row.lastEarnedAt,
+          rank_position: row.rank,
+          season_points: row.points,
+        },
+        create: {
+          id: standingId,
+          is_disqualified: row.disqualified,
+          is_hidden: row.hidden,
+          last_earned_at: row.lastEarnedAt,
+          rank_position: row.rank,
+          season_id: seasonId,
+          season_points: row.points,
+          user_id: row.userId,
+        },
+      });
+    }
+  }
+
+  const seasonMuscleStandingRows = new Map<
+    string,
+    Array<{
+      disqualified: boolean;
+      hidden: boolean;
+      lastEarnedAt: Date | null;
+      muscleGroup: string;
+      points: number;
+      userId: string;
+    }>
+  >();
+  for (const [seasonId, userRows] of seasonMusclePoints) {
+    for (const [userId, muscleRows] of userRows) {
+      const state = rankingState(userId);
+      for (const [muscle, value] of muscleRows) {
+        const key = `${seasonId}:${muscle}`;
+        const rows = seasonMuscleStandingRows.get(key) ?? [];
+        rows.push({
+          disqualified: state.disqualified,
+          hidden: state.hidden,
+          lastEarnedAt: value.lastEarnedAt,
+          muscleGroup: muscle,
+          points: value.points,
+          userId,
+        });
+        seasonMuscleStandingRows.set(key, rows);
+      }
+    }
+  }
+  for (const [key, rows] of seasonMuscleStandingRows) {
+    const separator = key.indexOf(':');
+    const seasonId = key.slice(0, separator);
+    const muscleGroup = key.slice(separator + 1);
+    for (const row of rankRows(rows)) {
+      const standingId = seedId(
+        `season-muscle:${seasonId}:${memberKeyFor(row.userId)}:${muscleGroup}`,
+      );
+      const existingStanding =
+        await ctx.prisma.seasonalMuscleStanding.findUnique({
+          where: {
+            season_id_user_id_muscle_group: {
+              muscle_group: muscleGroup,
+              season_id: seasonId,
+              user_id: row.userId,
+            },
+          },
+          select: { id: true },
+        });
+      if (!canRewrite(existingStanding?.id, standingId)) continue;
+      await ctx.prisma.seasonalMuscleStanding.upsert({
+        where: {
+          season_id_user_id_muscle_group: {
+            muscle_group: muscleGroup,
+            season_id: seasonId,
+            user_id: row.userId,
+          },
+        },
+        update: {
+          is_disqualified: row.disqualified,
+          is_hidden: row.hidden,
+          last_earned_at: row.lastEarnedAt,
+          muscle_points: row.points,
+          rank_position: row.rank,
+        },
+        create: {
+          id: standingId,
+          is_disqualified: row.disqualified,
+          is_hidden: row.hidden,
+          last_earned_at: row.lastEarnedAt,
+          muscle_group: muscleGroup,
+          muscle_points: row.points,
+          rank_position: row.rank,
+          season_id: seasonId,
+          user_id: row.userId,
+        },
+      });
+    }
+  }
+  if (ctx.config.mode === 'reset' || ctx.config.mode === 'additive') {
+    for (const seasonId of touchedSeasonIds) {
+      for (const muscleGroup of muscleKeys) {
+        const rankedRows = rankRows(
+          historyUserIds.map((userId) => {
+            const value = seasonMusclePoints
+              .get(seasonId)
+              ?.get(userId)
+              ?.get(muscleGroup);
+            const state = rankingState(userId);
+            return {
+              disqualified: state.disqualified,
+              hidden: state.hidden,
+              lastEarnedAt: value?.lastEarnedAt ?? null,
+              muscleGroup,
+              points: value?.points ?? 0,
+              userId,
+            };
+          }),
+        );
+        for (const row of rankedRows) {
+          const userId = row.userId;
+          const standingId = seedId(
+            `season-muscle:${seasonId}:${memberKeyFor(userId)}:${muscleGroup}`,
+          );
+          const existingStanding =
+            await ctx.prisma.seasonalMuscleStanding.findUnique({
+              where: {
+                season_id_user_id_muscle_group: {
+                  muscle_group: muscleGroup,
+                  season_id: seasonId,
+                  user_id: userId,
+                },
+              },
+              select: { id: true },
+            });
+          if (!canRewrite(existingStanding?.id, standingId)) continue;
+          await ctx.prisma.seasonalMuscleStanding.upsert({
+            where: {
+              season_id_user_id_muscle_group: {
+                muscle_group: muscleGroup,
+                season_id: seasonId,
+                user_id: userId,
+              },
+            },
+            update: {
+              is_disqualified: row.disqualified,
+              is_hidden: row.hidden,
+              last_earned_at: row.lastEarnedAt,
+              muscle_points: row.points,
+              rank_position: row.rank,
+            },
+            create: {
+              id: standingId,
+              is_disqualified: row.disqualified,
+              is_hidden: row.hidden,
+              last_earned_at: row.lastEarnedAt,
+              muscle_group: muscleGroup,
+              muscle_points: row.points,
+              rank_position: row.rank,
+              season_id: seasonId,
+              user_id: userId,
+            },
+          });
+        }
+      }
+    }
+  }
+
+  const [completedBookings, completedCoaching, milestoneDefinitions] =
+    await Promise.all([
+      ctx.prisma.amenityBooking.findMany({
+        where: {
+          status: BookingStatus.completed,
+          user_id: { in: historyUserIds },
+        },
+        orderBy: [{ completed_at: 'asc' }, { id: 'asc' }],
+        select: { completed_at: true, id: true, user_id: true },
+      }),
+      ctx.prisma.coachAppointment.findMany({
+        where: {
+          status: AppointmentStatus.completed,
+          user_id: { in: historyUserIds },
+        },
+        orderBy: [
+          { completed_at: 'asc' },
+          { scheduled_at: 'asc' },
+          { id: 'asc' },
+        ],
+        select: {
+          completed_at: true,
+          id: true,
+          scheduled_at: true,
+          user_id: true,
+        },
+      }),
+      ctx.prisma.milestoneDefinition.findMany({
+        where: {
+          key: { in: DYNAMIC_MILESTONES.map((milestone) => milestone.key) },
+        },
+        select: { id: true, key: true },
+      }),
+    ]);
+  const milestoneIdByKey = new Map(
+    milestoneDefinitions.map((definition) => [definition.key, definition.id]),
+  );
+  const bookingsByUser = new Map<string, typeof completedBookings>();
+  const coachingByUser = new Map<string, typeof completedCoaching>();
+  for (const booking of completedBookings) {
+    const rows = bookingsByUser.get(booking.user_id) ?? [];
+    rows.push(booking);
+    bookingsByUser.set(booking.user_id, rows);
+  }
+  for (const appointment of completedCoaching) {
+    const rows = coachingByUser.get(appointment.user_id) ?? [];
+    rows.push(appointment);
+    coachingByUser.set(appointment.user_id, rows);
+  }
+  const metricSource = (
+    userId: string,
+    metric: string,
+    target: number,
+  ): {
+    ids: string[];
+    observed: number;
+    unlockedAt: Date | null;
+    sourceType: string;
+  } => {
+    if (metric === 'completed_venue_bookings') {
+      const rows = bookingsByUser.get(userId) ?? [];
+      return {
+        ids: rows.map((row) => row.id),
+        observed: rows.length,
+        unlockedAt: rows[target - 1]?.completed_at ?? null,
+        sourceType: ProgressionSourceType.venue_booking_completed,
+      };
+    }
+    if (metric === 'completed_coach_appointments') {
+      const rows = coachingByUser.get(userId) ?? [];
+      return {
+        ids: rows.map((row) => row.id),
+        observed: rows.length,
+        unlockedAt:
+          rows[target - 1]?.completed_at ??
+          rows[target - 1]?.scheduled_at ??
+          null,
+        sourceType: ProgressionSourceType.coaching_appointment_completed,
+      };
+    }
+    const rows = workouts
+      .filter((workout) => workout.user_id === userId)
+      .map((workout) => ({
+        date: workout.completed_at ?? workout.started_at,
+        id: workout.id,
+        xp: deltasByWorkout.get(workout.id)?.totalXp ?? 0,
+      }));
+    if (metric === 'completed_workout_sessions') {
+      return {
+        ids: rows.map((row) => row.id),
+        observed: rows.length,
+        unlockedAt: rows[target - 1]?.date ?? null,
+        sourceType: ProgressionSourceType.workout_session_completed,
+      };
+    }
+    let observed = 0;
+    let unlockedAt: Date | null = null;
+    for (const row of rows) {
+      observed += row.xp;
+      if (!unlockedAt && observed >= target) unlockedAt = row.date;
+    }
+    return {
+      ids: rows.map((row) => row.id),
+      observed,
+      unlockedAt,
+      sourceType: ProgressionSourceType.workout_session_completed,
+    };
+  };
+  for (const memberKey of historyMemberKeys) {
+    const userId = ctx.state.userIds[memberKey];
+    if (!userId) continue;
+    for (const milestone of DYNAMIC_MILESTONES) {
+      const milestoneId = milestoneIdByKey.get(milestone.key);
+      if (!milestoneId) continue;
+      const source = metricSource(userId, milestone.metric, milestone.target);
+      const progressId = seedId(
+        `milestone-progress:${memberKey}:${milestone.key}`,
+      );
+      const existing = await ctx.prisma.userMilestoneProgress.findUnique({
+        where: {
+          user_id_milestone_definition_id: {
+            milestone_definition_id: milestoneId,
+            user_id: userId,
+          },
+        },
+        select: { id: true, status: true },
+      });
+      if (!canRewrite(existing?.id, progressId)) continue;
+      const unlocked =
+        source.observed >= milestone.target && source.unlockedAt !== null;
+      await ctx.prisma.userMilestoneProgress.upsert({
+        where: {
+          user_id_milestone_definition_id: {
+            milestone_definition_id: milestoneId,
+            user_id: userId,
+          },
+        },
+        update: {
+          claimed_at: null,
+          progress_payload: {
+            actual_source_ids: source.ids,
+            metric: milestone.metric,
+            observed: source.observed,
+            source: 'dynamic-seed',
+            source_type: source.sourceType,
+            target: milestone.target,
+          },
+          progress_value: source.observed,
+          reward_granted_at: null,
+          status: unlocked
+            ? MilestoneProgressStatus.unlocked
+            : MilestoneProgressStatus.in_progress,
+          unlocked_at: unlocked ? source.unlockedAt : null,
+        },
+        create: {
+          id: progressId,
+          milestone_definition_id: milestoneId,
+          progress_payload: {
+            actual_source_ids: source.ids,
+            metric: milestone.metric,
+            observed: source.observed,
+            source: 'dynamic-seed',
+            source_type: source.sourceType,
+            target: milestone.target,
+          },
+          progress_value: source.observed,
+          status: unlocked
+            ? MilestoneProgressStatus.unlocked
+            : MilestoneProgressStatus.in_progress,
+          unlocked_at: unlocked ? source.unlockedAt : null,
+          user_id: userId,
+        },
+      });
+    }
+  }
+
+  const evidenceMemberKeys = ctx.state.activeMemberKeys.slice(0, 3);
+  for (const [index, memberKey] of evidenceMemberKeys.entries()) {
+    const milestoneKey =
+      DYNAMIC_MILESTONES[index % DYNAMIC_MILESTONES.length].key;
+    const evidenceId = seedId(`milestone-evidence:${memberKey}:${index}`);
+    const existingEvidence =
+      await ctx.prisma.milestoneEvidenceSubmission.findUnique({
+        where: { id: evidenceId },
+        select: { id: true, created_at: true, status: true },
+      });
+    if (!existingEvidence || !canRewrite(existingEvidence.id, evidenceId))
+      continue;
+    const progressId = seedId(
+      `milestone-progress:${memberKey}:${milestoneKey}`,
+    );
+    const progress = await ctx.prisma.userMilestoneProgress.findUnique({
+      where: { id: progressId },
+      select: { progress_value: true, status: true, unlocked_at: true },
+    });
+    const target =
+      DYNAMIC_MILESTONES.find((milestone) => milestone.key === milestoneKey)
+        ?.target ?? 0;
+    const unlocked =
+      (progress?.progress_value ?? 0) >= target &&
+      (progress?.status === MilestoneProgressStatus.unlocked ||
+        progress?.status === MilestoneProgressStatus.claimed);
+    const nextStatus =
+      unlocked &&
+      existingEvidence.status === MilestoneEvidenceSubmissionStatus.approved
+        ? MilestoneEvidenceSubmissionStatus.approved
+        : existingEvidence.status === MilestoneEvidenceSubmissionStatus.rejected
+          ? MilestoneEvidenceSubmissionStatus.rejected
+          : MilestoneEvidenceSubmissionStatus.pending;
+    await ctx.prisma.milestoneEvidenceSubmission.update({
+      where: { id: evidenceId },
+      data: {
+        milestone_progress_id: progressId,
+        reviewed_at:
+          nextStatus === MilestoneEvidenceSubmissionStatus.pending
+            ? null
+            : (progress?.unlocked_at ?? existingEvidence.created_at),
+        reviewed_by_user_id:
+          nextStatus === MilestoneEvidenceSubmissionStatus.pending
+            ? null
+            : (ctx.state.userIds[ctx.state.adminKeys[0]] ?? null),
+        status: nextStatus,
+      },
+    });
+  }
+}
+
 export async function seedFitnessGamification(ctx: DynamicSeedContext) {
   await seedExerciseBackbone(ctx);
   await seedTrainingAndWorkouts(ctx);
   await seedGamification(ctx);
+  await reconcileSeedGamification(ctx);
 
   ctx.notableIds.dynamicSeasonId =
     ctx.state.seasonId ?? seedId('season:dynamic-main');

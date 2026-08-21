@@ -35,11 +35,7 @@ export function toCanonicalPoseExerciseHint(
     return null;
   }
 
-  if (
-    poseStarterCatalog.includes(
-      canonical as (typeof poseStarterCatalog)[number],
-    )
-  ) {
+  if (poseStarterCatalog.includes(canonical)) {
     return canonical;
   }
 

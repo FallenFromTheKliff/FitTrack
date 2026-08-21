@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  buildModelCoverageSummary,
   invalidateDynamicSeedManifest,
   MODEL_COVERAGE,
   MODEL_DELEGATES,
@@ -17,6 +18,7 @@ import {
   assertMembershipCommerceLineage,
   hasKeyedIntervalOverlap,
   isLegalCheckoutHoldEvidence,
+  nutritionCalendarDay,
   SEED_SCENARIO_MATRIX,
 } from './integrity';
 import { dateInsideRange, daysFrom, yearsAgo } from './time';
@@ -33,6 +35,55 @@ void test('integrity coverage classifies every manifest delegate', () => {
         status,
       ),
     ),
+  );
+});
+
+void test('manifest coverage reports model and row totals by category', () => {
+  const counts = Object.fromEntries(
+    MODEL_DELEGATES.map((delegate, index) => [delegate, index + 1]),
+  );
+  const coverage = buildModelCoverageSummary(counts);
+  const categoryModelCount = [
+    coverage.seeded,
+    coverage.derived,
+    coverage.intentionallyEmpty,
+    coverage.externalOnly,
+  ].reduce((total, category) => total + category.modelCount, 0);
+  const categoryRowCount = [
+    coverage.seeded,
+    coverage.derived,
+    coverage.intentionallyEmpty,
+    coverage.externalOnly,
+  ].reduce((total, category) => total + category.rowCount, 0);
+
+  assert.equal(categoryModelCount, MODEL_DELEGATES.length);
+  assert.equal(coverage.totalModelCount, MODEL_DELEGATES.length);
+  assert.equal(categoryRowCount, coverage.totalRowCount);
+  assert.equal(
+    coverage.totalRowCount,
+    MODEL_DELEGATES.reduce((total, delegate) => total + counts[delegate], 0),
+  );
+  assert.ok(coverage.derived.modelCount > 0);
+  assert.deepEqual(coverage.intentionallyEmpty.models, []);
+  assert.deepEqual(coverage.externalOnly.models, []);
+});
+
+void test('nutrition date checks honor the persisted calendar-day precision', () => {
+  const persistedLogDate = new Date('2026-03-13T00:00:00.000Z');
+  const targetCalculatedAt = new Date('2026-03-13T08:00:00.000Z');
+  const activityStart = new Date('2026-03-13T20:00:00.000Z');
+  const activityEnd = new Date('2026-03-14T10:00:00.000Z');
+
+  assert.ok(
+    nutritionCalendarDay(targetCalculatedAt) <=
+      nutritionCalendarDay(persistedLogDate),
+  );
+  assert.ok(
+    nutritionCalendarDay(persistedLogDate) >=
+      nutritionCalendarDay(activityStart),
+  );
+  assert.ok(
+    nutritionCalendarDay(persistedLogDate) <= nutritionCalendarDay(activityEnd),
   );
 });
 

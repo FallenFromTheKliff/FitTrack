@@ -72,6 +72,37 @@ export interface ExpProgressionState {
   remaining_exp: number | null;
 }
 
+export interface WorkoutProgressionDelta {
+  xp: number;
+  volumeKg: Prisma.Decimal;
+}
+
+/**
+ * Keep workout-derived EXP and volume calculation in one production-owned
+ * helper so seed fixtures cannot drift from runtime progression.
+ */
+export function calculateWorkoutProgressionDelta(input: {
+  repsCompleted?: number | null;
+  repsAiCounted?: number | null;
+  weightKg?: Prisma.Decimal | number | string | null;
+}): WorkoutProgressionDelta {
+  const repsCompleted = input.repsCompleted ?? input.repsAiCounted ?? 0;
+  if (!Number.isFinite(repsCompleted) || repsCompleted <= 0) {
+    return { xp: 0, volumeKg: new Prisma.Decimal(0) };
+  }
+
+  const parsedWeightKg = input.weightKg
+    ? new Prisma.Decimal(input.weightKg)
+    : null;
+  const weightForXp = parsedWeightKg ?? new Prisma.Decimal(1);
+  const volumeKg = (parsedWeightKg ?? new Prisma.Decimal(0)).times(
+    repsCompleted,
+  );
+  const xp = weightForXp.times(repsCompleted).dividedBy(10).floor().toNumber();
+
+  return { xp: Math.max(1, xp), volumeKg };
+}
+
 function normalizeExp(exp: number): number {
   if (!Number.isFinite(exp)) {
     return 0;

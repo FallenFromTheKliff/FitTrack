@@ -142,6 +142,8 @@ const SEASON_STATUS_TRANSITIONS: Record<SeasonStatus, SeasonStatus[]> = {
   [SeasonStatus.archived]: [],
 };
 
+import { calculateWorkoutProgressionDelta } from './gamification.constants';
+
 const ADMIN_RANKING_GOVERNANCE_STATUSES = new Set<RankingGovernanceStatus>([
   RankingGovernanceStatus.normal,
   RankingGovernanceStatus.hidden_by_admin,
@@ -1910,9 +1912,12 @@ export class GamificationService {
     const deltas = new Map<string, MuscleMasteryDelta>();
 
     for (const log of logs) {
-      const repsCompleted = log.repsCompleted ?? log.repsAiCounted ?? 0;
-
-      if (repsCompleted <= 0) {
+      const delta = calculateWorkoutProgressionDelta({
+        repsCompleted: log.repsCompleted,
+        repsAiCounted: log.repsAiCounted,
+        weightKg: log.weightKg,
+      });
+      if (delta.xp <= 0) {
         continue;
       }
 
@@ -1920,22 +1925,9 @@ export class GamificationService {
         xp: 0,
         volumeKg: new Prisma.Decimal(0),
       };
-      const parsedWeightKg = log.weightKg
-        ? new Prisma.Decimal(log.weightKg)
-        : null;
-      const weightForXp = parsedWeightKg ?? new Prisma.Decimal(1);
-      const volumeKg = (parsedWeightKg ?? new Prisma.Decimal(0)).times(
-        repsCompleted,
-      );
-      const xp = weightForXp
-        .times(repsCompleted)
-        .dividedBy(10)
-        .floor()
-        .toNumber();
-
       deltas.set(log.muscleGroupHint, {
-        xp: current.xp + Math.max(1, xp),
-        volumeKg: current.volumeKg.plus(volumeKg),
+        xp: current.xp + delta.xp,
+        volumeKg: current.volumeKg.plus(delta.volumeKg),
       });
     }
 

@@ -272,6 +272,7 @@ async function ensureDefaultMuscleDefinitions(prisma: PrismaClient) {
       create: {
         aliases: [...muscle.aliases],
         body_region: muscle.body_region,
+        id: muscle.id,
         is_system: true,
         key: muscle.key,
         name: muscle.name,
@@ -666,6 +667,7 @@ async function ensureDefaultGamificationProfiles(prisma: PrismaClient) {
 
 type BootstrapDefaultsOptions = {
   includeUsers?: boolean;
+  ensureGamificationProfiles?: boolean;
   referenceDate?: Date;
 };
 
@@ -681,7 +683,9 @@ export async function bootstrapDefaults(
   const amenitySummary = await ensureDefaultAmenities(prisma);
   const muscleSummary = await ensureDefaultMuscleDefinitions(prisma);
   await ensureDefaultGamificationBackbone(prisma, options.referenceDate);
-  await ensureDefaultGamificationProfiles(prisma);
+  if (options.ensureGamificationProfiles ?? true) {
+    await ensureDefaultGamificationProfiles(prisma);
+  }
 
   return {
     adminEmail: ADMIN_EMAIL,

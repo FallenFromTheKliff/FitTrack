@@ -4,6 +4,10 @@ import { PrismaClient } from '@prisma/client';
 import { bootstrapDefaults } from './defaults';
 import { getDatabaseUrl, parseDynamicSeedConfig } from './dynamic-seed/config';
 import {
+  buildSeedAccounts,
+  populateAccountState,
+} from './dynamic-seed/accounts';
+import {
   runSeedIntegrityAudit,
   SeedIntegrityError,
 } from './dynamic-seed/integrity';
@@ -14,17 +18,29 @@ import {
 } from './dynamic-seed/manifest';
 import type { DynamicSeedIntegritySummary } from './dynamic-seed/manifest';
 import { SeedRandom } from './dynamic-seed/random';
-import { resetDatabaseForDynamicSeed } from './dynamic-seed/reset';
+import {
+  assertLocalDatabaseAllowed,
+  resetDatabaseForDynamicSeed,
+} from './dynamic-seed/reset';
 import {
   createInitialSeedState,
   type DynamicSeedContext,
   type SeedDomainResult,
 } from './dynamic-seed/types';
 import { seedAiGymAnalytics } from './dynamic-seed/domains/ai-gym-analytics';
-import { seedFacilitiesCoaching } from './dynamic-seed/domains/facilities-coaching';
-import { seedFitnessGamification } from './dynamic-seed/domains/fitness-gamification';
+import {
+  repairSeededCoachingBilling,
+  seedFacilitiesCoaching,
+} from './dynamic-seed/domains/facilities-coaching';
+import {
+  reconcileSeedGamification,
+  seedFitnessGamification,
+} from './dynamic-seed/domains/fitness-gamification';
 import { seedMembershipPayments } from './dynamic-seed/domains/membership-payments';
-import { seedNutritionInventory } from './dynamic-seed/domains/nutrition-inventory';
+import {
+  seedBodyNutrition,
+  seedNutritionInventory,
+} from './dynamic-seed/domains/nutrition-inventory';
 import { seedUsersAuthProfiles } from './dynamic-seed/domains/users-auth-profiles';
 import { reconcileCoachingContracts } from './dynamic-seed/reconcile';
 
@@ -32,11 +48,11 @@ const config = parseDynamicSeedConfig();
 const adapter = new PrismaPg({ connectionString: getDatabaseUrl() });
 const prisma = new PrismaClient({ adapter });
 
-async function runDomain(
+async function runDomain<T extends SeedDomainResult | void>(
   label: string,
-  fn: (ctx: DynamicSeedContext) => Promise<SeedDomainResult | void>,
+  fn: (ctx: DynamicSeedContext) => Promise<T>,
   ctx: DynamicSeedContext,
-) {
+): Promise<T> {
   const startedAt = Date.now();
   const result = await fn(ctx);
   const elapsedMs = Date.now() - startedAt;
@@ -49,7 +65,121 @@ async function runDomain(
   return result;
 }
 
+async function runBodyNutritionScope() {
+  const scopeStartedAt = Date.now();
+  if (config.mode === 'reset') {
+    throw new Error(
+      '[dynamic-seed] body-nutrition scope is additive-only; omit --mode=reset to preserve unrelated rows.',
+    );
+  }
+  if (config.target !== 'local') {
+    throw new Error(
+      '[dynamic-seed] body-nutrition scope is local-only; use --target=local.',
+    );
+  }
+  assertLocalDatabaseAllowed();
+  const state = createInitialSeedState();
+  populateAccountState(state, buildSeedAccounts(config));
+  const ctx: DynamicSeedContext = {
+    config,
+    notableIds: {},
+    prisma,
+    rng: new SeedRandom(config.seed),
+    state,
+  };
+
+  console.log(
+    `[dynamic-seed][body-nutrition] target=${config.target} mode=${config.mode} ` +
+      `users=${config.users} seed=${config.seed}`,
+  );
+  await runDomain('body-nutrition', seedBodyNutrition, ctx);
+  const integrity = await runSeedIntegrityAudit(ctx, {
+    categories: ['body-nutrition'],
+  });
+  const [nutritionRows, tdeeRows, macroRows] = await Promise.all([
+    prisma.nutritionLog.count(),
+    prisma.tdeeProfile.count(),
+    prisma.macroTarget.count(),
+  ]);
+  console.log(
+    `[dynamic-seed][body-nutrition] PASS checks=${integrity.checks} ` +
+      `nutrition=${nutritionRows} tdee=${tdeeRows} macros=${macroRows}`,
+  );
+  console.log(
+    `[dynamic-seed][body-nutrition] elapsedMs=${Date.now() - scopeStartedAt}`,
+  );
+  console.log('BODY-NUTRITION VALIDATION PASSED');
+}
+
+async function runCoachingPaymentsScope() {
+  const scopeStartedAt = Date.now();
+  if (config.mode === 'reset') {
+    throw new Error(
+      '[dynamic-seed] coaching-payments scope is additive-only; omit --mode=reset to preserve unrelated rows.',
+    );
+  }
+  if (config.target !== 'local') {
+    throw new Error(
+      '[dynamic-seed] coaching-payments scope is local-only; use --target=local.',
+    );
+  }
+  assertLocalDatabaseAllowed();
+  const state = createInitialSeedState();
+  populateAccountState(state, buildSeedAccounts(config));
+  const ctx: DynamicSeedContext = {
+    config,
+    notableIds: {},
+    prisma,
+    rng: new SeedRandom(config.seed),
+    state,
+  };
+
+  console.log(
+    `[dynamic-seed][coaching-payments] target=${config.target} mode=${config.mode} ` +
+      `users=${config.users} seed=${config.seed}`,
+  );
+  const repair = await runDomain(
+    'coaching-payment-cycle-repair',
+    repairSeededCoachingBilling,
+    ctx,
+  );
+  await runDomain(
+    'coaching-contract-reconciliation',
+    reconcileCoachingContracts,
+    ctx,
+  );
+  const integrity = await runSeedIntegrityAudit(ctx, {
+    categories: ['payment'],
+  });
+  const [appointmentRows, billingCycleRows, paymentRows] = await Promise.all([
+    prisma.coachAppointment.count({
+      where: { recurring_plan_id: { not: null } },
+    }),
+    prisma.recurringCoachingBillingCycle.count(),
+    prisma.payment.count(),
+  ]);
+  console.log(
+    `[dynamic-seed][coaching-payments] PASS checks=${integrity.checks} ` +
+      `repairs=cycles:${repair?.counts?.billingCycles ?? 0}/payments:${
+        repair?.counts?.payments ?? 0
+      } ` +
+      `appointments=${appointmentRows} billingCycles=${billingCycleRows} payments=${paymentRows}`,
+  );
+  console.log(
+    `[dynamic-seed][coaching-payments] elapsedMs=${Date.now() - scopeStartedAt}`,
+  );
+  console.log('COACHING-PAYMENTS VALIDATION PASSED');
+}
+
 async function main() {
+  if (config.scope === 'body-nutrition') {
+    await runBodyNutritionScope();
+    return;
+  }
+  if (config.scope === 'coaching-payments') {
+    await runCoachingPaymentsScope();
+    return;
+  }
   const seedStartedAt = Date.now();
   await invalidateDynamicSeedManifest();
   console.log(
@@ -80,6 +210,7 @@ async function main() {
       `scenarioCounts=${JSON.stringify(ctx.state.scenarioCounts)}`,
   );
   await bootstrapDefaults(prisma, {
+    ensureGamificationProfiles: false,
     includeUsers: false,
     referenceDate: config.anchorDate,
   });
@@ -89,6 +220,11 @@ async function main() {
   await runDomain(
     'coaching-contract-reconciliation',
     reconcileCoachingContracts,
+    ctx,
+  );
+  await runDomain(
+    'fitness-gamification-reconciliation',
+    reconcileSeedGamification,
     ctx,
   );
   await runDomain('nutrition-inventory', seedNutritionInventory, ctx);

@@ -161,9 +161,9 @@ const COHORT_FILL: Record<MemberCohort, number> = {
 
 const ENGAGEMENT_HISTORY_MULTIPLIERS: Record<MemberEngagement, number> = {
   gym_rat: 1,
-  frequent: 0.8,
-  regular: 0.6,
-  casual: 0.75,
+  frequent: 0.82,
+  regular: 0.65,
+  casual: 0.45,
   lazy: 0.2,
   zero_use: 0,
 };
@@ -387,7 +387,11 @@ export function memberVolumeCount(
     return 0;
   }
 
-  if (domain === 'workouts' || domain === 'exerciseLogs') {
+  if (
+    domain === 'workouts' ||
+    domain === 'exerciseLogs' ||
+    domain === 'nutrition'
+  ) {
     const engagement =
       account?.memberEngagement ??
       account?.scenario?.memberEngagement ??
@@ -401,6 +405,7 @@ export function memberVolumeCount(
       account.hasCompletedHistory === false ||
       account.memberPersona === 'pending' ||
       account.memberPersona === 'unverified' ||
+      account.memberPersona === 'suspended' ||
       !window.activityStart ||
       !window.activityEnd;
     if (noHistory) {
@@ -413,9 +418,21 @@ export function memberVolumeCount(
       ? ctx.config.exerciseHistory === 0
         ? 0
         : Math.min(1.5, Math.max(0.2, ctx.config.exerciseHistory / 50))
-      : 1;
+      : domain === 'nutrition'
+        ? Math.min(
+            1,
+            Math.max(
+              0.2,
+              ((memberAccessWindow(ctx, memberKey).activityEnd?.getTime() ??
+                0) -
+                (memberAccessWindow(ctx, memberKey).activityStart?.getTime() ??
+                  0)) /
+                (180 * 24 * 60 * 60 * 1_000),
+            ),
+          )
+        : 1;
   const engagementScale =
-    domain === 'workouts' || domain === 'exerciseLogs'
+    domain === 'workouts' || domain === 'exerciseLogs' || domain === 'nutrition'
       ? ENGAGEMENT_HISTORY_MULTIPLIERS[
           account?.memberEngagement ??
             account?.scenario?.memberEngagement ??

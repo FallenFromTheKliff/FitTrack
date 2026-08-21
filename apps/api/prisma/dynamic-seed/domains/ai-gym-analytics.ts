@@ -1,4 +1,6 @@
 import {
+  AppointmentStatus,
+  BookingStatus,
   ChatContext,
   ChatRole,
   EquipmentStatus,
@@ -7,9 +9,12 @@ import {
   InsightFocus,
   InsightPeriod,
   InteractionType,
+  MembershipCardStatus,
   NotificationChannel,
   NotificationStatus,
   NotificationType,
+  PaymentStatus,
+  SubscriptionStatus,
   Prisma,
 } from '@prisma/client';
 import { seedId } from '../ids';
@@ -17,7 +22,7 @@ import { dateOnly, daysFrom, fixedTime } from '../time';
 import type { DynamicSeedContext } from '../types';
 import { activityDateFor, memberVolumeCount } from '../volumes';
 
-const GYM_EQUIPMENT = [
+export const GYM_EQUIPMENT = [
   [
     'rack-1',
     'Power Rack 1',
@@ -87,7 +92,7 @@ const GYM_EQUIPMENT = [
 ] as const;
 
 import { pickBrodigyQuestion } from '../brodigy';
-const FAQS = [
+export const FAQS = [
   [
     GymFaqCategory.hours,
     'What time does the gym open?',
@@ -148,13 +153,23 @@ async function seedAiChat(ctx: DynamicSeedContext) {
       account.role !== 'member' ||
       !ctx.state.restrictedMemberKeys.includes(account.key),
   );
-  const userKeys = eligibleAccounts.flatMap((account) => {
-    const turns =
+  const threadCountByUser = new Map(
+    eligibleAccounts.map((account) => [
+      account.key,
       account.role === 'member'
-        ? Math.floor(memberVolumeCount(ctx, account.key, 'chats') / 4)
-        : 3;
-    return Array.from({ length: Math.max(1, turns) }, () => account.key);
-  });
+        ? Math.max(
+            1,
+            Math.floor(memberVolumeCount(ctx, account.key, 'chats') / 4),
+          )
+        : 3,
+    ]),
+  );
+  const userKeys = eligibleAccounts.flatMap((account) =>
+    Array.from(
+      { length: threadCountByUser.get(account.key) ?? 1 },
+      () => account.key,
+    ),
+  );
   const threadCounts = new Map<string, number>();
   const sessionRows: Prisma.AiChatSessionCreateManyInput[] = [];
   const messageRows: Prisma.AiChatMessageCreateManyInput[] = [];
@@ -178,7 +193,7 @@ async function seedAiChat(ctx: DynamicSeedContext) {
       ctx,
       userKey,
       threadIndex * 2,
-      Math.max(1, threadCounts.get(userKey) ?? 1) * 2,
+      Math.max(1, (threadCountByUser.get(userKey) ?? 1) * 2),
       18,
       index % 50,
     );
@@ -202,6 +217,9 @@ async function seedAiChat(ctx: DynamicSeedContext) {
             : 'Gym guidance',
       user_id: userId,
     });
+    sessionRows[sessionRows.length - 1].is_active =
+      threadIndex === (threadCountByUser.get(userKey) ?? 1) - 1 &&
+      assistantMessageAt >= daysFrom(ctx.config.anchorDate, -30, 0);
 
     messageRows.push(
       {
@@ -258,127 +276,456 @@ async function seedAiChat(ctx: DynamicSeedContext) {
     });
   });
 
-  await ctx.prisma.aiChatSession.createMany({
-    data: sessionRows,
-    skipDuplicates: true,
-  });
-  await ctx.prisma.aiChatMessage.createMany({
-    data: messageRows,
-    skipDuplicates: true,
-  });
-  await ctx.prisma.aiInteractionLog.createMany({
-    data: interactionRows,
-    skipDuplicates: true,
-  });
+  for (const row of sessionRows) {
+    const existingActive = await ctx.prisma.aiChatSession.findFirst({
+      where: {
+        context_type: row.context_type,
+        is_active: true,
+        user_id: row.user_id,
+      },
+      select: { id: true },
+    });
+    const canActivate =
+      row.is_active === true &&
+      (!existingActive ||
+        existingActive.id === row.id ||
+        ctx.config.mode === 'reset');
+    await ctx.prisma.aiChatSession.upsert({
+      where: { id: row.id },
+      update: { ...row, is_active: canActivate },
+      create: { ...row, is_active: canActivate },
+    });
+  }
+  for (const row of messageRows) {
+    await ctx.prisma.aiChatMessage.upsert({
+      where: { id: row.id },
+      update: row,
+      create: row,
+    });
+  }
+  for (const row of interactionRows) {
+    await ctx.prisma.aiInteractionLog.upsert({
+      where: { id: row.id },
+      update: row,
+      create: row,
+    });
+  }
 }
 
 async function seedNotifications(ctx: DynamicSeedContext) {
-  const types = [
-    NotificationType.payment_confirmed,
-    NotificationType.booking_confirmed,
-    NotificationType.appointment_reminder,
-    NotificationType.rank_up,
-    NotificationType.low_stock,
-    NotificationType.subscription_expiring,
-    NotificationType.system,
-  ] as const;
+  type NotificationEvent = {
+    body: string;
+    eventAt: Date;
+    eventId: string;
+    source: string;
+    title: string;
+    type: NotificationType;
+    userId: string;
+  };
+  const seededUserIds = ctx.state.accounts.map(
+    (account) => ctx.state.userIds[account.key],
+  );
+  const accountByUserId = new Map(
+    ctx.state.accounts.map((account) => [
+      ctx.state.userIds[account.key],
+      account,
+    ]),
+  );
+  const [
+    payments,
+    bookings,
+    appointments,
+    subscriptions,
+    cards,
+    standings,
+    milestones,
+    products,
+  ] = await Promise.all([
+    ctx.prisma.payment.findMany({
+      where: { user_id: { in: seededUserIds } },
+      select: {
+        amount: true,
+        id: true,
+        payable_type: true,
+        status: true,
+        user_id: true,
+        created_at: true,
+      },
+    }),
+    ctx.prisma.amenityBooking.findMany({
+      where: { user_id: { in: seededUserIds } },
+      select: {
+        id: true,
+        starts_at: true,
+        status: true,
+        user_id: true,
+        created_at: true,
+      },
+    }),
+    ctx.prisma.coachAppointment.findMany({
+      where: { user_id: { in: seededUserIds } },
+      select: {
+        id: true,
+        scheduled_at: true,
+        status: true,
+        user_id: true,
+        created_at: true,
+      },
+    }),
+    ctx.prisma.subscription.findMany({
+      where: { user_id: { in: seededUserIds } },
+      select: {
+        expires_at: true,
+        id: true,
+        status: true,
+        user_id: true,
+        created_at: true,
+      },
+    }),
+    ctx.prisma.membershipCard.findMany({
+      where: { user_id: { in: seededUserIds } },
+      select: { id: true, purchased_at: true, status: true, user_id: true },
+    }),
+    ctx.prisma.seasonalStanding.findMany({
+      where: { user_id: { in: seededUserIds } },
+      select: {
+        id: true,
+        last_earned_at: true,
+        rank_position: true,
+        user_id: true,
+      },
+    }),
+    ctx.prisma.userMilestoneProgress.findMany({
+      where: { user_id: { in: seededUserIds } },
+      select: { id: true, status: true, unlocked_at: true, user_id: true },
+    }),
+    ctx.prisma.retailProduct.findMany({
+      select: {
+        id: true,
+        name: true,
+        reorder_threshold: true,
+        stock_quantity: true,
+      },
+    }),
+  ]);
 
-  const notificationRows: Prisma.NotificationCreateManyInput[] = [];
-  ctx.state.accounts.forEach((account, userIndex) => {
+  // Older seed revisions used notification:${account}:${index} ids and
+  // intentionally left pending rows behind. Reconcile only those canonical
+  // ids so additive/user-created notifications remain untouched.
+  const legacyNotificationIds = ctx.state.accounts.flatMap((account) => {
     const isMember = account.role === 'member';
-    const isRestricted = ctx.state.restrictedMemberKeys.includes(account.key);
-    const total = isMember
-      ? Math.min(
-          200,
-          isRestricted
-            ? Math.min(3, memberVolumeCount(ctx, account.key, 'notifications'))
-            : memberVolumeCount(ctx, account.key, 'notifications'),
-        )
-      : 8;
-    for (let rowIndex = 0; rowIndex < total; rowIndex += 1) {
-      const type = isRestricted
-        ? [
-            NotificationType.system,
-            NotificationType.payment_failed,
-            NotificationType.subscription_expired,
-          ][rowIndex % 3]
-        : types[(userIndex + rowIndex) % types.length];
-      const status =
-        rowIndex % 5 === 0
-          ? NotificationStatus.read
-          : rowIndex % 5 === 1
-            ? NotificationStatus.sent
-            : NotificationStatus.pending;
-      const createdAt = isMember
-        ? seedChatDate(
-            ctx,
-            account.key,
-            rowIndex,
-            total,
-            9 + (rowIndex % 8),
-            rowIndex % 50,
-          )
-        : daysFrom(
-            ctx.config.anchorDate,
-            -4 + (rowIndex % 3),
-            9 + (rowIndex % 8),
-            rowIndex % 50,
-          );
-      notificationRows.push({
-        id: seedId(`notification:${account.key}:${rowIndex}`),
-        body:
-          type === NotificationType.low_stock
-            ? 'Inventory alert: review low stock products before closing.'
-            : isRestricted
-              ? 'Account status update: finish verification or contact the support desk.'
-              : 'Notification used for filters and badge counts.',
-        channel:
-          rowIndex % 3 === 2
-            ? NotificationChannel.in_app
-            : NotificationChannel.email,
+    return Array.from({ length: isMember ? 200 : 8 }, (_, rowIndex) =>
+      seedId(`notification:${account.key}:${rowIndex}`),
+    );
+  });
+  const legacyNotifications = await ctx.prisma.notification.findMany({
+    where: {
+      id: { in: legacyNotificationIds },
+      user_id: { in: seededUserIds },
+    },
+    select: { created_at: true, id: true },
+  });
+  const anchorTime = ctx.config.anchorDate.getTime();
+  for (const legacy of legacyNotifications) {
+    const createdAt =
+      legacy.created_at.getTime() <= anchorTime
+        ? legacy.created_at
+        : new Date(anchorTime - 60_000);
+    await ctx.prisma.notification.update({
+      where: { id: legacy.id },
+      data: {
         created_at: createdAt,
         data: {
-          source: 'dynamic-seed',
-          type,
-          cohort: isMember ? ctx.state.memberCohorts[account.key] : null,
+          legacy_seed: true,
+          reconciled_at: ctx.config.anchorDate.toISOString(),
+          source: 'dynamic-seed-legacy',
         },
-        read_at:
-          status === NotificationStatus.read
-            ? daysFrom(
-                createdAt,
-                0,
-                createdAt.getUTCHours() + 2,
-                createdAt.getUTCMinutes(),
-              )
-            : null,
-        sent_at:
-          status === NotificationStatus.pending
-            ? null
-            : daysFrom(
-                createdAt,
-                0,
-                createdAt.getUTCHours() + 1,
-                createdAt.getUTCMinutes(),
-              ),
-        status,
-        title:
-          type === NotificationType.low_stock
-            ? 'Low stock review'
-            : type === NotificationType.rank_up
-              ? 'Rank progress'
-              : isRestricted
-                ? 'Account status update'
-                : 'FitTrack update',
-        type,
-        user_id: ctx.state.userIds[account.key],
+        read_at: createdAt,
+        sent_at: createdAt,
+        status: NotificationStatus.read,
+      },
+    });
+  }
+
+  const events: NotificationEvent[] = [];
+  const addEvent = (event: NotificationEvent) => {
+    const account = accountByUserId.get(event.userId);
+    const restricted =
+      account?.role === 'member' &&
+      ctx.state.restrictedMemberKeys.includes(account.key);
+    if (restricted && event.source !== 'account') return;
+    events.push(event);
+  };
+  for (const payment of payments) {
+    if (
+      payment.status !== PaymentStatus.completed &&
+      payment.status !== PaymentStatus.failed
+    ) {
+      continue;
+    }
+    const failed = payment.status === PaymentStatus.failed;
+    addEvent({
+      body: failed
+        ? 'Your payment attempt could not be completed. Contact the support desk if you need help.'
+        : 'Your payment was completed successfully.',
+      eventAt: payment.created_at,
+      eventId: payment.id,
+      source: 'payment',
+      title: failed ? 'Payment failed' : 'Payment confirmed',
+      type: failed
+        ? NotificationType.payment_failed
+        : NotificationType.payment_confirmed,
+      userId: payment.user_id,
+    });
+  }
+  for (const booking of bookings) {
+    const type =
+      booking.status === BookingStatus.confirmed
+        ? NotificationType.booking_confirmed
+        : booking.status === BookingStatus.cancelled
+          ? NotificationType.booking_cancelled
+          : booking.status === BookingStatus.no_show
+            ? NotificationType.booking_no_show
+            : null;
+    if (!type) continue;
+    addEvent({
+      body:
+        type === NotificationType.booking_confirmed
+          ? 'Your venue booking is confirmed.'
+          : type === NotificationType.booking_cancelled
+            ? 'Your venue booking was cancelled.'
+            : 'Your venue booking was recorded as a no-show.',
+      eventAt: booking.created_at,
+      eventId: booking.id,
+      source: 'booking',
+      title:
+        type === NotificationType.booking_confirmed
+          ? 'Booking confirmed'
+          : type === NotificationType.booking_cancelled
+            ? 'Booking cancelled'
+            : 'Booking no-show',
+      type,
+      userId: booking.user_id,
+    });
+    if (
+      type === NotificationType.booking_confirmed &&
+      booking.starts_at >= ctx.config.anchorDate &&
+      booking.starts_at.getTime() - ctx.config.anchorDate.getTime() <=
+        7 * 86_400_000
+    ) {
+      addEvent({
+        body: 'Your confirmed venue booking is coming up soon.',
+        eventAt: daysFrom(booking.starts_at, -1, 9),
+        eventId: `${booking.id}:reminder`,
+        source: 'booking-reminder',
+        title: 'Booking reminder',
+        type: NotificationType.booking_reminder,
+        userId: booking.user_id,
       });
     }
-  });
+  }
+  for (const appointment of appointments) {
+    const type =
+      appointment.status === AppointmentStatus.confirmed
+        ? NotificationType.appointment_confirmed
+        : appointment.status === AppointmentStatus.completed
+          ? NotificationType.appointment_completed
+          : appointment.status === AppointmentStatus.cancelled
+            ? NotificationType.appointment_cancelled
+            : appointment.status === AppointmentStatus.no_show
+              ? NotificationType.system
+              : null;
+    if (!type) continue;
+    addEvent({
+      body:
+        type === NotificationType.appointment_confirmed
+          ? 'Your coaching appointment is confirmed.'
+          : type === NotificationType.appointment_completed
+            ? 'Your coaching appointment was completed.'
+            : type === NotificationType.appointment_cancelled
+              ? 'Your coaching appointment was cancelled.'
+              : 'Your coaching appointment was recorded as a no-show.',
+      eventAt: appointment.created_at,
+      eventId: appointment.id,
+      source: 'appointment',
+      title:
+        type === NotificationType.system
+          ? 'Appointment update'
+          : type === NotificationType.appointment_confirmed
+            ? 'Appointment confirmed'
+            : type === NotificationType.appointment_completed
+              ? 'Appointment completed'
+              : 'Appointment cancelled',
+      type,
+      userId: appointment.user_id,
+    });
+    if (
+      type === NotificationType.appointment_confirmed &&
+      appointment.scheduled_at >= ctx.config.anchorDate &&
+      appointment.scheduled_at.getTime() - ctx.config.anchorDate.getTime() <=
+        7 * 86_400_000
+    ) {
+      addEvent({
+        body: 'Your confirmed coaching appointment is coming up soon.',
+        eventAt: daysFrom(appointment.scheduled_at, -1, 9),
+        eventId: `${appointment.id}:reminder`,
+        source: 'appointment-reminder',
+        title: 'Appointment reminder',
+        type: NotificationType.appointment_reminder,
+        userId: appointment.user_id,
+      });
+    }
+  }
+  for (const subscription of subscriptions) {
+    if (subscription.status === SubscriptionStatus.expired) {
+      addEvent({
+        body: 'Your membership subscription has expired. Review membership options to restore access.',
+        eventAt: subscription.expires_at ?? subscription.created_at,
+        eventId: subscription.id,
+        source: 'membership',
+        title: 'Subscription expired',
+        type: NotificationType.subscription_expired,
+        userId: subscription.user_id,
+      });
+    } else if (
+      subscription.expires_at &&
+      subscription.expires_at >= ctx.config.anchorDate &&
+      subscription.expires_at.getTime() - ctx.config.anchorDate.getTime() <=
+        7 * 86_400_000
+    ) {
+      addEvent({
+        body: 'Your membership subscription expires soon. Review renewal options.',
+        eventAt: daysFrom(subscription.expires_at, -3, 9),
+        eventId: `${subscription.id}:expiring`,
+        source: 'membership',
+        title: 'Subscription expiring',
+        type: NotificationType.subscription_expiring,
+        userId: subscription.user_id,
+      });
+    }
+  }
+  for (const card of cards) {
+    if (card.status === MembershipCardStatus.revoked) {
+      addEvent({
+        body: 'Your membership QR card is no longer active. Contact staff for assistance.',
+        eventAt: card.purchased_at,
+        eventId: card.id,
+        source: 'account',
+        title: 'Membership card update',
+        type: NotificationType.system,
+        userId: card.user_id,
+      });
+    }
+  }
+  for (const standing of standings) {
+    if (!standing.rank_position || standing.rank_position > 3) continue;
+    addEvent({
+      body: `Your seeded ranking position is ${standing.rank_position}.`,
+      eventAt:
+        standing.last_earned_at ?? daysFrom(ctx.config.anchorDate, -2, 9),
+      eventId: standing.id,
+      source: 'rank',
+      title: 'Rank progress',
+      type: NotificationType.rank_up,
+      userId: standing.user_id,
+    });
+  }
+  for (const milestone of milestones) {
+    if (milestone.status !== 'unlocked' && milestone.status !== 'claimed')
+      continue;
+    addEvent({
+      body:
+        milestone.status === 'claimed'
+          ? 'A seeded milestone reward was claimed.'
+          : 'A seeded milestone has been unlocked.',
+      eventAt: milestone.unlocked_at ?? daysFrom(ctx.config.anchorDate, -2, 9),
+      eventId: milestone.id,
+      source: 'milestone',
+      title:
+        milestone.status === 'claimed'
+          ? 'Milestone reward'
+          : 'Milestone unlocked',
+      type: NotificationType.system,
+      userId: milestone.user_id,
+    });
+  }
+  for (const product of products) {
+    if (product.stock_quantity > product.reorder_threshold) continue;
+    for (const staffKey of [...ctx.state.adminKeys, ...ctx.state.staffKeys]) {
+      addEvent({
+        body: `${product.name} is at ${product.stock_quantity} units, at or below the reorder threshold.`,
+        eventAt: daysFrom(ctx.config.anchorDate, -1, 8),
+        eventId: product.id,
+        source: 'stock',
+        title: 'Low stock review',
+        type: NotificationType.low_stock,
+        userId: ctx.state.userIds[staffKey],
+      });
+    }
+  }
+  for (const account of ctx.state.accounts) {
+    if (!ctx.state.restrictedMemberKeys.includes(account.key)) continue;
+    addEvent({
+      body: 'Account status update: complete verification or contact the support desk.',
+      eventAt:
+        account.lifecycle?.registeredAt ??
+        daysFrom(ctx.config.anchorDate, -2, 9),
+      eventId: account.key,
+      source: 'account',
+      title: 'Account status update',
+      type: NotificationType.system,
+      userId: ctx.state.userIds[account.key],
+    });
+  }
 
-  await ctx.prisma.notification.createMany({
-    data: notificationRows,
-    skipDuplicates: true,
-  });
+  const anchor = ctx.config.anchorDate.getTime();
+  const clampToAnchor = (value: Date) =>
+    value.getTime() > anchor - 60_000 ? new Date(anchor - 60_000) : value;
+  events.sort((left, right) =>
+    `${left.source}:${left.eventId}:${left.userId}`.localeCompare(
+      `${right.source}:${right.eventId}:${right.userId}`,
+    ),
+  );
+  for (const [index, event] of events.entries()) {
+    const createdAt = clampToAnchor(event.eventAt);
+    const sentAt = clampToAnchor(
+      new Date(Math.min(anchor, createdAt.getTime() + 15 * 60_000)),
+    );
+    const isRead = index % 4 === 0;
+    const readAt = isRead
+      ? clampToAnchor(
+          new Date(Math.min(anchor, sentAt.getTime() + 30 * 60_000)),
+        )
+      : null;
+    const row: Prisma.NotificationCreateManyInput = {
+      body: event.body,
+      channel:
+        index % 3 === 2
+          ? NotificationChannel.in_app
+          : NotificationChannel.email,
+      created_at: createdAt,
+      data: {
+        event_id: event.eventId,
+        event_source: event.source,
+        source: 'dynamic-seed',
+      },
+      dedupe_key: `dynamic-seed:${event.source}:${event.eventId}:${event.userId}`,
+      id: seedId(
+        `notification:event:${event.source}:${event.eventId}:${event.userId}`,
+      ),
+      read_at: readAt,
+      sent_at: sentAt,
+      status: isRead ? NotificationStatus.read : NotificationStatus.sent,
+      title: event.title,
+      type: event.type,
+      user_id: event.userId,
+    };
+    await ctx.prisma.notification.upsert({
+      where: { id: row.id },
+      update: row,
+      create: row,
+    });
+  }
 }
 
 async function seedGymLayoutAndKnowledge(ctx: DynamicSeedContext) {
@@ -457,73 +804,111 @@ async function seedGymLayoutAndKnowledge(ctx: DynamicSeedContext) {
     }
   }
 
-  await ctx.prisma.gymSpecialSchedule.createMany({
-    data: [
-      {
-        id: seedId('special-schedule:maintenance-night'),
-        closes_at: fixedTime('18:00:00'),
-        ends_on: dateOnly(ctx.config.anchorDate, 14),
-        is_active: true,
-        is_closed: false,
-        opens_at: fixedTime('08:00:00'),
-        pricing_note: 'Off-peak booking discount after maintenance window.',
-        reason: 'Quarterly equipment maintenance',
-        starts_on: dateOnly(ctx.config.anchorDate, 14),
-      },
-      {
-        id: seedId('special-schedule:holiday'),
-        closes_at: null,
-        ends_on: dateOnly(ctx.config.anchorDate, 32),
-        is_active: true,
-        is_closed: true,
-        opens_at: null,
-        pricing_note: null,
-        reason: 'Local holiday closure',
-        starts_on: dateOnly(ctx.config.anchorDate, 32),
-      },
-    ],
-    skipDuplicates: true,
-  });
+  const specialSchedules = [
+    {
+      id: seedId('special-schedule:maintenance-history'),
+      closes_at: fixedTime('18:00:00'),
+      ends_on: dateOnly(ctx.config.anchorDate, -45),
+      is_active: false,
+      is_closed: false,
+      opens_at: fixedTime('10:00:00'),
+      pricing_note: 'Historical maintenance window; normal hours restored.',
+      reason: 'Quarterly equipment maintenance (completed)',
+      starts_on: dateOnly(ctx.config.anchorDate, -45),
+    },
+    {
+      id: seedId('special-schedule:maintenance-night'),
+      closes_at: fixedTime('18:00:00'),
+      ends_on: dateOnly(ctx.config.anchorDate, 14),
+      is_active: true,
+      is_closed: false,
+      opens_at: fixedTime('08:00:00'),
+      pricing_note: 'Off-peak booking discount after maintenance window.',
+      reason: 'Quarterly equipment maintenance',
+      starts_on: dateOnly(ctx.config.anchorDate, 14),
+    },
+    {
+      id: seedId('special-schedule:holiday'),
+      closes_at: null,
+      ends_on: dateOnly(ctx.config.anchorDate, 32),
+      is_active: true,
+      is_closed: true,
+      opens_at: null,
+      pricing_note: null,
+      reason: 'Local holiday closure',
+      starts_on: dateOnly(ctx.config.anchorDate, 32),
+    },
+  ];
+  for (const schedule of specialSchedules) {
+    await ctx.prisma.gymSpecialSchedule.upsert({
+      where: { id: schedule.id },
+      update: schedule,
+      create: schedule,
+    });
+  }
 
-  await ctx.prisma.gymPromotion.createMany({
-    data: [
-      {
-        id: seedId('promotion:premium-coaching-demo'),
-        description: 'Premium coaching member promo for the current campaign.',
-        ends_at: daysFrom(ctx.config.anchorDate, 21, 23, 59),
-        is_active: true,
-        pricing_note: 'Free assessment on first recurring plan.',
-        promo_code: 'PREMIUMQA',
-        starts_at: daysFrom(ctx.config.anchorDate, -2, 0),
-        title: 'Premium Coaching Demo',
-      },
-      {
-        id: seedId('promotion:amenity-bundle'),
-        description:
-          'Boxing ring and studio reservation promo for the current campaign.',
-        ends_at: daysFrom(ctx.config.anchorDate, 10, 23, 59),
-        is_active: true,
-        pricing_note: '10% off two-hour amenity blocks.',
-        promo_code: 'BOOKFIT',
-        starts_at: daysFrom(ctx.config.anchorDate, -5, 0),
-        title: 'Amenity Bundle',
-      },
-    ],
-    skipDuplicates: true,
-  });
+  const promotions = [
+    {
+      id: seedId('promotion:premium-coaching-demo'),
+      description: 'Premium coaching member promo for the current campaign.',
+      ends_at: daysFrom(ctx.config.anchorDate, 21, 23, 59),
+      is_active: true,
+      pricing_note: 'Free assessment on first recurring plan.',
+      promo_code: 'PREMIUMQA',
+      starts_at: daysFrom(ctx.config.anchorDate, -2, 0),
+      title: 'Premium Coaching Demo',
+    },
+    {
+      id: seedId('promotion:amenity-bundle'),
+      description:
+        'Boxing ring and studio reservation promo for the upcoming campaign.',
+      ends_at: daysFrom(ctx.config.anchorDate, 10, 23, 59),
+      is_active: true,
+      pricing_note: '10% off two-hour amenity blocks.',
+      promo_code: 'BOOKFIT',
+      starts_at: daysFrom(ctx.config.anchorDate, 3, 0),
+      title: 'Amenity Bundle',
+    },
+    {
+      id: seedId('promotion:expired-starter'),
+      description: 'Expired starter offer retained for historical analytics.',
+      ends_at: daysFrom(ctx.config.anchorDate, -10, 23, 59),
+      is_active: false,
+      pricing_note: 'Historical campaign only.',
+      promo_code: 'STARTERHISTORY',
+      starts_at: daysFrom(ctx.config.anchorDate, -30, 0),
+      title: 'Starter History',
+    },
+  ];
+  for (const promotion of promotions) {
+    await ctx.prisma.gymPromotion.upsert({
+      where: { id: promotion.id },
+      update: promotion,
+      create: promotion,
+    });
+  }
 
-  await ctx.prisma.gymFaqEntry.createMany({
-    data: FAQS.map(([category, question, answer], index) => ({
+  for (const [category, question, answer] of FAQS) {
+    const index = FAQS.findIndex((candidate) => candidate[1] === question);
+    const resolvedAnswer =
+      category === GymFaqCategory.membership
+        ? 'Purchase the membership card with PayMongo or full cash payment, then staff can verify the QR card.'
+        : answer;
+    const row = {
       id: seedId(`gym-faq:${index}`),
-      answer,
+      answer: resolvedAnswer,
       category,
       is_active: true,
       keywords: question.toLowerCase().split(/\W+/).filter(Boolean),
       question,
       sort_order: index + 1,
-    })),
-    skipDuplicates: true,
-  });
+    };
+    await ctx.prisma.gymFaqEntry.upsert({
+      where: { id: row.id },
+      update: row,
+      create: row,
+    });
+  }
 }
 
 async function seedGymChat(ctx: DynamicSeedContext) {
@@ -564,7 +949,9 @@ async function seedGymChat(ctx: DynamicSeedContext) {
       sessionRows.push({
         id: sessionId,
         created_at: userMessageAt,
-        is_active: threadIndex === 0,
+        is_active:
+          threadIndex === gymTurns - 1 &&
+          assistantMessageAt >= daysFrom(ctx.config.anchorDate, -30, 0),
         last_activity_at: assistantMessageAt,
         title: 'Gym policy and schedule help',
         user_id: ctx.state.userIds[memberKey],
@@ -633,23 +1020,90 @@ async function seedGymChat(ctx: DynamicSeedContext) {
     }
   });
 
-  await ctx.prisma.gymChatSession.createMany({
-    data: sessionRows,
-    skipDuplicates: true,
-  });
-  await ctx.prisma.gymChatMessage.createMany({
-    data: messageRows,
-    skipDuplicates: true,
-  });
-  await ctx.prisma.gymChatInteractionLog.createMany({
-    data: interactionRows,
-    skipDuplicates: true,
-  });
+  for (const row of sessionRows) {
+    const existingActive = await ctx.prisma.gymChatSession.findFirst({
+      where: { is_active: true, user_id: row.user_id },
+      select: { id: true },
+    });
+    const canActivate =
+      row.is_active === true &&
+      (!existingActive ||
+        existingActive.id === row.id ||
+        ctx.config.mode === 'reset');
+    await ctx.prisma.gymChatSession.upsert({
+      where: { id: row.id },
+      update: { ...row, is_active: canActivate },
+      create: { ...row, is_active: canActivate },
+    });
+  }
+  for (const row of messageRows) {
+    await ctx.prisma.gymChatMessage.upsert({
+      where: { id: row.id },
+      update: row,
+      create: row,
+    });
+  }
+  for (const row of interactionRows) {
+    await ctx.prisma.gymChatInteractionLog.upsert({
+      where: { id: row.id },
+      update: row,
+      create: row,
+    });
+  }
 }
 
 async function seedAuditAndAnalytics(ctx: DynamicSeedContext) {
   const adminId = ctx.state.userIds.admin;
   const staffId = ctx.state.userIds.staff;
+  const [
+    completedPayments,
+    completedSales,
+    saleItems,
+    completedAppointments,
+    completedBookings,
+    attendance,
+    products,
+  ] = await Promise.all([
+    ctx.prisma.payment.findMany({
+      where: { status: PaymentStatus.completed },
+      select: { amount: true, id: true, payable_type: true },
+    }),
+    ctx.prisma.saleTransaction.findMany({
+      where: { status: 'completed' },
+      select: { id: true, total_amount: true },
+    }),
+    ctx.prisma.saleTransactionItem.findMany({
+      select: { subtotal: true, transaction_id: true },
+    }),
+    ctx.prisma.coachAppointment.findMany({
+      where: { status: AppointmentStatus.completed },
+      select: { id: true },
+    }),
+    ctx.prisma.amenityBooking.findMany({
+      where: { status: BookingStatus.completed },
+      select: { id: true },
+    }),
+    ctx.prisma.attendanceLog.findMany({ select: { id: true } }),
+    ctx.prisma.retailProduct.findMany({
+      select: {
+        id: true,
+        name: true,
+        reorder_threshold: true,
+        stock_quantity: true,
+      },
+    }),
+  ]);
+  const completedRevenue = completedPayments.reduce(
+    (total, payment) => total + Number(payment.amount),
+    0,
+  );
+  const retailRevenue = completedSales.reduce(
+    (total, sale) => total + Number(sale.total_amount),
+    0,
+  );
+  const lowStockProducts = products.filter(
+    (product) => product.stock_quantity <= product.reorder_threshold,
+  );
   const auditRows: Prisma.AuditLogCreateManyInput[] = [
     {
       id: seedId('audit:payment-verified:member-premium'),
@@ -684,55 +1138,136 @@ async function seedAuditAndAnalytics(ctx: DynamicSeedContext) {
       ip_address: '127.0.0.22',
       user_id: staffId,
     },
+    {
+      id: seedId('audit:equipment-maintenance:bike-1:started'),
+      action: 'EQUIPMENT_MAINTENANCE_STARTED',
+      after: { status: EquipmentStatus.maintenance },
+      before: { status: EquipmentStatus.available },
+      created_at: daysFrom(ctx.config.anchorDate, -1, 6),
+      entity: 'GymEquipment',
+      entity_id: seedId('gym-equipment:bike-1'),
+      ip_address: '127.0.0.23',
+      user_id: staffId,
+    },
+    {
+      id: seedId('audit:equipment-maintenance:treadmill-1:completed'),
+      action: 'EQUIPMENT_MAINTENANCE_COMPLETED',
+      after: { status: EquipmentStatus.available },
+      before: { status: EquipmentStatus.maintenance },
+      created_at: daysFrom(ctx.config.anchorDate, -12, 17),
+      entity: 'GymEquipment',
+      entity_id: seedId('gym-equipment:treadmill-1'),
+      ip_address: '127.0.0.24',
+      user_id: staffId,
+    },
   ];
 
-  await ctx.prisma.auditLog.createMany({
-    data: auditRows,
-    skipDuplicates: true,
-  });
+  for (const row of auditRows) {
+    await ctx.prisma.auditLog.upsert({
+      where: { id: row.id },
+      update: row,
+      create: row,
+    });
+  }
 
-  await ctx.prisma.businessInsightRun.createMany({
-    data: [
-      {
-        id: seedId('business-insight:overview:monthly'),
-        created_at: daysFrom(ctx.config.anchorDate, -1, 8),
-        end_date: dateOnly(ctx.config.anchorDate, 0),
-        focus: InsightFocus.overview,
-        insight_payload: {
-          opportunities: ['Premium coaching utilization is strong.'],
-          risks: ['Pending payments need staff follow-up.'],
-          summary:
-            'Monthly overview with revenue, attendance, and coaching signals.',
+  const insightRows: Prisma.BusinessInsightRunCreateManyInput[] = [
+    {
+      id: seedId('business-insight:overview:monthly'),
+      created_at: daysFrom(ctx.config.anchorDate, -1, 8),
+      end_date: dateOnly(ctx.config.anchorDate, 0),
+      focus: InsightFocus.overview,
+      insight_payload: {
+        metrics: {
+          completed_appointments: completedAppointments.length,
+          completed_bookings: completedBookings.length,
+          completed_payments: completedPayments.length,
+          attendance_events: attendance.length,
+          gross_payment_amount: Number(completedRevenue.toFixed(2)),
+          retail_sales_amount: Number(retailRevenue.toFixed(2)),
         },
-        latency_ms: 1450,
-        model_used: 'seeded-business-insight',
-        period: InsightPeriod.monthly,
-        request_payload: { source: 'dynamic-seed', includeNarrative: true },
-        requested_by: adminId,
-        start_date: dateOnly(ctx.config.anchorDate, -30),
-        token_count: 980,
+        opportunities:
+          completedAppointments.length > 0
+            ? [
+                `${completedAppointments.length} completed coaching appointment(s) can inform retention outreach.`,
+              ]
+            : [
+                'No completed coaching appointments were seeded for this window.',
+              ],
+        risks:
+          lowStockProducts.length > 0
+            ? [
+                `${lowStockProducts.length} retail product(s) are at or below reorder threshold.`,
+              ]
+            : ['No retail products are below their reorder threshold.'],
+        source: 'dynamic-seed',
+        summary: `Seeded operations include ${completedPayments.length} completed payment event(s), ${completedBookings.length} completed venue booking(s), and ${attendance.length} attendance event(s).`,
       },
-      {
-        id: seedId('business-insight:inventory:weekly'),
-        created_at: daysFrom(ctx.config.anchorDate, -2, 8),
-        end_date: dateOnly(ctx.config.anchorDate, 0),
-        focus: InsightFocus.inventory,
-        insight_payload: {
-          opportunities: ['Bundle protein bars with coaching check-ins.'],
-          risks: ['Low stock products should be reordered this week.'],
-          summary: 'Inventory insight for admin analytics review.',
+      latency_ms: 1450,
+      model_used: 'seeded-business-insight',
+      period: InsightPeriod.monthly,
+      request_payload: {
+        includeNarrative: true,
+        provenance: {
+          appointment_ids: completedAppointments
+            .slice(0, 20)
+            .map(({ id }) => id),
+          booking_ids: completedBookings.slice(0, 20).map(({ id }) => id),
+          payment_ids: completedPayments.slice(0, 20).map(({ id }) => id),
         },
-        latency_ms: 1180,
-        model_used: 'seeded-business-insight',
-        period: InsightPeriod.weekly,
-        request_payload: { source: 'dynamic-seed', includeNarrative: true },
-        requested_by: adminId,
-        start_date: dateOnly(ctx.config.anchorDate, -7),
-        token_count: 760,
+        source: 'dynamic-seed',
       },
-    ],
-    skipDuplicates: true,
-  });
+      requested_by: adminId,
+      start_date: dateOnly(ctx.config.anchorDate, -30),
+      token_count: 980,
+    },
+    {
+      id: seedId('business-insight:inventory:weekly'),
+      created_at: daysFrom(ctx.config.anchorDate, -2, 8),
+      end_date: dateOnly(ctx.config.anchorDate, 0),
+      focus: InsightFocus.inventory,
+      insight_payload: {
+        metrics: {
+          low_stock_items: lowStockProducts.length,
+          tracked_products: products.length,
+          completed_retail_sales: completedSales.length,
+          completed_retail_line_items: saleItems.length,
+        },
+        opportunities:
+          products.length > 0
+            ? [
+                `Review the ${products.length} tracked retail product(s) against current sell-through.`,
+              ]
+            : ['No tracked retail products were seeded for this window.'],
+        risks:
+          lowStockProducts.length > 0
+            ? lowStockProducts.map(({ name }) => `${name} needs replenishment.`)
+            : ['No low-stock risk is present in the final seeded state.'],
+        source: 'dynamic-seed',
+        summary: `Inventory insight is derived from ${products.length} product row(s), ${completedSales.length} completed sale(s), and ${saleItems.length} sale line item(s).`,
+      },
+      latency_ms: 1180,
+      model_used: 'seeded-business-insight',
+      period: InsightPeriod.weekly,
+      request_payload: {
+        includeNarrative: true,
+        provenance: {
+          product_ids: products.slice(0, 20).map(({ id }) => id),
+          sale_ids: completedSales.slice(0, 20).map(({ id }) => id),
+        },
+        source: 'dynamic-seed',
+      },
+      requested_by: adminId,
+      start_date: dateOnly(ctx.config.anchorDate, -7),
+      token_count: 760,
+    },
+  ];
+  for (const row of insightRows) {
+    await ctx.prisma.businessInsightRun.upsert({
+      where: { id: row.id },
+      update: row,
+      create: row,
+    });
+  }
 }
 
 export async function seedAiGymAnalytics(ctx: DynamicSeedContext) {

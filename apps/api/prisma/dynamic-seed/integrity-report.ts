@@ -2,10 +2,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 
 import { buildSeedAccounts, populateAccountState } from './accounts';
-import {
-  buildModelCounts,
-  readCurrentDynamicSeedManifest,
-} from './manifest';
+import { buildModelCounts, readCurrentDynamicSeedManifest } from './manifest';
 import { getDatabaseUrl, parseDynamicSeedConfig } from './config';
 import { runSeedIntegrityAudit } from './integrity';
 import { SeedRandom } from './random';
@@ -25,6 +22,7 @@ async function main() {
         {
           config: manifest.config,
           counts: manifest.counts,
+          coverage: manifest.coverage,
           integrity: manifest.integrity,
         },
         null,
@@ -68,6 +66,7 @@ async function main() {
     console.log(
       `[dynamic-seed][report] PASS anchor=${manifest.config.anchorDate} ` +
         `checks=${integrity.checks} ` +
+        `coverageRows=${manifest.coverage.totalRowCount} ` +
         `users=${counts.user ?? 0} memberships=${counts.subscription ?? 0} ` +
         `cards=${counts.membershipCard ?? 0} payments=${counts.payment ?? 0} ` +
         `holds=${counts.commerceCheckoutHold ?? 0} bookings=${counts.amenityBooking ?? 0} ` +
@@ -78,6 +77,7 @@ async function main() {
         {
           config: manifest.config,
           counts,
+          coverage: manifest.coverage,
           integrity,
         },
         null,

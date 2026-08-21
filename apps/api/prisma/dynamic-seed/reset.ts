@@ -31,6 +31,16 @@ function isLocalDatabaseUrl(databaseUrl: string) {
   };
 }
 
+export function assertLocalDatabaseAllowed() {
+  const databaseInfo = isLocalDatabaseUrl(getDatabaseUrl());
+  if (!databaseInfo.isLocal) {
+    throw new Error(
+      `[dynamic-seed] Refusing scoped local seed for database "${databaseInfo.database}" on host "${databaseInfo.host}".`,
+    );
+  }
+  return databaseInfo;
+}
+
 export function assertResetAllowed(config: DynamicSeedConfig) {
   const databaseUrl = getDatabaseUrl();
   const databaseInfo = isLocalDatabaseUrl(databaseUrl);

@@ -3,6 +3,7 @@ import { localEnvFilePath } from '../../env-path';
 import type {
   DynamicSeedConfig,
   DynamicSeedMode,
+  DynamicSeedScope,
   DynamicSeedTarget,
 } from './types';
 
@@ -35,6 +36,13 @@ function parseMode(value?: string): DynamicSeedMode {
 
 function parseTarget(value?: string): DynamicSeedTarget {
   return value === 'railway' ? 'railway' : 'local';
+}
+
+function parseScope(value?: string): DynamicSeedScope {
+  if (value === 'body-nutrition' || value === 'coaching-payments') {
+    return value;
+  }
+  return 'all';
 }
 
 function parsePositiveInt(value: string | undefined, fallback: number) {
@@ -150,6 +158,7 @@ export function parseDynamicSeedConfig(
     pendingPaymentRate: parseRate(getFlag(argv, 'pending-payment-rate'), 0.12),
     seed,
     sessionDensity: parseDensity(getFlag(argv, 'session-density')),
+    scope: parseScope(getFlag(argv, 'scope')),
     splitPresetsPerMember: Math.min(
       4,
       parsePositiveInt(getFlag(argv, 'split-presets-per-member'), 2),

@@ -14,6 +14,8 @@
     "db:seed:realistic": "node ../../tasks/seed-realistic.mjs 180",
     "db:seed:dynamic": "node -r ts-node/register prisma/seed-dynamic.ts --target=local --mode=reset --users=180",
     "db:seed:dynamic:additive": "node -r ts-node/register prisma/seed-dynamic.ts --target=local --mode=additive --users=180",
+    "db:seed:body-nutrition": "node -r ts-node/register prisma/seed-dynamic.ts --target=local --mode=additive --scope=body-nutrition --users=180",
+    "db:seed:coaching-payments": "node -r ts-node/register prisma/seed-dynamic.ts --target=local --mode=additive --scope=coaching-payments --users=180",
     "db:seed:dynamic:railway": "railway run node -r ts-node/register prisma/seed-dynamic.ts --target=railway --mode=additive --users=180",
     "db:backfill:gamification": "node -r ts-node/register prisma/backfill-gamification.ts --dry-run",
     "test:seed:dynamic": "node -r ts-node/register prisma/dynamic-seed/contract.spec.ts",

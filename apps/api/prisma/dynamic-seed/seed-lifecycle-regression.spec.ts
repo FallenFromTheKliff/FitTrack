@@ -13,8 +13,14 @@ import {
   seedCheckoutHolds,
   seedFacilitiesCoaching,
 } from './domains/facilities-coaching';
-import { seedFitnessGamification } from './domains/fitness-gamification';
-import { seedNutritionInventory } from './domains/nutrition-inventory';
+import {
+  reconcileSeedGamification,
+  seedFitnessGamification,
+} from './domains/fitness-gamification';
+import {
+  seedBodyNutrition,
+  seedNutritionInventory,
+} from './domains/nutrition-inventory';
 import { seedAiGymAnalytics } from './domains/ai-gym-analytics';
 import { reconcileCoachingContracts } from './reconcile';
 import { CANONICAL_MUSCLE_DEFINITIONS } from '../../../../packages/utils/fitness-catalog';
@@ -73,6 +79,12 @@ function createManyRows(rows: Row[], input: CreateManyInput) {
 function matchesWhere(row: Row, where?: Row) {
   if (!where) return true;
   return Object.entries(where).every(([key, expected]) => {
+    if (key === 'OR' && Array.isArray(expected)) {
+      return expected.some((branch) => matchesWhere(row, branch as Row));
+    }
+    if (key === 'AND' && Array.isArray(expected)) {
+      return expected.every((branch) => matchesWhere(row, branch as Row));
+    }
     const actual = rowValue(row, key);
     if (
       expected &&
@@ -88,10 +100,45 @@ function matchesWhere(row: Row, where?: Row) {
     if (
       expected &&
       typeof expected === 'object' &&
+      'notIn' in (expected as Record<string, unknown>)
+    ) {
+      return !(expected as { notIn: readonly unknown[] }).notIn.includes(
+        actual,
+      );
+    }
+    if (
+      expected &&
+      typeof expected === 'object' &&
       'some' in (expected as Record<string, unknown>)
     ) {
       return Array.isArray(actual) && actual.length > 0;
     }
+    if (
+      expected &&
+      typeof expected === 'object' &&
+      'not' in (expected as Record<string, unknown>)
+    ) {
+      return actual !== (expected as { not: unknown }).not;
+    }
+
+    // Prisma represents a composite unique selector as a nested object, for
+    // example `{ user_id_muscle_group: { user_id, muscle_group } }`. The
+    // in-memory fixture stores the scalar columns directly, so match the
+    // nested selector against those columns instead of comparing it to an
+    // absent synthetic property. This keeps the fixture's findUnique/upsert
+    // behavior aligned with Prisma without weakening duplicate checks.
+    if (
+      actual === undefined &&
+      expected &&
+      typeof expected === 'object' &&
+      !Array.isArray(expected)
+    ) {
+      return Object.entries(expected as Record<string, unknown>).every(
+        ([nestedKey, nestedExpected]) =>
+          matchesWhere(row, { [nestedKey]: nestedExpected }),
+      );
+    }
+
     return actual === expected;
   });
 }
@@ -555,8 +602,25 @@ class InMemorySeedPrisma {
   };
 
   readonly coachWorkoutAssignment = {
-    findMany: (input: { where?: Row; select?: Row }) =>
-      Promise.resolve(selectedRows(this.coachWorkoutAssignments, input)),
+    findMany: (input: { where?: Row; select?: Row }) => {
+      const appointmentFilter = input.where?.appointment;
+      const rows = appointmentFilter
+        ? this.coachWorkoutAssignments.filter((assignment) => {
+            const appointment = this.coachAppointments.find(
+              (candidate) =>
+                rowValue(candidate, 'id') ===
+                rowValue(assignment, 'appointment_id'),
+            );
+            return Boolean(
+              appointment &&
+              matchesWhere(appointment, appointmentFilter as Row),
+            );
+          })
+        : this.coachWorkoutAssignments;
+      const where = input.where ? { ...input.where } : undefined;
+      if (where) delete where.appointment;
+      return Promise.resolve(selectedRows(rows, { ...input, where }));
+    },
     upsert: (input: UpsertInput) => {
       const existing = this.coachWorkoutAssignments.find((row) =>
         matchesWhere(row, input.where),
@@ -679,7 +743,10 @@ class InMemorySeedPrisma {
       case 'amenityFeedback':
         return [...this.amenityFeedbackRows];
       case 'auditLog':
-        return [...this.auditLogs];
+        // The generic upsert fallback must retain the live backing array.
+        // Returning a copy would silently discard audit rows created by
+        // domains that use upsert instead of the specialized createMany path.
+        return this.auditLogs;
       case 'exerciseCatalog':
         return [...this.exerciseCatalogRows];
       case 'muscleDefinition':
@@ -725,13 +792,24 @@ class InMemorySeedPrisma {
       count: () => Promise.resolve(rows().length),
       create: (input: { data: Row }) => {
         const row = withDefaults(input.data);
+        if (row.id === undefined || row.id === null) {
+          row.id = seedId(`in-memory:${delegate}:${rows().length}`);
+        }
         rows().push(row);
         return Promise.resolve(row);
       },
       createMany: (input: CreateManyInput) =>
         Promise.resolve(
           createManyRows(rows(), {
-            data: input.data.map((row) => withDefaults(row)),
+            data: input.data.map((row, index) => {
+              const normalized = withDefaults(row);
+              if (normalized.id === undefined || normalized.id === null) {
+                normalized.id = seedId(
+                  `in-memory:${delegate}:${rows().length + index}`,
+                );
+              }
+              return normalized;
+            }),
           }),
         ),
       findFirst: (input: { where?: Row; select?: Row }) =>
@@ -759,6 +837,18 @@ class InMemorySeedPrisma {
         );
         for (const row of matchingRows) Object.assign(row, input.data);
         return Promise.resolve({ count: matchingRows.length });
+      },
+      deleteMany: (input: { where?: Row }) => {
+        const existingRows = rows();
+        const retainedRows = existingRows.filter(
+          (candidate) => !matchesWhere(candidate, input.where),
+        );
+        const deletedCount = existingRows.length - retainedRows.length;
+        existingRows.length = 0;
+        existingRows.push(...retainedRows);
+        return Promise.resolve({
+          count: deletedCount,
+        });
       },
       upsert: (input: UpsertInput) => {
         const existing = rows().find((row) => matchesWhere(row, input.where));
@@ -1654,6 +1744,99 @@ void test('actual facilities seed preserves amenity identity, venue capacity, an
   );
 });
 
+void test('body nutrition scope preserves user-created targets and logs', async () => {
+  const prisma = createInMemorySeedPrisma();
+  const state = createInitialSeedState();
+  const config = seedConfig();
+  const ctx: DynamicSeedContext = {
+    config,
+    notableIds: {},
+    prisma: prisma as unknown as DynamicSeedContext['prisma'],
+    rng: new SeedRandom(config.seed),
+    state,
+  };
+
+  await seedUsersAuthProfiles(ctx);
+  const activeMemberId = ctx.state.userIds['member-active'];
+  const customTdeeId = 'user-created-tdee-target';
+  const customMacroId = 'user-created-macro-target';
+  const customNutritionId = 'user-created-nutrition-log';
+  const customDate = new Date('2026-03-13T00:00:00.000Z');
+  const genericPrisma = prisma as unknown as {
+    tdeeProfile: { create: (input: { data: Row }) => Promise<Row> };
+    macroTarget: { create: (input: { data: Row }) => Promise<Row> };
+    nutritionLog: { create: (input: { data: Row }) => Promise<Row> };
+  };
+
+  await genericPrisma.tdeeProfile.create({
+    data: {
+      id: customTdeeId,
+      user_id: activeMemberId,
+      weight_kg: 70,
+      height_cm: 175,
+      age: 30,
+      gender: 'male',
+      activity_level: 'active',
+      fitness_goal: 'maintenance',
+      bmr_calories: 1700,
+      tdee_calories: 2805,
+      is_active: true,
+      calculated_at: customDate,
+      created_at: customDate,
+      updated_at: customDate,
+    },
+  });
+  await genericPrisma.macroTarget.create({
+    data: {
+      id: customMacroId,
+      user_id: activeMemberId,
+      tdee_profile_id: customTdeeId,
+      target_calories: 2805,
+      protein_g: 231.41,
+      carbs_g: 294.53,
+      fat_g: 77.92,
+      is_active: true,
+      created_at: customDate,
+      updated_at: customDate,
+    },
+  });
+  await genericPrisma.nutritionLog.create({
+    data: {
+      id: customNutritionId,
+      user_id: activeMemberId,
+      macro_target_id: customMacroId,
+      log_date: customDate,
+      meal_name: 'Custom meal',
+      food_item: 'User-created food',
+      calories: 500,
+      protein_g: 30,
+      carbs_g: 50,
+      fat_g: 15,
+      quantity: 1,
+      unit: 'serving',
+      created_at: customDate,
+      updated_at: customDate,
+    },
+  });
+
+  await seedBodyNutrition(ctx);
+
+  const tdeeRows = prisma.delegateRows('tdeeProfile');
+  const macroRows = prisma.delegateRows('macroTarget');
+  const nutritionRows = prisma.delegateRows('nutritionLog');
+  assert.equal(
+    tdeeRows.find((row) => rowValue(row, 'id') === customTdeeId)?.is_active,
+    true,
+  );
+  assert.equal(
+    macroRows.find((row) => rowValue(row, 'id') === customMacroId)?.is_active,
+    true,
+  );
+  assert.ok(
+    nutritionRows.some((row) => rowValue(row, 'id') === customNutritionId),
+  );
+});
+
 void test('full coaching fixture runs fitness, reconciliation, and shared integrity', async () => {
   const prisma = createInMemorySeedPrisma();
   const state = createInitialSeedState();
@@ -1668,6 +1851,7 @@ void test('full coaching fixture runs fitness, reconciliation, and shared integr
 
   await seedUsersAuthProfiles(ctx);
   await bootstrapDefaults(prisma as unknown as DynamicSeedContext['prisma'], {
+    ensureGamificationProfiles: false,
     includeUsers: false,
     referenceDate: config.anchorDate,
   });
@@ -1677,6 +1861,7 @@ void test('full coaching fixture runs fitness, reconciliation, and shared integr
   await seedFacilitiesCoaching(ctx);
   await seedFitnessGamification(ctx);
   await reconcileCoachingContracts(ctx);
+  await reconcileSeedGamification(ctx);
   await seedNutritionInventory(ctx);
   await seedAiGymAnalytics(ctx);
   prisma.syncCommerceRows();
