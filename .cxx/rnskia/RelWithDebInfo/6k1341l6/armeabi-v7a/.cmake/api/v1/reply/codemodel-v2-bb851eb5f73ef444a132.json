@@ -1,0 +1,60 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"jsonFile" : "directory-.-RelWithDebInfo-d0094a50bb2071803777.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.13"
+					},
+					"projectIndex" : 0,
+					"source" : ".",
+					"targetIndexes" : 
+					[
+						0
+					]
+				}
+			],
+			"name" : "RelWithDebInfo",
+			"projects" : 
+			[
+				{
+					"directoryIndexes" : 
+					[
+						0
+					],
+					"name" : "RNSkia",
+					"targetIndexes" : 
+					[
+						0
+					]
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 0,
+					"id" : "rnskia::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-rnskia-RelWithDebInfo-df09c099f0a7d725a171.json",
+					"name" : "rnskia",
+					"projectIndex" : 0
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "C:/FitTrack_rebuilt_20260330_212527/.cxx/rnskia/RelWithDebInfo/6k1341l6/armeabi-v7a",
+		"source" : "C:/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/@shopif_b76e8d191a057cbe1823d097381fb57a/node_modules/@shopify/react-native-skia/android"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 3
+	}
+}

@@ -1,0 +1,85 @@
+# Main
+node_modules/
+*.log
+tasks.md
+package-lock.json
+apps/mobile/.env
+
+# Environment files
+.env
+.env.*
+
+# Agent prompts and working docs
+agents/
+
+# Build outputs
+.artifacts/
+artifacts/
+.agents/
+.ai/
+.codex-local/
+.npm-cache/
+.playwright-mcp/
+.pnpm-store/
+.gradle-user-home/
+.next/
+.expo/
+.turbo/
+.worktrees/
+dist/
+*.tsbuildinfo
+tmp/
+test-results/
+playwright-report/
+graphify-out/
+apps/web/test-results/
+apps/web/.next-runtime/
+apps/mobile/dist-web-auth-check/
+apps/web/debug_logs.txt
+apps/web/dom.html
+temp_skill_build/
+.railway-deploy/
+.railway-upload/
+members-admin-*.png
+apps/web/dashboard.png
+apps/web/members.png
+check_page.js
+do_replace.js
+do_replace_safe.js
+fix_ui_for_real.js
+refactor.js
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/settings.json
+.history/
+
+# Python
+**/__pycache__/
+.pytest_cache/
+.uv-cache/
+.uv-cache-local/
+.uv-runtime/
+.venv/
+Ultralytics/
+pytest-cache-files-*/
+
+# Task runner scratch data
+tasks/backend-builder/tmp/
+
+# Keep shared agent setup and MCP config versioned for the team
+!.codex/
+!.codex/**
+!.serena/
+!.serena/**
+!.playwright-mcp.json
+!.playwright-fittrack-flow.json
+!.vscode/mcp.json
+
+# But still ignore Serena runtime chatter
+.serena/logs/
+.serena/memories/integration/
+.serena/memories/skills/

@@ -1,0 +1,302 @@
+"use client";
+
+import type {
+  ExerciseMuscleTargetRecord,
+  ExerciseMuscleTargetRole,
+  MuscleDefinitionRecord,
+} from "@fittrack/api-client";
+import {
+  calculateMuscleEffortXpShares,
+  EXERCISE_MUSCLE_GROUP_OPTIONS,
+  EXERCISE_MUSCLE_TARGET_ROLE_OPTIONS,
+  getCanonicalMuscleDefinitions,
+  getMuscleDefinitionLabel,
+  normalizeExerciseMuscleTargets,
+} from "@fittrack/utils";
+import {
+  FieldShell,
+  clamp,
+  formatRole,
+  inputStyle,
+  miniButtonStyle,
+  panelStyle,
+  toNumber,
+  type EditorColors,
+} from "./ExerciseContractEditorShared";
+import { MuscleDefinitionIcon } from "./ExerciseLabPageContext";
+import { FitSelect } from "@/components/fit";
+export function MuscleTargetsEditor({
+  colors,
+  fallbackMuscleGroup,
+  muscleDefinitions,
+  onManageMuscles,
+  onChange,
+  value,
+}: {
+  colors: EditorColors;
+  fallbackMuscleGroup: string;
+  muscleDefinitions?: MuscleDefinitionRecord[];
+  onManageMuscles?: () => void;
+  onChange: (nextTargets: ExerciseMuscleTargetRecord[]) => void;
+  value: ExerciseMuscleTargetRecord[];
+}) {
+  const definitions = getCanonicalMuscleDefinitions(muscleDefinitions);
+  const activeDefinitions = definitions.filter(
+    (definition) => definition.isActive,
+  );
+  const definitionByKey = new Map(
+    (muscleDefinitions ?? []).map((definition) => [
+      definition.key.trim().toLowerCase(),
+      definition,
+    ]),
+  );
+  const targets = normalizeExerciseMuscleTargets(value, fallbackMuscleGroup);
+  const total = targets.reduce((sum, target) => sum + target.allocationPercent, 0);
+  const effortShares = calculateMuscleEffortXpShares(targets);
+  const effectiveShareByMuscle = new Map(
+    effortShares.map((share) => [share.muscleGroup, share.effectivePercent]),
+  );
+  const usedMuscleGroups = new Set(
+    targets.map((target) => target.muscleGroup.trim().toLowerCase()),
+  );
+  const firstUnusedMuscleGroup = activeDefinitions.find(
+    (definition) => !usedMuscleGroups.has(definition.key.toLowerCase()),
+  );
+  const nextMuscleGroup =
+    firstUnusedMuscleGroup?.key ||
+    fallbackMuscleGroup ||
+    activeDefinitions[0]?.key ||
+    EXERCISE_MUSCLE_GROUP_OPTIONS[0] ||
+    "core";
+
+  const updateTarget = (
+    index: number,
+    patch: Partial<ExerciseMuscleTargetRecord>,
+  ) => {
+    onChange(
+      normalizeExerciseMuscleTargets(
+        targets.map((target, currentIndex) =>
+          currentIndex === index ? { ...target, ...patch } : target,
+        ),
+        fallbackMuscleGroup,
+      ),
+    );
+  };
+
+  return (
+    <section style={panelStyle(colors)}>
+      <div
+        className="exercise-muscle-target-header"
+        style={{
+          alignItems: "center",
+          display: "flex",
+          gap: 12,
+          justifyContent: "space-between",
+        }}
+      >
+        <div>
+          <strong style={{ color: colors.text }}>Muscle Effort XP</strong>
+          <p style={{ color: colors.textMuted, margin: "4px 0 0" }}>
+            Assign exactly 100% effort across the muscles used by this
+            movement. Role modifiers shape the effective XP share without
+            shrinking the total XP pool.
+          </p>
+        </div>
+        <span
+          style={{
+            border: `1px solid ${
+              total === 100 ? "#3ed875" : colors.borderStrong
+            }`,
+            borderRadius: 6,
+            color: total === 100 ? "#3ed875" : colors.primary,
+            fontSize: 12,
+            fontWeight: 900,
+            padding: "8px 11px",
+          }}
+        >
+          {total}% total
+        </span>
+      </div>
+
+      <div style={{ display: "grid", gap: 12 }}>
+        {targets.map((target, index) => (
+          <div
+            key={`${target.role}-${target.muscleGroup}-${index}`}
+            className="exercise-muscle-target-row"
+            style={{
+              background: colors.background,
+              border: `1px solid ${colors.border}`,
+              borderRadius: 16,
+              display: "grid",
+              gap: 10,
+              gridTemplateColumns: "1.3fr 0.9fr 0.7fr auto",
+              padding: 12,
+            }}
+          >
+            <FieldShell colors={colors} label="Muscle">
+              <div style={{ alignItems: "center", display: "flex", gap: 8 }}>
+                {definitionByKey.get(target.muscleGroup.trim().toLowerCase()) ? (
+                  <MuscleDefinitionIcon
+                    colors={{
+                      accent: colors.primary,
+                      background: colors.surface,
+                      border: colors.border,
+                    }}
+                    definition={definitionByKey.get(
+                      target.muscleGroup.trim().toLowerCase(),
+                    )}
+                    size={32}
+                  />
+                ) : null}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <FitSelect
+                    compact
+                    fullWidth
+                    name={`exercise-muscle-target-${index}`}
+                    onChange={(event) =>
+                      updateTarget(index, { muscleGroup: event.target.value })
+                    }
+                    options={[
+                      ...(activeDefinitions.some(
+                        (definition) => definition.key === target.muscleGroup,
+                      )
+                        ? []
+                        : [{
+                            label: `${getMuscleDefinitionLabel(target.muscleGroup, definitions)} archived/unknown`,
+                            value: target.muscleGroup,
+                          }]),
+                      ...activeDefinitions.map((definition) => ({
+                        label: definition.name,
+                        value: definition.key,
+                      })),
+                    ]}
+                    value={target.muscleGroup}
+                  />
+                </div>
+              </div>
+            </FieldShell>
+            <FieldShell colors={colors} label="Role">
+              <FitSelect
+                compact
+                fullWidth
+                name={`exercise-muscle-role-${index}`}
+                onChange={(event) =>
+                  updateTarget(index, {
+                    role: event.target.value as ExerciseMuscleTargetRole,
+                  })
+                }
+                options={EXERCISE_MUSCLE_TARGET_ROLE_OPTIONS.map((role) => ({
+                  label: formatRole(role),
+                  value: role,
+                }))}
+                value={target.role}
+              />
+            </FieldShell>
+            <FieldShell colors={colors} label="Effort %">
+              <input
+                min={0}
+                max={100}
+                name={`exercise-muscle-allocation-${index}`}
+                onChange={(event) =>
+                  updateTarget(index, {
+                    allocationPercent: Math.round(
+                      clamp(toNumber(event.target.value, 0), 0, 100),
+                    ),
+                  })
+                }
+                style={inputStyle(colors)}
+                type="number"
+                value={target.allocationPercent}
+              />
+            </FieldShell>
+            <button
+              disabled={targets.length <= 1}
+              onClick={() =>
+                onChange(targets.filter((_, currentIndex) => currentIndex !== index))
+              }
+              style={{
+                ...miniButtonStyle(colors),
+                alignSelf: "end",
+                opacity: targets.length <= 1 ? 0.45 : 1,
+              }}
+              type="button"
+            >
+              Remove
+            </button>
+            <span
+              style={{
+                color: colors.textMuted,
+                fontSize: 12,
+                gridColumn: "1 / -1",
+              }}
+            >
+              Effective XP preview:{" "}
+              <strong style={{ color: colors.text }}>
+                {effectiveShareByMuscle.get(target.muscleGroup) ?? 0}%
+              </strong>{" "}
+              after {formatRole(target.role).toLowerCase()} role weighting.
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {total !== 100 ? (
+        <span style={{ color: colors.primary, fontSize: 13, fontWeight: 800 }}>
+          Save is blocked until Muscle Effort XP totals exactly 100%.
+        </span>
+      ) : null}
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        <button
+          disabled={!firstUnusedMuscleGroup}
+          onClick={() =>
+            onChange([
+              ...targets,
+              {
+                allocationPercent: Math.max(0, 100 - total),
+                muscleGroup: nextMuscleGroup,
+                role: "secondary",
+              },
+            ])
+          }
+          style={{
+            ...miniButtonStyle(colors),
+            opacity: firstUnusedMuscleGroup ? 1 : 0.45,
+          }}
+          type="button"
+        >
+          Add muscle target
+        </button>
+        {onManageMuscles ? (
+          <button
+            onClick={onManageMuscles}
+            style={miniButtonStyle(colors)}
+            type="button"
+          >
+            Manage Muscle Library
+          </button>
+        ) : null}
+      </div>
+
+      <style>{`
+        @media (max-width: 680px) {
+          .exercise-muscle-target-header {
+            align-items: flex-start !important;
+            flex-direction: column !important;
+          }
+
+          .exercise-muscle-target-row {
+            grid-template-columns: minmax(0, 1fr) !important;
+          }
+
+          .exercise-muscle-target-row > button {
+            justify-self: stretch !important;
+            width: 100% !important;
+          }
+        }
+      `}</style>
+    </section>
+  );
+}
+
+

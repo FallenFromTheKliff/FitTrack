@@ -1,0 +1,9 @@
+export const BOOKING_LIFECYCLE_QUEUE = 'booking-lifecycle';
+export const BOOKING_NO_SHOW_JOB = 'check-no-show';
+export const BOOKING_REMINDER_JOB = 'send-booking-reminder';
+export const BOOKING_PENDING_CLEANUP_JOB = 'cancel-stale-pending';
+export const BOOKING_COMPLETION_JOB = 'complete-past-bookings';
+export const BOOKING_LIFECYCLE_TIMEZONE = 'Asia/Manila';
+export const BOOKING_PENDING_CLEANUP_WINDOW_MINUTES = 15;
+export const BOOKING_NO_SHOW_GRACE_MINUTES = 30;
+export const BOOKING_REMINDER_OFFSET_HOURS = 24;

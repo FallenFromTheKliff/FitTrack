@@ -1,0 +1,25 @@
+diff --git a/android/CMakeLists.txt b/android/CMakeLists.txt
+--- a/android/CMakeLists.txt
++++ b/android/CMakeLists.txt
+@@ -1,6 +1,10 @@
+ project(RNSkia)
+ cmake_minimum_required(VERSION 3.4.1)
+ 
++# Windows + pnpm can produce extremely long object paths under node_modules/.pnpm.
++# Force CMake to hash object filenames earlier so native builds stay under path limits.
++set(CMAKE_OBJECT_PATH_MAX 128)
++
+ set (CMAKE_VERBOSE_MAKEFILE ON)
+ set (CMAKE_CXX_STANDARD 20)
+ 
+diff --git a/android/build.gradle b/android/build.gradle
+--- a/android/build.gradle
++++ b/android/build.gradle
+@@ -211,6 +211,7 @@ android {
+     externalNativeBuild {
+         cmake {
+             path file('CMakeLists.txt')
++            buildStagingDirectory new File(rootDir.getParentFile().getParentFile().getParentFile(), ".cxx/rnskia")
+         }
+     }
+ 

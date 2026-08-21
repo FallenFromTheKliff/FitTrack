@@ -1,0 +1,13 @@
+# FitTrack API Railway config.
+# Use this file as the service's custom Config-as-Code path: /apps/api/railway.toml
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "/apps/api/Dockerfile"
+
+[deploy]
+preDeployCommand = "pnpm run railway:predeploy"
+startCommand = "node dist/src/main.js"
+healthcheckPath = "/v1/health"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3

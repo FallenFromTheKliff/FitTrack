@@ -1,0 +1,31 @@
+{
+  "buildFiles": [
+    "C:\\FitTrack_rebuilt_20260330_212527\\node_modules\\.pnpm\\@shopif_b76e8d191a057cbe1823d097381fb57a\\node_modules\\@shopify\\react-native-skia\\android\\CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "C:\\Users\\HOUSTON\\AppData\\Local\\Android\\Sdk\\cmake\\3.31.6\\bin\\ninja.exe",
+      "-C",
+      "C:\\FitTrack_rebuilt_20260330_212527\\.cxx\\rnskia\\RelWithDebInfo\\6k1341l6\\x86",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "C:\\Users\\HOUSTON\\AppData\\Local\\Android\\Sdk\\cmake\\3.31.6\\bin\\ninja.exe",
+    "-C",
+    "C:\\FitTrack_rebuilt_20260330_212527\\.cxx\\rnskia\\RelWithDebInfo\\6k1341l6\\x86",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {
+    "rnskia::@6890427a1f51a3e7e1df": {
+      "artifactName": "rnskia",
+      "abi": "x86",
+      "output": "C:\\FitTrack_rebuilt_20260330_212527\\node_modules\\.pnpm\\@shopif_b76e8d191a057cbe1823d097381fb57a\\node_modules\\@shopify\\react-native-skia\\android\\build\\intermediates\\cxx\\RelWithDebInfo\\6k1341l6\\obj\\x86\\librnskia.so",
+      "runtimeFiles": [
+        "C:\\Users\\HOUSTON\\.gradle\\caches\\9.0.0\\transforms\\5e07a7917399250df5d3c6fa58687b7f\\transformed\\react-android-0.83.4-release\\prefab\\modules\\reactnative\\libs\\android.x86\\libreactnative.so",
+        "C:\\Users\\HOUSTON\\.gradle\\caches\\9.0.0\\transforms\\49ded6a95e2e1ac4b365819611b55b49\\transformed\\fbjni-0.7.0\\prefab\\modules\\fbjni\\libs\\android.x86\\libfbjni.so",
+        "C:\\Users\\HOUSTON\\.gradle\\caches\\9.0.0\\transforms\\5e07a7917399250df5d3c6fa58687b7f\\transformed\\react-android-0.83.4-release\\prefab\\modules\\jsi\\libs\\android.x86\\libjsi.so"
+      ]
+    }
+  }
+}

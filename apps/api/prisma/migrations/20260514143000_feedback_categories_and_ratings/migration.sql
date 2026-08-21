@@ -1,0 +1,6 @@
+ALTER TABLE "app_feedback"
+  ADD COLUMN IF NOT EXISTS "category" VARCHAR(40) NOT NULL DEFAULT 'general';
+
+ALTER TABLE "amenity_feedback"
+  ADD COLUMN IF NOT EXISTS "rating" SMALLINT NOT NULL DEFAULT 5,
+  ALTER COLUMN "comment" DROP NOT NULL;

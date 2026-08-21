@@ -1,0 +1,11 @@
+diff --git a/android/build.gradle b/android/build.gradle
+--- a/android/build.gradle
++++ b/android/build.gradle
+@@ -154,6 +154,7 @@ android {
+   externalNativeBuild {
+     cmake {
+       path "CMakeLists.txt"
++      buildStagingDirectory new File(rootDir, ".cxx/react-native-vision-camera")
+     }
+   }
+   packagingOptions {

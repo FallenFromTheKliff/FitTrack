@@ -1,0 +1,169 @@
+name: fittrack
+
+volumes:
+  postgres_data:
+    name: fittrack-postgres-data
+  redis_data:
+    name: fittrack-redis-data
+  prometheus_data:
+    name: fittrack-prometheus-data
+  grafana_data:
+    name: fittrack-grafana-data
+
+services:
+  db:
+    container_name: fittrack-db
+    image: postgres:16-alpine
+    env_file:
+      - .env.docker
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    container_name: fittrack-redis
+    image: redis:7-alpine
+    command: [ "redis-server", "--appendonly", "yes" ]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  schema:
+    container_name: fittrack-schema
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    env_file:
+      - .env.docker
+    working_dir: /app/apps/api
+    depends_on:
+      db:
+        condition: service_healthy
+    command: [ "node", "node_modules/prisma/build/index.js", "db", "push", "--accept-data-loss", "--schema=prisma/schema.prisma" ]
+    restart: "no"
+
+  init:
+    container_name: fittrack-init
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    env_file:
+      - .env.docker
+    working_dir: /app/apps/api
+    depends_on:
+      schema:
+        condition: service_completed_successfully
+    command: [ "node", "dist/prisma/bootstrap-defaults.js" ]
+    restart: "no"
+
+  ai-microservice:
+    container_name: fittrack-ai
+    build:
+      context: ./apps/ai-microservice
+      dockerfile: Dockerfile
+    env_file:
+      - .env.docker
+    ports:
+      - "8001:8000"
+    healthcheck:
+      test: [ "CMD", "python", "-c", "import urllib.request; import sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health').status == 200 else 1)" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    container_name: fittrack-api
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    env_file:
+      - .env.docker
+    ports:
+      - "3001:3001"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      init:
+        condition: service_completed_successfully
+      ai-microservice:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1:3001/v1/health | grep -q '\"status\":\"ok\"'" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  web:
+    container_name: fittrack-web
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:3001/v1
+        NEXT_PUBLIC_R2_PUBLIC_BASE_URL: ${NEXT_PUBLIC_R2_PUBLIC_BASE_URL:-}
+        NEXT_PUBLIC_R2_DEFAULT_AVATAR_DIR: ${NEXT_PUBLIC_R2_DEFAULT_AVATAR_DIR:-defaults/avatars}
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3001/v1
+      NEXT_PUBLIC_R2_PUBLIC_BASE_URL: ${NEXT_PUBLIC_R2_PUBLIC_BASE_URL:-}
+      NEXT_PUBLIC_R2_DEFAULT_AVATAR_DIR: ${NEXT_PUBLIC_R2_DEFAULT_AVATAR_DIR:-defaults/avatars}
+    ports:
+      - "8080:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -q --spider http://127.0.0.1:8080/login" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  prometheus:
+    container_name: fittrack-prometheus
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./apps/api/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=7d"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1:9090/-/ready | grep -q 'Prometheus Server is Ready'" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  grafana:
+    container_name: fittrack-grafana
+    image: grafana/grafana:latest
+    env_file:
+      - .env.docker
+    environment:
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "3002:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./apps/api/monitoring/grafana-datasource.yml:/etc/grafana/provisioning/datasources/prometheus.yml:ro
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health | grep -q 'ok'" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10

@@ -1,0 +1,34 @@
+{
+  "browser": {
+    "browserName": "chromium",
+    "launchOptions": {
+      "headless": true
+    },
+    "contextOptions": {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    }
+  },
+  "capabilities": ["core", "testing", "network"],
+  "saveSession": true,
+  "saveTrace": true,
+  "sharedBrowserContext": false,
+  "outputDir": ".artifacts/playwright-mcp",
+  "outputMode": "file",
+  "console": {
+    "level": "info"
+  },
+  "network": {
+    "allowedOrigins": ["http://127.0.0.1:*", "http://localhost:*"]
+  },
+  "testIdAttribute": "data-testid",
+  "timeouts": {
+    "action": 8000,
+    "navigation": 60000
+  },
+  "snapshot": {
+    "mode": "incremental"
+  }
+}

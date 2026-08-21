@@ -1,0 +1,971 @@
+{
+	"artifacts" : 
+	[
+		{
+			"path" : "C:/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/expo-mo_b1818a6ea85dab8860fcdfded29395d8/node_modules/expo-modules-core/android/build/intermediates/cxx/RelWithDebInfo/3g1e3jm7/obj/arm64-v8a/libexpo-modules-core.so"
+		}
+	],
+	"backtrace" : 3,
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"add_library",
+			"include",
+			"target_link_libraries",
+			"target_compile_options",
+			"use_expo_common",
+			"target_include_directories"
+		],
+		"files" : 
+		[
+			"cmake/main.cmake",
+			"CMakeLists.txt",
+			"cmake/common.cmake"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 1
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 18,
+				"parent" : 0
+			},
+			{
+				"file" : 0,
+				"parent" : 1
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 22,
+				"parent" : 2
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 61,
+				"parent" : 2
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 87,
+				"parent" : 2
+			},
+			{
+				"command" : 3,
+				"file" : 0,
+				"line" : 44,
+				"parent" : 2
+			},
+			{
+				"command" : 4,
+				"file" : 0,
+				"line" : 30,
+				"parent" : 2
+			},
+			{
+				"command" : 2,
+				"file" : 2,
+				"line" : 36,
+				"parent" : 7
+			},
+			{
+				"command" : 5,
+				"file" : 0,
+				"line" : 32,
+				"parent" : 2
+			},
+			{
+				"command" : 5,
+				"file" : 0,
+				"line" : 51,
+				"parent" : 2
+			}
+		]
+	},
+	"compileGroups" : 
+	[
+		{
+			"compileCommandFragments" : 
+			[
+				{
+					"fragment" : "-g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D__BIONIC_NO_PAGE_SIZE_MACRO -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security   -O2 -g -DNDEBUG -fPIC"
+				},
+				{
+					"backtrace" : 6,
+					"fragment" : "-DWORKLETS_ENABLED=1"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "--std=c++20"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-O2"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-frtti"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-fexceptions"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-Wall"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-fstack-protector-all"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-DUSE_HERMES=0"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-DUNIT_TEST=0"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-DIS_NEW_ARCHITECTURE_ENABLED=1"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-DRN_FABRIC_ENABLED=1"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-DRN_SERIALIZABLE_STATE=1"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-DFOLLY_NO_CONFIG=1"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-DFOLLY_HAVE_CLOCK_GETTIME=1"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-DFOLLY_USE_LIBCPP=1"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-DFOLLY_CFG_NO_COROUTINES=1"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-DFOLLY_MOBILE=1"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-DFOLLY_HAVE_RECVMMSG=1"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-DFOLLY_HAVE_PTHREAD=1"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-DFOLLY_HAVE_XSI_STRERROR_R=1"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-DREACT_NATIVE_TARGET_VERSION=83"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-DREACT_NATIVE_MINOR_VERSION=83"
+				},
+				{
+					"fragment" : "-std=gnu++20"
+				},
+				{
+					"fragment" : "-Winvalid-pch -fpch-instantiate-templates -Xclang -emit-pch -Xclang -include -Xclang C:/FitTrack_rebuilt_20260330_212527/.cxx/expo-core/RelWithDebInfo/3g1e3jm7/arm64-v8a/CMakeFiles/expo-modules-core.dir/cmake_pch.hxx -x c++-header"
+				}
+			],
+			"defines" : 
+			[
+				{
+					"define" : "expo_modules_core_EXPORTS"
+				}
+			],
+			"includes" : 
+			[
+				{
+					"backtrace" : 9,
+					"path" : "C:/Users/HOUSTON/.gradle/caches/9.0.0/transforms/5e07a7917399250df5d3c6fa58687b7f/transformed/react-android-0.83.4-release/prefab/modules/reactnative/include/react"
+				},
+				{
+					"backtrace" : 9,
+					"path" : "C:/Users/HOUSTON/.gradle/caches/9.0.0/transforms/5e07a7917399250df5d3c6fa58687b7f/transformed/react-android-0.83.4-release/prefab/modules/reactnative/include/react/fabric"
+				},
+				{
+					"backtrace" : 9,
+					"path" : "C:/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/react-n_fe2a44044c183df1e345599b89e6b22b/node_modules/react-native/ReactAndroid/src/main/jni/react/turbomodule"
+				},
+				{
+					"backtrace" : 9,
+					"path" : "C:/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/expo-mo_b1818a6ea85dab8860fcdfded29395d8/node_modules/expo-modules-core/android/src/fabric"
+				},
+				{
+					"backtrace" : 9,
+					"path" : "C:/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/expo-mo_b1818a6ea85dab8860fcdfded29395d8/node_modules/expo-modules-core/android/../common/cpp"
+				},
+				{
+					"backtrace" : 9,
+					"path" : "C:/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/expo-mo_b1818a6ea85dab8860fcdfded29395d8/node_modules/expo-modules-core/android/../common/cpp/fabric"
+				},
+				{
+					"backtrace" : 10,
+					"path" : "C:/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/react-n_fe2a44044c183df1e345599b89e6b22b/node_modules/react-native/ReactCommon"
+				},
+				{
+					"backtrace" : 10,
+					"path" : "C:/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/react-n_fe2a44044c183df1e345599b89e6b22b/node_modules/react-native/ReactCommon/jsiexecutor"
+				},
+				{
+					"backtrace" : 10,
+					"path" : "C:/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/react-n_cc5dcfc983295b0eda6c7c8194f36099/node_modules/react-native-worklets/Common/cpp"
+				},
+				{
+					"backtrace" : 10,
+					"path" : "C:/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/react-n_cc5dcfc983295b0eda6c7c8194f36099/node_modules/react-native-worklets/android/src/main/cpp"
+				},
+				{
+					"backtrace" : 4,
+					"path" : "C:/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/expo-mo_b1818a6ea85dab8860fcdfded29395d8/node_modules/expo-modules-core/android/../common/cpp/JSI"
+				},
+				{
+					"backtrace" : 4,
+					"path" : "C:/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/expo-mo_b1818a6ea85dab8860fcdfded29395d8/node_modules/expo-modules-core/android/src/jsi"
+				},
+				{
+					"backtrace" : 8,
+					"isSystem" : true,
+					"path" : "C:/Users/HOUSTON/.gradle/caches/9.0.0/transforms/5e07a7917399250df5d3c6fa58687b7f/transformed/react-android-0.83.4-release/prefab/modules/jsi/include"
+				},
+				{
+					"backtrace" : 8,
+					"isSystem" : true,
+					"path" : "C:/Users/HOUSTON/.gradle/caches/9.0.0/transforms/49ded6a95e2e1ac4b365819611b55b49/transformed/fbjni-0.7.0/prefab/modules/fbjni/include"
+				},
+				{
+					"backtrace" : 8,
+					"isSystem" : true,
+					"path" : "C:/Users/HOUSTON/.gradle/caches/9.0.0/transforms/5e07a7917399250df5d3c6fa58687b7f/transformed/react-android-0.83.4-release/prefab/modules/reactnative/include"
+				}
+			],
+			"language" : "CXX",
+			"languageStandard" : 
+			{
+				"backtraces" : 
+				[
+					3
+				],
+				"standard" : "20"
+			},
+			"precompileHeaders" : 
+			[
+				{
+					"backtrace" : 8,
+					"header" : "C:/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/expo-mo_b1818a6ea85dab8860fcdfded29395d8/node_modules/expo-modules-core/android/src/main/cpp/ExpoHeader.pch"
+				}
+			],
+			"sourceIndexes" : 
+			[
+				0
+			],
+			"sysroot" : 
+			{
+				"path" : "C:/Users/HOUSTON/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot"
+			}
+		},
+		{
+			"compileCommandFragments" : 
+			[
+				{
+					"fragment" : "-g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D__BIONIC_NO_PAGE_SIZE_MACRO -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security   -O2 -g -DNDEBUG -fPIC"
+				},
+				{
+					"backtrace" : 6,
+					"fragment" : "-DWORKLETS_ENABLED=1"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "--std=c++20"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-O2"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-frtti"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-fexceptions"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-Wall"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-fstack-protector-all"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-DUSE_HERMES=0"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-DUNIT_TEST=0"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-DIS_NEW_ARCHITECTURE_ENABLED=1"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-DRN_FABRIC_ENABLED=1"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-DRN_SERIALIZABLE_STATE=1"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-DFOLLY_NO_CONFIG=1"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-DFOLLY_HAVE_CLOCK_GETTIME=1"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-DFOLLY_USE_LIBCPP=1"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-DFOLLY_CFG_NO_COROUTINES=1"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-DFOLLY_MOBILE=1"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-DFOLLY_HAVE_RECVMMSG=1"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-DFOLLY_HAVE_PTHREAD=1"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-DFOLLY_HAVE_XSI_STRERROR_R=1"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-DREACT_NATIVE_TARGET_VERSION=83"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-DREACT_NATIVE_MINOR_VERSION=83"
+				},
+				{
+					"fragment" : "-std=gnu++20"
+				},
+				{
+					"fragment" : "-Winvalid-pch -Xclang -include-pch -Xclang C:/FitTrack_rebuilt_20260330_212527/.cxx/expo-core/RelWithDebInfo/3g1e3jm7/arm64-v8a/CMakeFiles/expo-modules-core.dir/cmake_pch.hxx.pch -Xclang -include -Xclang C:/FitTrack_rebuilt_20260330_212527/.cxx/expo-core/RelWithDebInfo/3g1e3jm7/arm64-v8a/CMakeFiles/expo-modules-core.dir/cmake_pch.hxx"
+				}
+			],
+			"defines" : 
+			[
+				{
+					"define" : "expo_modules_core_EXPORTS"
+				}
+			],
+			"includes" : 
+			[
+				{
+					"backtrace" : 9,
+					"path" : "C:/Users/HOUSTON/.gradle/caches/9.0.0/transforms/5e07a7917399250df5d3c6fa58687b7f/transformed/react-android-0.83.4-release/prefab/modules/reactnative/include/react"
+				},
+				{
+					"backtrace" : 9,
+					"path" : "C:/Users/HOUSTON/.gradle/caches/9.0.0/transforms/5e07a7917399250df5d3c6fa58687b7f/transformed/react-android-0.83.4-release/prefab/modules/reactnative/include/react/fabric"
+				},
+				{
+					"backtrace" : 9,
+					"path" : "C:/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/react-n_fe2a44044c183df1e345599b89e6b22b/node_modules/react-native/ReactAndroid/src/main/jni/react/turbomodule"
+				},
+				{
+					"backtrace" : 9,
+					"path" : "C:/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/expo-mo_b1818a6ea85dab8860fcdfded29395d8/node_modules/expo-modules-core/android/src/fabric"
+				},
+				{
+					"backtrace" : 9,
+					"path" : "C:/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/expo-mo_b1818a6ea85dab8860fcdfded29395d8/node_modules/expo-modules-core/android/../common/cpp"
+				},
+				{
+					"backtrace" : 9,
+					"path" : "C:/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/expo-mo_b1818a6ea85dab8860fcdfded29395d8/node_modules/expo-modules-core/android/../common/cpp/fabric"
+				},
+				{
+					"backtrace" : 10,
+					"path" : "C:/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/react-n_fe2a44044c183df1e345599b89e6b22b/node_modules/react-native/ReactCommon"
+				},
+				{
+					"backtrace" : 10,
+					"path" : "C:/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/react-n_fe2a44044c183df1e345599b89e6b22b/node_modules/react-native/ReactCommon/jsiexecutor"
+				},
+				{
+					"backtrace" : 10,
+					"path" : "C:/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/react-n_cc5dcfc983295b0eda6c7c8194f36099/node_modules/react-native-worklets/Common/cpp"
+				},
+				{
+					"backtrace" : 10,
+					"path" : "C:/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/react-n_cc5dcfc983295b0eda6c7c8194f36099/node_modules/react-native-worklets/android/src/main/cpp"
+				},
+				{
+					"backtrace" : 4,
+					"path" : "C:/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/expo-mo_b1818a6ea85dab8860fcdfded29395d8/node_modules/expo-modules-core/android/../common/cpp/JSI"
+				},
+				{
+					"backtrace" : 4,
+					"path" : "C:/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/expo-mo_b1818a6ea85dab8860fcdfded29395d8/node_modules/expo-modules-core/android/src/jsi"
+				},
+				{
+					"backtrace" : 8,
+					"isSystem" : true,
+					"path" : "C:/Users/HOUSTON/.gradle/caches/9.0.0/transforms/5e07a7917399250df5d3c6fa58687b7f/transformed/react-android-0.83.4-release/prefab/modules/jsi/include"
+				},
+				{
+					"backtrace" : 8,
+					"isSystem" : true,
+					"path" : "C:/Users/HOUSTON/.gradle/caches/9.0.0/transforms/49ded6a95e2e1ac4b365819611b55b49/transformed/fbjni-0.7.0/prefab/modules/fbjni/include"
+				},
+				{
+					"backtrace" : 8,
+					"isSystem" : true,
+					"path" : "C:/Users/HOUSTON/.gradle/caches/9.0.0/transforms/5e07a7917399250df5d3c6fa58687b7f/transformed/react-android-0.83.4-release/prefab/modules/reactnative/include"
+				}
+			],
+			"language" : "CXX",
+			"languageStandard" : 
+			{
+				"backtraces" : 
+				[
+					3
+				],
+				"standard" : "20"
+			},
+			"precompileHeaders" : 
+			[
+				{
+					"backtrace" : 8,
+					"header" : "C:/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/expo-mo_b1818a6ea85dab8860fcdfded29395d8/node_modules/expo-modules-core/android/src/main/cpp/ExpoHeader.pch"
+				}
+			],
+			"sourceIndexes" : 
+			[
+				1,
+				2,
+				3,
+				4,
+				5,
+				6,
+				7,
+				8,
+				9,
+				10,
+				11,
+				12,
+				13,
+				14,
+				15,
+				16,
+				17,
+				18,
+				19,
+				20,
+				21,
+				22,
+				23,
+				24,
+				25,
+				26,
+				27,
+				28,
+				29,
+				30,
+				31,
+				32,
+				33,
+				34,
+				35,
+				36,
+				37,
+				38,
+				39,
+				40,
+				41,
+				42,
+				43,
+				44,
+				45,
+				46,
+				47,
+				48
+			],
+			"sysroot" : 
+			{
+				"path" : "C:/Users/HOUSTON/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot"
+			}
+		}
+	],
+	"dependencies" : 
+	[
+		{
+			"backtrace" : 4,
+			"id" : "expo-modules-jsi::@6890427a1f51a3e7e1df"
+		}
+	],
+	"id" : "expo-modules-core::@6890427a1f51a3e7e1df",
+	"link" : 
+	{
+		"commandFragments" : 
+		[
+			{
+				"fragment" : "-Wl,-z,max-page-size=16384 -Wl,--build-id=sha1 -Wl,--no-rosegment -Wl,--no-undefined-version -Wl,--fatal-warnings -Wl,--no-undefined -Qunused-arguments  -Wl,--gc-sections",
+				"role" : "flags"
+			},
+			{
+				"backtrace" : 4,
+				"fragment" : "C:\\Users\\HOUSTON\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\sysroot\\usr\\lib\\aarch64-linux-android\\24\\liblog.so",
+				"role" : "libraries"
+			},
+			{
+				"backtrace" : 4,
+				"fragment" : "-landroid",
+				"role" : "libraries"
+			},
+			{
+				"backtrace" : 4,
+				"fragment" : "libexpo-modules-jsi.a",
+				"role" : "libraries"
+			},
+			{
+				"backtrace" : 5,
+				"fragment" : "C:\\FitTrack_rebuilt_20260330_212527\\node_modules\\.pnpm\\react-n_cc5dcfc983295b0eda6c7c8194f36099\\node_modules\\react-native-worklets\\android\\build\\intermediates\\cmake\\release\\obj\\arm64-v8a\\libworklets.so",
+				"role" : "libraries"
+			},
+			{
+				"fragment" : "C:\\Users\\HOUSTON\\.gradle\\caches\\9.0.0\\transforms\\5e07a7917399250df5d3c6fa58687b7f\\transformed\\react-android-0.83.4-release\\prefab\\modules\\jsi\\libs\\android.arm64-v8a\\libjsi.so",
+				"role" : "libraries"
+			},
+			{
+				"fragment" : "C:\\Users\\HOUSTON\\.gradle\\caches\\9.0.0\\transforms\\49ded6a95e2e1ac4b365819611b55b49\\transformed\\fbjni-0.7.0\\prefab\\modules\\fbjni\\libs\\android.arm64-v8a\\libfbjni.so",
+				"role" : "libraries"
+			},
+			{
+				"fragment" : "C:\\Users\\HOUSTON\\.gradle\\caches\\9.0.0\\transforms\\5e07a7917399250df5d3c6fa58687b7f\\transformed\\react-android-0.83.4-release\\prefab\\modules\\reactnative\\libs\\android.arm64-v8a\\libreactnative.so",
+				"role" : "libraries"
+			},
+			{
+				"fragment" : "-latomic -lm",
+				"role" : "libraries"
+			}
+		],
+		"language" : "CXX",
+		"sysroot" : 
+		{
+			"path" : "C:/Users/HOUSTON/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot"
+		}
+	},
+	"name" : "expo-modules-core",
+	"nameOnDisk" : "libexpo-modules-core.so",
+	"paths" : 
+	{
+		"build" : ".",
+		"source" : "."
+	},
+	"sourceGroups" : 
+	[
+		{
+			"name" : "Source Files",
+			"sourceIndexes" : 
+			[
+				0,
+				1,
+				2,
+				3,
+				4,
+				5,
+				6,
+				7,
+				8,
+				9,
+				10,
+				11,
+				12,
+				13,
+				14,
+				15,
+				16,
+				17,
+				18,
+				19,
+				20,
+				21,
+				22,
+				23,
+				24,
+				25,
+				26,
+				27,
+				28,
+				29,
+				30,
+				31,
+				32,
+				33,
+				34,
+				35,
+				36,
+				37,
+				38,
+				39,
+				40,
+				41,
+				42,
+				43,
+				44,
+				45,
+				46,
+				47,
+				48
+			]
+		},
+		{
+			"name" : "Precompile Header File",
+			"sourceIndexes" : 
+			[
+				49
+			]
+		}
+	],
+	"sources" : 
+	[
+		{
+			"backtrace" : 0,
+			"compileGroupIndex" : 0,
+			"path" : "C:/FitTrack_rebuilt_20260330_212527/.cxx/expo-core/RelWithDebInfo/3g1e3jm7/arm64-v8a/CMakeFiles/expo-modules-core.dir/cmake_pch.hxx.cxx",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "C:/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/expo-mo_b1818a6ea85dab8860fcdfded29395d8/node_modules/expo-modules-core/common/cpp/EventEmitter.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "C:/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/expo-mo_b1818a6ea85dab8860fcdfded29395d8/node_modules/expo-modules-core/common/cpp/LazyObject.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "C:/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/expo-mo_b1818a6ea85dab8860fcdfded29395d8/node_modules/expo-modules-core/common/cpp/NativeModule.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "C:/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/expo-mo_b1818a6ea85dab8860fcdfded29395d8/node_modules/expo-modules-core/common/cpp/SharedObject.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "C:/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/expo-mo_b1818a6ea85dab8860fcdfded29395d8/node_modules/expo-modules-core/common/cpp/SharedRef.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "C:/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/expo-mo_b1818a6ea85dab8860fcdfded29395d8/node_modules/expo-modules-core/common/cpp/fabric/ExpoViewComponentDescriptor.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "C:/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/expo-mo_b1818a6ea85dab8860fcdfded29395d8/node_modules/expo-modules-core/common/cpp/fabric/ExpoViewEventEmitter.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "C:/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/expo-mo_b1818a6ea85dab8860fcdfded29395d8/node_modules/expo-modules-core/common/cpp/fabric/ExpoViewProps.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "C:/FitTrack_rebuilt_20260330_212527/node_modules/.pnpm/expo-mo_b1818a6ea85dab8860fcdfded29395d8/node_modules/expo-modules-core/common/cpp/fabric/ExpoViewShadowNode.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "src/main/cpp/Exceptions.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "src/main/cpp/ExpoModulesHostObject.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "src/main/cpp/JNIDeallocator.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "src/main/cpp/JNIFunctionBody.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "src/main/cpp/JNIInjector.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "src/main/cpp/JNIUtils.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "src/main/cpp/JSIContext.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "src/main/cpp/JSharedObject.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "src/main/cpp/JavaCallback.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "src/main/cpp/JavaReferencesCache.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "src/main/cpp/JavaScriptArrayBuffer.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "src/main/cpp/JavaScriptFunction.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "src/main/cpp/JavaScriptModuleObject.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "src/main/cpp/JavaScriptObject.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "src/main/cpp/JavaScriptRuntime.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "src/main/cpp/JavaScriptTypedArray.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "src/main/cpp/JavaScriptValue.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "src/main/cpp/JavaScriptWeakObject.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "src/main/cpp/MethodMetadata.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "src/main/cpp/NativeArrayBuffer.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "src/main/cpp/RuntimeHolder.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "src/main/cpp/decorators/JSClassesDecorator.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "src/main/cpp/decorators/JSConstantsDecorator.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "src/main/cpp/decorators/JSDecoratorsBridgingObject.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "src/main/cpp/decorators/JSFunctionsDecorator.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "src/main/cpp/decorators/JSObjectDecorator.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "src/main/cpp/decorators/JSPropertiesDecorator.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "src/main/cpp/installers/MainRuntimeInstaller.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "src/main/cpp/installers/WorkletRuntimeInstaller.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "src/main/cpp/types/AnyType.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "src/main/cpp/types/ExpectedType.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "src/main/cpp/types/FrontendConverter.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "src/main/cpp/types/FrontendConverterProvider.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "src/main/cpp/types/JNIToJSIConverter.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "src/main/cpp/worklets/Serializable.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "src/main/cpp/worklets/Worklet.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "src/main/cpp/worklets/WorkletJSCallInvoker.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "src/main/cpp/worklets/WorkletNativeRuntime.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"compileGroupIndex" : 1,
+			"path" : "src/fabric/FabricComponentsRegistry.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 0,
+			"path" : "C:/FitTrack_rebuilt_20260330_212527/.cxx/expo-core/RelWithDebInfo/3g1e3jm7/arm64-v8a/CMakeFiles/expo-modules-core.dir/cmake_pch.hxx",
+			"sourceGroupIndex" : 1
+		}
+	],
+	"type" : "SHARED_LIBRARY"
+}

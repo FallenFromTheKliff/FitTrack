@@ -1,0 +1,2479 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// =============================================================================
+// FitTrack — Prisma Schema
+// Team: Byte Bros · INF234
+// Stack: NestJS · PostgreSQL · Prisma ORM
+// =============================================================================
+
+// =============================================================================
+// S2 — AUTH & IDENTITY
+// =============================================================================
+
+model User {
+  id                   String     @id @default(uuid()) @db.Uuid
+  role                 UserRole
+  status               UserStatus @default(pending)
+  email_verified_at    DateTime?  @db.Timestamptz(6)
+  phone_verified_at    DateTime?  @db.Timestamptz(6)
+  qr_code_token        String?    @unique @db.VarChar(64)
+  qr_code_rotated_at   DateTime?  @db.Timestamptz(6)
+  qr_code_expires_at   DateTime?  @db.Timestamptz(6)
+  has_accepted_privacy Boolean    @default(false)
+  privacy_accepted_at  DateTime?  @db.Timestamptz(6)
+  created_at           DateTime   @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime   @updatedAt @db.Timestamptz(6)
+  deletedAt            DateTime?  @db.Timestamptz(6)
+
+  // S2
+  auth_identities                AuthIdentity[]
+  refresh_tokens                 RefreshToken[]
+  otp_verifications              OtpVerification[]
+  // S3
+  profile                        UserProfile?
+  notification_prefs             NotificationPreference?
+  deletion_requests              AccountDeletionRequest[]
+  progress_metrics               ProgressMetric[]
+  attendance_logs                AttendanceLog[]               @relation("attendee")
+  scanned_attendance             AttendanceLog[]               @relation("scanner")
+  app_feedback                   AppFeedback[]
+  amenity_feedback               AmenityFeedback[]
+  // S4
+  subscriptions                  Subscription[]
+  membership_card                MembershipCard?
+  payments                       Payment[]
+  payments_verified              Payment[]                     @relation("payment_verifier")
+  commerce_checkout_holds        CommerceCheckoutHold[]
+  // S5
+  amenity_bookings               AmenityBooking[]
+  // S6
+  coach_profile                  CoachProfile?
+  member_appointments            CoachAppointment[]            @relation("member")
+  recurring_coaching_plans       RecurringCoachingPlan[]       @relation("recurring_plan_member")
+  coach_reviews                  CoachReview[]
+  client_relationships           CoachClientRelationship[]     @relation("member_rel")
+  // S7
+  training_plans                 TrainingPlan[]
+  coach_assigned_plans           TrainingPlan[]                @relation("coach_trainer")
+  workout_sessions               WorkoutSession[]
+  exercise_logs                  ExerciseLog[]
+  pose_sessions                  PoseSession[]
+  // S8
+  muscle_mastery                 MuscleMasteryProgress[]
+  progression_source_events      ProgressionSourceEvent[]
+  progression_grants             ProgressionGrantLedger[]
+  progression_profile            UserProgressionProfile?
+  seasonal_standings             SeasonalStanding[]
+  seasonal_muscle_standings      SeasonalMuscleStanding[]
+  milestone_progress             UserMilestoneProgress[]
+  milestone_evidence_submissions MilestoneEvidenceSubmission[] @relation("milestone_evidence_submitter")
+  milestone_evidence_reviews     MilestoneEvidenceSubmission[] @relation("milestone_evidence_reviewer")
+  milestone_definitions_created  MilestoneDefinition[]         @relation("milestone_definition_creator")
+  milestone_definitions_updated  MilestoneDefinition[]         @relation("milestone_definition_updater")
+  milestone_definitions_archived MilestoneDefinition[]         @relation("milestone_definition_archiver")
+  ranking_profile                RankingProfile?
+  integrity_profile              IntegrityProfile?
+  integrity_cases                IntegrityCase[]
+  integrity_events               IntegrityEvent[]
+  moderation_actions_taken       ModerationActionRecord[]      @relation("moderation_actor")
+  moderation_actions_received    ModerationActionRecord[]      @relation("moderation_target")
+  // S9
+  tdee_profiles                  TdeeProfile[]
+  macro_targets                  MacroTarget[]
+  nutrition_logs                 NutritionLog[]
+  // S10
+  sale_transactions_processed    SaleTransaction[]             @relation("processed_by")
+  sale_transactions_customer     SaleTransaction[]             @relation("sale_customer")
+  equipment_writeoffs            EquipmentWriteOff[]
+  // S11
+  ai_chat_sessions               AiChatSession[]
+  ai_interaction_logs            AiInteractionLog[]
+  // S12
+  notifications                  Notification[]
+
+  // S14
+  audit_logs AuditLog[]
+
+  // S16
+  gym_chat_sessions               GymChatSession[]
+  gym_chat_interaction_logs       GymChatInteractionLog[]
+  // S17
+  business_insight_runs_requested BusinessInsightRun[]
+
+  @@index([status])
+  @@index([role])
+  @@map("users")
+}
+
+enum UserRole {
+  admin
+  staff
+  member
+  coach
+}
+
+enum UserStatus {
+  pending
+  active
+  suspended
+  banned
+}
+
+model AccountDeletionRequest {
+  id          String                       @id @default(uuid())
+  userId      String                       @map("user_id") @db.Uuid
+  reason      String?
+  status      AccountDeletionRequestStatus @default(pending)
+  reviewedBy  String?                      @map("reviewed_by") @db.Uuid
+  reviewedAt  DateTime?                    @map("reviewed_at") @db.Timestamptz(6)
+  reviewNotes String?                      @map("review_notes")
+  createdAt   DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@map("account_deletion_requests")
+}
+
+enum AccountDeletionRequestStatus {
+  pending
+  approved
+  rejected
+  cancelled
+}
+
+model AuthIdentity {
+  id               String       @id @default(uuid()) @db.Uuid
+  user_id          String       @db.Uuid
+  provider         AuthProvider
+  identifier       String       @db.VarChar(255) // email address or E.164 phone number
+  credential_hash  String?      @db.VarChar(255) // bcrypt(12) — email provider only
+  provider_user_id String?      @db.VarChar(255) // Google user ID — google provider only
+  is_primary       Boolean      @default(false)
+  verified_at      DateTime?    @db.Timestamptz(6)
+  created_at       DateTime     @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime     @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, provider, identifier])
+  @@index([provider, identifier])
+  @@map("auth_identities")
+}
+
+// One account can be accessed via email, phone, and/or google simultaneously
+enum AuthProvider {
+  email
+  phone
+  google
+}
+
+model RefreshToken {
+  id           String    @id @default(uuid()) @db.Uuid
+  user_id      String    @db.Uuid
+  token_hash   String    @unique @db.VarChar(255) // SHA-256 of the raw token UUID
+  device_info  String?   @db.VarChar(255) // User-Agent header
+  ip_address   String?   @db.VarChar(45) // IPv4 or IPv6
+  expires_at   DateTime  @db.Timestamptz(6)
+  revoked_at   DateTime? @db.Timestamptz(6)
+  rotated_from String?   @db.Uuid
+  created_at   DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime  @updatedAt @db.Timestamptz(6)
+
+  user     User           @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  parent   RefreshToken?  @relation("TokenRotation", fields: [rotated_from], references: [id])
+  children RefreshToken[] @relation("TokenRotation")
+
+  @@index([user_id])
+  @@index([expires_at])
+  @@map("refresh_tokens")
+}
+
+model OtpVerification {
+  id           String     @id @default(uuid()) @db.Uuid
+  user_id      String     @db.Uuid
+  channel      OtpChannel
+  purpose      OtpPurpose
+  code_hash    String     @db.VarChar(255) // SHA-256 of the 6-digit OTP
+  expires_at   DateTime   @db.Timestamptz(6)
+  attempts     Int        @default(0) @db.SmallInt
+  locked_until DateTime?  @db.Timestamptz(6)
+  consumed_at  DateTime?  @db.Timestamptz(6)
+  created_at   DateTime   @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime   @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, purpose])
+  @@index([expires_at])
+  @@map("otp_verifications")
+}
+
+enum OtpChannel {
+  email
+  sms
+}
+
+enum OtpPurpose {
+  registration
+  login_2fa
+  password_reset
+  phone_verify
+}
+
+// =============================================================================
+// S3 — USER PROFILE & PROGRESS
+// =============================================================================
+
+model UserProfile {
+  id             String         @id @default(uuid()) @db.Uuid
+  user_id        String         @unique @db.Uuid
+  first_name     String         @db.VarChar(100)
+  last_name      String         @db.VarChar(100)
+  phone          String?        @db.VarChar(20) // stored here; verified via AuthIdentity
+  date_of_birth  DateTime?      @db.Date
+  gender         Gender?
+  weight_kg      Decimal?       @db.Decimal(5, 2)
+  height_cm      Decimal?       @db.Decimal(5, 2)
+  activity_level ActivityLevel?
+  fitness_goal   FitnessGoal?
+  avatar_url     String?        @db.VarChar(500)
+  created_at     DateTime       @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime       @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("user_profiles")
+}
+
+model AppFeedback {
+  id         String   @id @default(uuid()) @db.Uuid
+  user_id    String   @db.Uuid
+  category   String   @default("general") @db.VarChar(40)
+  message    String
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, created_at(sort: Desc)])
+  @@map("app_feedback")
+}
+
+enum Gender {
+  male
+  female
+  other
+}
+
+enum ActivityLevel {
+  sedentary
+  light
+  moderate
+  active
+  very_active
+}
+
+enum FitnessGoal {
+  bulking
+  cutting
+  maintenance
+  sport_specific
+}
+
+model ProgressMetric {
+  id             String   @id @default(uuid()) @db.Uuid
+  user_id        String   @db.Uuid
+  weight_kg      Decimal? @db.Decimal(5, 2)
+  height_cm      Decimal? @db.Decimal(5, 2)
+  body_fat_pct   Decimal? @db.Decimal(4, 2)
+  muscle_mass_kg Decimal? @db.Decimal(5, 2)
+  waist_cm       Decimal? @db.Decimal(5, 2)
+  chest_cm       Decimal? @db.Decimal(5, 2)
+  notes          String?
+  recorded_at    DateTime @db.Timestamptz(6)
+  created_at     DateTime @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [user_id], references: [id])
+
+  @@index([user_id, recorded_at(sort: Desc)])
+  @@map("progress_metrics")
+}
+
+model NotificationPreference {
+  id                               String   @id @default(uuid()) @db.Uuid
+  user_id                          String   @unique @db.Uuid
+  subscription_expiring_email      Boolean  @default(true)
+  subscription_expiring_sms        Boolean  @default(false)
+  subscription_expired_email       Boolean  @default(true)
+  booking_confirmed_email          Boolean  @default(true)
+  booking_confirmed_sms            Boolean  @default(false)
+  booking_cancelled_email          Boolean  @default(true)
+  venue_booking_reminder_email     Boolean  @default(true)
+  venue_booking_reminder_sms       Boolean  @default(false)
+  booking_no_show_email            Boolean  @default(true)
+  appointment_confirmed_email      Boolean  @default(true)
+  appointment_confirmed_sms        Boolean  @default(false)
+  coach_appointment_reminder_email Boolean  @default(true)
+  coach_appointment_reminder_sms   Boolean  @default(false)
+  appointment_completed_email      Boolean  @default(true)
+  appointment_cancelled_email      Boolean  @default(true)
+  rank_up_email                    Boolean  @default(true)
+  payment_confirmed_email          Boolean  @default(true)
+  payment_failed_email             Boolean  @default(true)
+  ai_session_archived_email        Boolean  @default(true)
+  system_email                     Boolean  @default(true)
+  created_at                       DateTime @default(now()) @db.Timestamptz(6)
+  updated_at                       DateTime @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
+}
+
+model AttendanceLog {
+  id           String    @id @default(uuid()) @db.Uuid
+  user_id      String    @db.Uuid
+  scanned_by   String?   @db.Uuid
+  check_in_at  DateTime  @db.Timestamptz(6)
+  check_out_at DateTime? @db.Timestamptz(6)
+  created_at   DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime  @updatedAt @db.Timestamptz(6)
+
+  user    User  @relation("attendee", fields: [user_id], references: [id])
+  scanner User? @relation("scanner", fields: [scanned_by], references: [id])
+
+  @@index([user_id, check_in_at(sort: Desc)])
+  @@index([check_in_at])
+  @@map("attendance_logs")
+}
+
+// =============================================================================
+// S4 — SUBSCRIPTION & PAYMENTS
+// =============================================================================
+
+model MembershipPlan {
+  id                String   @id @default(uuid()) @db.Uuid
+  name              String   @db.VarChar(100)
+  description       String?
+  price             Decimal  @db.Decimal(10, 2)
+  currency          String   @default("PHP") @db.VarChar(3)
+  duration_days     Int
+  features          Json     @default("{}")
+  sort_order        Int      @default(0) @db.SmallInt
+  includes_coaching Boolean  @default(false)
+  is_active         Boolean  @default(true)
+  created_at        DateTime @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime @updatedAt @db.Timestamptz(6)
+
+  subscriptions Subscription[]
+  commerce_checkout_holds CommerceCheckoutHold[]
+
+  @@index([is_active, sort_order])
+  @@map("membership_plans")
+}
+
+model MembershipCatalogSettings {
+  id                    String   @id @default(uuid()) @db.Uuid
+  membership_card_price Decimal  @default(400) @db.Decimal(10, 2)
+  created_at            DateTime @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime @updatedAt @db.Timestamptz(6)
+
+  @@map("membership_catalog_settings")
+}
+
+model Subscription {
+  id                  String             @id @default(uuid()) @db.Uuid
+  user_id             String             @db.Uuid
+  plan_id             String             @db.Uuid
+  payment_id          String?            @db.Uuid
+  status              SubscriptionStatus @default(pending_payment)
+  starts_at           DateTime?          @db.Timestamptz(6)
+  expires_at          DateTime?          @db.Timestamptz(6)
+  warned_7d_at        DateTime?          @db.Timestamptz(6)
+  warned_3d_at        DateTime?          @db.Timestamptz(6)
+  warned_1d_at        DateTime?          @db.Timestamptz(6)
+  cancelled_at        DateTime?          @db.Timestamptz(6)
+  cancellation_reason String?
+  created_at          DateTime           @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime           @updatedAt @db.Timestamptz(6)
+
+  user User           @relation(fields: [user_id], references: [id])
+  plan MembershipPlan @relation(fields: [plan_id], references: [id])
+
+  // Partial unique via raw migration:
+  // CREATE UNIQUE INDEX subscriptions_one_active_per_user
+  //   ON subscriptions(user_id)
+  //   WHERE status IN ('active','past_due','pending_payment');
+  @@index([user_id])
+  @@index([expires_at, status])
+  @@map("subscriptions")
+}
+
+enum SubscriptionStatus {
+  pending_payment
+  active
+  past_due
+  expired
+  cancelled
+  suspended
+}
+
+model MembershipCard {
+  id            String               @id @default(uuid()) @db.Uuid
+  user_id       String               @unique @db.Uuid
+  status        MembershipCardStatus @default(active)
+  source        MembershipCardSource @default(admin_grant)
+  price         Decimal              @default(400) @db.Decimal(10, 2)
+  purchased_at  DateTime             @default(now()) @db.Timestamptz(6)
+  verified_at   DateTime?            @db.Timestamptz(6)
+  verified_by   String?              @db.Uuid
+  activated_at  DateTime?            @db.Timestamptz(6)
+  revoked_at    DateTime?            @db.Timestamptz(6)
+  revoked_by    String?              @db.Uuid
+  revoke_reason String?
+  created_at    DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime             @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([verified_by])
+  @@index([revoked_by])
+  @@map("membership_cards")
+}
+
+enum MembershipCardStatus {
+  pending_verification
+  active
+  revoked
+}
+
+enum MembershipCardSource {
+  cash
+  paymongo
+  admin_grant
+  admin_repair
+}
+
+model Payment {
+  id               String          @id @default(uuid()) @db.Uuid
+  user_id          String          @db.Uuid
+  payable_type     PayableType
+  payable_id       String          @db.Uuid
+  payment_stage    PaymentStage
+  amount           Decimal         @db.Decimal(10, 2)
+  currency         String          @default("PHP") @db.VarChar(3)
+  provider         PaymentProvider
+  provider_ref     String?         @unique @db.VarChar(255)
+  gateway_event_id String?         @unique @db.VarChar(255)
+  idempotency_key  String          @unique @db.VarChar(128)
+  status           PaymentStatus   @default(pending)
+  gateway_metadata Json?
+  screenshot_url   String?         @db.VarChar(500)
+  rejection_reason String?
+  verified_by      String?         @db.Uuid
+  verified_at      DateTime?       @db.Timestamptz(6)
+  created_at       DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime        @updatedAt @db.Timestamptz(6)
+
+  user     User  @relation(fields: [user_id], references: [id])
+  verifier User? @relation("payment_verifier", fields: [verified_by], references: [id])
+  commerce_checkout_hold CommerceCheckoutHold? @relation("commerce_checkout_payment")
+
+  @@index([payable_type, payable_id])
+  @@index([user_id, status])
+  @@index([status])
+  @@map("payments")
+}
+
+enum PayableType {
+  subscription
+  booking
+  coaching
+  commerce_checkout_hold
+  recurring_coaching
+  product
+  membership_card
+}
+
+enum PaymentStage {
+  downpayment
+  balance
+  full
+}
+
+enum PaymentProvider {
+  paymongo
+  cash
+}
+
+enum PaymentStatus {
+  pending
+  processing
+  awaiting_verification
+  completed
+  failed
+}
+
+// Internal commerce state. Holds are never appointments, enrollments, or
+// coach-client relationships; they only reserve a checkout intent until it
+// expires or PayMongo success consumes it.
+model CommerceCheckoutHold {
+  id              String                       @id @default(uuid()) @db.Uuid
+  user_id         String                       @db.Uuid
+  coach_id        String?                      @db.Uuid
+  amenity_id      String?                      @db.Uuid
+  kind            CommerceCheckoutHoldKind
+  status          CommerceCheckoutHoldStatus   @default(held)
+  idempotency_key String                       @unique @db.VarChar(128)
+  payment_id      String?                      @unique @db.Uuid
+  scheduled_at    DateTime?                    @db.Timestamptz(6)
+  ends_at         DateTime?                    @db.Timestamptz(6)
+  duration_minutes Int?                        @db.SmallInt
+  amount          Decimal                      @db.Decimal(10, 2)
+  currency        String                       @default("PHP") @db.VarChar(3)
+  session_count   Int?                         @db.SmallInt
+  start_date      DateTime?                    @db.Date
+  end_date        DateTime?                    @db.Date
+  preferred_days  Int[]                        @default([])
+  preferred_time  DateTime?                    @db.Time(0)
+  member_notes    String?
+  expires_at      DateTime                     @db.Timestamptz(6)
+  consumed_at     DateTime?                    @db.Timestamptz(6)
+  released_at     DateTime?                    @db.Timestamptz(6)
+  failure_reason  String?
+  appointment_id  String?                      @db.Uuid
+  booking_id      String?                      @db.Uuid
+  subscription_id String?                      @db.Uuid
+  membership_card_id String?                   @db.Uuid
+  recurring_plan_id String?                    @db.Uuid
+  membership_plan_id String?                   @db.Uuid
+  created_at      DateTime                     @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime                     @updatedAt @db.Timestamptz(6)
+
+  user    User          @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  coach   CoachProfile? @relation(fields: [coach_id], references: [id])
+  amenity Amenity?      @relation(fields: [amenity_id], references: [id])
+  membership_plan MembershipPlan? @relation(fields: [membership_plan_id], references: [id])
+  payment Payment?      @relation("commerce_checkout_payment", fields: [payment_id], references: [id], onDelete: SetNull)
+
+  @@index([coach_id, status, expires_at])
+  @@index([amenity_id, status, expires_at])
+  @@index([user_id, status])
+  @@index([expires_at, status])
+  @@map("commerce_checkout_holds")
+}
+
+enum CommerceCheckoutHoldKind {
+  one_time
+  monthly
+  venue
+  subscription
+  membership_card
+}
+
+enum CommerceCheckoutHoldStatus {
+  held
+  consumed
+  released
+  expired
+  failed
+}
+
+// =============================================================================
+// S5 — FACILITY BOOKINGS
+// =============================================================================
+
+model Amenity {
+  id                    String      @id @default(uuid()) @db.Uuid
+  name                  String      @db.VarChar(100)
+  type                  AmenityType
+  description           String?
+  capacity              Int         @default(1)
+  hourly_rate           Decimal     @default(0) @db.Decimal(8, 2)
+  minimum_hours         Int?
+  icon_key              String?     @db.VarChar(100)
+  grid_column           Int?
+  grid_row              Int?
+  grid_width            Int?
+  grid_height           Int?
+  image_url             String?     @db.VarChar(500)
+  image_fit             String      @default("cover") @db.VarChar(10)
+  image_focal_x         Decimal     @default(0.5) @db.Decimal(4, 3)
+  image_focal_y         Decimal     @default(0.5) @db.Decimal(4, 3)
+  image_crop_zoom       Decimal     @default(1) @db.Decimal(4, 2)
+  is_reservable         Boolean?
+  display_order         Int?
+  floor_id              String?     @db.VarChar(20)
+  requires_subscription Boolean     @default(false)
+  status                EquipmentStatus?
+  is_mapped             Boolean     @default(true)
+  is_active             Boolean     @default(true)
+  created_at            DateTime    @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime    @updatedAt @db.Timestamptz(6)
+
+  bookings AmenityBooking[]
+  commerce_checkout_holds CommerceCheckoutHold[]
+  feedback AmenityFeedback[]
+  layout_equipment GymEquipment[]
+
+  @@index([is_active, type])
+  @@map("amenities")
+}
+
+model FacilityFloorPlanMedia {
+  floor_id    String   @id @db.VarChar(20)
+  image_url   String?  @db.VarChar(500)
+  grid_width  Int      @default(15)
+  grid_height Int      @default(10)
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime @updatedAt @db.Timestamptz(6)
+
+  @@map("facility_floor_plan_media")
+}
+
+enum AmenityType {
+  basketball_court
+  boxing_ring
+  other
+}
+
+model AmenityBooking {
+  id                  String        @id @default(uuid()) @db.Uuid
+  user_id             String        @db.Uuid
+  amenity_id          String        @db.Uuid
+  coach_id            String?       @db.Uuid
+  status              BookingStatus @default(pending)
+  starts_at           DateTime      @db.Timestamptz(6)
+  ends_at             DateTime      @db.Timestamptz(6)
+  total_amount        Decimal       @db.Decimal(10, 2)
+  downpayment_amount  Decimal       @db.Decimal(10, 2)
+  balance_amount      Decimal       @db.Decimal(10, 2)
+  downpayment_paid_at DateTime?     @db.Timestamptz(6)
+  balance_paid_at     DateTime?     @db.Timestamptz(6)
+  cancelled_at        DateTime?     @db.Timestamptz(6)
+  cancellation_reason String?       @db.VarChar(80)
+  completed_at        DateTime?     @db.Timestamptz(6)
+  notes               String?
+  created_at          DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime      @updatedAt @db.Timestamptz(6)
+
+  user    User          @relation(fields: [user_id], references: [id])
+  amenity Amenity       @relation(fields: [amenity_id], references: [id])
+  coach   CoachProfile? @relation(fields: [coach_id], references: [id])
+
+  @@index([user_id])
+  @@index([amenity_id, starts_at, ends_at])
+  @@index([coach_id, starts_at, ends_at])
+  @@index([status])
+  @@map("amenity_bookings")
+}
+
+model AmenityFeedback {
+  id         String   @id @default(uuid()) @db.Uuid
+  amenity_id String   @db.Uuid
+  user_id    String   @db.Uuid
+  rating     Int      @default(5) @db.SmallInt
+  comment    String?
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @updatedAt @db.Timestamptz(6)
+
+  amenity Amenity @relation(fields: [amenity_id], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([amenity_id, created_at(sort: Desc)])
+  @@index([user_id, created_at(sort: Desc)])
+  @@map("amenity_feedback")
+}
+
+enum BookingStatus {
+  pending // downpayment not yet received
+  confirmed // payment settled; booking is active
+  balance_pending // on arrival; balance not yet collected
+  completed // session/booking has been marked done
+  cancelled // cancelled (downpayment forfeited)
+  no_show // did not arrive
+}
+
+// =============================================================================
+// S6 — COACHING
+// =============================================================================
+
+model CoachProfile {
+  id                               String            @id @default(uuid()) @db.Uuid
+  user_id                          String?           @unique @db.Uuid
+  display_name                     String?           @db.VarChar(160)
+  contact_email                    String?           @db.VarChar(255)
+  contact_phone                    String?           @db.VarChar(40)
+  specialization                   String?           @db.VarChar(255)
+  bio                              String?
+  certification                    String?           @db.VarChar(255)
+  hourly_rate                      Decimal           @default(0) @db.Decimal(8, 2)
+  monthly_rate                     Decimal           @default(0) @db.Decimal(10, 2)
+  monthly_session_count            Int               @default(0) @db.SmallInt
+  monthly_session_duration_minutes Int               @default(60) @db.SmallInt
+  monthly_offer_description        String?           @db.VarChar(500)
+  monthly_offer_active             Boolean           @default(false)
+  gym_commission_pct               Decimal           @default(20) @db.Decimal(5, 2)
+  schedule_type                    CoachScheduleType @default(part_time)
+  average_rating                   Decimal?          @db.Decimal(3, 2)
+  rating_count                     Int               @default(0)
+  is_available_for_booking         Boolean           @default(true)
+  created_at                       DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at                       DateTime          @updatedAt @db.Timestamptz(6)
+
+  user                 User?                     @relation(fields: [user_id], references: [id])
+  appointments         CoachAppointment[]
+  recurring_plans      RecurringCoachingPlan[]
+  amenity_bookings     AmenityBooking[]
+  reviews              CoachReview[]
+  availability_slots   CoachAvailabilitySlot[]
+  client_relationships CoachClientRelationship[] @relation("coach_rel")
+  commerce_checkout_holds CommerceCheckoutHold[]
+  specialties          CoachProfileSpecialty[]
+
+  @@index([is_available_for_booking, average_rating(sort: Desc)])
+  @@map("coach_profiles")
+}
+
+model CoachSpecialty {
+  id               String                  @id @default(uuid()) @db.Uuid
+  normalized_label String                  @unique @db.VarChar(255)
+  display_label    String                  @db.VarChar(255)
+  created_at       DateTime                @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime                @updatedAt @db.Timestamptz(6)
+
+  coach_profiles CoachProfileSpecialty[]
+
+  @@index([display_label])
+  @@map("coach_specialties")
+}
+
+model CoachProfileSpecialty {
+  coach_profile_id String   @db.Uuid
+  specialty_id     String   @db.Uuid
+  created_at       DateTime @default(now()) @db.Timestamptz(6)
+
+  coach_profile CoachProfile  @relation(fields: [coach_profile_id], references: [id], onDelete: Cascade)
+  specialty     CoachSpecialty @relation(fields: [specialty_id], references: [id], onDelete: Restrict)
+
+  @@id([coach_profile_id, specialty_id])
+  @@index([specialty_id])
+  @@map("coach_profile_specialties")
+}
+
+model CoachAppointment {
+  id                         String                         @id @default(uuid()) @db.Uuid
+  user_id                    String                         @db.Uuid
+  coach_id                   String                         @db.Uuid
+  recurring_plan_id          String?                        @db.Uuid
+  recurring_schedule_item_id String?                        @unique @db.Uuid
+  status                     AppointmentStatus              @default(pending_coach)
+  recurring_state            RecurringCoachingSessionState?
+  original_scheduled_at      DateTime?                      @db.Timestamptz(6)
+  is_free_session            Boolean                        @default(false)
+  scheduled_at               DateTime                       @db.Timestamptz(6)
+  duration_minutes           Int                            @default(60)
+  total_amount               Decimal                        @default(0) @db.Decimal(10, 2)
+  downpayment_amount         Decimal                        @default(0) @db.Decimal(10, 2)
+  balance_amount             Decimal                        @default(0) @db.Decimal(10, 2)
+  gym_revenue                Decimal                        @default(0) @db.Decimal(10, 2)
+  coach_earnings             Decimal                        @default(0) @db.Decimal(10, 2)
+  downpayment_paid_at        DateTime?                      @db.Timestamptz(6)
+  balance_paid_at            DateTime?                      @db.Timestamptz(6)
+  session_notes              String?
+  coach_feedback             String?
+  assessment_report          String?
+  member_notes               String?
+  completed_at               DateTime?                      @db.Timestamptz(6)
+  coach_payout_paid_at       DateTime?                      @db.Timestamptz(6)
+  no_show_at                 DateTime?                      @db.Timestamptz(6)
+  cancellation_reason        String?
+  cancelled_at               DateTime?                      @db.Timestamptz(6)
+  created_at                 DateTime                       @default(now()) @db.Timestamptz(6)
+  updated_at                 DateTime                       @updatedAt @db.Timestamptz(6)
+
+  user                    User                           @relation("member", fields: [user_id], references: [id])
+  coach                   CoachProfile                   @relation(fields: [coach_id], references: [id])
+  recurring_plan          RecurringCoachingPlan?         @relation(fields: [recurring_plan_id], references: [id], onDelete: SetNull)
+  recurring_schedule_item RecurringCoachingScheduleItem? @relation("recurring_schedule_item_appointment", fields: [recurring_schedule_item_id], references: [id], onDelete: SetNull)
+  workout_assignment      CoachWorkoutAssignment?
+  review                  CoachReview?
+
+  @@index([user_id, status])
+  @@index([coach_id, scheduled_at])
+  @@index([recurring_plan_id, scheduled_at])
+  @@index([scheduled_at, status])
+  @@map("coach_appointments")
+}
+
+enum CoachScheduleType {
+  full_time
+  part_time
+}
+
+enum AppointmentStatus {
+  pending_coach
+  pending_payment
+  confirmed
+  cancelled
+  completed
+  no_show
+}
+
+model RecurringCoachingPlan {
+  id                  String                      @id @default(uuid()) @db.Uuid
+  member_id           String                      @db.Uuid
+  coach_id            String                      @db.Uuid
+  training_plan_id    String?                     @db.Uuid
+  created_by          String?                     @db.Uuid
+  frequency           RecurringCoachingFrequency
+  preferred_days      Int[]                       @default([])
+  preferred_time      DateTime                    @db.Time(0)
+  start_date          DateTime                    @db.Date
+  end_date            DateTime                    @db.Date
+  duration_minutes    Int                         @default(60)
+  quoted_amount       Decimal                     @default(0) @db.Decimal(10, 2)
+  status              RecurringCoachingPlanStatus @default(active)
+  total_sessions      Int                         @default(0)
+  completed_sessions  Int                         @default(0)
+  coach_approved_at   DateTime?                   @db.Timestamptz(6)
+  cancellation_reason String?
+  cancelled_at        DateTime?                   @db.Timestamptz(6)
+  created_at          DateTime                    @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime                    @updatedAt @db.Timestamptz(6)
+
+  member         User                            @relation("recurring_plan_member", fields: [member_id], references: [id])
+  coach          CoachProfile                    @relation(fields: [coach_id], references: [id])
+  training_plan  TrainingPlan?                   @relation("coaching_recurring_plan", fields: [training_plan_id], references: [id], onDelete: SetNull)
+  appointments   CoachAppointment[]
+  billing_cycles RecurringCoachingBillingCycle[]
+  schedule_items RecurringCoachingScheduleItem[]
+
+  @@index([member_id, status])
+  @@index([coach_id, status])
+  @@index([training_plan_id])
+  @@index([status, start_date, end_date])
+  @@map("recurring_coaching_plans")
+}
+
+model RecurringCoachingScheduleItem {
+  id                String                              @id @default(uuid()) @db.Uuid
+  recurring_plan_id String                              @db.Uuid
+  training_schedule_day_id String?                      @db.Uuid
+  sequence_index    Int                                 @db.SmallInt
+  scheduled_at      DateTime                            @db.Timestamptz(6)
+  duration_minutes  Int                                 @default(60)
+  amount            Decimal                             @default(0) @db.Decimal(10, 2)
+  status            RecurringCoachingScheduleItemStatus @default(pending_payment)
+  created_at        DateTime                            @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime                            @updatedAt @db.Timestamptz(6)
+
+  recurring_plan RecurringCoachingPlan @relation(fields: [recurring_plan_id], references: [id], onDelete: Cascade)
+  training_schedule_day TrainingScheduleDay? @relation(fields: [training_schedule_day_id], references: [id], onDelete: SetNull)
+  appointment    CoachAppointment?     @relation("recurring_schedule_item_appointment")
+
+  @@unique([recurring_plan_id, sequence_index])
+  @@unique([recurring_plan_id, scheduled_at])
+  @@index([training_schedule_day_id])
+  @@index([recurring_plan_id, status, scheduled_at])
+  @@map("recurring_coaching_schedule_items")
+}
+
+model RecurringCoachingBillingCycle {
+  id                   String                              @id @default(uuid()) @db.Uuid
+  recurring_plan_id    String                              @db.Uuid
+  cycle_start_date     DateTime                            @db.Date
+  cycle_end_date       DateTime                            @db.Date
+  due_date             DateTime                            @db.Date
+  grace_period_ends_at DateTime                            @db.Timestamptz(6)
+  amount               Decimal                             @db.Decimal(10, 2)
+  status               RecurringCoachingBillingCycleStatus @default(due)
+  payment_id           String?                             @unique @db.Uuid
+  paid_at              DateTime?                           @db.Timestamptz(6)
+  created_at           DateTime                            @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime                            @updatedAt @db.Timestamptz(6)
+
+  recurring_plan RecurringCoachingPlan @relation(fields: [recurring_plan_id], references: [id], onDelete: Cascade)
+
+  @@unique([recurring_plan_id, cycle_start_date])
+  @@index([status, due_date])
+  @@index([payment_id])
+  @@map("recurring_coaching_billing_cycles")
+}
+
+enum RecurringCoachingFrequency {
+  weekly
+  biweekly
+  monthly
+}
+
+enum RecurringCoachingPlanStatus {
+  draft
+  awaiting_payment
+  active
+  paused
+  cancelled
+  completed
+}
+
+enum RecurringCoachingBillingCycleStatus {
+  due
+  processing
+  awaiting_verification
+  paid
+  overdue
+  cancelled
+}
+
+enum RecurringCoachingSessionState {
+  generated
+  skipped
+  individually_rescheduled
+  cancelled
+  completed
+}
+
+model CoachReview {
+  id             String   @id @default(uuid()) @db.Uuid
+  coach_id       String   @db.Uuid
+  reviewer_id    String   @db.Uuid
+  appointment_id String   @unique @db.Uuid
+  rating         Int      @db.SmallInt
+  comment        String?
+  created_at     DateTime @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime @updatedAt @db.Timestamptz(6)
+
+  coach       CoachProfile     @relation(fields: [coach_id], references: [id])
+  reviewer    User             @relation(fields: [reviewer_id], references: [id])
+  appointment CoachAppointment @relation(fields: [appointment_id], references: [id])
+
+  @@index([coach_id, created_at(sort: Desc)])
+  @@map("coach_reviews")
+}
+
+model CoachAvailabilitySlot {
+  id          String   @id @default(uuid()) @db.Uuid
+  coach_id    String   @db.Uuid
+  day_of_week Int      @db.SmallInt // 0=Sunday … 6=Saturday
+  start_time  DateTime @db.Time(0)
+  end_time    DateTime @db.Time(0)
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime @updatedAt @db.Timestamptz(6)
+
+  coach CoachProfile @relation(fields: [coach_id], references: [id])
+
+  // Partial unique via raw migration:
+  // CREATE UNIQUE INDEX coach_slot_unique
+  //   ON coach_availability_slots(coach_id, day_of_week, start_time)
+  //   WHERE is_active = true;
+  @@index([coach_id, day_of_week, is_active])
+  @@map("coach_availability_slots")
+}
+
+model CoachClientRelationship {
+  id         String             @id @default(uuid()) @db.Uuid
+  coach_id   String             @db.Uuid
+  member_id  String             @db.Uuid
+  status     RelationshipStatus @default(pending)
+  started_at DateTime?          @db.Timestamptz(6)
+  ended_at   DateTime?          @db.Timestamptz(6)
+  notes      String?
+  created_at DateTime           @default(now()) @db.Timestamptz(6)
+  updated_at DateTime           @updatedAt @db.Timestamptz(6)
+
+  coach  CoachProfile @relation("coach_rel", fields: [coach_id], references: [id])
+  member User         @relation("member_rel", fields: [member_id], references: [id])
+
+  // Partial unique via raw migration:
+  // CREATE UNIQUE INDEX coach_client_active_unique
+  //   ON coach_client_relationships(coach_id, member_id)
+  //   WHERE status IN ('pending','active');
+  @@index([coach_id, status])
+  @@index([member_id, status])
+  @@map("coach_client_relationships")
+}
+
+enum RelationshipStatus {
+  pending
+  active
+  paused
+  terminated
+}
+
+// =============================================================================
+// S7 — FITNESS & TRAINING
+// =============================================================================
+
+model ExerciseCatalog {
+  id                 String           @id @default(uuid()) @db.Uuid
+  name               String           @db.VarChar(255)
+  muscle_group       String           @db.VarChar(100)
+  muscle_targets     Json?
+  movement_profile   Json?
+  hand_shape_profile Json?
+  category           ExerciseCategory
+  description        String?
+  instructions       String?
+  video_url          String?          @db.VarChar(500)
+  image_url          String?          @db.VarChar(500)
+  is_active          Boolean          @default(true)
+  created_at         DateTime         @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime         @updatedAt @db.Timestamptz(6)
+
+  plan_exercises               PlanExercise[]
+  exercise_logs                ExerciseLog[]
+  pose_profiles                PoseExerciseProfile[]
+
+  @@index([muscle_group, is_active])
+  @@index([category])
+  @@map("exercise_catalog")
+}
+
+model MuscleDefinition {
+  id          String   @id @default(uuid()) @db.Uuid
+  key         String   @unique @db.VarChar(100)
+  name        String   @db.VarChar(120)
+  body_region String   @db.VarChar(80)
+  aliases     Json?
+  icon_kind   ProgressionIconKind?
+  icon_key    String?  @db.VarChar(100)
+  icon_asset_key String? @db.VarChar(500)
+  sort_order  Int      @default(0) @db.SmallInt
+  is_active   Boolean  @default(true)
+  is_system   Boolean  @default(false)
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([body_region, is_active])
+  @@index([is_active, sort_order])
+  @@map("muscle_definitions")
+}
+
+enum ExerciseCategory {
+  strength
+  cardio
+  flexibility
+  balance
+}
+
+enum PoseProfileKind {
+  seed
+  learned
+}
+
+model TrainingPlan {
+  id                   String      @id @default(uuid()) @db.Uuid
+  user_id              String      @db.Uuid
+  coach_id             String?     @db.Uuid
+  source               PlanSource
+  title                String      @db.VarChar(255)
+  goal                 FitnessGoal
+  duration_weeks       Int
+  days_per_week        Int         @db.SmallInt
+  is_active            Boolean     @default(false)
+  is_template          Boolean     @default(false)
+  ai_generation_prompt Json?
+  created_at           DateTime    @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime    @updatedAt @db.Timestamptz(6)
+
+  user                     User                     @relation(fields: [user_id], references: [id])
+  coach                    User?                    @relation("coach_trainer", fields: [coach_id], references: [id])
+  schedule_days            TrainingScheduleDay[]
+  sessions                 WorkoutSession[]
+  workout_assignments      CoachWorkoutAssignment[]
+  coaching_recurring_plans RecurringCoachingPlan[]  @relation("coaching_recurring_plan")
+
+  // Partial unique via raw migration:
+  // CREATE UNIQUE INDEX one_active_plan_per_user
+  //   ON training_plans(user_id) WHERE is_active=true AND is_template=false;
+  @@index([user_id, is_active])
+  @@map("training_plans")
+}
+
+enum PlanSource {
+  ai_generated
+  coach_assigned
+  self_created
+}
+
+model TrainingScheduleDay {
+  id          String   @id @default(uuid()) @db.Uuid
+  plan_id     String   @db.Uuid
+  week_number Int      @db.SmallInt
+  day_of_week Int      @db.SmallInt
+  focus_label String?  @db.VarChar(100)
+  notes       String?
+  is_rest_day Boolean?
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime @updatedAt @db.Timestamptz(6)
+
+  plan                TrainingPlan             @relation(fields: [plan_id], references: [id], onDelete: Cascade)
+  exercises           PlanExercise[]
+  workout_assignments CoachWorkoutAssignment[]
+  recurring_schedule_items RecurringCoachingScheduleItem[]
+
+  @@index([plan_id, week_number, day_of_week])
+  @@map("training_schedule_days")
+}
+
+model PlanExercise {
+  id                  String   @id @default(uuid()) @db.Uuid
+  schedule_day_id     String   @db.Uuid
+  exercise_id         String   @db.Uuid
+  sets                Int      @db.SmallInt
+  reps                Int?     @db.SmallInt
+  duration_seconds    Int?
+  rest_seconds        Int      @default(75)
+  rest_seconds_by_set Json?
+  weight_kg_target    Decimal? @db.Decimal(6, 2)
+  notes               String?
+  order_index         Int      @default(0) @db.SmallInt
+  created_at          DateTime @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime @updatedAt @db.Timestamptz(6)
+
+  schedule_day TrainingScheduleDay @relation(fields: [schedule_day_id], references: [id], onDelete: Cascade)
+  exercise     ExerciseCatalog     @relation(fields: [exercise_id], references: [id])
+
+  @@index([schedule_day_id, order_index])
+  @@map("plan_exercises")
+}
+
+model WorkoutSession {
+  id               String        @id @default(uuid()) @db.Uuid
+  user_id          String        @db.Uuid
+  plan_id          String?       @db.Uuid
+  status           SessionStatus @default(in_progress)
+  started_at       DateTime      @db.Timestamptz(6)
+  completed_at     DateTime?     @db.Timestamptz(6)
+  cancelled_at     DateTime?     @db.Timestamptz(6)
+  duration_seconds Int?
+  total_volume_kg  Decimal?      @db.Decimal(10, 2)
+  last_activity_at DateTime      @db.Timestamptz(6)
+  created_at       DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime      @updatedAt @db.Timestamptz(6)
+
+  user                     User                    @relation(fields: [user_id], references: [id])
+  plan                     TrainingPlan?           @relation(fields: [plan_id], references: [id])
+  exercise_logs            ExerciseLog[]
+  coach_workout_assignment CoachWorkoutAssignment?
+
+  @@index([user_id, status])
+  @@index([user_id, started_at(sort: Desc)])
+  @@map("workout_sessions")
+}
+
+model CoachWorkoutAssignment {
+  id                       String                       @id @default(uuid()) @db.Uuid
+  appointment_id           String                       @unique @db.Uuid
+  training_plan_id         String                       @db.Uuid
+  training_schedule_day_id String                       @db.Uuid
+  workout_session_id       String?                      @unique @db.Uuid
+  sequence_index           Int                          @db.SmallInt
+  source                   CoachWorkoutAssignmentSource @default(automatic)
+  state                    CoachWorkoutAssignmentState  @default(assigned)
+  assigned_at              DateTime                     @default(now()) @db.Timestamptz(6)
+  held_at                  DateTime?                    @db.Timestamptz(6)
+  completed_at             DateTime?                    @db.Timestamptz(6)
+  override_reason          String?
+  created_at               DateTime                     @default(now()) @db.Timestamptz(6)
+  updated_at               DateTime                     @updatedAt @db.Timestamptz(6)
+
+  appointment     CoachAppointment    @relation(fields: [appointment_id], references: [id], onDelete: Cascade)
+  training_plan   TrainingPlan        @relation(fields: [training_plan_id], references: [id], onDelete: Cascade)
+  schedule_day    TrainingScheduleDay @relation(fields: [training_schedule_day_id], references: [id], onDelete: Cascade)
+  workout_session WorkoutSession?     @relation(fields: [workout_session_id], references: [id], onDelete: SetNull)
+
+  @@index([training_plan_id, sequence_index, state])
+  @@index([training_schedule_day_id, state])
+  @@map("coach_workout_assignments")
+}
+
+enum CoachWorkoutAssignmentSource {
+  automatic
+  coach_override
+}
+
+enum CoachWorkoutAssignmentState {
+  assigned
+  held
+  completed
+  skipped
+}
+
+enum SessionStatus {
+  in_progress
+  completed
+  cancelled
+}
+
+model ExerciseLog {
+  id               String   @id @default(uuid()) @db.Uuid
+  session_id       String   @db.Uuid
+  user_id          String   @db.Uuid
+  plan_exercise_id String?  @db.Uuid
+  exercise_id      String   @db.Uuid
+  set_number       Int      @db.SmallInt
+  reps_target      Int?     @db.SmallInt
+  reps_completed   Int?     @db.SmallInt
+  reps_ai_counted  Int?     @db.SmallInt
+  weight_kg        Decimal? @db.Decimal(6, 2)
+  duration_seconds Int?
+  created_at       DateTime @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime @updatedAt @db.Timestamptz(6)
+
+  session      WorkoutSession  @relation(fields: [session_id], references: [id], onDelete: Cascade)
+  user         User            @relation(fields: [user_id], references: [id])
+  exercise     ExerciseCatalog @relation(fields: [exercise_id], references: [id])
+  pose_session PoseSession?
+
+  // Partial unique via raw migration:
+  // CREATE UNIQUE INDEX exercise_log_set_unique
+  //   ON exercise_logs(session_id, exercise_id, set_number);
+  @@index([session_id])
+  @@index([exercise_id, created_at(sort: Desc)])
+  @@map("exercise_logs")
+}
+
+model PoseExerciseProfile {
+  id                    String          @id @default(uuid()) @db.Uuid
+  exercise_id           String?         @db.Uuid
+  canonical_name        String          @db.VarChar(100)
+  profile_kind          PoseProfileKind @default(seed)
+  landmark_signature    Json
+  angle_signature       Json
+  orientation_signature Json
+  movement_pattern      Json
+  visibility_pattern    Json
+  dominant_joint        String?         @db.VarChar(32)
+  tolerance             Decimal?        @db.Decimal(5, 2)
+  rep_thresholds        Json?
+  rep_rules             Json?
+  sample_count          Int             @default(1)
+  confidence_threshold  Decimal?        @db.Decimal(4, 3)
+  is_active             Boolean         @default(true)
+  created_at            DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime        @updatedAt @db.Timestamptz(6)
+
+  exercise ExerciseCatalog? @relation(fields: [exercise_id], references: [id], onDelete: SetNull)
+  sessions PoseSession[]
+
+  @@index([canonical_name, is_active])
+  @@index([exercise_id, is_active])
+  @@map("pose_exercise_profiles")
+}
+
+model PoseSession {
+  id                        String    @id @default(uuid()) @db.Uuid
+  user_id                   String    @db.Uuid
+  exercise_log_id           String?   @unique @db.Uuid
+  exercise_hint             String?   @db.VarChar(255)
+  rep_count_ai              Int       @default(0) @db.SmallInt
+  confidence_avg            Decimal?  @db.Decimal(4, 3)
+  detected_exercise_name    String?   @db.VarChar(100)
+  detected_profile_id       String?   @db.Uuid
+  classification_confidence Decimal?  @db.Decimal(4, 3)
+  subject_lock_confidence   Decimal?  @db.Decimal(4, 3)
+  analysis_summary          Json?
+  started_at                DateTime  @db.Timestamptz(6)
+  ended_at                  DateTime? @db.Timestamptz(6)
+  created_at                DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at                DateTime  @updatedAt @db.Timestamptz(6)
+
+  user              User                      @relation(fields: [user_id], references: [id])
+  exercise_log      ExerciseLog?              @relation(fields: [exercise_log_id], references: [id])
+  pose_profile      PoseExerciseProfile?      @relation(fields: [detected_profile_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id])
+  @@index([detected_exercise_name])
+  @@index([detected_profile_id])
+  @@map("pose_sessions")
+}
+
+// =============================================================================
+// S8 — GAMIFICATION
+// =============================================================================
+
+model MuscleMasteryProgress {
+  id              String      @id @default(uuid()) @db.Uuid
+  user_id         String      @db.Uuid
+  muscle_group    String      @db.VarChar(100)
+  total_volume_kg Decimal     @default(0) @db.Decimal(12, 2)
+  xp_points       Int         @default(0) // grows past adamantite — never capped
+  rank            MasteryRank @default(bronze)
+  last_ranked_at  DateTime?   @db.Timestamptz(6)
+  created_at      DateTime    @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime    @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [user_id], references: [id])
+
+  @@unique([user_id, muscle_group])
+  @@index([user_id])
+  @@map("muscle_mastery_progress")
+}
+
+// Display: if rank=adamantite AND xp>10000 → "Adamantite+ ({xp-10000} EXP)"
+enum MasteryRank {
+  bronze
+  silver
+  gold
+  platinum
+  adamantite
+}
+
+enum ProgressionIconKind {
+  library
+  custom
+}
+
+model ProgressionSourceEvent {
+  id             String                  @id @default(uuid()) @db.Uuid
+  user_id        String                  @db.Uuid
+  source_type    ProgressionSourceType
+  source_id      String                  @db.VarChar(191)
+  source_status  ProgressionSourceStatus @default(pending)
+  source_context Json?
+  processed_at   DateTime?               @db.Timestamptz(6)
+  created_at     DateTime                @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime                @updatedAt @db.Timestamptz(6)
+
+  user               User                     @relation(fields: [user_id], references: [id])
+  progression_grants ProgressionGrantLedger[]
+  integrity_events   IntegrityEvent[]
+  moderation_actions ModerationActionRecord[]
+
+  @@unique([source_type, source_id])
+  @@index([user_id, created_at])
+  @@index([source_status, created_at])
+  @@map("progression_source_events")
+}
+
+model ProgressionGrantLedger {
+  id              String                 @id @default(uuid()) @db.Uuid
+  user_id         String                 @db.Uuid
+  source_event_id String?                @db.Uuid
+  season_id       String?                @db.Uuid
+  grant_type      ProgressionGrantType
+  grant_status    ProgressionGrantStatus @default(applied)
+  amount          Int
+  muscle_group    String?                @db.VarChar(100)
+  reason          String?                @db.VarChar(255)
+  metadata        Json?
+  voided_at       DateTime?              @db.Timestamptz(6)
+  created_at      DateTime               @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime               @updatedAt @db.Timestamptz(6)
+
+  user               User                     @relation(fields: [user_id], references: [id])
+  source_event       ProgressionSourceEvent?  @relation(fields: [source_event_id], references: [id], onDelete: SetNull)
+  season             SeasonDefinition?        @relation(fields: [season_id], references: [id], onDelete: SetNull)
+  moderation_actions ModerationActionRecord[]
+
+  @@index([user_id, grant_type, created_at])
+  @@index([source_event_id])
+  @@index([season_id])
+  @@map("progression_grant_ledger")
+}
+
+model UserProgressionProfile {
+  id                    String    @id @default(uuid()) @db.Uuid
+  user_id               String    @unique @db.Uuid
+  active_season_id      String?   @db.Uuid
+  progression_rules_version String @default("exp-v1") @db.VarChar(50)
+  total_xp              Int       @default(0)
+  current_streak        Int       @default(0)
+  longest_streak        Int       @default(0)
+  current_season_points Int       @default(0)
+  last_progressed_at    DateTime? @db.Timestamptz(6)
+  created_at            DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime  @updatedAt @db.Timestamptz(6)
+
+  user          User              @relation(fields: [user_id], references: [id])
+  active_season SeasonDefinition? @relation("active_progression_season", fields: [active_season_id], references: [id], onDelete: SetNull)
+
+  @@index([active_season_id])
+  @@map("user_progression_profiles")
+}
+
+model SeasonDefinition {
+  id              String       @id @default(uuid()) @db.Uuid
+  title           String       @db.VarChar(160)
+  description     String?
+  status          SeasonStatus @default(draft)
+  rules_version   String       @default("v1") @db.VarChar(50)
+  starts_at       DateTime     @db.Timestamptz(6)
+  ends_at         DateTime     @db.Timestamptz(6)
+  auto_start_next Boolean      @default(false)
+  activated_at    DateTime?    @db.Timestamptz(6)
+  closed_at       DateTime?    @db.Timestamptz(6)
+  archived_at     DateTime?    @db.Timestamptz(6)
+  created_at      DateTime     @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime     @updatedAt @db.Timestamptz(6)
+
+  active_user_profiles UserProgressionProfile[] @relation("active_progression_season")
+  standings            SeasonalStanding[]
+  muscle_standings     SeasonalMuscleStanding[]
+  progression_grants   ProgressionGrantLedger[]
+  moderation_actions   ModerationActionRecord[]
+
+  @@index([status, starts_at])
+  @@map("season_definitions")
+}
+
+model SeasonalStanding {
+  id              String    @id @default(uuid()) @db.Uuid
+  season_id       String    @db.Uuid
+  user_id         String    @db.Uuid
+  season_points   Int       @default(0)
+  rank_position   Int?
+  is_hidden       Boolean   @default(false)
+  is_disqualified Boolean   @default(false)
+  last_earned_at  DateTime? @db.Timestamptz(6)
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime  @updatedAt @db.Timestamptz(6)
+
+  season SeasonDefinition @relation(fields: [season_id], references: [id], onDelete: Cascade)
+  user   User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([season_id, user_id])
+  @@index([season_id, season_points])
+  @@index([user_id])
+  @@map("seasonal_standings")
+}
+
+enum RecurringCoachingScheduleItemStatus {
+  pending_payment
+  activated
+  cancelled
+}
+
+model SeasonalMuscleStanding {
+  id              String    @id @default(uuid()) @db.Uuid
+  season_id       String    @db.Uuid
+  user_id         String    @db.Uuid
+  muscle_group    String    @db.VarChar(100)
+  muscle_points   Int       @default(0)
+  rank_position   Int?
+  is_hidden       Boolean   @default(false)
+  is_disqualified Boolean   @default(false)
+  last_earned_at  DateTime? @db.Timestamptz(6)
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime  @updatedAt @db.Timestamptz(6)
+
+  season SeasonDefinition @relation(fields: [season_id], references: [id], onDelete: Cascade)
+  user   User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([season_id, user_id, muscle_group])
+  @@index([season_id, muscle_group, muscle_points])
+  @@index([user_id, season_id])
+  @@map("seasonal_muscle_standings")
+}
+
+model MilestoneDefinition {
+  id                   String                       @id @default(uuid()) @db.Uuid
+  key                  String                       @unique @db.VarChar(120)
+  title                String                       @db.VarChar(160)
+  description          String?
+  category             MilestoneCategory
+  trigger_type         MilestoneTriggerType
+  condition_payload    Json?
+  reward_payload       Json?
+  icon_kind            ProgressionIconKind?
+  icon_key             String?                      @db.VarChar(100)
+  icon_asset_key       String?                      @db.VarChar(500)
+  status               MilestoneDefinitionStatus    @default(active)
+  verification_policy  MilestoneVerificationPolicy  @default(auto)
+  evidence_requirement MilestoneEvidenceRequirement @default(none)
+  is_active            Boolean                      @default(true)
+  is_hidden            Boolean                      @default(false)
+  sort_order           Int                          @default(0)
+  starts_at            DateTime?                    @db.Timestamptz(6)
+  ends_at              DateTime?                    @db.Timestamptz(6)
+  retired_at           DateTime?                    @db.Timestamptz(6)
+  archived_at          DateTime?                    @db.Timestamptz(6)
+  archived_by_user_id  String?                      @db.Uuid
+  created_by_user_id   String?                      @db.Uuid
+  updated_by_user_id   String?                      @db.Uuid
+  created_at           DateTime                     @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime                     @updatedAt @db.Timestamptz(6)
+
+  user_progress        UserMilestoneProgress[]
+  evidence_submissions MilestoneEvidenceSubmission[]
+  archived_by          User?                         @relation("milestone_definition_archiver", fields: [archived_by_user_id], references: [id], onDelete: SetNull)
+  created_by           User?                         @relation("milestone_definition_creator", fields: [created_by_user_id], references: [id], onDelete: SetNull)
+  updated_by           User?                         @relation("milestone_definition_updater", fields: [updated_by_user_id], references: [id], onDelete: SetNull)
+
+  @@index([category, status])
+  @@index([is_active, retired_at])
+  @@index([verification_policy, evidence_requirement])
+  @@map("milestone_definitions")
+}
+
+model UserMilestoneProgress {
+  id                      String                  @id @default(uuid()) @db.Uuid
+  user_id                 String                  @db.Uuid
+  milestone_definition_id String                  @db.Uuid
+  status                  MilestoneProgressStatus @default(in_progress)
+  progress_value          Int                     @default(0)
+  progress_payload        Json?
+  unlocked_at             DateTime?               @db.Timestamptz(6)
+  claimed_at              DateTime?               @db.Timestamptz(6)
+  reward_granted_at       DateTime?               @db.Timestamptz(6)
+  created_at              DateTime                @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime                @updatedAt @db.Timestamptz(6)
+
+  user                 User                          @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  milestone_definition MilestoneDefinition           @relation(fields: [milestone_definition_id], references: [id], onDelete: Cascade)
+  evidence_submissions MilestoneEvidenceSubmission[]
+
+  @@unique([user_id, milestone_definition_id])
+  @@index([status, unlocked_at])
+  @@map("user_milestone_progress")
+}
+
+model MilestoneEvidenceSubmission {
+  id                      String                            @id @default(uuid()) @db.Uuid
+  user_id                 String                            @db.Uuid
+  milestone_definition_id String                            @db.Uuid
+  milestone_progress_id   String?                           @db.Uuid
+  status                  MilestoneEvidenceSubmissionStatus @default(pending)
+  evidence_type           MilestoneEvidenceType
+  file_url                String
+  file_key                String?                           @db.VarChar(500)
+  mime_type               String                            @db.VarChar(100)
+  size_bytes              Int
+  original_filename       String?                           @db.VarChar(255)
+  caption                 String?
+  reviewer_notes          String?
+  reviewed_at             DateTime?                         @db.Timestamptz(6)
+  reviewed_by_user_id     String?                           @db.Uuid
+  created_at              DateTime                          @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime                          @updatedAt @db.Timestamptz(6)
+
+  user                 User                   @relation("milestone_evidence_submitter", fields: [user_id], references: [id], onDelete: Cascade)
+  milestone_definition MilestoneDefinition    @relation(fields: [milestone_definition_id], references: [id], onDelete: Cascade)
+  milestone_progress   UserMilestoneProgress? @relation(fields: [milestone_progress_id], references: [id], onDelete: SetNull)
+  reviewer             User?                  @relation("milestone_evidence_reviewer", fields: [reviewed_by_user_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id, created_at])
+  @@index([milestone_definition_id, status])
+  @@index([status, created_at])
+  @@map("milestone_evidence_submissions")
+}
+
+model RankingProfile {
+  id                String                  @id @default(uuid()) @db.Uuid
+  user_id           String                  @unique @db.Uuid
+  visibility        RankingVisibility       @default(public)
+  governance_status RankingGovernanceStatus @default(normal)
+  display_alias     String?                 @db.VarChar(100)
+  admin_note        String?
+  created_at        DateTime                @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime                @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([visibility, governance_status])
+  @@map("ranking_profiles")
+}
+
+model IntegrityProfile {
+  id               String             @id @default(uuid()) @db.Uuid
+  user_id          String             @unique @db.Uuid
+  risk_level       IntegrityRiskLevel @default(low)
+  open_case_count  Int                @default(0)
+  last_flagged_at  DateTime?          @db.Timestamptz(6)
+  last_resolved_at DateTime?          @db.Timestamptz(6)
+  created_at       DateTime           @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime           @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([risk_level, open_case_count])
+  @@map("integrity_profiles")
+}
+
+model IntegrityCase {
+  id          String              @id @default(uuid()) @db.Uuid
+  user_id     String              @db.Uuid
+  status      IntegrityCaseStatus @default(open)
+  summary     String?             @db.VarChar(255)
+  opened_at   DateTime            @default(now()) @db.Timestamptz(6)
+  resolved_at DateTime?           @db.Timestamptz(6)
+  created_at  DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime            @updatedAt @db.Timestamptz(6)
+
+  user               User                     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  integrity_events   IntegrityEvent[]
+  moderation_actions ModerationActionRecord[]
+
+  @@index([user_id, status, opened_at])
+  @@map("integrity_cases")
+}
+
+model IntegrityEvent {
+  id                String             @id @default(uuid()) @db.Uuid
+  user_id           String             @db.Uuid
+  source_event_id   String?            @db.Uuid
+  integrity_case_id String?            @db.Uuid
+  event_type        String             @db.VarChar(100)
+  reason_code       String?            @db.VarChar(100)
+  risk_level        IntegrityRiskLevel @default(low)
+  details           Json?
+  is_resolved       Boolean            @default(false)
+  created_at        DateTime           @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime           @updatedAt @db.Timestamptz(6)
+
+  user           User                    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  source_event   ProgressionSourceEvent? @relation(fields: [source_event_id], references: [id], onDelete: SetNull)
+  integrity_case IntegrityCase?          @relation(fields: [integrity_case_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id, created_at])
+  @@index([integrity_case_id])
+  @@map("integrity_events")
+}
+
+model ModerationActionRecord {
+  id                   String               @id @default(uuid()) @db.Uuid
+  actor_user_id        String?              @db.Uuid
+  target_user_id       String               @db.Uuid
+  source_event_id      String?              @db.Uuid
+  progression_grant_id String?              @db.Uuid
+  integrity_case_id    String?              @db.Uuid
+  season_id            String?              @db.Uuid
+  action_type          ModerationActionType
+  rationale            String?
+  before_state         Json?
+  after_state          Json?
+  created_at           DateTime             @default(now()) @db.Timestamptz(6)
+
+  actor_user        User?                   @relation("moderation_actor", fields: [actor_user_id], references: [id], onDelete: SetNull)
+  target_user       User                    @relation("moderation_target", fields: [target_user_id], references: [id], onDelete: Cascade)
+  source_event      ProgressionSourceEvent? @relation(fields: [source_event_id], references: [id], onDelete: SetNull)
+  progression_grant ProgressionGrantLedger? @relation(fields: [progression_grant_id], references: [id], onDelete: SetNull)
+  integrity_case    IntegrityCase?          @relation(fields: [integrity_case_id], references: [id], onDelete: SetNull)
+  season            SeasonDefinition?       @relation(fields: [season_id], references: [id], onDelete: SetNull)
+
+  @@index([target_user_id, created_at])
+  @@index([actor_user_id, created_at])
+  @@index([action_type, created_at])
+  @@map("moderation_action_records")
+}
+
+enum ProgressionSourceType {
+  workout_session_completed
+  workout_session_invalidated
+  pose_session_finalized
+  pose_session_flagged
+  rep_log_accepted
+  rep_log_rejected
+  weighted_exercise_logged
+  nutrition_log_created
+  nutrition_log_updated
+  nutrition_log_deleted
+  coaching_appointment_completed
+  coaching_appointment_no_show
+  venue_booking_completed
+  venue_booking_no_show
+  ai_chat_message_sent
+  ai_action_completed
+  gym_chat_message_sent
+  milestone_evidence_submitted
+  milestone_evidence_approved
+  milestone_evidence_rejected
+  moderation_action
+}
+
+enum ProgressionSourceStatus {
+  pending
+  applied
+  blocked
+  reduced
+  voided
+  invalidated
+}
+
+enum ProgressionGrantType {
+  xp
+  season_points
+  streak_credit
+  penalty
+}
+
+enum ProgressionGrantStatus {
+  applied
+  voided
+}
+
+enum SeasonStatus {
+  draft
+  active
+  closed
+  archived
+}
+
+enum MilestoneCategory {
+  training
+  consistency
+  season
+  creator
+  governance
+  nutrition
+  coaching
+  booking
+  ai
+  weighted_lifting
+  attendance
+}
+
+enum MilestoneTriggerType {
+  source_event
+  summary_threshold
+  streak
+  manual
+  composite
+}
+
+enum MilestoneProgressStatus {
+  in_progress
+  pending_review
+  rejected
+  unlocked
+  claimed
+}
+
+enum MilestoneDefinitionStatus {
+  draft
+  active
+  archived
+}
+
+enum MilestoneVerificationPolicy {
+  auto
+  manual_required
+  auto_then_review
+  staff_attested
+}
+
+enum MilestoneEvidenceRequirement {
+  none
+  image
+  video
+  image_or_video
+}
+
+enum MilestoneEvidenceType {
+  image
+  video
+}
+
+enum MilestoneEvidenceSubmissionStatus {
+  pending
+  approved
+  rejected
+}
+
+enum RankingVisibility {
+  public
+  anonymous
+  private
+}
+
+enum RankingGovernanceStatus {
+  normal
+  hidden_by_user
+  anonymized_by_user
+  hidden_by_admin
+  disqualified
+}
+
+enum IntegrityRiskLevel {
+  low
+  medium
+  high
+}
+
+enum IntegrityCaseStatus {
+  open
+  under_review
+  resolved_valid
+  resolved_invalid
+  escalated
+}
+
+enum ModerationActionType {
+  manual_exp_grant
+  void_progression_grant
+  restore_progression_grant
+  hide_from_rankings
+  disqualify_active_season
+  resolve_integrity_case_valid
+  resolve_integrity_case_invalid
+}
+
+// =============================================================================
+// S9 — TDEE & NUTRITION
+// =============================================================================
+
+model TdeeProfile {
+  id             String        @id @default(uuid()) @db.Uuid
+  user_id        String        @db.Uuid
+  weight_kg      Decimal       @db.Decimal(5, 2)
+  height_cm      Decimal       @db.Decimal(5, 2)
+  age            Int           @db.SmallInt
+  gender         Gender
+  activity_level ActivityLevel
+  fitness_goal   FitnessGoal
+  bmr_calories   Decimal       @db.Decimal(8, 2)
+  tdee_calories  Decimal       @db.Decimal(8, 2)
+  is_active      Boolean       @default(true)
+  calculated_at  DateTime      @db.Timestamptz(6)
+  created_at     DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime      @updatedAt @db.Timestamptz(6)
+
+  user          User          @relation(fields: [user_id], references: [id])
+  macro_targets MacroTarget[]
+
+  @@index([user_id, is_active])
+  // Partial unique via raw migration:
+  // CREATE UNIQUE INDEX one_active_tdee ON tdee_profiles(user_id) WHERE is_active=true;
+  @@map("tdee_profiles")
+}
+
+model MacroTarget {
+  id              String   @id @default(uuid()) @db.Uuid
+  user_id         String   @db.Uuid
+  tdee_profile_id String   @db.Uuid
+  target_calories Decimal  @db.Decimal(8, 2)
+  protein_g       Decimal  @db.Decimal(6, 2)
+  carbs_g         Decimal  @db.Decimal(6, 2)
+  fat_g           Decimal  @db.Decimal(6, 2)
+  is_active       Boolean  @default(true)
+  created_at      DateTime @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime @updatedAt @db.Timestamptz(6)
+
+  user         User           @relation(fields: [user_id], references: [id])
+  tdee_profile TdeeProfile    @relation(fields: [tdee_profile_id], references: [id])
+  logs         NutritionLog[]
+
+  @@index([user_id, is_active])
+  // Partial unique via raw migration:
+  // CREATE UNIQUE INDEX one_active_macro ON macro_targets(user_id) WHERE is_active=true;
+  @@map("macro_targets")
+}
+
+model NutritionLog {
+  id              String        @id @default(uuid()) @db.Uuid
+  user_id         String        @db.Uuid
+  macro_target_id String?       @db.Uuid
+  log_date        DateTime      @db.Date
+  meal_name       String        @db.VarChar(100)
+  food_item       String        @db.VarChar(255)
+  icon_kind       NutritionIconKind?
+  icon_key        String?       @db.VarChar(100)
+  icon_asset_key  String?       @db.VarChar(500)
+  calories        Decimal       @db.Decimal(8, 2)
+  protein_g       Decimal       @default(0) @db.Decimal(6, 2)
+  carbs_g         Decimal       @default(0) @db.Decimal(6, 2)
+  fat_g           Decimal       @default(0) @db.Decimal(6, 2)
+  quantity        Decimal       @default(1) @db.Decimal(6, 2)
+  unit            NutritionUnit @default(serving)
+  created_at      DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime      @updatedAt @db.Timestamptz(6)
+
+  user         User         @relation(fields: [user_id], references: [id])
+  macro_target MacroTarget? @relation(fields: [macro_target_id], references: [id])
+
+  @@index([user_id, log_date(sort: Desc)])
+  @@index([log_date])
+  @@map("nutrition_logs")
+}
+
+enum NutritionUnit {
+  g
+  kg
+  ml
+  L
+  oz
+  lb
+  cup
+  tbsp
+  tsp
+  serving
+  piece
+}
+
+enum NutritionIconKind {
+  library
+  custom
+}
+
+// =============================================================================
+// S10 — INVENTORY
+// =============================================================================
+
+// ─── RETAIL PRODUCTS ─────────────────────────────────────────────────────────
+
+model RetailProduct {
+  id                      String    @id @default(uuid()) @db.Uuid
+  name                    String    @db.VarChar(255)
+  category                String    @default("other") @db.VarChar(80)
+  description             String?
+  price                   Decimal   @db.Decimal(10, 2)
+  cost                    Decimal   @default(0) @db.Decimal(10, 2)
+  stock_quantity          Int       @default(0)
+  reorder_threshold       Int       @default(10)
+  last_low_stock_alert_at DateTime? @db.Timestamptz(6)
+  image_url               String?   @db.VarChar(500)
+  is_active               Boolean   @default(true)
+  created_at              DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime  @updatedAt @db.Timestamptz(6)
+
+  sale_items SaleTransactionItem[]
+
+  @@index([category, is_active])
+  @@index([is_active])
+  @@index([stock_quantity])
+  @@map("retail_products")
+}
+
+model SaleTransaction {
+  id               String            @id @default(uuid()) @db.Uuid
+  customer_name    String?           @db.VarChar(255)
+  customer_user_id String?           @db.Uuid
+  notes            String?
+  source           SaleSource        @default(manual)
+  total_amount     Decimal           @db.Decimal(10, 2)
+  payment_method   SalePaymentMethod
+  payment_id       String?           @db.Uuid
+  processed_by     String            @db.Uuid
+  status           SaleStatus        @default(pending)
+  created_at       DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime          @updatedAt @db.Timestamptz(6)
+
+  items         SaleTransactionItem[]
+  customer_user User?                 @relation("sale_customer", fields: [customer_user_id], references: [id])
+  staff         User                  @relation("processed_by", fields: [processed_by], references: [id])
+
+  @@index([created_at(sort: Desc)])
+  @@index([customer_user_id])
+  @@index([status])
+  @@map("sale_transactions")
+}
+
+enum SalePaymentMethod {
+  cash
+  paymongo
+}
+
+enum SaleSource {
+  manual
+  mobile
+}
+
+enum SaleStatus {
+  pending
+  completed
+  cancelled
+}
+
+model SaleTransactionItem {
+  id             String   @id @default(uuid()) @db.Uuid
+  transaction_id String   @db.Uuid
+  product_id     String   @db.Uuid
+  quantity       Int
+  unit_price     Decimal  @db.Decimal(10, 2)
+  subtotal       Decimal  @db.Decimal(10, 2)
+  created_at     DateTime @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime @updatedAt @db.Timestamptz(6)
+
+  transaction SaleTransaction @relation(fields: [transaction_id], references: [id], onDelete: Cascade)
+  product     RetailProduct   @relation(fields: [product_id], references: [id])
+
+  @@index([transaction_id])
+  @@index([product_id])
+  @@map("sale_transaction_items")
+}
+
+// ─── EQUIPMENT TRACKING ──────────────────────────────────────────────────────
+
+model GymEquipmentItem {
+  id               String   @id @default(uuid()) @db.Uuid
+  name             String   @db.VarChar(255)
+  description      String?
+  image_url        String?  @db.VarChar(500)
+  quantity_total   Int
+  quantity_current Int
+  quantity_maintenance Int?
+  quantity_broken     Int?
+  quantity_missing    Int?
+  unit             String   @default("units") @db.VarChar(50)
+  is_active        Boolean  @default(true)
+  created_at       DateTime @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime @updatedAt @db.Timestamptz(6)
+
+  write_offs EquipmentWriteOff[]
+  layout_nodes GymEquipment[]
+
+  @@index([is_active])
+  @@map("gym_equipment_items")
+}
+
+model EquipmentWriteOff {
+  id              String   @id @default(uuid()) @db.Uuid
+  equipment_id    String   @db.Uuid
+  quantity_before Int
+  quantity_set_to Int
+  quantity_lost   Int
+  reason          String
+  performed_by    String   @db.Uuid
+  created_at      DateTime @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime @updatedAt @db.Timestamptz(6)
+
+  equipment GymEquipmentItem @relation(fields: [equipment_id], references: [id])
+  performer User             @relation(fields: [performed_by], references: [id])
+
+  @@index([equipment_id, created_at(sort: Desc)])
+  @@map("equipment_write_offs")
+}
+
+// =============================================================================
+// S11 — AI & CHATBOT
+// =============================================================================
+
+model AiChatSession {
+  id               String      @id @default(uuid()) @db.Uuid
+  user_id          String      @db.Uuid
+  context_type     ChatContext
+  title            String?     @db.VarChar(255)
+  is_active        Boolean     @default(true)
+  last_activity_at DateTime    @db.Timestamptz(6)
+  created_at       DateTime    @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime    @updatedAt @db.Timestamptz(6)
+
+  user         User               @relation(fields: [user_id], references: [id])
+  messages     AiChatMessage[]
+  interactions AiInteractionLog[]
+
+  // Partial unique via raw migration:
+  // CREATE UNIQUE INDEX one_active_ai_session_per_context
+  //   ON ai_chat_sessions(user_id, context_type) WHERE is_active=true;
+  @@index([user_id, is_active])
+  @@map("ai_chat_sessions")
+}
+
+enum ChatContext {
+  general
+  tdee_adjustment
+  training_plan
+  nutrition
+}
+
+model AiChatMessage {
+  id               String   @id @default(uuid()) @db.Uuid
+  session_id       String   @db.Uuid
+  role             ChatRole
+  content          String
+  action_triggered String?  @db.VarChar(100)
+  created_at       DateTime @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime @updatedAt @db.Timestamptz(6)
+
+  session AiChatSession @relation(fields: [session_id], references: [id], onDelete: Cascade)
+
+  @@index([session_id, created_at(sort: Desc)])
+  @@map("ai_chat_messages")
+}
+
+enum ChatRole {
+  user
+  assistant
+}
+
+model AiInteractionLog {
+  id               String          @id @default(uuid()) @db.Uuid
+  user_id          String          @db.Uuid
+  session_id       String?         @db.Uuid
+  interaction_type InteractionType
+  request_payload  Json
+  response_payload Json?
+  action_triggered String?         @db.VarChar(100)
+  action_result    Json?
+  latency_ms       Int?
+  model_used       String?         @db.VarChar(100)
+  token_count      Int?
+  error            String?
+  created_at       DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime        @updatedAt @db.Timestamptz(6)
+
+  user    User           @relation(fields: [user_id], references: [id])
+  session AiChatSession? @relation(fields: [session_id], references: [id])
+
+  @@index([user_id, interaction_type])
+  @@index([created_at(sort: Desc)])
+  @@map("ai_interaction_logs")
+}
+
+enum InteractionType {
+  chat
+  plan_generation
+  tdee_adjustment
+  pose_analysis
+}
+
+// =============================================================================
+// S12 — NOTIFICATIONS
+// =============================================================================
+
+model Notification {
+  id         String              @id @default(uuid()) @db.Uuid
+  user_id    String              @db.Uuid
+  type       NotificationType
+  channel    NotificationChannel
+  title      String              @db.VarChar(255)
+  body       String
+  data       Json?
+  dedupe_key String?              @unique @db.VarChar(255)
+  status     NotificationStatus  @default(pending)
+  sent_at    DateTime?           @db.Timestamptz(6)
+  read_at    DateTime?           @db.Timestamptz(6)
+  error      String?
+  created_at DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at DateTime            @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, channel, status])
+  @@index([user_id, read_at])
+  @@map("notifications")
+}
+
+enum NotificationType {
+  subscription_expiring
+  subscription_expired
+  payment_confirmed
+  payment_failed
+  booking_confirmed
+  booking_cancelled
+  booking_reminder
+  booking_no_show
+  appointment_confirmed
+  appointment_reminder
+  appointment_completed
+  appointment_cancelled
+  rank_up
+  low_stock
+  equipment_write_off
+  ai_session_archived
+  system
+}
+
+enum NotificationChannel {
+  in_app
+  email
+  sms
+}
+
+enum NotificationStatus {
+  pending
+  sent
+  failed
+  read
+}
+
+// =============================================================================
+// S13 — GYM LAYOUT & ANALYTICS
+// NOTE: GymEquipment (2D canvas positions) is SEPARATE from
+//       GymEquipmentItem in S10 (count-only tracking)
+// =============================================================================
+
+model GymEquipment {
+  id          String          @id @default(uuid()) @db.Uuid
+  name        String          @db.VarChar(255)
+  type        String          @db.VarChar(100)
+  floor_id    String          @default("floor-1") @db.VarChar(20)
+  inventory_item_id String?   @db.Uuid
+  venue_id    String?         @db.Uuid
+  grid_width  Int?
+  grid_height Int?
+  grid_column Int?
+  grid_row    Int?
+  position_x  Decimal         @db.Decimal(8, 2)
+  position_y  Decimal         @db.Decimal(8, 2)
+  status      EquipmentStatus @default(available)
+  icon_key    String?         @db.VarChar(100)
+  is_active   Boolean         @default(true)
+  created_at  DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime        @updatedAt @db.Timestamptz(6)
+
+  inventory_item GymEquipmentItem? @relation(fields: [inventory_item_id], references: [id], onDelete: SetNull)
+  venue          Amenity?          @relation(fields: [venue_id], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([is_active])
+  @@index([floor_id, grid_column, grid_row])
+  @@index([inventory_item_id, is_active])
+  @@index([venue_id, is_active])
+  @@map("gym_equipment")
+}
+
+enum EquipmentStatus {
+  available
+  occupied
+  maintenance
+  broken
+  missing
+}
+
+// =============================================================================
+// S14 — AUDITING
+// =============================================================================
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  user_id    String?  @db.Uuid // who performed the action (null = system)
+  action     String   @db.VarChar(100) // e.g. USER_BANNED, PAYMENT_VERIFIED
+  entity     String   @db.VarChar(100) // e.g. User, Payment, Subscription
+  entity_id  String   @db.VarChar(100) // UUID of the affected record
+  before     Json? // state snapshot before change
+  after      Json? // state snapshot after change
+  ip_address String?  @db.VarChar(45)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+
+  user User? @relation(fields: [user_id], references: [id], onDelete: SetNull)
+
+  @@index([entity, entity_id])
+  @@index([user_id, created_at(sort: Desc)])
+  @@index([created_at(sort: Desc)])
+  @@map("audit_logs")
+}
+
+// =============================================================================
+// S16 â€” AI CHATBOT
+// =============================================================================
+
+model GymChatSession {
+  id               String   @id @default(uuid()) @db.Uuid
+  user_id          String   @db.Uuid
+  title            String?  @db.VarChar(255)
+  is_active        Boolean  @default(true)
+  last_activity_at DateTime @db.Timestamptz(6)
+  created_at       DateTime @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime @updatedAt @db.Timestamptz(6)
+
+  user         User                    @relation(fields: [user_id], references: [id])
+  messages     GymChatMessage[]
+  interactions GymChatInteractionLog[]
+
+  @@index([user_id, is_active])
+  @@map("gym_chat_sessions")
+}
+
+model GymChatMessage {
+  id               String      @id @default(uuid()) @db.Uuid
+  session_id       String      @db.Uuid
+  role             GymChatRole
+  content          String
+  grounded_sources Json?
+  out_of_scope     Boolean     @default(false)
+  created_at       DateTime    @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime    @updatedAt @db.Timestamptz(6)
+
+  session GymChatSession @relation(fields: [session_id], references: [id], onDelete: Cascade)
+
+  @@index([session_id, created_at(sort: Desc)])
+  @@map("gym_chat_messages")
+}
+
+enum GymChatRole {
+  user
+  assistant
+  system
+}
+
+model GymChatInteractionLog {
+  id                String   @id @default(uuid()) @db.Uuid
+  user_id           String   @db.Uuid
+  session_id        String?  @db.Uuid
+  request_payload   Json
+  grounding_payload Json?
+  response_payload  Json?
+  latency_ms        Int?
+  model_used        String?  @db.VarChar(100)
+  token_count       Int?
+  out_of_scope      Boolean  @default(false)
+  error             String?
+  created_at        DateTime @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime @updatedAt @db.Timestamptz(6)
+
+  user    User            @relation(fields: [user_id], references: [id])
+  session GymChatSession? @relation(fields: [session_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id, created_at(sort: Desc)])
+  @@map("gym_chat_interaction_logs")
+}
+
+model GymOperatingHour {
+  id          String   @id @default(uuid()) @db.Uuid
+  day_of_week Int      @db.SmallInt
+  opens_at    DateTime @db.Time(0)
+  closes_at   DateTime @db.Time(0)
+  is_closed   Boolean  @default(false)
+  label       String?  @db.VarChar(100)
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([day_of_week])
+  @@map("gym_operating_hours")
+}
+
+model GymSpecialSchedule {
+  id           String    @id @default(uuid()) @db.Uuid
+  starts_on    DateTime  @db.Date
+  ends_on      DateTime  @db.Date
+  opens_at     DateTime? @db.Time(0)
+  closes_at    DateTime? @db.Time(0)
+  is_closed    Boolean   @default(false)
+  reason       String    @db.VarChar(255)
+  pricing_note String?
+  is_active    Boolean   @default(true)
+  created_at   DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime  @updatedAt @db.Timestamptz(6)
+
+  @@index([starts_on, ends_on, is_active])
+  @@map("gym_special_schedules")
+}
+
+model GymPromotion {
+  id           String   @id @default(uuid()) @db.Uuid
+  title        String   @db.VarChar(255)
+  description  String
+  promo_code   String?  @db.VarChar(100)
+  starts_at    DateTime @db.Timestamptz(6)
+  ends_at      DateTime @db.Timestamptz(6)
+  pricing_note String?
+  is_active    Boolean  @default(true)
+  created_at   DateTime @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([starts_at, ends_at, is_active])
+  @@map("gym_promotions")
+}
+
+model GymFaqEntry {
+  id         String         @id @default(uuid()) @db.Uuid
+  category   GymFaqCategory
+  question   String         @db.VarChar(255)
+  answer     String
+  keywords   Json?
+  sort_order Int            @default(0) @db.SmallInt
+  is_active  Boolean        @default(true)
+  created_at DateTime       @default(now()) @db.Timestamptz(6)
+  updated_at DateTime       @updatedAt @db.Timestamptz(6)
+
+  @@index([category, is_active, sort_order])
+  @@map("gym_faq_entries")
+}
+
+enum GymFaqCategory {
+  general
+  hours
+  rates
+  promo
+  membership
+  amenities
+  coaching
+  training
+  nutrition
+  rules
+}
+
+// =============================================================================
+// S17 — BUSINESS ANALYTICS
+// =============================================================================
+
+model BusinessInsightRun {
+  id              String        @id @default(uuid()) @db.Uuid
+  requested_by    String?       @db.Uuid
+  focus           InsightFocus
+  period          InsightPeriod
+  start_date      DateTime      @db.Date
+  end_date        DateTime      @db.Date
+  request_payload Json
+  insight_payload Json
+  model_used      String?       @db.VarChar(100)
+  token_count     Int?
+  latency_ms      Int?
+  created_at      DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime      @updatedAt @db.Timestamptz(6)
+
+  requester User? @relation(fields: [requested_by], references: [id], onDelete: SetNull)
+
+  @@index([created_at(sort: Desc)])
+  @@index([requested_by, created_at(sort: Desc)])
+  @@map("business_insight_runs")
+}
+
+enum InsightFocus {
+  overview
+  revenue
+  attendance
+  membership
+  coaching
+  inventory
+}
+
+enum InsightPeriod {
+  daily
+  weekly
+  monthly
+  yearly
+  custom
+}
+
+// =============================================================================
+// RAW SQL MIGRATIONS — run after prisma migrate dev
+// =============================================================================
+// CREATE UNIQUE INDEX subscriptions_one_active_per_user
+//   ON subscriptions(user_id)
+//   WHERE status IN ('active','past_due','pending_payment');
+//
+// CREATE UNIQUE INDEX one_active_plan_per_user
+//   ON training_plans(user_id)
+//   WHERE is_active = true AND is_template = false;
+//
+// CREATE UNIQUE INDEX one_active_tdee
+//   ON tdee_profiles(user_id) WHERE is_active = true;
+//
+// CREATE UNIQUE INDEX one_active_macro
+//   ON macro_targets(user_id) WHERE is_active = true;
+//
+// CREATE UNIQUE INDEX one_active_ai_session_per_context
+//   ON ai_chat_sessions(user_id, context_type) WHERE is_active = true;
+//
+// CREATE UNIQUE INDEX coach_slot_unique
+//   ON coach_availability_slots(coach_id, day_of_week, start_time)
+//   WHERE is_active = true;
+//
+// CREATE UNIQUE INDEX coach_client_active_unique
+//   ON coach_client_relationships(coach_id, member_id)
+//   WHERE status IN ('pending','active');
+//
+// CREATE UNIQUE INDEX exercise_log_set_unique
+//   ON exercise_logs(session_id, exercise_id, set_number);

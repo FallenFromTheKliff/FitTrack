@@ -1,0 +1,12 @@
+Total messages: 11 (Errors: 9, Warnings: 0)
+Returning 9 messages for level "error"
+
+[ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:3001/v1/bookings/amenity?limit=100&start_date=2026-08-01&end_date=2026-08-31:0
+[ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:3001/v1/bookings/amenities:0
+[ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:3001/v1/bookings/amenity?limit=100:0
+[ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:3001/v1/bookings/amenity?limit=100&start_date=2026-08-01&end_date=2026-08-31:0
+[ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:3001/v1/bookings/amenities:0
+[ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:3001/v1/bookings/amenity?limit=100:0
+[ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:3001/v1/bookings/amenity?limit=100&start_date=2026-08-01&end_date=2026-08-31:0
+[ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:3001/v1/bookings/amenities:0
+[ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:3001/v1/bookings/amenity?limit=100:0

@@ -1,0 +1,29 @@
+                        -HC:\FitTrack_rebuilt_20260330_212527\node_modules\.pnpm\@shopif_b76e8d191a057cbe1823d097381fb57a\node_modules\@shopify\react-native-skia\android
+-DCMAKE_SYSTEM_NAME=Android
+-DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+-DCMAKE_SYSTEM_VERSION=24
+-DANDROID_PLATFORM=android-24
+-DANDROID_ABI=armeabi-v7a
+-DCMAKE_ANDROID_ARCH_ABI=armeabi-v7a
+-DANDROID_NDK=C:\Users\HOUSTON\AppData\Local\Android\Sdk\ndk\27.1.12297006
+-DCMAKE_ANDROID_NDK=C:\Users\HOUSTON\AppData\Local\Android\Sdk\ndk\27.1.12297006
+-DCMAKE_TOOLCHAIN_FILE=C:\Users\HOUSTON\AppData\Local\Android\Sdk\ndk\27.1.12297006\build\cmake\android.toolchain.cmake
+-DCMAKE_CXX_FLAGS=-fexceptions -frtti -std=c++1y -DONANDROID
+-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=C:\FitTrack_rebuilt_20260330_212527\node_modules\.pnpm\@shopif_b76e8d191a057cbe1823d097381fb57a\node_modules\@shopify\react-native-skia\android\build\intermediates\cxx\RelWithDebInfo\6k1341l6\obj\armeabi-v7a
+-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=C:\FitTrack_rebuilt_20260330_212527\node_modules\.pnpm\@shopif_b76e8d191a057cbe1823d097381fb57a\node_modules\@shopify\react-native-skia\android\build\intermediates\cxx\RelWithDebInfo\6k1341l6\obj\armeabi-v7a
+-DCMAKE_BUILD_TYPE=RelWithDebInfo
+-DCMAKE_FIND_ROOT_PATH=C:\FitTrack_rebuilt_20260330_212527\.cxx\rnskia\RelWithDebInfo\6k1341l6\prefab\armeabi-v7a\prefab
+-BC:\FitTrack_rebuilt_20260330_212527\.cxx\rnskia\RelWithDebInfo\6k1341l6\armeabi-v7a
+-GNinja
+-DCMAKE_OBJECT_PATH_MAX=1024
+-DCMAKE_MAKE_PROGRAM=C:/Users/HOUSTON/AppData/Local/Android/Sdk/cmake/3.31.6/bin/ninja.exe
+-DANDROID_STL=c++_shared
+-DREACT_NATIVE_VERSION=83
+-DREACT_NATIVE_DIR=C:\FitTrack_rebuilt_20260330_212527\node_modules\.pnpm\@shopif_b76e8d191a057cbe1823d097381fb57a\node_modules\react-native
+-DNODE_MODULES_DIR=C:\FitTrack_rebuilt_20260330_212527\node_modules\.pnpm\@shopif_b76e8d191a057cbe1823d097381fb57a\node_modules
+-DPREBUILT_DIR=C:\FitTrack_rebuilt_20260330_212527\node_modules\.pnpm\@shopif_b76e8d191a057cbe1823d097381fb57a\node_modules\@shopify\react-native-skia\android\build/react-native-0*/jni
+-DSKIA_LIBS_PATH=C:\FitTrack_rebuilt_20260330_212527\node_modules\.pnpm\@shopif_b76e8d191a057cbe1823d097381fb57a\node_modules\@shopify\react-native-skia\android/../libs/android
+-DSK_GRAPHITE=OFF
+-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON
+                        Build command args: []
+                        Version: 2

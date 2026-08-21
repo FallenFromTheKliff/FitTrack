@@ -1,0 +1,43 @@
+{
+  "buildFiles": [
+    "C:\\FitTrack_rebuilt_20260330_212527\\node_modules\\.pnpm\\react-n_cc5dcfc983295b0eda6c7c8194f36099\\node_modules\\react-native-worklets\\android\\CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "C:\\Users\\HOUSTON\\AppData\\Local\\Android\\Sdk\\cmake\\3.31.6\\bin\\ninja.exe",
+      "-C",
+      "C:\\FitTrack_rebuilt_20260330_212527\\.cxx\\rnw\\RelWithDebInfo\\4wm4g186\\arm64-v8a",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "C:\\Users\\HOUSTON\\AppData\\Local\\Android\\Sdk\\cmake\\3.31.6\\bin\\ninja.exe",
+    "-C",
+    "C:\\FitTrack_rebuilt_20260330_212527\\.cxx\\rnw\\RelWithDebInfo\\4wm4g186\\arm64-v8a",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {
+    "worklets::@6890427a1f51a3e7e1df": {
+      "toolchain": "toolchain",
+      "abi": "arm64-v8a",
+      "artifactName": "worklets",
+      "output": "C:\\FitTrack_rebuilt_20260330_212527\\node_modules\\.pnpm\\react-n_cc5dcfc983295b0eda6c7c8194f36099\\node_modules\\react-native-worklets\\android\\build\\intermediates\\cxx\\RelWithDebInfo\\4wm4g186\\obj\\arm64-v8a\\libworklets.so",
+      "runtimeFiles": [
+        "C:\\Users\\HOUSTON\\.gradle\\caches\\9.0.0\\transforms\\5e07a7917399250df5d3c6fa58687b7f\\transformed\\react-android-0.83.4-release\\prefab\\modules\\reactnative\\libs\\android.arm64-v8a\\libreactnative.so",
+        "C:\\Users\\HOUSTON\\.gradle\\caches\\9.0.0\\transforms\\5e07a7917399250df5d3c6fa58687b7f\\transformed\\react-android-0.83.4-release\\prefab\\modules\\jsi\\libs\\android.arm64-v8a\\libjsi.so",
+        "C:\\Users\\HOUSTON\\.gradle\\caches\\9.0.0\\transforms\\49ded6a95e2e1ac4b365819611b55b49\\transformed\\fbjni-0.7.0\\prefab\\modules\\fbjni\\libs\\android.arm64-v8a\\libfbjni.so",
+        "C:\\Users\\HOUSTON\\.gradle\\caches\\9.0.0\\transforms\\17b10e9e10d2424ccdc6bd1700ac9ef0\\transformed\\hermes-android-0.14.1-release\\prefab\\modules\\hermesvm\\libs\\android.arm64-v8a\\libhermesvm.so"
+      ]
+    }
+  },
+  "toolchains": {
+    "toolchain": {
+      "cCompilerExecutable": "C:\\Users\\HOUSTON\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang.exe",
+      "cppCompilerExecutable": "C:\\Users\\HOUSTON\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe"
+    }
+  },
+  "cFileExtensions": [],
+  "cppFileExtensions": [
+    "cpp"
+  ]
+}

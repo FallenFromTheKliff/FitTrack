@@ -1,0 +1,79 @@
+{
+  "inputs": [
+    {
+      "type": "promptString",
+      "id": "github_mcp_pat_v2",
+      "description": "GitHub Personal Access Token",
+      "password": true
+    }
+  ],
+  "servers": {
+    "Figma": {
+      "type": "http",
+      "url": "https://mcp.figma.com/mcp"
+    },
+    "GitHub": {
+      "type": "http",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "headers": {
+        "Authorization": "Bearer ${input:github_mcp_pat_v2}"
+      }
+    },
+    "Prisma Remote": {
+      "type": "http",
+      "url": "https://mcp.prisma.io/mcp"
+    },
+    "FitTrack Playwright": {
+      "type": "stdio",
+      "command": "pnpm.cmd",
+      "args": [
+        "exec",
+        "playwright-mcp",
+        "--config",
+        "${workspaceFolder}\\.playwright-mcp.json",
+        "--grant-permissions",
+        "camera",
+        "microphone"
+      ],
+      "env": {
+        "PLAYWRIGHT_BROWSERS_PATH": "0"
+      }
+    },
+    "FitTrack Prisma Local": {
+      "type": "stdio",
+      "command": "pnpm.cmd",
+      "args": [
+        "--dir",
+        "${workspaceFolder}\\apps\\api",
+        "exec",
+        "prisma",
+        "mcp"
+      ]
+    },
+    "FitTrack Swagger": {
+      "type": "stdio",
+      "command": "pnpm.cmd",
+      "args": [
+        "--dir",
+        "${workspaceFolder}",
+        "exec",
+        "swagger-mcp"
+      ],
+      "env": {
+        "API_BASE_URL": "http://127.0.0.1:3001",
+        "API_DOCS_URL": "http://127.0.0.1:3001/v1/docs-json"
+      }
+    },
+    "Context7 Docs": {
+      "type": "http",
+      "url": "https://mcp.context7.com/mcp"
+    },
+    "shadcn": {
+      "command": "npx",
+      "args": [
+        "shadcn@3.0.0",
+        "mcp"
+      ]
+    }
+  }
+}

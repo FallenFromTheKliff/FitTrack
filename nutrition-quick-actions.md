@@ -1,0 +1,127 @@
+- generic [ref=e19]:
+  - generic [ref=e20]:
+    - img [ref=e22] [cursor=pointer]
+    - generic [ref=e23]:
+      - generic [ref=e24]: Nutrition
+      - generic [ref=e25]: Fuel your body right!
+    - generic [ref=e26]:
+      - button "Open page help" [ref=e27] [cursor=pointer]:
+        - img [ref=e28]
+      - button "Open notifications" [ref=e31] [cursor=pointer]:
+        - img [ref=e32]
+  - generic [ref=e41]:
+    - generic [ref=e44]:
+      - generic [ref=e45]:
+        - generic [ref=e46]:
+          - generic [ref=e47]: MAINTENANCE
+          - generic [ref=e48]: TODAY'S CALORIES
+        - img [ref=e50]
+      - generic [ref=e52]: "7003"
+      - generic [ref=e53]: / 2365 kcal
+      - generic [ref=e56]: 4638 kcal over target
+      - generic [ref=e57]:
+        - img [ref=e58]
+        - generic [ref=e63]: Use the FAB to update this target.
+    - generic [ref=e66]:
+      - generic [ref=e67]:
+        - generic [ref=e68]: Target Status
+        - generic [ref=e70]:
+          - generic [ref=e71]:
+            - generic:
+              - img [ref=e74]
+              - generic [ref=e78]:
+                - generic [ref=e79]:
+                  - generic [ref=e80]: Daily Target
+                  - generic [ref=e83]: Over target
+                - generic [ref=e84]: 100% of today's target logged.
+          - generic [ref=e85]:
+            - generic:
+              - img [ref=e88]
+              - generic [ref=e90]:
+                - generic [ref=e91]:
+                  - generic [ref=e92]: Recent Adherence
+                  - generic [ref=e95]: 296% Above target
+                - generic [ref=e96]: 7003 kcal logged against 2365 kcal today.
+          - generic [ref=e97]:
+            - generic:
+              - img [ref=e99]
+              - generic [ref=e104]:
+                - generic [ref=e105]:
+                  - generic [ref=e106]: Target History
+                  - generic [ref=e109]: +255 kcal
+                - generic [ref=e110]: Last calculated Aug 9, 2026. 2 saved calculations on record.
+      - generic [ref=e111]:
+        - generic [ref=e112]: Macro Breakdown
+        - generic [ref=e114]:
+          - 'generic "Protein: 98 grams of 104 grams. On target, 94 percent of target." [ref=e115]':
+            - generic [ref=e116]:
+              - generic [ref=e118]: Protein
+              - generic [ref=e119]: 98g / 104g
+            - generic [ref=e122]: 6g remaining | On target (94%)
+          - 'generic "Carbs: 152 grams of 339 grams. Below target, 45 percent of target." [ref=e123]':
+            - generic [ref=e124]:
+              - generic [ref=e126]: Carbs
+              - generic [ref=e127]: 152g / 339g
+            - generic [ref=e130]: 187g remaining | Below target (45%)
+          - 'generic "Fats: 41 grams of 66 grams. Below target, 62 percent of target." [ref=e131]':
+            - generic [ref=e132]:
+              - generic [ref=e134]: Fats
+              - generic [ref=e135]: 41g / 66g
+            - generic [ref=e138]: 25g remaining | Below target (62%)
+      - generic [ref=e139]:
+        - generic [ref=e140]:
+          - generic [ref=e141]: Today's Nutrition Log
+          - button "History" [ref=e143] [cursor=pointer]:
+            - img [ref=e144]
+            - generic [ref=e148]: History
+        - generic [ref=e149]:
+          - generic [ref=e151]:
+            - img [ref=e152]
+            - textbox "Search today's meals" [ref=e155]:
+              - /placeholder: Search today's meals...
+          - generic [ref=e157]:
+            - button "Edit Breakfast, Garlic rice, eggs, and chicken tocino" [ref=e159] [cursor=pointer]:
+              - generic "coffee meal icon" [ref=e161]:
+                - img [ref=e162]
+              - generic [ref=e164]:
+                - generic [ref=e165]: Breakfast - Garlic rice, eggs, and chicken tocino
+                - generic [ref=e166]: 6202 kcal | P 38 C 72 F 18 | 1 cup
+              - img [ref=e167]
+            - button "Edit Dinner, Grilled tuna, rice, and ensalada" [ref=e170] [cursor=pointer]:
+              - generic "beef meal icon" [ref=e172]:
+                - img [ref=e173]
+              - generic [ref=e177]:
+                - generic [ref=e178]: Dinner - Grilled tuna, rice, and ensalada
+                - generic [ref=e179]: 590 kcal | P 48 C 55 F 16 | 1 cup
+              - img [ref=e180]
+            - button "Edit Snack, Runtime nutrition check updated" [ref=e183] [cursor=pointer]:
+              - generic "cookie meal icon" [ref=e185]:
+                - img [ref=e186]
+              - generic [ref=e188]:
+                - generic [ref=e189]: Snack - Runtime nutrition check updated
+                - generic [ref=e190]: 211 kcal | P 12 C 25 F 7 | 1 serving
+              - img [ref=e191]
+            - generic [ref=e195]: End of today's meals
+          - generic [ref=e196]:
+            - img [ref=e197]
+            - generic [ref=e199]: Use the FAB to log meals.
+  - button "Close quick actions menu" [active] [ref=e549] [cursor=pointer]:
+    - generic [ref=e202]:
+      - img [ref=e204]
+      - img [ref=e206]
+  - generic [ref=e550]:
+    - button "BrodigyAI. Nutrition chat" [ref=e552] [cursor=pointer]:
+      - img [ref=e554]
+      - generic [ref=e557]:
+        - generic [ref=e558]: BrodigyAI
+        - generic [ref=e559]: Nutrition chat
+    - button "Log Meal. Add today's food" [ref=e561] [cursor=pointer]:
+      - img [ref=e563]
+      - generic [ref=e564]:
+        - generic [ref=e565]: Log Meal
+        - generic [ref=e566]: Add today's food
+    - button "Target. Update calories" [ref=e568] [cursor=pointer]:
+      - img [ref=e570]
+      - generic [ref=e574]:
+        - generic [ref=e575]: Target
+        - generic [ref=e576]: Update calories

@@ -1,0 +1,72 @@
+import React, { type ReactNode } from "react";
+import { View } from "react-native";
+import type { StyleProp, ViewStyle } from "react-native";
+import Animated, { useAnimatedStyle } from "react-native-reanimated";
+
+import { useTheme } from "@/contexts/ThemeContext";
+import { useThemeTransitionAnim } from "@/hooks/animations/core/useThemeTransition";
+import { makeFitSectionStyles } from "@/styles/components/FitStyles";
+
+import { AnimatedFitText } from "@/components/fit/FitText";
+
+type Props = {
+  heading: string;
+  children: ReactNode;
+  bare?: boolean;
+  cardStyle?: StyleProp<ViewStyle>;
+  headerAccessory?: ReactNode;
+  subtitle?: string;
+};
+
+export default React.memo(function FitSection({
+  heading,
+  children,
+  bare = false,
+  cardStyle,
+  headerAccessory,
+  subtitle
+}: Props) {
+  const { colors } = useTheme();
+  const { ic } = useThemeTransitionAnim();
+  const s = React.useMemo(() => makeFitSectionStyles(colors), [colors]);
+
+  const headingAnimStyle = useAnimatedStyle(() => ({ color: ic.value.textMuted }));
+  const subtitleAnimStyle = useAnimatedStyle(() => ({ color: ic.value.textMuted }));
+  const cardAnimStyle = useAnimatedStyle(() => ({
+    backgroundColor: ic.value.surface,
+    borderColor: ic.value.border
+  }));
+
+  return (
+    <View style={s.section}>
+      {heading.length > 0 && (
+        headerAccessory ? (
+          <View style={s.headerRow}>
+            <AnimatedFitText style={[s.heading, s.headingInline, headingAnimStyle]}>
+              {heading}
+            </AnimatedFitText>
+            <View style={s.headerAccessory}>
+              {headerAccessory}
+            </View>
+          </View>
+        ) : (
+          <AnimatedFitText style={[s.heading, headingAnimStyle]}>
+            {heading}
+          </AnimatedFitText>
+        )
+      )}
+      {subtitle ? (
+        <AnimatedFitText style={[s.subtitle, subtitleAnimStyle]}>
+          {subtitle}
+        </AnimatedFitText>
+      ) : null}
+      {bare ? (
+        <View>{children}</View>
+      ) : (
+        <Animated.View style={[s.card, cardAnimStyle, cardStyle as ViewStyle]}>
+          {children}
+        </Animated.View>
+      )}
+    </View>
+  );
+});

@@ -1,0 +1,11 @@
+{
+  "name": "@fittrack/app-config",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "dependencies": {
+    "@fittrack/api-client": "workspace:*",
+    "@fittrack/utils": "workspace:*"
+  }
+}

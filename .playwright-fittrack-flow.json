@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "artifactsDir": ".artifacts/playwright-mcp",
+  "requirePlaywrightMcp": true,
+  "capture": {
+    "networkRequests": true,
+    "consoleMessages": true,
+    "trace": true,
+    "failureScreenshot": true
+  },
+  "apps": {
+    "web": {
+      "baseUrl": "http://127.0.0.1:8080",
+      "loginRoute": "/login",
+      "memberLoginRoute": "/member-login",
+      "defaultProtectedRoute": "/dashboard",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "allowedRoles": ["ADMIN", "STAFF", "COACH", "USER"],
+      "deniedRoles": [],
+      "roleFallbackRoutes": {
+        "ADMIN": "/analytics",
+        "STAFF": "/accounts",
+        "COACH": "/dashboard",
+        "USER": "/dashboard"
+      },
+      "notes": "Use the team login route for ADMIN, STAFF, and COACH. Use memberLoginRoute for USER. Verify role-specific page gates through Playwright network capture when touched."
+    },
+    "mobile": {
+      "baseUrl": "http://127.0.0.1:8081",
+      "loginRoute": "/login",
+      "defaultProtectedRoute": "/home",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "mode": "expo-web",
+      "allowedRoles": ["USER", "COACH"],
+      "deniedRoles": ["ADMIN", "STAFF"],
+      "roleFallbackRoutes": {
+        "USER": "/home",
+        "COACH": "/home"
+      },
+      "notes": "Use Expo web for Playwright verification and treat it as the browser-driven mobile surface. ADMIN and STAFF should be rejected by the mobile role gate."
+    }
+  },
+  "verificationPolicy": {
+    "requireWebFlow": true,
+    "requireMobileFlow": true,
+    "requireTouchedEndpointEvidence": true,
+    "requireNegativePathWhenRoleSensitive": true
+  }
+}

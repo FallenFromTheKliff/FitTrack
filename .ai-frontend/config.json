@@ -1,0 +1,70 @@
+{
+  "language": "typescript",
+  "frameworks": ["nextjs", "expo"],
+  "monorepo": "turborepo",
+  "rules": [
+    ".ai-frontend/agent.md",
+    ".ai-frontend/goals-mode.md",
+    ".ai-frontend/context-recovery.md",
+    ".ai-frontend/AI_CONTEXT.md",
+    ".ai-frontend/monorepo.md",
+    ".ai-frontend/ui-ux-workflow.md",
+    ".ai-frontend/style.md",
+    ".ai-frontend/context-protection.md",
+    ".ai-frontend/component-rules.md",
+    ".ai-frontend/performance.md"
+  ],
+  "tools": ["filesystem", "git", "search", "serena", "exa", "playwright", "chrome-devtools", "figma", "notion", "github", "swagger"],
+  "toolPolicy": {
+    "defaultAllowed": ["filesystem", "git", "search"],
+    "conditional": ["exa", "swagger"],
+    "explicitOnly": ["serena", "playwright", "chrome-devtools", "figma", "notion", "github"],
+    "forbiddenDuringRuleEditing": ["docker", "dev-server", "android-emulator", "browser-screenshots"]
+  },
+  "mcpPrecision": {
+    "default": "local-static-first",
+    "requireNamedQuestionBeforeMcp": true,
+    "maxHeavyMcpLanesPerPhase": 1,
+    "stopMcpAfterQuestionAnswered": true,
+    "neverUseMcpForFileOnlyAudits": true,
+    "preferFocusedTargets": true
+  },
+  "runtimeBudget": {
+    "maxActiveAppSurfaces": 1,
+    "maxVerificationIterations": 3,
+    "maxScreenshotsPerIteration": 1,
+    "allowAndroidEmulatorByDefault": false,
+    "allowFullMonorepoBuildByDefault": false,
+    "allowDockerByDefault": false,
+    "preferFocusedCommands": true,
+    "cleanupStartedProcesses": true
+  },
+  "apps": {
+    "mobile": {
+      "path": "apps/mobile",
+      "framework": "expo",
+      "orientation": "member-facing",
+      "router": "expo-router",
+      "devPort": 8081
+    },
+    "web": {
+      "path": "apps/web",
+      "framework": "nextjs",
+      "orientation": "admin-staff-facing",
+      "router": "next-app-router",
+      "devPort": 8080
+    }
+  },
+  "contractSources": {
+    "primary": ["packages/api-client", "packages/query", "packages/app-core", "packages/types", "packages/validators"],
+    "supporting": ["Notion FITTRACK: Backup Log when explicitly requested", "Swagger MCP when runtime API truth is needed"],
+    "backendEdits": "forbidden unless explicitly requested"
+  },
+  "restrictions": {
+    "backend_changes": false,
+    "context_crud_modification": false,
+    "javascript_files": false,
+    "performance_regression": false,
+    "cross_app_style_bleed": false
+  }
+}

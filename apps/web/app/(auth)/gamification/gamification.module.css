@@ -1,0 +1,354 @@
+.adminShell {
+  --gm-space-1: 4px;
+  --gm-space-2: 8px;
+  --gm-space-3: 12px;
+  --gm-space-4: 16px;
+  --gm-space-5: 24px;
+}
+
+.adminPage {
+  gap: 10px !important;
+  height: 100%;
+  padding-bottom: 0;
+}
+
+.commandCenter {
+  display: none !important;
+  isolation: isolate;
+  overflow: hidden;
+  padding: 18px 20px !important;
+  position: relative;
+}
+
+.commandCenter::before {
+  content: none;
+}
+
+.commandIdentity {
+  max-width: 720px;
+}
+
+.commandActions {
+  align-self: flex-start;
+}
+
+.activeSeason {
+  margin-top: 2px;
+}
+
+.metricGrid {
+  display: none !important;
+  border-radius: 10px !important;
+}
+
+.metricItem {
+  min-height: 68px !important;
+  padding: 12px 16px !important;
+}
+
+.leaderboard {
+  border-radius: 10px !important;
+  height: 100%;
+  padding: 0 !important;
+}
+
+.leaderboardBody {
+  display: grid;
+  gap: 0;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.leaderboardHeader {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 12px 18px 8px;
+}
+
+.leaderboardActions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+}
+
+.leaderboardHeading {
+  display: grid;
+  gap: 4px;
+}
+
+.filterToolbar {
+  background: transparent !important;
+  border-radius: 0 !important;
+  grid-template-columns: minmax(220px, 1.25fr) minmax(210px, 0.9fr) minmax(190px, auto) !important;
+  padding: 8px 18px !important;
+}
+
+.muscleFilterToolbar {
+  background: transparent !important;
+  border-radius: 0 !important;
+  display: grid;
+  gap: 8px;
+  grid-template-columns:
+    minmax(220px, 1.25fr)
+    repeat(3, minmax(170px, 0.8fr)) !important;
+  padding: 8px 18px !important;
+}
+
+.advancedFilters {
+  position: relative;
+}
+
+.advancedFilters > summary {
+  align-items: center;
+  border: 1px solid currentColor;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  font-size: 12px;
+  font-weight: 750;
+  gap: 8px;
+  justify-content: space-between;
+  list-style: none;
+  min-height: 38px;
+  opacity: 0.74;
+  padding: 0 12px;
+}
+
+.advancedFilters > summary::-webkit-details-marker {
+  display: none;
+}
+
+.advancedFilters > summary span {
+  align-items: center;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 10px;
+  height: 20px;
+  justify-content: center;
+  min-width: 20px;
+  opacity: 0.72;
+}
+
+.advancedFilterGrid {
+  border: 1px solid currentColor;
+  border-radius: 10px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(160px, 1fr));
+  margin-top: 8px;
+  padding: 10px;
+  position: absolute;
+  right: 0;
+  top: 100%;
+  width: min(520px, calc(100vw - 48px));
+  z-index: 20;
+}
+
+.archivedToggle {
+  align-items: center;
+  border: 1px solid;
+  border-radius: 8px;
+  display: flex;
+  font-size: 12px;
+  gap: 10px;
+  min-height: 38px;
+  padding: 0 12px;
+}
+
+.tableViewport {
+  padding: 0 18px !important;
+}
+
+.tableFooter {
+  margin: 0 18px;
+  padding: 8px 0 10px !important;
+}
+
+.governanceWorkspace {
+  border-radius: 10px !important;
+}
+
+.governanceBody {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr);
+  height: 340px;
+  min-height: 340px;
+}
+
+.governanceTabs {
+  align-content: start;
+  border-bottom: 0 !important;
+  border-right: 1px solid currentColor;
+  grid-template-columns: minmax(0, 1fr) !important;
+  opacity: 0.98;
+  padding: 10px;
+}
+
+.governanceTab {
+  border-bottom-width: 0 !important;
+  border-left: 2px solid transparent !important;
+  justify-content: flex-start !important;
+  min-height: 46px !important;
+  padding: 10px 12px !important;
+}
+
+.governanceTab[aria-selected="true"] {
+  background: color-mix(in srgb, currentColor 7%, transparent) !important;
+  border-left-color: currentColor !important;
+}
+
+.governancePanel {
+  align-content: start;
+  height: 340px;
+  min-height: 340px;
+  overflow-y: auto !important;
+  padding: 18px 20px !important;
+  scrollbar-gutter: stable;
+}
+
+.governanceRecord {
+  border-left-width: 2px !important;
+  padding: 14px 16px !important;
+}
+
+.auditRecord {
+  background: transparent !important;
+  border-width: 0 0 0 2px !important;
+  border-radius: 0 !important;
+  padding: 12px 14px !important;
+}
+
+@media (max-width: 1280px) {
+  .filterToolbar {
+    grid-template-columns: repeat(3, minmax(160px, 1fr)) !important;
+  }
+
+  .muscleFilterToolbar {
+    grid-template-columns: repeat(2, minmax(180px, 1fr)) !important;
+  }
+}
+
+@media (max-width: 960px) {
+  .adminPage,
+  .leaderboard,
+  .leaderboardBody {
+    height: auto;
+  }
+
+  .leaderboardBody {
+    grid-template-rows: auto;
+    overflow: visible;
+  }
+
+  .commandCenter {
+    padding: 16px !important;
+  }
+
+  .metricItem {
+    min-height: 62px !important;
+  }
+
+  .filterToolbar {
+    grid-template-columns: minmax(0, 1fr) minmax(180px, 0.8fr) !important;
+  }
+
+  .muscleFilterToolbar {
+    grid-template-columns: minmax(0, 1fr) minmax(180px, 0.8fr) !important;
+  }
+
+  .advancedFilters {
+    grid-column: 1 / -1;
+  }
+
+  .advancedFilterGrid {
+    left: 0;
+    position: static;
+    right: auto;
+    width: 100%;
+  }
+
+  .governanceBody {
+    grid-template-columns: minmax(0, 1fr);
+    height: 420px;
+    min-height: 420px;
+  }
+
+  .governanceTabs {
+    border-bottom: 1px solid currentColor !important;
+    border-right: 0;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    padding: 8px;
+  }
+
+  .governanceTab {
+    border-bottom: 2px solid transparent !important;
+    border-left-width: 0 !important;
+    justify-content: center !important;
+  }
+
+  .governanceTab[aria-selected="true"] {
+    border-bottom-color: currentColor !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .adminPage {
+    gap: 12px !important;
+  }
+
+  .leaderboardHeader {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 14px;
+  }
+
+  .leaderboardActions {
+    justify-content: flex-start;
+  }
+
+  .filterToolbar {
+    grid-template-columns: minmax(0, 1fr) !important;
+    padding: 10px 14px !important;
+  }
+
+  .muscleFilterToolbar {
+    grid-template-columns: minmax(0, 1fr) !important;
+    padding: 10px 14px !important;
+  }
+
+  .advancedFilters {
+    grid-column: auto;
+  }
+
+  .advancedFilterGrid {
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+  }
+
+  .tableViewport {
+    padding: 0 14px !important;
+  }
+
+  .tableFooter {
+    align-items: flex-start !important;
+    flex-direction: column;
+    margin: 0 14px;
+  }
+
+  .governanceTabs {
+    overflow-x: auto;
+  }
+
+  .governancePanel {
+    height: 366px;
+    min-height: 366px;
+    padding: 14px !important;
+  }
+}

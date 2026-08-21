@@ -1,0 +1,35 @@
+[mcp_servers.graphify]
+command = "C:/Users/HOUSTON/.local/bin/graphify-mcp.exe"
+args = ["C:/FitTrack_rebuilt_20260330_212527/graphify-out/graph.json"]
+cwd = "C:/FitTrack_rebuilt_20260330_212527"
+enabled = true
+required = false
+startup_timeout_sec = 15
+tool_timeout_sec = 30
+enabled_tools = [
+  "graph_stats",
+  "god_nodes",
+  "get_node",
+  "get_neighbors",
+  "get_community",
+  "shortest_path",
+]
+default_tools_approval_mode = "approve"
+
+[mcp_servers.storybook]
+url = "http://127.0.0.1:6006/mcp"
+enabled = true
+required = false
+startup_timeout_sec = 10
+tool_timeout_sec = 30
+default_tools_approval_mode = "approve"
+
+[mcp_servers.shadcn]
+command = "npx"
+args = ["shadcn@latest", "mcp"]
+cwd = "C:/FitTrack_rebuilt_20260330_212527/apps/web"
+enabled = true
+required = false
+startup_timeout_sec = 30
+tool_timeout_sec = 30
+default_tools_approval_mode = "approve"

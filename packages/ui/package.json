@@ -1,0 +1,20 @@
+{
+  "name": "@fittrack/ui",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "exports": {
+    ".": "./index.ts",
+    "./styles": "./styles.ts",
+    "./tailwind-preset": "./tailwind-preset.ts",
+    "./theme": "./theme.ts",
+    "./tokens": "./tokens.ts"
+  },
+  "dependencies": {
+    "@fittrack/types": "workspace:*"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.19"
+  }
+}
