@@ -9,11 +9,15 @@ ENV PRISMA_SKIP_POSTINSTALL_GENERATE=true
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json apps/api/package.json
+COPY packages/utils/package.json packages/utils/package.json
+COPY packages/types/package.json packages/types/package.json
 COPY patches ./patches
 
-RUN pnpm install --frozen-lockfile --filter @fittrack/api...
+RUN pnpm install --frozen-lockfile --filter @fittrack/api... --filter @fittrack/utils...
 
 COPY apps/api ./apps/api
+COPY packages/utils ./packages/utils
+COPY packages/types ./packages/types
 COPY tasks/ensure-prisma-client-link.mjs ./tasks/ensure-prisma-client-link.mjs
 
 RUN pnpm --filter @fittrack/api exec prisma generate --schema prisma/schema.prisma
@@ -35,4 +39,4 @@ USER nestjs
 
 EXPOSE 3001
 
-CMD ["node", "dist/src/main.js"]
+CMD ["node", "dist/apps/api/src/main.js"]

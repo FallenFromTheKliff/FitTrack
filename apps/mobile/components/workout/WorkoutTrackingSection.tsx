@@ -58,6 +58,7 @@ type WorkoutTrackingSectionProps = {
   isFrozen: boolean;
   isCameraSwitching: boolean;
   isRecording: boolean;
+  hasStartedSet: boolean;
   isTrackingReady: boolean;
   lowConfidenceLandmarks: string[];
   movementContract: PoseMovementContractRecord | null;
@@ -107,6 +108,7 @@ export function WorkoutTrackingSection({
   isFrozen,
   isCameraSwitching,
   isRecording,
+  hasStartedSet,
   isTrackingReady,
   lowConfidenceLandmarks,
   movementContract,
@@ -154,6 +156,19 @@ export function WorkoutTrackingSection({
   const isNativePoseRuntime = Platform.OS !== "web";
   const isStaticHoldTarget =
     cameraTarget?.targetDurationSeconds != null && cameraTarget.targetReps <= 0;
+  const targetReps = cameraTarget?.targetReps ?? 0;
+  const isNormalRepTarget = !!cameraTarget && !isStaticHoldTarget && targetReps > 0;
+  const repProgress =
+    targetReps > 0 ? Math.min(1, reps / targetReps) : 0;
+  const repsRemaining = Math.max(0, targetReps - reps);
+  const repsOver = Math.max(0, reps - targetReps);
+  const goalLabel =
+    reps > targetReps
+      ? `+${repsOver} ABOVE GOAL`
+      : reps === targetReps
+        ? "GOAL REACHED ✓"
+        : `${repsRemaining} TO GO`;
+  const goalColor = reps >= targetReps ? colors.success : colors.brand;
   const cameraTransform = useMemo(() => {
     if (!cameraFrameSize || previewSize.width <= 0 || previewSize.height <= 0) {
       return null;
@@ -445,6 +460,21 @@ export function WorkoutTrackingSection({
                 : " · Bodyweight"}
               {` · ${currentPhase}`}
             </FitText>
+            {isNormalRepTarget ? (
+              <View style={{ gap: 5, marginTop: 8 }}>
+                <View style={{ alignItems: "baseline", flexDirection: "row", justifyContent: "space-between" }}>
+                  <FitText style={{ color: "#FFFFFF", fontSize: 20, fontWeight: "900" }}>
+                    {reps} / {targetReps}
+                  </FitText>
+                  <FitText style={{ color: goalColor, fontSize: 10, fontWeight: "900", letterSpacing: 0.6 }}>
+                    {goalLabel}
+                  </FitText>
+                </View>
+                <View style={{ backgroundColor: "rgba(255,255,255,0.2)", borderRadius: 999, height: 5, overflow: "hidden" }}>
+                  <View style={{ backgroundColor: goalColor, borderRadius: 999, height: 5, width: `${repProgress * 100}%` }} />
+                </View>
+              </View>
+            ) : null}
             {cameraRuntimeState === "rest" ? (
               <FitText
                 style={{ color: colors.brand, fontSize: 10, fontWeight: "900", marginTop: 3 }}
@@ -466,7 +496,21 @@ export function WorkoutTrackingSection({
             ) : null}
           </View>
         ) : null}
-        {cameraActive && permissionGranted && !subjectLocked ? (
+        {cameraTarget && cameraActive && permissionGranted ? (
+          <View style={{ position: "absolute", left: 14, right: 14, bottom: 86, zIndex: 4 }}>
+            <View style={{ alignItems: "center", backgroundColor: "rgba(0,0,0,0.62)", borderColor: subjectLocked ? colors.success : colors.border, borderRadius: 18, borderWidth: 1, padding: 10 }}>
+              <FitText style={{ color: subjectLocked ? colors.success : "#FFFFFF", fontSize: 12, fontWeight: "900", letterSpacing: 0.8 }}>
+                {subjectLocked ? "BODY TRACKED" : "GET IN FRAME"}
+              </FitText>
+              <FitText style={{ color: "rgba(255,255,255,0.78)", fontSize: 11, marginTop: 3, textAlign: "center" }}>
+                {subjectLocked
+                  ? "Automatic subject lock is active. Reps pause if your body leaves the frame."
+                  : "Stand fully in frame so FitTrack can acquire your body automatically."}
+              </FitText>
+            </View>
+          </View>
+        ) : null}
+        {cameraActive && permissionGranted && !cameraTarget && !subjectLocked ? (
           <View style={{ position: "absolute", left: 14, right: 14, bottom: 86, zIndex: 4 }}>
             <View
               style={{
@@ -519,7 +563,7 @@ export function WorkoutTrackingSection({
             </View>
           </View>
         ) : null}
-        {cameraActive && permissionGranted && subjectLocked ? (
+        {cameraActive && permissionGranted && !cameraTarget && subjectLocked ? (
           <View
             style={{
               alignItems: "center",
@@ -559,6 +603,12 @@ export function WorkoutTrackingSection({
           </View>
         </View>
         {cameraActive && permissionGranted ? (
+          cameraTarget ? (
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              <FitButton icon={hasStartedSet ? (isRecording ? Pause : Play) : Circle} label={hasStartedSet ? (isRecording ? "Pause" : "Resume") : "Start Set"} variant={hasStartedSet ? "ghost" : "primary"} disabled={hasStartedSet ? secondaryActionDisabled : primaryActionDisabled} onPress={hasStartedSet ? (isRecording ? onPause : () => { void onResumeRecord(); }) : () => { void onStartRecord(); }} style={{ flex: 1, minWidth: 0 }} />
+              <FitButton icon={StopCircle} label="Finish Set" variant="danger" disabled={countdownValue !== null || isCameraSwitching} onPress={onStopRecord} style={{ display: hasStartedSet ? "flex" : "none", flex: 1, minWidth: 0 }} />
+            </View>
+          ) : (
           <View style={s.previewControls}>
             <FitButton
               icon={isRecording ? StopCircle : Circle}
@@ -581,6 +631,7 @@ export function WorkoutTrackingSection({
               style={s.previewControlButton}
             />
           </View>
+          )
         ) : null}
       </View>
       {trackingDisabledReason ? (

@@ -221,6 +221,12 @@ export default function AttendanceQrModal({
             {
               width: "100%",
               maxWidth: 420,
+              // FitModalScrollView intentionally fills its parent. A
+              // maxHeight alone leaves that flex child with no measurable
+              // height, collapsing the QR body while the header/footer
+              // remain visible.
+              height: "88%",
+              flexShrink: 1,
               maxHeight: "88%",
               borderRadius: 24,
               borderWidth: 1,

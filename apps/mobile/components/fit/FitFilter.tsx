@@ -69,9 +69,14 @@ export default function FitFilter({
   const { height, opacity } = usePanelAnim({ targetHeight, visible: isOpen });
 
   const filterPanelStyle = useAnimatedStyle(() => ({
-    height: height.value,
+    // The first open has no measured height yet. Applying height: 0 here
+    // prevents the child from laying out, so every filter rendered as an
+    // empty, clickable strip. Let the panel size intrinsically once so its
+    // onLayout can establish the animated target height.
+    ...(measuredHeight > 0
+      ? { height: height.value, overflow: "hidden" as const }
+      : { overflow: "visible" as const }),
     opacity: opacity.value,
-    overflow: "hidden",
   }));
 
   if (!everOpenedRef.current) return null;

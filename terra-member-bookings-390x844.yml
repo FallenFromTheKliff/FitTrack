@@ -1,0 +1,95 @@
+- generic [ref=e19]:
+  - generic [ref=e20]:
+    - img [ref=e22] [cursor=pointer]
+    - generic [ref=e23]:
+      - generic [ref=e24]: Bookings
+      - generic [ref=e25]: Stay on top of your schedule!
+    - generic [ref=e26]:
+      - button "Open page help" [ref=e27] [cursor=pointer]:
+        - img [ref=e28]
+      - button "12 unread notifications" [ref=e31] [cursor=pointer]:
+        - img [ref=e32]
+        - generic [ref=e36]: "12"
+  - generic [ref=e43]:
+    - generic [ref=e46]:
+      - generic [ref=e48]:
+        - img [ref=e49]
+        - textbox "Search bookings" [ref=e52]:
+          - /placeholder: Search bookings...
+      - button "Open booking filters" [ref=e53] [cursor=pointer]:
+        - img [ref=e54]
+    - generic [ref=e57]:
+      - generic [ref=e58]:
+        - generic [ref=e59]: Sep 4, 2026 - 1 booking
+        - button "Boxing Ring, Fri, Sep 4, 2026 | 04:00 PM - 05:00 PM, Confirmed" [ref=e64] [cursor=pointer]:
+          - img [ref=e66]
+          - generic [ref=e75]:
+            - generic [ref=e76]:
+              - generic [ref=e77]: Boxing Ring
+              - generic [ref=e80]: Confirmed
+            - generic [ref=e81]: Fri, Sep 4, 2026 | 04:00 PM - 05:00 PM
+          - img [ref=e82]
+      - generic [ref=e84]:
+        - generic [ref=e85]: Sep 2, 2026 - 1 booking
+        - button "Basketball Court, Wed, Sep 2, 2026 | 09:00 PM - 10:00 PM, Confirmed" [ref=e90] [cursor=pointer]:
+          - img [ref=e92]
+          - generic [ref=e94]:
+            - generic [ref=e95]:
+              - generic [ref=e96]: Basketball Court
+              - generic [ref=e99]: Confirmed
+            - generic [ref=e100]: Wed, Sep 2, 2026 | 09:00 PM - 10:00 PM
+          - img [ref=e101]
+      - generic [ref=e103]:
+        - generic [ref=e104]: Aug 31, 2026 - 1 booking
+        - button "Boxing Ring, Mon, Aug 31, 2026 | 08:00 PM - 09:00 PM, Confirmed" [ref=e109] [cursor=pointer]:
+          - img [ref=e111]
+          - generic [ref=e120]:
+            - generic [ref=e121]:
+              - generic [ref=e122]: Boxing Ring
+              - generic [ref=e125]: Confirmed
+            - generic [ref=e126]: Mon, Aug 31, 2026 | 08:00 PM - 09:00 PM
+          - img [ref=e127]
+      - generic [ref=e129]:
+        - generic [ref=e130]: Aug 29, 2026 - 1 booking
+        - button "Basketball Court, Sat, Aug 29, 2026 | 07:00 PM - 08:00 PM, Confirmed" [ref=e135] [cursor=pointer]:
+          - img [ref=e137]
+          - generic [ref=e139]:
+            - generic [ref=e140]:
+              - generic [ref=e141]: Basketball Court
+              - generic [ref=e144]: Confirmed
+            - generic [ref=e145]: Sat, Aug 29, 2026 | 07:00 PM - 08:00 PM
+          - img [ref=e146]
+      - generic [ref=e148]:
+        - generic [ref=e149]: Aug 23, 2026 - 1 booking
+        - button "Boxing Ring, Sun, Aug 23, 2026 | 04:00 PM - 05:00 PM, Confirmed" [ref=e154] [cursor=pointer]:
+          - img [ref=e156]
+          - generic [ref=e165]:
+            - generic [ref=e166]:
+              - generic [ref=e167]: Boxing Ring
+              - generic [ref=e170]: Confirmed
+            - generic [ref=e171]: Sun, Aug 23, 2026 | 04:00 PM - 05:00 PM
+          - img [ref=e172]
+      - generic [ref=e174]:
+        - generic [ref=e175]: Mar 23, 2026 - 1 booking
+        - button "Mobility Studio, Mon, Mar 23, 2026 | 06:00 PM - 07:00 PM, Completed" [ref=e180] [cursor=pointer]:
+          - img [ref=e182]
+          - generic [ref=e188]:
+            - generic [ref=e189]:
+              - generic [ref=e190]: Mobility Studio
+              - generic [ref=e193]: Completed
+            - generic [ref=e194]: Mon, Mar 23, 2026 | 06:00 PM - 07:00 PM
+          - img [ref=e195]
+      - generic [ref=e197]:
+        - generic [ref=e198]: Feb 21, 2026 - 1 booking
+        - button "Basketball Court, Sat, Feb 21, 2026 | 05:00 PM - 06:00 PM, Completed" [ref=e203] [cursor=pointer]:
+          - img [ref=e205]
+          - generic [ref=e207]:
+            - generic [ref=e208]:
+              - generic [ref=e209]: Basketball Court
+              - generic [ref=e212]: Completed
+            - generic [ref=e213]: Sat, Feb 21, 2026 | 05:00 PM - 06:00 PM
+          - img [ref=e214]
+  - button "Open quick actions menu" [ref=e217] [cursor=pointer]:
+    - generic [ref=e218]:
+      - img [ref=e220]
+      - img [ref=e222]

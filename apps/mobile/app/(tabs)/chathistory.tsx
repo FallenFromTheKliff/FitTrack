@@ -290,6 +290,9 @@ export default function ChatHistoryScreen() {
               />
             </View>
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Filter chat history"
+              accessibilityState={{ expanded: isFilterOpen }}
               onPress={() => { setIsFilterOpen((open) => !open); setFabOpen(false); }}
               style={s.filterBtn}
               hitSlop={8}

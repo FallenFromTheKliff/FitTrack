@@ -23,6 +23,7 @@ import {
 } from "@fittrack/query";
 import { isCoachManagedTrainingPlan } from "@fittrack/app-core";
 import type { TrainingPlanSummaryRecord } from "@fittrack/types";
+import { getPoseAutoRepCapabilityForLabel } from "@fittrack/utils";
 
 import { FitButton, FitText } from "@/components/fit";
 import { useAuth } from "@/contexts/AuthContext";
@@ -919,21 +920,34 @@ export function MobileWorkoutToday({
 
                 {activeSession ? (
                   (() => {
-                    const hasCameraTarget =
+                    const hasRepOrDurationTarget =
                       exercise.reps != null ||
                       (exercise.durationSeconds ?? 0) > 0;
+                    const hasPoseCapability =
+                      getPoseAutoRepCapabilityForLabel(exercise.exerciseName) !==
+                      null;
+                    const canTrackWithCamera =
+                      hasPoseCapability && hasRepOrDurationTarget;
                     return (
-                  <FitButton
-                    icon={Camera}
-                    disabled={restRemaining > 0 || !hasCameraTarget}
-                    label={
-                      !hasCameraTarget
-                        ? "Camera Needs a Rep or Duration Target"
-                        : "Track This Set With Camera"
-                    }
-                    onPress={openCameraForCurrentSet}
-                    variant="ghost"
-                  />
+                      canTrackWithCamera ? (
+                        <FitButton
+                          icon={Camera}
+                          disabled={restRemaining > 0}
+                          label="Track This Set With Camera"
+                          onPress={openCameraForCurrentSet}
+                          variant="ghost"
+                        />
+                      ) : (
+                        <FitText
+                          style={{
+                            color: colors.textMuted,
+                            fontSize: 11,
+                            textAlign: "center",
+                          }}
+                        >
+                          Manual tracking
+                        </FitText>
+                      )
                     );
                   })()
                 ) : null}

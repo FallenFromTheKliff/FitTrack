@@ -29,6 +29,7 @@ import type {
 import type { WorkoutCameraTarget } from "@/components/workout/workout-camera-target";
 import {
   buildFallbackPoseMovementContract,
+  getPoseAutoRepCapabilityForLabel,
   isValidPoseMovementContract,
   normalizeExerciseMovementProfile,
   createPoseSignalCache,
@@ -1352,6 +1353,7 @@ export function useWorkoutLiveController(
   const subjectLockGestureStartMsRef = useRef<number | null>(null);
   const subjectLockLostFramesRef = useRef(0);
   const subjectFingerprintRef = useRef<SubjectPoseFingerprint | null>(null);
+  const plannedMovementKeyRef = useRef<string | null>(null);
   const autoCompletionKeyRef = useRef<string | null>(null);
   const autoFinalizeSetRef = useRef<((repCount: number) => void) | null>(null);
   const cameraRuntimeStateRef = useRef<WorkoutCameraRuntimeState>("ready");
@@ -1379,15 +1381,6 @@ export function useWorkoutLiveController(
         : nextValue;
     liveRepCountRef.current = resolvedValue;
     setReps(resolvedValue);
-    if (
-      isRecordingRef.current &&
-      cameraRuntimeStateRef.current === "tracking" &&
-      cameraTarget &&
-      cameraTarget.targetReps > 0 &&
-      resolvedValue >= cameraTarget.targetReps
-    ) {
-      autoFinalizeSetRef.current?.(resolvedValue);
-    }
   };
 
   const setTrackedWorkoutLoadKg = (nextValue: number | null) => {
@@ -1472,7 +1465,7 @@ export function useWorkoutLiveController(
   const setSubjectLockState = (
     locked: boolean,
     confidence: number | null,
-    source: "gesture" | "manual" | "reset",
+    source: "auto" | "gesture" | "manual" | "reset",
     fingerprintKeypoints?: PoseKeypointRecord[] | null,
   ) => {
     subjectLockedRef.current = locked;
@@ -1491,7 +1484,9 @@ export function useWorkoutLiveController(
     setSubjectLockGestureProgress(0);
     setSubjectLockStatusText(
       locked
-        ? source === "gesture"
+        ? source === "auto"
+          ? "Body tracked automatically. Reps count while your movement stays in frame."
+          : source === "gesture"
           ? "Rock-sign gesture locked this subject. Use Unlock target to release it."
           : "Manual subject lock is active. Tap Unlock target to release it."
         : `Subject lock is off. Tap Lock on me, or hold a clear rock-and-roll sign for ${SUBJECT_LOCK_GESTURE_HOLD_SECONDS} seconds once live landmarks are visible.`,
@@ -1665,6 +1660,22 @@ export function useWorkoutLiveController(
       return;
     }
 
+    // Planned workouts already identify the exercise. Acquire the first
+    // reliable body rig automatically instead of requiring a gesture or a
+    // manual lock button. The existing fingerprint/grace-period checks still
+    // guard every frame after this initial acquisition.
+    if (cameraTarget) {
+      const rigConfidence = Math.min(
+        1,
+        Math.max(
+          SUBJECT_LOCK_RIG_VISIBILITY_THRESHOLD,
+          averageVisibilityForIndexes(keypoints, SUBJECT_LOCK_RIG_LANDMARK_INDEXES),
+        ),
+      );
+      setSubjectLockState(true, rigConfidence, "auto", keypoints);
+      return;
+    }
+
     if (!isRockSignSubjectLockGestureWithProfile(keypoints, activeHandShapeProfile)) {
       if (subjectLockGestureStartMsRef.current !== null) {
         resetSubjectLockGesture();
@@ -1826,11 +1837,12 @@ export function useWorkoutLiveController(
     () => toSavedExerciseOptions(exerciseReferences),
     [exerciseReferences],
   );
-  const trackingExerciseLabel =
-    confirmedExerciseLabel ??
-    movementContract?.exercise ??
-    detectedExerciseName ??
-    null;
+  const trackingExerciseLabel = cameraTarget
+    ? cameraTarget.exerciseName
+    : confirmedExerciseLabel ??
+      movementContract?.exercise ??
+      detectedExerciseName ??
+      null;
   const suggestedExerciseHint =
     confirmedExerciseLabel ??
     currentPlanExercise?.exerciseName ??
@@ -1953,9 +1965,15 @@ export function useWorkoutLiveController(
   );
   const trackingDisabledReason = useMemo(() => {
     if (exercisesLoading) return null;
+    if (
+      cameraTarget &&
+      !getPoseAutoRepCapabilityForLabel(cameraTarget.exerciseName)
+    ) {
+      return "Camera tracking is not available for this exercise. Use manual set logging.";
+    }
     if (exerciseReferences.length > 0) return null;
     return "The live exercise catalog is empty on this stack. Seed the workout catalog before starting tracked sets and EXP sync.";
-  }, [exerciseReferences.length, exercisesLoading]);
+  }, [cameraTarget, exerciseReferences.length, exercisesLoading]);
   countdownValueRef.current = countdownValue;
   isExerciseConfirmationVisibleRef.current = isExerciseConfirmationVisible;
   useEffect(() => {
@@ -2182,6 +2200,93 @@ export function useWorkoutLiveController(
     return fallbackContract;
   };
 
+  const armPlannedMovementContract = (
+    frameKeypoints: PoseKeypointRecord[] | null,
+    statusText: string,
+  ) => {
+    if (!cameraTarget) return null;
+    const capability = getPoseAutoRepCapabilityForLabel(
+      cameraTarget.exerciseName,
+    );
+    if (!capability) return null;
+
+    const plannedMovementKey = `${cameraTarget.planExerciseId}:${cameraTarget.setNumber}:${cameraTarget.exerciseName}:${cameraTarget.targetDurationSeconds ?? 0}`;
+    if (
+      plannedMovementKeyRef.current === plannedMovementKey &&
+      movementContractRef.current
+    ) {
+      // Reassert the plan-owned identity without rebuilding the contract on
+      // every native/web frame.
+      confirmedExerciseLabelRef.current = cameraTarget.exerciseName;
+      setConfirmedExerciseLabel(cameraTarget.exerciseName);
+      setDetectedExerciseName(cameraTarget.exerciseName);
+      setIsExerciseConfirmationVisible(false);
+      return movementContractRef.current;
+    }
+
+    const plannedContract = resolveCameraMovementContract(
+      buildFallbackPoseMovementContract(capability.contractExercise),
+    );
+    if (!plannedContract || !isValidPoseMovementContract(plannedContract)) {
+      return null;
+    }
+
+    const previousState = repEngineStateRef.current;
+    repEngineStateRef.current = {
+      ...createPoseRepEngineState(),
+      rawAngleData: previousState.rawAngleData,
+      repCount: previousState.repCount,
+    };
+    movementContractRef.current = plannedContract;
+    plannedMovementKeyRef.current = plannedMovementKey;
+    confirmedExerciseLabelRef.current = cameraTarget.exerciseName;
+    holdProgressSecondsRef.current = 0;
+    setConfirmedExerciseLabel(cameraTarget.exerciseName);
+    setDetectedExerciseName(cameraTarget.exerciseName);
+    setExerciseConfirmationCandidates([]);
+    setIsExerciseConfirmationVisible(false);
+    setHoldProgressSeconds(0);
+    setHoldValid(false);
+    setMovementContract(plannedContract);
+    setCurrentPhase("primed");
+    setCurrentAngle(
+      frameKeypoints
+        ? getPoseMovementContractAngle(plannedContract, frameKeypoints)
+        : null,
+    );
+    setPoseFeedback([
+      `${toDisplayExerciseName(cameraTarget.exerciseName)} is ready. Get in frame to start automatic counting.`,
+      "FitTrack is using the exercise from your workout plan.",
+      plannedContract.repModel === "static_hold"
+        ? `Hold valid form for ${plannedContract.holdDurationSeconds ?? 30} seconds; a sustained form break pauses the timer.`
+        : "Move through the full range of motion; your target is a goal and reps continue above it.",
+    ]);
+    setPoseStatusOverride(statusText);
+    framesSinceAnalyzeRef.current = 0;
+    analyzeErrorMessageRef.current = null;
+    return plannedContract;
+  };
+
+  useEffect(() => {
+    if (!cameraTarget) {
+      plannedMovementKeyRef.current = null;
+      return;
+    }
+    if (!getPoseAutoRepCapabilityForLabel(cameraTarget.exerciseName)) return;
+    armPlannedMovementContract(
+      null,
+      `Ready for ${toDisplayExerciseName(cameraTarget.exerciseName)}. Get in frame to begin.`,
+    );
+    // The helper is guarded by the plan/set key so this effect only arms the
+    // contract when the target changes or a runtime reset cleared it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    cameraTarget?.exerciseName,
+    cameraTarget?.planExerciseId,
+    cameraTarget?.setNumber,
+    cameraTarget?.targetDurationSeconds,
+  ]);
+
   const disposePoseAnalyzer = () => {
     poseAnalyzerRef.current?.dispose();
     poseAnalyzerRef.current = null;
@@ -2269,7 +2374,9 @@ export function useWorkoutLiveController(
     if (!isRecordingRef.current || !poseSessionIdRef.current) {
       setPoseStatusOverride(
         reliability.isReliable
-          ? "Native landmarks are live. Start recording to arm auto detection and rep counting."
+          ? cameraTarget
+            ? `Body tracked. Planned ${toDisplayExerciseName(cameraTarget.exerciseName)} is ready when you start the set.`
+            : "Native landmarks are live. Start recording to arm auto detection and rep counting."
           : "Native camera is live. Keep your full body visible to lock clean landmarks.",
       );
       return;
@@ -2288,6 +2395,13 @@ export function useWorkoutLiveController(
             : "Native camera is ready. Start the next planned set when you are positioned.",
       );
       return;
+    }
+
+    if (cameraTarget && !movementContractRef.current) {
+      armPlannedMovementContract(
+        stableFrame.keypoints,
+        `Planned ${toDisplayExerciseName(cameraTarget.exerciseName)} tracking is ready.`,
+      );
     }
 
     if (!reliability.isReliable) {
@@ -2333,13 +2447,24 @@ export function useWorkoutLiveController(
       return;
     }
 
-    if (!movementContractRef.current && confirmedExerciseLabelRef.current) {
+    if (
+      !cameraTarget &&
+      !movementContractRef.current &&
+      confirmedExerciseLabelRef.current
+    ) {
       armFallbackMovementContract(
         confirmedExerciseLabelRef.current,
         stableFrame.keypoints,
         `Native landmark rep counting is armed for ${toDisplayExerciseName(
           confirmedExerciseLabelRef.current,
         )}.`,
+      );
+    }
+
+    if (cameraTarget && !movementContractRef.current) {
+      armPlannedMovementContract(
+        stableFrame.keypoints,
+        `Planned ${toDisplayExerciseName(cameraTarget.exerciseName)} tracking is ready.`,
       );
     }
 
@@ -2351,17 +2476,26 @@ export function useWorkoutLiveController(
       setCurrentAngle(liveAngle);
       if (!canCountLockedSubject(stableFrame.keypoints, stableFrame.capturedAtMs)) {
         resetRepEngineForSubjectLockWait();
-        setPoseFeedback([
-          subjectLockedRef.current
-            ? "Subject lock lost the body rig. Recenter and lock again before counting."
-            : "Lock onto your body before rep counting starts.",
-          "This prevents background pose jitter from creating phantom reps.",
-          "Keep shoulders, hips, and one arm chain visible before tapping Lock on me.",
-        ]);
+        setPoseFeedback(
+          cameraTarget
+            ? [
+                "Body lost — get back in frame. Reacquiring automatically.",
+                "Your counted reps are preserved while tracking pauses.",
+              ]
+            : [
+                subjectLockedRef.current
+                  ? "Subject lock lost the body rig. Recenter and lock again before counting."
+                  : "Lock onto your body before rep counting starts.",
+                "This prevents background pose jitter from creating phantom reps.",
+                "Keep shoulders, hips, and one arm chain visible before tapping Lock on me.",
+              ],
+        );
         setPoseStatusOverride(
-          subjectLockedRef.current
-            ? "Subject lock is unstable. Counting is paused until the rig is visible again."
-            : "Subject lock is required before rep counting. The overlay can move, but reps stay paused.",
+          cameraTarget
+            ? "Body lost — get back in frame. Reacquiring automatically."
+            : subjectLockedRef.current
+              ? "Subject lock is unstable. Counting is paused until the rig is visible again."
+              : "Subject lock is required before rep counting. The overlay can move, but reps stay paused.",
         );
         return;
       }
@@ -2479,7 +2613,7 @@ export function useWorkoutLiveController(
       }
       setExerciseConfirmationCandidates(analysis.candidateExercises);
 
-      if (analysis.exerciseClass) {
+      if (!cameraTarget && analysis.exerciseClass) {
         setDetectedExerciseName(analysis.exerciseClass);
       }
 
@@ -2498,6 +2632,13 @@ export function useWorkoutLiveController(
       }
 
       if (analysis.needsConfirmation) {
+        if (cameraTarget) {
+          const plannedContract = armPlannedMovementContract(
+            stableFrame.keypoints,
+            `Planned ${toDisplayExerciseName(cameraTarget.exerciseName)} tracking is ready.`,
+          );
+          if (plannedContract) return;
+        }
         movementContractRef.current = null;
         setMovementContract(null);
         setCurrentAngle(null);
@@ -2507,6 +2648,14 @@ export function useWorkoutLiveController(
           "Confirm the native exercise label to resume live rep counting.",
         );
         return;
+      }
+
+      if (cameraTarget) {
+        const plannedContract = armPlannedMovementContract(
+          stableFrame.keypoints,
+          `Planned ${toDisplayExerciseName(cameraTarget.exerciseName)} tracking is ready.`,
+        );
+        if (plannedContract) return;
       }
 
       const nextMovementContract = resolveCameraMovementContract(
@@ -2553,15 +2702,20 @@ export function useWorkoutLiveController(
         error instanceof ApiClientError
           ? error.message
           : "Native landmark analysis could not process the latest batch.";
-      const fallbackContract = confirmedExerciseLabelRef.current
-        ? armFallbackMovementContract(
+      const fallbackContract = cameraTarget
+        ? armPlannedMovementContract(
+            stableFrame.keypoints,
+            `Using the planned ${toDisplayExerciseName(cameraTarget.exerciseName)} counter while native analysis reconnects.`,
+          )
+        : confirmedExerciseLabelRef.current
+          ? armFallbackMovementContract(
             confirmedExerciseLabelRef.current,
             stableFrame.keypoints,
             `Using local native rep counting for ${toDisplayExerciseName(
               confirmedExerciseLabelRef.current,
             )} while auto detection reconnects.`,
           )
-        : null;
+          : null;
       if (analyzeErrorMessageRef.current !== message) {
         analyzeErrorMessageRef.current = message;
         console.error("Native pose batch analyze failed");
@@ -2746,6 +2900,13 @@ export function useWorkoutLiveController(
       );
       return;
     }
+
+    if (cameraTarget && !movementContractRef.current) {
+      armPlannedMovementContract(
+        frame.keypoints,
+        `Planned ${toDisplayExerciseName(cameraTarget.exerciseName)} tracking is ready.`,
+      );
+    }
     setCameraFrameSize((current) =>
       current?.width === frame.frameWidth && current.height === frame.frameHeight
         ? current
@@ -2760,17 +2921,26 @@ export function useWorkoutLiveController(
       setCurrentAngle(liveAngle);
       if (!canCountLockedSubject(frame.keypoints, frame.capturedAtMs)) {
         resetRepEngineForSubjectLockWait();
-        setPoseFeedback([
-          subjectLockedRef.current
-            ? "Subject lock lost the body rig. Recenter and lock again before counting."
-            : "Lock onto your body before rep counting starts.",
-          "This prevents background pose jitter from creating phantom reps.",
-          "Keep shoulders, hips, and one arm chain visible before tapping Lock on me.",
-        ]);
+        setPoseFeedback(
+          cameraTarget
+            ? [
+                "Body lost — get back in frame. Reacquiring automatically.",
+                "Your counted reps are preserved while tracking pauses.",
+              ]
+            : [
+                subjectLockedRef.current
+                  ? "Subject lock lost the body rig. Recenter and lock again before counting."
+                  : "Lock onto your body before rep counting starts.",
+                "This prevents background pose jitter from creating phantom reps.",
+                "Keep shoulders, hips, and one arm chain visible before tapping Lock on me.",
+              ],
+        );
         setPoseStatusOverride(
-          subjectLockedRef.current
-            ? "Subject lock is unstable. Counting is paused until the rig is visible again."
-            : "Subject lock is required before rep counting. The overlay can move, but reps stay paused.",
+          cameraTarget
+            ? "Body lost — get back in frame. Reacquiring automatically."
+            : subjectLockedRef.current
+              ? "Subject lock is unstable. Counting is paused until the rig is visible again."
+              : "Subject lock is required before rep counting. The overlay can move, but reps stay paused.",
         );
         return;
       }
@@ -2879,7 +3049,7 @@ export function useWorkoutLiveController(
       }
       setExerciseConfirmationCandidates(analysis.candidateExercises);
 
-      if (analysis.exerciseClass) {
+      if (!cameraTarget && analysis.exerciseClass) {
         setDetectedExerciseName(analysis.exerciseClass);
       }
 
@@ -2898,6 +3068,13 @@ export function useWorkoutLiveController(
       }
 
       if (analysis.needsConfirmation) {
+        if (cameraTarget) {
+          const plannedContract = armPlannedMovementContract(
+            frame.keypoints,
+            `Planned ${toDisplayExerciseName(cameraTarget.exerciseName)} tracking is ready.`,
+          );
+          if (plannedContract) return;
+        }
         movementContractRef.current = null;
         setMovementContract(null);
         setCurrentAngle(null);
@@ -2907,6 +3084,14 @@ export function useWorkoutLiveController(
           "Confirm the live exercise label to resume auto rep counting.",
         );
         return;
+      }
+
+      if (cameraTarget) {
+        const plannedContract = armPlannedMovementContract(
+          frame.keypoints,
+          `Planned ${toDisplayExerciseName(cameraTarget.exerciseName)} tracking is ready.`,
+        );
+        if (plannedContract) return;
       }
 
       const nextMovementContract = resolveCameraMovementContract(
@@ -2960,15 +3145,20 @@ export function useWorkoutLiveController(
         error instanceof ApiClientError
           ? error.message
           : "Pose tracking could not analyze the latest keypoint batch.";
-      const fallbackContract = confirmedExerciseLabelRef.current
-        ? armFallbackMovementContract(
+      const fallbackContract = cameraTarget
+        ? armPlannedMovementContract(
+            frame.keypoints,
+            `Using the planned ${toDisplayExerciseName(cameraTarget.exerciseName)} counter while pose analysis reconnects.`,
+          )
+        : confirmedExerciseLabelRef.current
+          ? armFallbackMovementContract(
             confirmedExerciseLabelRef.current,
             frame.keypoints,
             `Using local rep counting for ${toDisplayExerciseName(
               confirmedExerciseLabelRef.current,
             )} while live pose analysis reconnects.`,
           )
-        : null;
+          : null;
       if (analyzeErrorMessageRef.current !== message) {
         analyzeErrorMessageRef.current = message;
         console.error("Pose analyze batch failed");
@@ -2999,7 +3189,9 @@ export function useWorkoutLiveController(
     if (!activePoseSessionId) return;
     if (!isWebPoseRuntime) {
       setPoseStatusOverride(
-        "Native landmark stream is armed. Move through 2-3 clean reps so auto detection can lock the exercise.",
+        cameraTarget
+          ? `Planned ${toDisplayExerciseName(cameraTarget.exerciseName)} is armed. Get in frame, then start the set.`
+          : "Native landmark stream is armed. Move through 2-3 clean reps so auto detection can lock the exercise.",
       );
       return;
     }
@@ -3013,6 +3205,13 @@ export function useWorkoutLiveController(
   };
 
   const handleConfirmExerciseLabel = (label: string) => {
+    if (cameraTarget) {
+      armPlannedMovementContract(
+        currentKeypoints,
+        `Planned ${toDisplayExerciseName(cameraTarget.exerciseName)} tracking is ready.`,
+      );
+      return;
+    }
     const nextLabel = label.trim();
     if (!nextLabel) {
       showMessage("Choose or name the exercise so rep tracking can resume.");
@@ -3083,6 +3282,14 @@ export function useWorkoutLiveController(
   };
 
   const handleUseAutoDetection = () => {
+    if (cameraTarget) {
+      armPlannedMovementContract(
+        currentKeypoints,
+        `Planned ${toDisplayExerciseName(cameraTarget.exerciseName)} tracking is ready.`,
+      );
+      setIsExerciseModalOpen(false);
+      return;
+    }
     confirmedExerciseLabelRef.current = null;
     setConfirmedExerciseLabel(null);
     setDetectedExerciseName(null);
@@ -3188,6 +3395,13 @@ export function useWorkoutLiveController(
 
   const handleStartRecord = async () => {
     if (isFrozen || countdownValue !== null) return;
+    if (
+      cameraTarget &&
+      !getPoseAutoRepCapabilityForLabel(cameraTarget.exerciseName)
+    ) {
+      showMessage("Camera tracking is not available for this exercise. Use manual set logging.");
+      return;
+    }
     if (trackingDisabledReason) {
       showMessage(trackingDisabledReason);
       return;
@@ -3202,6 +3416,16 @@ export function useWorkoutLiveController(
       const livePoseSessionId = await ensureLiveWorkout();
       resetPoseTrackingBuffers();
       resetPoseRuntimeState(true);
+      if (cameraTarget) {
+        const plannedContract = armPlannedMovementContract(
+          null,
+          `Planned ${toDisplayExerciseName(cameraTarget.exerciseName)} tracking is armed. Get in frame to begin.`,
+        );
+        if (!plannedContract) {
+          showMessage("This planned exercise is not supported for camera tracking. Use manual set logging.");
+          return;
+        }
+      }
       resetEquipmentDetectionState();
       setPoseFeedback([]);
       setIsRecording(true);
@@ -3217,6 +3441,13 @@ export function useWorkoutLiveController(
 
   const handleResumeRecord = async () => {
     if (isFrozen || countdownValue !== null) return;
+    if (
+      cameraTarget &&
+      !getPoseAutoRepCapabilityForLabel(cameraTarget.exerciseName)
+    ) {
+      showMessage("Camera tracking is not available for this exercise. Use manual set logging.");
+      return;
+    }
     if (trackingDisabledReason) {
       showMessage(trackingDisabledReason);
       return;
@@ -3230,6 +3461,12 @@ export function useWorkoutLiveController(
       await ensurePoseAnalyzerReady();
       const livePoseSessionId = await ensureLiveWorkout();
       resetPoseTrackingBuffers();
+      if (cameraTarget && !movementContractRef.current) {
+        armPlannedMovementContract(
+          null,
+          `Planned ${toDisplayExerciseName(cameraTarget.exerciseName)} tracking is armed. Get in frame to resume.`,
+        );
+      }
       setIsRecording(true);
       setCameraRuntime("tracking");
       resume();
@@ -3249,12 +3486,21 @@ export function useWorkoutLiveController(
   };
 
   const handleStopRecord = () => {
+    if (cameraTarget && !poseSessionIdRef.current) {
+      showMessage("Start the set before finishing it.");
+      return;
+    }
     handlePause();
     setFinishVisible(true);
   };
 
   const handleFinishConfirm = async () => {
     if (isFinishing) return;
+    if (cameraTarget && !poseSessionIdRef.current) {
+      setFinishVisible(false);
+      showMessage("Start the set before saving it.");
+      return;
+    }
     const targetKey = getCameraTargetKey(cameraTarget);
     if (targetKey) {
       const latch = completionLatchRef.current;
@@ -3278,7 +3524,10 @@ export function useWorkoutLiveController(
       );
       let finalizedLoadInputKg: number | null = null;
       let finalizedDetectedExerciseName =
-        detectedExerciseName ?? confirmedExerciseLabelRef.current ?? null;
+        cameraTarget?.exerciseName ??
+        detectedExerciseName ??
+        confirmedExerciseLabelRef.current ??
+        null;
       if (poseSessionId) {
         const finalizedEquipmentContextLabel =
           finalizedDetectedExerciseName ??
@@ -3377,12 +3626,12 @@ export function useWorkoutLiveController(
         });
         finalizedReps = isStaticHoldTarget ? 0 : finalizedPose.repCountAi;
         setTrackedReps(finalizedPose.repCountAi);
-        finalizedDetectedExerciseName =
+        finalizedDetectedExerciseName = cameraTarget?.exerciseName ??
           finalizedPose.detectedExerciseName ??
           detectedExerciseName ??
           confirmedExerciseLabelRef.current ??
           null;
-        if (finalizedPose.detectedExerciseName) {
+        if (finalizedPose.detectedExerciseName && !cameraTarget) {
           setDetectedExerciseName(finalizedPose.detectedExerciseName);
         }
         const feedback = Array.isArray(
@@ -3402,7 +3651,7 @@ export function useWorkoutLiveController(
         workoutSessionId ??
         liveActiveSession?.id ??
         null;
-      const finalizedTrackingLabel =
+      const finalizedTrackingLabel = cameraTarget?.exerciseName ??
         confirmedExerciseLabelRef.current ??
         movementContractRef.current?.exercise ??
         finalizedDetectedExerciseName ??
@@ -3545,6 +3794,10 @@ export function useWorkoutLiveController(
 
   autoFinalizeSetRef.current = () => {
     if (!cameraTarget || isFinishing) return;
+    const isStaticHoldTarget =
+      cameraTarget.targetDurationSeconds != null &&
+      cameraTarget.targetReps <= 0;
+    if (!isStaticHoldTarget) return;
     const completionKey = `${cameraTarget.sessionId}:${cameraTarget.planExerciseId}:${cameraTarget.setNumber}`;
     if (autoCompletionKeyRef.current === completionKey) return;
     autoCompletionKeyRef.current = completionKey;
@@ -3553,9 +3806,7 @@ export function useWorkoutLiveController(
     stopFrameLoop();
     pause();
     showMessage(
-      cameraTarget.targetDurationSeconds != null && cameraTarget.targetReps <= 0
-        ? `${cameraTarget.targetDurationSeconds}s hold reached. Saving set ${cameraTarget.setNumber}...`
-        : `${cameraTarget.targetReps} reps reached. Saving set ${cameraTarget.setNumber}...`,
+      `${cameraTarget.targetDurationSeconds}s hold reached. Saving set ${cameraTarget.setNumber}...`,
     );
     void handleFinishConfirm();
   };
@@ -3659,6 +3910,7 @@ export function useWorkoutLiveController(
           ? DEFAULT_POSE_FEEDBACK
           : NATIVE_POSE_FEEDBACK,
     finishVisible,
+    hasStartedSet: poseSessionId !== null,
     holdProgressSeconds,
     holdValid,
     isExerciseConfirmationVisible,

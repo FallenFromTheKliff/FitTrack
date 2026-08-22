@@ -1,0 +1,138 @@
+- generic [ref=e1]:
+  - generic [ref=e19]:
+    - generic [ref=e20]:
+      - img [ref=e22] [cursor=pointer]
+      - generic [ref=e24]: Profile
+      - generic [ref=e25]:
+        - button "Open page help" [ref=e26] [cursor=pointer]:
+          - img [ref=e27]
+        - button "12 unread notifications" [ref=e30] [cursor=pointer]:
+          - img [ref=e31]
+          - generic [ref=e35]: "12"
+    - generic [ref=e42]:
+      - generic [ref=e43]:
+        - generic [ref=e45]: AV
+        - generic [ref=e46]:
+          - generic [ref=e47]: Ava Rivera
+          - generic [ref=e48]: seed.member.active@fittrack.com
+          - generic [ref=e49]: Member since Dec 2025
+      - generic [ref=e52]:
+        - generic [ref=e53]:
+          - generic [ref=e54]: Fitness Summary
+          - generic [ref=e55]:
+            - generic [ref=e56]:
+              - generic [ref=e58]:
+                - generic [ref=e59]: 2.9K
+                - generic [ref=e60]: Total EXP
+              - generic [ref=e63]:
+                - generic [ref=e64]: "25"
+                - generic [ref=e65]: Tracked Muscles
+              - generic [ref=e68]:
+                - generic [ref=e69]: "--"
+                - generic [ref=e70]: Gym Rank
+            - generic [ref=e71]:
+              - button "Current Badge, quads leads with 1,096 EXP., Silver badge" [ref=e73] [cursor=pointer]:
+                - img [ref=e76]
+                - generic [ref=e79]:
+                  - generic [ref=e80]:
+                    - generic [ref=e81]: Current Badge
+                    - generic [ref=e84]: Silver badge
+                  - generic [ref=e85]: quads leads with 1,096 EXP.
+                - img [ref=e86]
+              - button "Gym Standing, No leaderboard placement yet. Your next tracked sessions will start the climb., Leaderboard warming up" [ref=e89] [cursor=pointer]:
+                - img [ref=e92]
+                - generic [ref=e98]:
+                  - generic [ref=e99]:
+                    - generic [ref=e100]: Gym Standing
+                    - generic [ref=e103]: Leaderboard warming up
+                  - generic [ref=e104]: No leaderboard placement yet. Your next tracked sessions will start the climb.
+                - img [ref=e105]
+              - generic [ref=e107]:
+                - generic:
+                  - img [ref=e109]
+                  - generic [ref=e112]:
+                    - generic [ref=e113]:
+                      - generic [ref=e114]: Health Snapshot
+                      - generic [ref=e117]: BMI 23.4
+                    - generic [ref=e118]: Healthy | 82.7 kg | 188 cm
+            - generic [ref=e119]: Open Muscle Mastery or Workout anytime to improve these stats.
+        - generic [ref=e120]:
+          - generic [ref=e121]: Ranking Privacy
+          - generic [ref=e122]:
+            - generic [ref=e123]:
+              - generic:
+                - img [ref=e127]
+                - generic [ref=e130]:
+                  - generic [ref=e131]:
+                    - generic [ref=e132]: Public
+                    - generic [ref=e135]: Active
+                  - generic [ref=e136]: Show your profile name on ranked member surfaces.
+            - button "Anonymous, Stay ranked while masking your member identity." [ref=e138] [cursor=pointer]:
+              - img [ref=e141]
+              - generic [ref=e144]:
+                - generic [ref=e146]: Anonymous
+                - generic [ref=e147]: Stay ranked while masking your member identity.
+              - img [ref=e148]
+            - button "Private, Hide your visible ranking while keeping progression history." [ref=e151] [cursor=pointer]:
+              - img [ref=e154]
+              - generic [ref=e159]:
+                - generic [ref=e161]: Private
+                - generic [ref=e162]: Hide your visible ranking while keeping progression history.
+              - img [ref=e163]
+        - generic [ref=e165]:
+          - generic [ref=e166]: ACCOUNT
+          - generic [ref=e167]:
+            - button "Edit Profile, Update your name, phone, and avatar" [ref=e169] [cursor=pointer]:
+              - img [ref=e172]
+              - generic [ref=e184]:
+                - generic [ref=e186]: Edit Profile
+                - generic [ref=e187]: Update your name, phone, and avatar
+              - img [ref=e188]
+            - generic [ref=e190]:
+              - generic:
+                - img [ref=e192]
+                - generic [ref=e194]:
+                  - generic [ref=e195]:
+                    - generic [ref=e196]: Member Access
+                    - generic [ref=e199]: Member
+                  - generic [ref=e200]: Your membership card is active. Member-only app features are unlocked on this account.
+            - button "Attendance QR, Open your rotating attendance QR for front-desk check-ins., Ready" [ref=e202] [cursor=pointer]:
+              - img [ref=e204]
+              - generic [ref=e209]:
+                - generic [ref=e210]:
+                  - generic [ref=e211]: Attendance QR
+                  - generic [ref=e214]: Ready
+                - generic [ref=e215]: Open your rotating attendance QR for front-desk check-ins.
+              - img [ref=e216]
+        - button "REQUEST ACCOUNT TERMINATION" [ref=e218] [cursor=pointer]:
+          - img [ref=e219]
+          - generic [ref=e224]: REQUEST ACCOUNT TERMINATION
+  - dialog [ref=e226]:
+    - generic [ref=e229]:
+      - generic [ref=e230]:
+        - img [ref=e232]
+        - generic [ref=e238]:
+          - generic [ref=e239]: Attendance QR
+          - generic [ref=e240]: Live member QR for front-desk check-ins and attendance scans.
+      - generic [ref=e241]:
+        - generic [ref=e243]:
+          - img [ref=e245]
+          - generic [ref=e248]:
+            - generic [ref=e249]:
+              - img [ref=e250]
+              - generic [ref=e253]: 365d remaining
+            - generic [ref=e254]: Refreshing issues a brand-new QR immediately and invalidates the previous code.
+          - generic [ref=e255]:
+            - generic [ref=e256]: MANUAL CHECK-IN VALUE
+            - generic [ref=e257]: dynqr_300639f7f7f6a1d32e74f425428fe980
+          - generic [ref=e258]:
+            - button "Copy QR Value" [active] [ref=e260] [cursor=pointer]:
+              - img [ref=e261]
+              - generic [ref=e264]: Copy QR Value
+            - button "Refresh QR" [ref=e265] [cursor=pointer]:
+              - img [ref=e266]
+              - generic [ref=e271]: Refresh QR
+        - button "Scroll modal to bottom" [disabled]:
+          - img
+      - button "Close" [ref=e273] [cursor=pointer]:
+        - generic [ref=e274]: Close

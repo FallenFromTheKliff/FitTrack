@@ -44,6 +44,19 @@ export function WorkoutLiveScreen() {
     isRecording,
     onResumeRecord,
   } = controller;
+  const targetReps = cameraTarget?.targetReps ?? 0;
+  const repsOver = Math.max(0, controller.reps - targetReps);
+  const repsBelowGoal = Math.max(0, targetReps - controller.reps);
+  const finishGoalSummary =
+    controller.reps > targetReps
+      ? `+${repsOver} above goal`
+      : controller.reps === targetReps
+        ? "Goal reached"
+        : `${repsBelowGoal} below goal`;
+  const finishSetMessage =
+    cameraTarget && targetReps > 0
+      ? `Detected ${controller.reps} reps\nTarget ${targetReps} reps\n${finishGoalSummary}\n\nFitTrack will finalize the pose count and save only the current planned set. The workout stays open until every required set is complete.`
+      : "FitTrack will finalize the pose count and save only the current planned set. The workout stays open until every required set is complete.";
   const router = useRouter();
   const screenStyle = useAnimatedStyle(() => ({ opacity: controller.opacity.value }));
   const contentStyle = useAnimatedStyle(() => ({
@@ -220,6 +233,7 @@ export function WorkoutLiveScreen() {
             guidanceLabel={controller.trackingOverlayLabel}
             isFrozen={controller.isFrozen}
             isCameraSwitching={controller.isCameraSwitching}
+            hasStartedSet={controller.hasStartedSet}
             isRecording={controller.isRecording}
             isTrackingReady={controller.isTrackingReady}
             lowConfidenceLandmarks={controller.lowConfidenceLandmarks}
@@ -266,7 +280,7 @@ export function WorkoutLiveScreen() {
       <ConfirmModal
         isVisible={controller.finishVisible}
         title="Save This Set?"
-        message="FitTrack will finalize the pose count and save only the current planned set. The workout stays open until every required set is complete."
+        message={finishSetMessage}
         yesLabel="Save Set"
         noLabel="Keep Going"
         isLoading={controller.isFinishing}
