@@ -40,6 +40,7 @@ import {
   memberAccessWindow,
   memberVolumeCount,
 } from '../volumes';
+import { createSeedRowsInBatches } from '../batch';
 import {
   calculateWorkoutProgressionDelta,
   DEFAULT_MILESTONE_ICON_KEY,
@@ -703,6 +704,7 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
     memberKeys.filter((memberKey) => isRecurringCoachingMember(ctx, memberKey)),
   );
   const scheduleRows: Prisma.TrainingScheduleDayCreateManyInput[] = [];
+  const trainingPlanRows: Prisma.TrainingPlanCreateManyInput[] = [];
   const planExerciseRows: Prisma.PlanExerciseCreateManyInput[] = [];
   const sessionRows: Prisma.WorkoutSessionCreateManyInput[] = [];
   const exerciseLogRows: Prisma.ExerciseLogCreateManyInput[] = [];
@@ -777,71 +779,106 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
           : presetIndex === 2
             ? PlanSource.ai_generated
             : PlanSource.self_created;
-      await ctx.prisma.trainingPlan.upsert({
-        where: { id: planId },
-        update: {
-          ai_generation_prompt: {
-            memberKey,
-            presetIndex,
-            source: 'dynamic-seed',
-            style: template.key,
-          },
-          coach_id:
-            source === PlanSource.coach_assigned
-              ? ctx.state.userIds[coachKey]
-              : null,
-          days_per_week: template.daysPerWeek,
-          duration_weeks: durationWeeks,
-          goal:
-            memberIndex % 3 === 0
-              ? FitnessGoal.bulking
-              : memberIndex % 3 === 1
-                ? FitnessGoal.cutting
-                : FitnessGoal.maintenance,
-          is_active:
-            presetIndex === 0 &&
-            !ctx.state.historicalMemberKeys.includes(memberKey),
-          is_template: false,
-          source,
-          title:
-            presetIndex === 0 && isLucaDemoMember
-              ? 'Active PPL Rest Split'
-              : template.title,
-          created_at: planCreatedAt,
+      const trainingPlanRow: Prisma.TrainingPlanCreateManyInput = {
+        id: planId,
+        ai_generation_prompt: {
+          memberKey,
+          presetIndex,
+          source: 'dynamic-seed',
+          style: template.key,
         },
-        create: {
-          id: planId,
-          ai_generation_prompt: {
-            memberKey,
-            presetIndex,
-            source: 'dynamic-seed',
-            style: template.key,
+        coach_id:
+          source === PlanSource.coach_assigned
+            ? ctx.state.userIds[coachKey]
+            : null,
+        days_per_week: template.daysPerWeek,
+        duration_weeks: durationWeeks,
+        goal:
+          memberIndex % 3 === 0
+            ? FitnessGoal.bulking
+            : memberIndex % 3 === 1
+              ? FitnessGoal.cutting
+              : FitnessGoal.maintenance,
+        is_active:
+          presetIndex === 0 &&
+          !ctx.state.historicalMemberKeys.includes(memberKey),
+        is_template: false,
+        source,
+        title:
+          presetIndex === 0 && isLucaDemoMember
+            ? 'Active PPL Rest Split'
+            : template.title,
+        created_at: planCreatedAt,
+        user_id: userId,
+      };
+      trainingPlanRows.push(trainingPlanRow);
+      if (ctx.config.mode !== 'reset') {
+        await ctx.prisma.trainingPlan.upsert({
+          where: { id: planId },
+          update: {
+            ai_generation_prompt: {
+              memberKey,
+              presetIndex,
+              source: 'dynamic-seed',
+              style: template.key,
+            },
+            coach_id:
+              source === PlanSource.coach_assigned
+                ? ctx.state.userIds[coachKey]
+                : null,
+            days_per_week: template.daysPerWeek,
+            duration_weeks: durationWeeks,
+            goal:
+              memberIndex % 3 === 0
+                ? FitnessGoal.bulking
+                : memberIndex % 3 === 1
+                  ? FitnessGoal.cutting
+                  : FitnessGoal.maintenance,
+            is_active:
+              presetIndex === 0 &&
+              !ctx.state.historicalMemberKeys.includes(memberKey),
+            is_template: false,
+            source,
+            title:
+              presetIndex === 0 && isLucaDemoMember
+                ? 'Active PPL Rest Split'
+                : template.title,
+            created_at: planCreatedAt,
           },
-          coach_id:
-            source === PlanSource.coach_assigned
-              ? ctx.state.userIds[coachKey]
-              : null,
-          days_per_week: template.daysPerWeek,
-          duration_weeks: durationWeeks,
-          goal:
-            memberIndex % 3 === 0
-              ? FitnessGoal.bulking
-              : memberIndex % 3 === 1
-                ? FitnessGoal.cutting
-                : FitnessGoal.maintenance,
-          is_active:
-            presetIndex === 0 &&
-            !ctx.state.historicalMemberKeys.includes(memberKey),
-          is_template: false,
-          source,
-          title:
-            presetIndex === 0 && isLucaDemoMember
-              ? 'Active PPL Rest Split'
-              : template.title,
-          created_at: planCreatedAt,
-          user_id: userId,
-        },
-      });
+          create: {
+            id: planId,
+            ai_generation_prompt: {
+              memberKey,
+              presetIndex,
+              source: 'dynamic-seed',
+              style: template.key,
+            },
+            coach_id:
+              source === PlanSource.coach_assigned
+                ? ctx.state.userIds[coachKey]
+                : null,
+            days_per_week: template.daysPerWeek,
+            duration_weeks: durationWeeks,
+            goal:
+              memberIndex % 3 === 0
+                ? FitnessGoal.bulking
+                : memberIndex % 3 === 1
+                  ? FitnessGoal.cutting
+                  : FitnessGoal.maintenance,
+            is_active:
+              presetIndex === 0 &&
+              !ctx.state.historicalMemberKeys.includes(memberKey),
+            is_template: false,
+            source,
+            title:
+              presetIndex === 0 && isLucaDemoMember
+                ? 'Active PPL Rest Split'
+                : template.title,
+            created_at: planCreatedAt,
+            user_id: userId,
+          },
+        });
+      }
 
       for (let weekNumber = 1; weekNumber <= durationWeeks; weekNumber += 1) {
         for (let dayIndex = 0; dayIndex < 7; dayIndex += 1) {
@@ -1288,6 +1325,9 @@ async function seedTrainingAndWorkouts(ctx: DynamicSeedContext) {
     }
   }
 
+  if (ctx.config.mode === 'reset') {
+    await createSeedRowsInBatches(ctx.prisma.trainingPlan, trainingPlanRows);
+  }
   await ctx.prisma.trainingScheduleDay.createMany({
     data: scheduleRows,
     skipDuplicates: true,
@@ -1523,6 +1563,10 @@ async function seedGamification(ctx: DynamicSeedContext) {
     });
   }
 
+  const progressionProfileRows: Prisma.UserProgressionProfileCreateManyInput[] =
+    [];
+  const rankingProfileRows: Prisma.RankingProfileCreateManyInput[] = [];
+  const integrityProfileRows: Prisma.IntegrityProfileCreateManyInput[] = [];
   for (const account of ctx.state.accounts.filter(
     (candidate) =>
       candidate.role === 'admin' || historyMemberKeys.includes(candidate.key),
@@ -1532,123 +1576,146 @@ async function seedGamification(ctx: DynamicSeedContext) {
     const points = account.role === 'admin' ? 0 : 150 + (memberIndex % 12) * 65;
     const totalXp = getRepresentativeLifetimeXp(account, memberIndex);
     const progressionProfileId = seedId(`progression-profile:${account.key}`);
-    const existingProgressionProfile =
-      await ctx.prisma.userProgressionProfile.findUnique({
-        where: { user_id: userId },
-        select: { id: true },
-      });
-    if (
-      canRewriteSeedOwned(existingProgressionProfile?.id, progressionProfileId)
-    ) {
-      await ctx.prisma.userProgressionProfile.upsert({
-      where: { user_id: userId },
-      update: {
+    const currentStreak =
+      account.memberPersona === 'premium' ? 7 : 1 + (points % 5);
+    const longestStreak =
+      account.memberPersona === 'premium' ? 12 : 3 + (points % 8);
+    const lastProgressedAt = daysFrom(
+      ctx.config.anchorDate,
+      -1 - (points % 9),
+      19,
+    );
+    const progressionProfileRow: Prisma.UserProgressionProfileCreateManyInput =
+      {
+        id: progressionProfileId,
         active_season_id: activeSeasonId,
         current_season_points: points,
-        current_streak:
-          account.memberPersona === 'premium' ? 7 : 1 + (points % 5),
-        last_progressed_at: daysFrom(
-          ctx.config.anchorDate,
-          -1 - (points % 9),
-          19,
-        ),
-        longest_streak:
-          account.memberPersona === 'premium' ? 12 : 3 + (points % 8),
-        total_xp: totalXp,
-      },
-      create: {
-          id: progressionProfileId,
-        active_season_id: activeSeasonId,
-        current_season_points: points,
-        current_streak:
-          account.memberPersona === 'premium' ? 7 : 1 + (points % 5),
-        last_progressed_at: daysFrom(
-          ctx.config.anchorDate,
-          -1 - (points % 9),
-          19,
-        ),
-        longest_streak:
-          account.memberPersona === 'premium' ? 12 : 3 + (points % 8),
+        current_streak: currentStreak,
+        last_progressed_at: lastProgressedAt,
+        longest_streak: longestStreak,
         total_xp: totalXp,
         user_id: userId,
-      },
-      });
+      };
+    if (ctx.config.mode === 'reset') {
+      progressionProfileRows.push(progressionProfileRow);
+    } else {
+      const existingProgressionProfile =
+        await ctx.prisma.userProgressionProfile.findUnique({
+          where: { user_id: userId },
+          select: { id: true },
+        });
+      if (
+        canRewriteSeedOwned(
+          existingProgressionProfile?.id,
+          progressionProfileId,
+        )
+      ) {
+        await ctx.prisma.userProgressionProfile.upsert({
+          where: { user_id: userId },
+          update: {
+            active_season_id: activeSeasonId,
+            current_season_points: points,
+            current_streak: currentStreak,
+            last_progressed_at: lastProgressedAt,
+            longest_streak: longestStreak,
+            total_xp: totalXp,
+          },
+          create: progressionProfileRow,
+        });
+      }
     }
+
     const rankingProfileId = seedId(`ranking-profile:${account.key}`);
-    const existingRankingProfile = await ctx.prisma.rankingProfile.findUnique({
-      where: { user_id: userId },
-      select: { id: true },
-    });
-    if (canRewriteSeedOwned(existingRankingProfile?.id, rankingProfileId)) {
-      await ctx.prisma.rankingProfile.upsert({
-        where: { user_id: userId },
-        update: {
-          display_alias:
-            account.role === 'admin'
-              ? 'Admin Review'
-              : `${account.firstName} ${account.lastName.charAt(0)}.`,
-          governance_status:
-            account.memberPersona === 'suspended'
-              ? RankingGovernanceStatus.hidden_by_admin
-              : RankingGovernanceStatus.normal,
-          visibility: getSeedRankingVisibility(account),
+    const rankingProfileRow: Prisma.RankingProfileCreateManyInput = {
+      id: rankingProfileId,
+      display_alias:
+        account.role === 'admin'
+          ? 'Admin Review'
+          : `${account.firstName} ${account.lastName.charAt(0)}.`,
+      governance_status:
+        account.memberPersona === 'suspended'
+          ? RankingGovernanceStatus.hidden_by_admin
+          : RankingGovernanceStatus.normal,
+      user_id: userId,
+      visibility: getSeedRankingVisibility(account),
+    };
+    if (ctx.config.mode === 'reset') {
+      rankingProfileRows.push(rankingProfileRow);
+    } else {
+      const existingRankingProfile = await ctx.prisma.rankingProfile.findUnique(
+        {
+          where: { user_id: userId },
+          select: { id: true },
         },
-        create: {
-          id: rankingProfileId,
-          display_alias:
-            account.role === 'admin'
-              ? 'Admin Review'
-              : `${account.firstName} ${account.lastName.charAt(0)}.`,
-          governance_status:
-            account.memberPersona === 'suspended'
-              ? RankingGovernanceStatus.hidden_by_admin
-              : RankingGovernanceStatus.normal,
-          user_id: userId,
-          visibility: getSeedRankingVisibility(account),
-        },
-      });
+      );
+      if (canRewriteSeedOwned(existingRankingProfile?.id, rankingProfileId)) {
+        await ctx.prisma.rankingProfile.upsert({
+          where: { user_id: userId },
+          update: {
+            display_alias: rankingProfileRow.display_alias,
+            governance_status: rankingProfileRow.governance_status,
+            visibility: rankingProfileRow.visibility,
+          },
+          create: rankingProfileRow,
+        });
+      }
     }
+
     const integrityProfileId = seedId(`integrity-profile:${account.key}`);
-    const existingIntegrityProfile =
-      await ctx.prisma.integrityProfile.findUnique({
-        where: { user_id: userId },
-        select: { id: true },
-      });
-    if (canRewriteSeedOwned(existingIntegrityProfile?.id, integrityProfileId)) {
-      await ctx.prisma.integrityProfile.upsert({
-      where: { user_id: userId },
-      update: {
-        last_flagged_at:
-          account.memberPersona === 'suspended'
-            ? daysFrom(ctx.config.anchorDate, -6, 9)
-            : null,
-        open_case_count: account.memberPersona === 'suspended' ? 1 : 0,
-        risk_level:
-          account.memberPersona === 'suspended'
-            ? IntegrityRiskLevel.high
-            : account.memberPersona === 'frozen'
-              ? IntegrityRiskLevel.medium
-              : IntegrityRiskLevel.low,
-      },
-      create: {
-          id: integrityProfileId,
-        last_flagged_at:
-          account.memberPersona === 'suspended'
-            ? daysFrom(ctx.config.anchorDate, -6, 9)
-            : null,
-        open_case_count: account.memberPersona === 'suspended' ? 1 : 0,
-        risk_level:
-          account.memberPersona === 'suspended'
-            ? IntegrityRiskLevel.high
-            : account.memberPersona === 'frozen'
-              ? IntegrityRiskLevel.medium
-              : IntegrityRiskLevel.low,
-        user_id: userId,
-      },
-      });
+    const integrityProfileRow: Prisma.IntegrityProfileCreateManyInput = {
+      id: integrityProfileId,
+      last_flagged_at:
+        account.memberPersona === 'suspended'
+          ? daysFrom(ctx.config.anchorDate, -6, 9)
+          : null,
+      open_case_count: account.memberPersona === 'suspended' ? 1 : 0,
+      risk_level:
+        account.memberPersona === 'suspended'
+          ? IntegrityRiskLevel.high
+          : account.memberPersona === 'frozen'
+            ? IntegrityRiskLevel.medium
+            : IntegrityRiskLevel.low,
+      user_id: userId,
+    };
+    if (ctx.config.mode === 'reset') {
+      integrityProfileRows.push(integrityProfileRow);
+    } else {
+      const existingIntegrityProfile =
+        await ctx.prisma.integrityProfile.findUnique({
+          where: { user_id: userId },
+          select: { id: true },
+        });
+      if (
+        canRewriteSeedOwned(existingIntegrityProfile?.id, integrityProfileId)
+      ) {
+        await ctx.prisma.integrityProfile.upsert({
+          where: { user_id: userId },
+          update: {
+            last_flagged_at: integrityProfileRow.last_flagged_at,
+            open_case_count: integrityProfileRow.open_case_count,
+            risk_level: integrityProfileRow.risk_level,
+          },
+          create: integrityProfileRow,
+        });
+      }
     }
   }
+  if (ctx.config.mode === 'reset') {
+    await createSeedRowsInBatches(
+      ctx.prisma.userProgressionProfile,
+      progressionProfileRows,
+    );
+    await createSeedRowsInBatches(
+      ctx.prisma.rankingProfile,
+      rankingProfileRows,
+    );
+    await createSeedRowsInBatches(
+      ctx.prisma.integrityProfile,
+      integrityProfileRows,
+    );
+  }
 
+  const seasonalStandingRows: Prisma.SeasonalStandingCreateManyInput[] = [];
   for (const [index, memberKey] of activeMemberKeys.entries()) {
     const userId = ctx.state.userIds[memberKey];
     const standings = [
@@ -1673,6 +1740,18 @@ async function seedGamification(ctx: DynamicSeedContext) {
     ];
 
     for (const standing of standings) {
+      const legacyIds =
+        standing.season_id === previousSeasonId
+          ? [seedId(`season-standing:previous:${memberKey}`)]
+          : [];
+      const row: Prisma.SeasonalStandingCreateManyInput = {
+        ...standing,
+        user_id: userId,
+      };
+      if (ctx.config.mode === 'reset') {
+        seasonalStandingRows.push(row);
+        continue;
+      }
       const existingStanding = await ctx.prisma.seasonalStanding.findUnique({
         where: {
           season_id_user_id: {
@@ -1682,10 +1761,6 @@ async function seedGamification(ctx: DynamicSeedContext) {
         },
         select: { id: true },
       });
-      const legacyIds =
-        standing.season_id === previousSeasonId
-          ? [seedId(`season-standing:previous:${memberKey}`)]
-          : [];
       if (!canRewriteSeedOwned(existingStanding?.id, standing.id, legacyIds)) {
         continue;
       }
@@ -1703,14 +1778,18 @@ async function seedGamification(ctx: DynamicSeedContext) {
           rank_position: standing.rank_position,
           season_points: standing.season_points,
         },
-        create: {
-          ...standing,
-          user_id: userId,
-        },
+        create: row,
       });
     }
   }
+  if (ctx.config.mode === 'reset') {
+    await createSeedRowsInBatches(
+      ctx.prisma.seasonalStanding,
+      seasonalStandingRows,
+    );
+  }
 
+  const muscleMasteryRows: Prisma.MuscleMasteryProgressCreateManyInput[] = [];
   for (const [memberIndex, memberKey] of historyMemberKeys.entries()) {
     for (const [muscleIndex, { key: muscle }] of activeMuscles.entries()) {
       const xpPoints = getRepresentativeMuscleXp(memberIndex, muscleIndex);
@@ -1718,6 +1797,19 @@ async function seedGamification(ctx: DynamicSeedContext) {
         4_500 + memberIndex * 125 + muscleIndex * 300,
       );
       const masteryId = seedId(`mastery:${memberKey}:${muscle}`);
+      const masteryRow: Prisma.MuscleMasteryProgressCreateManyInput = {
+        id: masteryId,
+        last_ranked_at: daysFrom(ctx.config.anchorDate, -2 - muscleIndex, 20),
+        muscle_group: muscle,
+        rank: evaluateExpRank(xpPoints),
+        total_volume_kg: totalVolumeKg,
+        user_id: ctx.state.userIds[memberKey],
+        xp_points: xpPoints,
+      };
+      if (ctx.config.mode === 'reset') {
+        muscleMasteryRows.push(masteryRow);
+        continue;
+      }
       const existingMastery = await ctx.prisma.muscleMasteryProgress.findUnique(
         {
           where: {
@@ -1744,18 +1836,20 @@ async function seedGamification(ctx: DynamicSeedContext) {
           xp_points: xpPoints,
         },
         create: {
-          id: masteryId,
-          last_ranked_at: daysFrom(ctx.config.anchorDate, -2 - muscleIndex, 20),
-          muscle_group: muscle,
-          rank: evaluateExpRank(xpPoints),
-          total_volume_kg: totalVolumeKg,
-          user_id: ctx.state.userIds[memberKey],
-          xp_points: xpPoints,
+          ...masteryRow,
         },
       });
     }
   }
+  if (ctx.config.mode === 'reset') {
+    await createSeedRowsInBatches(
+      ctx.prisma.muscleMasteryProgress,
+      muscleMasteryRows,
+    );
+  }
 
+  const seasonalMuscleStandingRows: Prisma.SeasonalMuscleStandingCreateManyInput[] =
+    [];
   for (const [memberIndex, memberKey] of activeMemberKeys.entries()) {
     for (const [muscleIndex, { key: muscle }] of activeMuscles.entries()) {
       const rows = [
@@ -1788,6 +1882,14 @@ async function seedGamification(ctx: DynamicSeedContext) {
       ];
 
       for (const row of rows) {
+        const createRow: Prisma.SeasonalMuscleStandingCreateManyInput = {
+          ...row,
+          user_id: ctx.state.userIds[memberKey],
+        };
+        if (ctx.config.mode === 'reset') {
+          seasonalMuscleStandingRows.push(createRow);
+          continue;
+        }
         const existingStanding =
           await ctx.prisma.seasonalMuscleStanding.findUnique({
             where: {
@@ -1816,12 +1918,18 @@ async function seedGamification(ctx: DynamicSeedContext) {
             rank_position: row.rank_position,
           },
           create: {
-            ...row,
-            user_id: ctx.state.userIds[memberKey],
+            ...createRow,
           },
         });
       }
     }
+  }
+
+  if (ctx.config.mode === 'reset') {
+    await createSeedRowsInBatches(
+      ctx.prisma.seasonalMuscleStanding,
+      seasonalMuscleStandingRows,
+    );
   }
 
   const completedWorkouts = await ctx.prisma.workoutSession.findMany({
@@ -1875,19 +1983,21 @@ async function seedGamification(ctx: DynamicSeedContext) {
 
   for (const [index, source] of sourceRows.entries()) {
     const { workoutId, volume, ...sourceRecord } = source;
-    await ctx.prisma.progressionSourceEvent.upsert({
-      where: { id: source.id },
-      update: {
-        created_at: source.created_at,
-        processed_at: source.processed_at,
-        source_context: sourceRecord.source_context,
-        source_id: sourceRecord.source_id,
-        source_status: sourceRecord.source_status,
-        source_type: sourceRecord.source_type,
-        user_id: sourceRecord.user_id,
-      },
-      create: sourceRecord,
-    });
+    if (ctx.config.mode !== 'reset') {
+      await ctx.prisma.progressionSourceEvent.upsert({
+        where: { id: source.id },
+        update: {
+          created_at: source.created_at,
+          processed_at: source.processed_at,
+          source_context: sourceRecord.source_context,
+          source_id: sourceRecord.source_id,
+          source_status: sourceRecord.source_status,
+          source_type: sourceRecord.source_type,
+          user_id: sourceRecord.user_id,
+        },
+        create: sourceRecord,
+      });
+    }
 
     const grants = [
       {
@@ -1920,22 +2030,24 @@ async function seedGamification(ctx: DynamicSeedContext) {
     ];
 
     for (const grant of grants) {
-      await ctx.prisma.progressionGrantLedger.upsert({
-        where: { id: grant.id },
-        update: {
-          amount: grant.amount,
-          created_at: grant.created_at,
-          grant_status: grant.grant_status,
-          grant_type: grant.grant_type,
-          metadata: grant.metadata,
-          muscle_group: grant.muscle_group,
-          reason: grant.reason,
-          season_id: grant.season_id,
-          source_event_id: grant.source_event_id,
-          user_id: grant.user_id,
-        },
-        create: grant,
-      });
+      if (ctx.config.mode !== 'reset') {
+        await ctx.prisma.progressionGrantLedger.upsert({
+          where: { id: grant.id },
+          update: {
+            amount: grant.amount,
+            created_at: grant.created_at,
+            grant_status: grant.grant_status,
+            grant_type: grant.grant_type,
+            metadata: grant.metadata,
+            muscle_group: grant.muscle_group,
+            reason: grant.reason,
+            season_id: grant.season_id,
+            source_event_id: grant.source_event_id,
+            user_id: grant.user_id,
+          },
+          create: grant,
+        });
+      }
     }
   }
 
@@ -1980,7 +2092,8 @@ async function seedGamification(ctx: DynamicSeedContext) {
         (totalXpByUser.get(grant.user_id) ?? 0) + amount,
       );
       if (grant.muscle_group) {
-        const muscleTotals = muscleXpByUser.get(grant.user_id) ?? new Map();
+        const muscleTotals =
+          muscleXpByUser.get(grant.user_id) ?? new Map<string, number>();
         muscleTotals.set(
           grant.muscle_group,
           (muscleTotals.get(grant.muscle_group) ?? 0) + amount,
@@ -2001,83 +2114,83 @@ async function seedGamification(ctx: DynamicSeedContext) {
 
   if (ctx.config.mode === 'reset') {
     for (const memberKey of historyMemberKeys) {
-    const userId = ctx.state.userIds[memberKey];
-    const totalXp = totalXpByUser.get(userId) ?? 0;
-    const seasonPoints = seasonPointsByUser.get(userId) ?? 0;
-    const lastProgressedAt =
-      lastProgressedAtByUser.get(userId) ??
-      activityDateFor(ctx, memberKey, 0, 1, 19) ??
-      daysFrom(ctx.config.anchorDate, -1, 19);
-    await ctx.prisma.userProgressionProfile.update({
-      where: { user_id: userId },
-      data: {
-        current_season_points: seasonPoints,
-        last_progressed_at: lastProgressedAt,
-        total_xp: totalXp,
-      },
-    });
-
-    const muscleTotals =
-      muscleXpByUser.get(userId) ?? new Map<string, number>();
-    for (const { key: muscle } of activeMuscles) {
-      const xpPoints = muscleTotals.get(muscle) ?? 0;
-      await ctx.prisma.muscleMasteryProgress.upsert({
-        where: {
-          user_id_muscle_group: { muscle_group: muscle, user_id: userId },
-        },
-        update: {
-          last_ranked_at: lastProgressedAt,
-          rank: evaluateExpRank(xpPoints),
-          total_volume_kg: new Prisma.Decimal(
-            (volumeByUser.get(userId) ?? 0).toFixed(2),
-          ),
-          xp_points: xpPoints,
-        },
-        create: {
-          id: seedId(`mastery:${memberKey}:${muscle}`),
-          last_ranked_at: lastProgressedAt,
-          muscle_group: muscle,
-          rank: evaluateExpRank(xpPoints),
-          total_volume_kg: new Prisma.Decimal(
-            (volumeByUser.get(userId) ?? 0).toFixed(2),
-          ),
-          user_id: userId,
-          xp_points: xpPoints,
+      const userId = ctx.state.userIds[memberKey];
+      const totalXp = totalXpByUser.get(userId) ?? 0;
+      const seasonPoints = seasonPointsByUser.get(userId) ?? 0;
+      const lastProgressedAt =
+        lastProgressedAtByUser.get(userId) ??
+        activityDateFor(ctx, memberKey, 0, 1, 19) ??
+        daysFrom(ctx.config.anchorDate, -1, 19);
+      await ctx.prisma.userProgressionProfile.update({
+        where: { user_id: userId },
+        data: {
+          current_season_points: seasonPoints,
+          last_progressed_at: lastProgressedAt,
+          total_xp: totalXp,
         },
       });
-    }
+
+      const muscleTotals =
+        muscleXpByUser.get(userId) ?? new Map<string, number>();
+      for (const { key: muscle } of activeMuscles) {
+        const xpPoints = muscleTotals.get(muscle) ?? 0;
+        await ctx.prisma.muscleMasteryProgress.upsert({
+          where: {
+            user_id_muscle_group: { muscle_group: muscle, user_id: userId },
+          },
+          update: {
+            last_ranked_at: lastProgressedAt,
+            rank: evaluateExpRank(xpPoints),
+            total_volume_kg: new Prisma.Decimal(
+              (volumeByUser.get(userId) ?? 0).toFixed(2),
+            ),
+            xp_points: xpPoints,
+          },
+          create: {
+            id: seedId(`mastery:${memberKey}:${muscle}`),
+            last_ranked_at: lastProgressedAt,
+            muscle_group: muscle,
+            rank: evaluateExpRank(xpPoints),
+            total_volume_kg: new Prisma.Decimal(
+              (volumeByUser.get(userId) ?? 0).toFixed(2),
+            ),
+            user_id: userId,
+            xp_points: xpPoints,
+          },
+        });
+      }
     }
     for (const [memberIndex, memberKey] of activeMemberKeys.entries()) {
-    const userId = ctx.state.userIds[memberKey];
-    const seasonPoints = seasonPointsByUser.get(userId) ?? 0;
-    const muscleTotals =
-      muscleXpByUser.get(userId) ?? new Map<string, number>();
-    await ctx.prisma.seasonalStanding.updateMany({
-      where: { season_id: activeSeasonId, user_id: userId },
-      data: {
-        last_earned_at:
-          lastProgressedAtByUser.get(userId) ??
-          daysFrom(ctx.config.anchorDate, -1, 19),
-        rank_position: memberIndex + 1,
-        season_points: seasonPoints,
-      },
-    });
-    for (const { key: muscle } of activeMuscles) {
-      await ctx.prisma.seasonalMuscleStanding.updateMany({
-        where: {
-          muscle_group: muscle,
-          season_id: activeSeasonId,
-          user_id: userId,
-        },
+      const userId = ctx.state.userIds[memberKey];
+      const seasonPoints = seasonPointsByUser.get(userId) ?? 0;
+      const muscleTotals =
+        muscleXpByUser.get(userId) ?? new Map<string, number>();
+      await ctx.prisma.seasonalStanding.updateMany({
+        where: { season_id: activeSeasonId, user_id: userId },
         data: {
           last_earned_at:
             lastProgressedAtByUser.get(userId) ??
             daysFrom(ctx.config.anchorDate, -1, 19),
-          muscle_points: muscleTotals.get(muscle) ?? 0,
           rank_position: memberIndex + 1,
+          season_points: seasonPoints,
         },
       });
-    }
+      for (const { key: muscle } of activeMuscles) {
+        await ctx.prisma.seasonalMuscleStanding.updateMany({
+          where: {
+            muscle_group: muscle,
+            season_id: activeSeasonId,
+            user_id: userId,
+          },
+          data: {
+            last_earned_at:
+              lastProgressedAtByUser.get(userId) ??
+              daysFrom(ctx.config.anchorDate, -1, 19),
+            muscle_points: muscleTotals.get(muscle) ?? 0,
+            rank_position: memberIndex + 1,
+          },
+        });
+      }
     }
   }
 
@@ -2132,34 +2245,42 @@ async function seedGamification(ctx: DynamicSeedContext) {
     }),
   );
 
-  for (const progress of milestoneProgressRows) {
-    const existingProgress = await ctx.prisma.userMilestoneProgress.findUnique({
-      where: {
-        user_id_milestone_definition_id: {
-          milestone_definition_id: progress.milestone_definition_id,
-          user_id: progress.user_id,
+  if (ctx.config.mode === 'reset') {
+    await createSeedRowsInBatches(
+      ctx.prisma.userMilestoneProgress,
+      milestoneProgressRows,
+    );
+  } else {
+    for (const progress of milestoneProgressRows) {
+      const existingProgress =
+        await ctx.prisma.userMilestoneProgress.findUnique({
+          where: {
+            user_id_milestone_definition_id: {
+              milestone_definition_id: progress.milestone_definition_id,
+              user_id: progress.user_id,
+            },
+          },
+          select: { id: true },
+        });
+      if (!canRewriteSeedOwned(existingProgress?.id, progress.id)) continue;
+      await ctx.prisma.userMilestoneProgress.upsert({
+        where: {
+          user_id_milestone_definition_id: {
+            milestone_definition_id: progress.milestone_definition_id,
+            user_id: progress.user_id,
+          },
         },
-      },
-      select: { id: true },
-    });
-    if (!canRewriteSeedOwned(existingProgress?.id, progress.id)) continue;
-    await ctx.prisma.userMilestoneProgress.upsert({
-      where: {
-        user_id_milestone_definition_id: {
-          milestone_definition_id: progress.milestone_definition_id,
-          user_id: progress.user_id,
+        update: {
+          claimed_at: progress.claimed_at,
+          progress_payload: progress.progress_payload,
+          progress_value: progress.progress_value,
+          reward_granted_at: progress.reward_granted_at,
+          status: progress.status,
+          unlocked_at: progress.unlocked_at,
         },
-      },
-      update: {
-        claimed_at: progress.claimed_at,
-        progress_payload: progress.progress_payload,
-        progress_value: progress.progress_value,
-        reward_granted_at: progress.reward_granted_at,
-        status: progress.status,
-        unlocked_at: progress.unlocked_at,
-      },
-      create: progress,
-    });
+        create: progress,
+      });
+    }
   }
 
   const evidenceMemberKeys = activeMemberKeys.slice(0, 3);
@@ -2242,7 +2363,9 @@ async function seedGamification(ctx: DynamicSeedContext) {
       risk_level:
         index === 0 ? IntegrityRiskLevel.high : IntegrityRiskLevel.medium,
       source_event_id:
-        sourceEventIdByUser.get(ctx.state.userIds[memberKey]) ?? null,
+        ctx.config.mode === 'reset'
+          ? null
+          : (sourceEventIdByUser.get(ctx.state.userIds[memberKey]) ?? null),
       user_id: ctx.state.userIds[memberKey],
     })),
     skipDuplicates: true,
@@ -2262,7 +2385,9 @@ async function seedGamification(ctx: DynamicSeedContext) {
       rationale: 'Moderation action for governance audit.',
       season_id: activeSeasonId,
       source_event_id:
-        sourceEventIdByUser.get(ctx.state.userIds[memberKey]) ?? null,
+        ctx.config.mode === 'reset'
+          ? null
+          : (sourceEventIdByUser.get(ctx.state.userIds[memberKey]) ?? null),
       target_user_id: ctx.state.userIds[memberKey],
     })),
     skipDuplicates: true,
@@ -2484,6 +2609,8 @@ export async function reconcileSeedGamification(ctx: DynamicSeedContext) {
     string,
     Map<string, Map<string, { points: number; lastEarnedAt: Date | null }>>
   >();
+  const sourceRowsForReset: Prisma.ProgressionSourceEventCreateManyInput[] = [];
+  const grantRowsForReset: Prisma.ProgressionGrantLedgerCreateManyInput[] = [];
 
   for (const workout of workouts) {
     const delta = deltasByWorkout.get(workout.id);
@@ -2510,11 +2637,15 @@ export async function reconcileSeedGamification(ctx: DynamicSeedContext) {
       source_type: ProgressionSourceType.workout_session_completed,
       user_id: workout.user_id,
     };
-    await ctx.prisma.progressionSourceEvent.upsert({
-      where: { id: sourceEventId },
-      update: sourceData,
-      create: { id: sourceEventId, ...sourceData },
-    });
+    if (ctx.config.mode === 'reset') {
+      sourceRowsForReset.push({ id: sourceEventId, ...sourceData });
+    } else {
+      await ctx.prisma.progressionSourceEvent.upsert({
+        where: { id: sourceEventId },
+        update: sourceData,
+        create: { id: sourceEventId, ...sourceData },
+      });
+    }
 
     const progressionSeason = seasonFor(occurredAt);
     const grants: SeedProgressionGrant[] = [...delta.byMuscle.entries()]
@@ -2559,23 +2690,27 @@ export async function reconcileSeedGamification(ctx: DynamicSeedContext) {
     }
     for (const grant of grants) {
       canonicalGrantIds.push(grant.id);
-      await ctx.prisma.progressionGrantLedger.upsert({
-        where: { id: grant.id },
-        update: {
-          amount: grant.amount,
-          created_at: grant.created_at,
-          grant_status: grant.grant_status,
-          grant_type: grant.grant_type,
-          metadata: grant.metadata,
-          muscle_group: grant.muscle_group,
-          reason: grant.reason,
-          season_id: grant.season_id,
-          source_event_id: grant.source_event_id,
-          user_id: grant.user_id,
-          voided_at: null,
-        },
-        create: grant,
-      });
+      if (ctx.config.mode === 'reset') {
+        grantRowsForReset.push(grant);
+      } else {
+        await ctx.prisma.progressionGrantLedger.upsert({
+          where: { id: grant.id },
+          update: {
+            amount: grant.amount,
+            created_at: grant.created_at,
+            grant_status: grant.grant_status,
+            grant_type: grant.grant_type,
+            metadata: grant.metadata,
+            muscle_group: grant.muscle_group,
+            reason: grant.reason,
+            season_id: grant.season_id,
+            source_event_id: grant.source_event_id,
+            user_id: grant.user_id,
+            voided_at: null,
+          },
+          create: grant,
+        });
+      }
       if (grant.grant_type === ProgressionGrantType.xp) {
         totalXpByUser.set(
           grant.user_id,
@@ -2633,6 +2768,16 @@ export async function reconcileSeedGamification(ctx: DynamicSeedContext) {
         seasonPointsBySeason.set(grant.season_id, rows);
       }
     }
+  }
+  if (ctx.config.mode === 'reset') {
+    await createSeedRowsInBatches(
+      ctx.prisma.progressionSourceEvent,
+      sourceRowsForReset,
+    );
+    await createSeedRowsInBatches(
+      ctx.prisma.progressionGrantLedger,
+      grantRowsForReset,
+    );
   }
 
   const canonicalSourceIdSet = new Set(sourceIds);

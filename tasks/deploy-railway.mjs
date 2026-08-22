@@ -1,35 +1,34 @@
-import { spawnSync } from 'node:child_process';
+import { spawnSync } from "node:child_process";
 import {
   copyFileSync,
   existsSync,
   mkdirSync,
   readdirSync,
   rmSync,
-} from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+} from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const REMOTE_RESET_CONFIRMATION = 'RESET_RAILWAY_DATABASE';
-const DYNAMIC_SEED_CONFIRMATION = 'RESET_REMOTE_DYNAMIC_SEED';
-const DEFAULT_ENVIRONMENT = 'production';
+const REMOTE_RESET_CONFIRMATION = "RESET_RAILWAY_DATABASE";
+const DEFAULT_ENVIRONMENT = "production";
 export const DEFAULT_SEED_USERS = 180;
-const DEFAULT_LINK_SERVICE = 'api';
+const DEFAULT_LINK_SERVICE = "api";
 const DEPLOYMENT_LIST_LIMIT = 100;
 const DEPLOYMENT_STATUS_MAX_ATTEMPTS = 30;
 const DEPLOYMENT_STATUS_INTERVAL_MS = 30_000;
 const DEPLOYMENT_LOG_LINE_LIMIT = 100;
 const CAPTURED_COMMAND_MAX_BUFFER_BYTES = 20 * 1024 * 1024;
 const PENDING_DEPLOYMENT_STATUSES = new Set([
-  'BUILDING',
-  'DEPLOYING',
-  'INITIALIZING',
-  'WAITING',
-  'QUEUED',
+  "BUILDING",
+  "DEPLOYING",
+  "INITIALIZING",
+  "WAITING",
+  "QUEUED",
 ]);
 const DEPLOYMENT_ID_VALUE_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const argv = process.argv.slice(2).filter((arg) => arg !== '--');
+const argv = process.argv.slice(2).filter((arg) => arg !== "--");
 
 function getOption(...names) {
   for (const name of names) {
@@ -89,9 +88,9 @@ Examples:
 }
 
 export function parseDeploymentList(output) {
-  const text = String(output ?? '').trim();
+  const text = String(output ?? "").trim();
   if (!text) {
-    throw new Error('Railway returned an empty deployment list.');
+    throw new Error("Railway returned an empty deployment list.");
   }
 
   let parsed;
@@ -112,11 +111,14 @@ export function parseDeploymentList(output) {
         : undefined;
 
   if (!deployments) {
-    throw new Error('Railway deployment JSON did not contain a deployment array.');
+    throw new Error(
+      "Railway deployment JSON did not contain a deployment array.",
+    );
   }
 
   return deployments.map((deployment) => {
-    const value = deployment && typeof deployment === 'object' ? deployment : {};
+    const value =
+      deployment && typeof deployment === "object" ? deployment : {};
     const id = value.id ?? value.deploymentId ?? value.deployment_id;
     const rawStatus = value.status ?? value.deploymentStatus;
 
@@ -132,7 +134,7 @@ export function parseDeploymentList(output) {
 }
 
 function extractDeploymentId(output) {
-  const text = String(output ?? '');
+  const text = String(output ?? "");
   const buildLogsId = text.match(
     /Build Logs:\s*https?:\/\/[^\s]+[?&]id=([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i,
   );
@@ -149,7 +151,7 @@ function extractDeploymentId(output) {
 
   const jsonIds = new Set();
   const collectJsonIds = (value, { root = false } = {}) => {
-    if (!value || typeof value !== 'object') {
+    if (!value || typeof value !== "object") {
       return;
     }
 
@@ -160,7 +162,7 @@ function extractDeploymentId(output) {
 
     const explicitId = value.deploymentId ?? value.deployment_id;
     if (
-      typeof explicitId === 'string' &&
+      typeof explicitId === "string" &&
       DEPLOYMENT_ID_VALUE_PATTERN.test(explicitId.trim())
     ) {
       jsonIds.add(explicitId.trim());
@@ -168,19 +170,19 @@ function extractDeploymentId(output) {
 
     if (
       root &&
-      typeof value.id === 'string' &&
+      typeof value.id === "string" &&
       DEPLOYMENT_ID_VALUE_PATTERN.test(value.id.trim())
     ) {
       jsonIds.add(value.id.trim());
     }
 
-    if (value.deployment && typeof value.deployment === 'object') {
+    if (value.deployment && typeof value.deployment === "object") {
       collectJsonIds(value.deployment, { root: true });
     }
-    if (value.data && typeof value.data === 'object') {
+    if (value.data && typeof value.data === "object") {
       collectJsonIds(value.data);
     }
-    if (value.result && typeof value.result === 'object') {
+    if (value.result && typeof value.result === "object") {
       collectJsonIds(value.result);
     }
   };
@@ -213,7 +215,9 @@ function deploymentMessage(deployment) {
     deployment?.meta?.deploymentMessage,
   ];
 
-  return values.filter((value) => value !== undefined && value !== null).join(' ');
+  return values
+    .filter((value) => value !== undefined && value !== null)
+    .join(" ");
 }
 
 export function identifyUploadedDeployment({
@@ -251,17 +255,19 @@ export function identifyUploadedDeployment({
 }
 
 export function classifyDeploymentStatus(status) {
-  const normalized = String(status ?? '').trim().toUpperCase();
-  if (normalized === 'SUCCESS') {
-    return 'success';
+  const normalized = String(status ?? "")
+    .trim()
+    .toUpperCase();
+  if (normalized === "SUCCESS") {
+    return "success";
   }
-  if (normalized === 'FAILED' || normalized === 'CRASHED') {
-    return 'failure';
+  if (normalized === "FAILED" || normalized === "CRASHED") {
+    return "failure";
   }
   if (PENDING_DEPLOYMENT_STATUSES.has(normalized)) {
-    return 'pending';
+    return "pending";
   }
-  return 'unknown';
+  return "unknown";
 }
 
 function fail(message) {
@@ -270,8 +276,8 @@ function fail(message) {
 }
 
 function restoreTerminalTitle() {
-  if (process.platform === 'win32') {
-    process.title = 'FitTrack Railway Deploy';
+  if (process.platform === "win32") {
+    process.title = "FitTrack Railway Deploy";
   }
 }
 
@@ -279,55 +285,50 @@ let railwayInvocation;
 let deploymentSnapshot;
 
 const DEPLOYMENT_ROOT_FILES = [
-  '.dockerignore',
-  '.gitignore',
-  '.npmrc',
-  '.nvmrc',
-  '.railwayignore',
-  'package.json',
-  'pnpm-lock.yaml',
-  'pnpm-workspace.yaml',
-  'tsconfig.base.json',
-  'turbo.json',
+  ".dockerignore",
+  ".gitignore",
+  ".npmrc",
+  ".nvmrc",
+  ".railwayignore",
+  "package.json",
+  "pnpm-lock.yaml",
+  "pnpm-workspace.yaml",
+  "tsconfig.base.json",
+  "turbo.json",
 ];
 
-const DEPLOYMENT_DIRECTORIES = [
-  'apps/api',
-  'apps/web',
-  'packages',
-  'patches',
-];
+const DEPLOYMENT_DIRECTORIES = ["apps/api", "apps/web", "packages", "patches"];
 
 const EXCLUDED_DEPLOYMENT_NAMES = new Set([
-  '.artifacts',
-  '.git',
-  '.next',
-  '.next-dev',
-  '.next-runtime',
-  '.pytest_cache',
-  '.turbo',
-  '.uv-cache',
-  '.uv-python',
-  '.uv-runtime',
-  '.venv',
-  '__pycache__',
-  'coverage',
-  'dist',
-  'logs',
-  'node_modules',
-  'playwright-report',
-  'test-results',
+  ".artifacts",
+  ".git",
+  ".next",
+  ".next-dev",
+  ".next-runtime",
+  ".pytest_cache",
+  ".turbo",
+  ".uv-cache",
+  ".uv-python",
+  ".uv-runtime",
+  ".venv",
+  "__pycache__",
+  "coverage",
+  "dist",
+  "logs",
+  "node_modules",
+  "playwright-report",
+  "test-results",
 ]);
 
 function isExcludedDeploymentEntry(name) {
   const lowerName = name.toLowerCase();
   return (
     EXCLUDED_DEPLOYMENT_NAMES.has(name) ||
-    lowerName === '.env' ||
-    lowerName.startsWith('.env.') ||
-    lowerName.endsWith('.log') ||
-    lowerName.endsWith('.pem') ||
-    lowerName.endsWith('.key')
+    lowerName === ".env" ||
+    lowerName.startsWith(".env.") ||
+    lowerName.endsWith(".log") ||
+    lowerName.endsWith(".pem") ||
+    lowerName.endsWith(".key")
   );
 }
 
@@ -356,23 +357,25 @@ function cleanupDeploymentSnapshot() {
 
   const workspace = path.resolve(process.cwd());
   const snapshot = path.resolve(deploymentSnapshot);
-  const snapshotRoot = path.join(workspace, '.railway-upload');
+  const snapshotRoot = path.join(workspace, ".railway-upload");
   if (!snapshot.startsWith(`${snapshotRoot}${path.sep}`)) {
-    console.error(`[railway-deploy] Refusing to clean unexpected path: ${snapshot}`);
+    console.error(
+      `[railway-deploy] Refusing to clean unexpected path: ${snapshot}`,
+    );
     return;
   }
 
   rmSync(snapshot, { force: true, recursive: true });
-  console.log('\n[railway-deploy] Removed temporary source snapshot.');
+  console.log("\n[railway-deploy] Removed temporary source snapshot.");
 }
 
-process.on('exit', cleanupDeploymentSnapshot);
+process.on("exit", cleanupDeploymentSnapshot);
 
 function createDeploymentSnapshot() {
   const workspace = path.resolve(process.cwd());
   const snapshot = path.join(
     workspace,
-    '.railway-upload',
+    ".railway-upload",
     `cli-source-${process.pid}`,
   );
   mkdirSync(snapshot, { recursive: true });
@@ -394,13 +397,13 @@ function createDeploymentSnapshot() {
     );
   }
 
-  const aiRoot = path.join(workspace, 'apps', 'ai-microservice');
-  const aiSnapshot = path.join(snapshot, 'apps', 'ai-microservice');
+  const aiRoot = path.join(workspace, "apps", "ai-microservice");
+  const aiSnapshot = path.join(snapshot, "apps", "ai-microservice");
   for (const relativePath of [
-    'Dockerfile',
-    'pyproject.toml',
-    'railway.toml',
-    'uv.lock',
+    "Dockerfile",
+    "pyproject.toml",
+    "railway.toml",
+    "uv.lock",
   ]) {
     const source = path.join(aiRoot, relativePath);
     if (existsSync(source)) {
@@ -410,24 +413,24 @@ function createDeploymentSnapshot() {
     }
   }
   copyDeploymentDirectory(
-    path.join(aiRoot, 'app'),
-    path.join(aiSnapshot, 'app'),
+    path.join(aiRoot, "app"),
+    path.join(aiSnapshot, "app"),
   );
 
   const prismaLinkTask = path.join(
     workspace,
-    'tasks',
-    'ensure-prisma-client-link.mjs',
+    "tasks",
+    "ensure-prisma-client-link.mjs",
   );
   const prismaLinkDestination = path.join(
     snapshot,
-    'tasks',
-    'ensure-prisma-client-link.mjs',
+    "tasks",
+    "ensure-prisma-client-link.mjs",
   );
   mkdirSync(path.dirname(prismaLinkDestination), { recursive: true });
   copyFileSync(prismaLinkTask, prismaLinkDestination);
 
-  console.log('\n[railway-deploy] Prepared allowlisted source snapshot.');
+  console.log("\n[railway-deploy] Prepared allowlisted source snapshot.");
   return snapshot;
 }
 
@@ -436,17 +439,17 @@ function resolveRailwayInvocation() {
     return railwayInvocation;
   }
 
-  if (process.platform !== 'win32') {
-    railwayInvocation = { command: 'railway', prefixArgs: [] };
+  if (process.platform !== "win32") {
+    railwayInvocation = { command: "railway", prefixArgs: [] };
     return railwayInvocation;
   }
 
   const searchDirectories = [
-    ...(process.env.PATH ?? '').split(path.delimiter),
-    process.env.APPDATA ? path.join(process.env.APPDATA, 'npm') : undefined,
+    ...(process.env.PATH ?? "").split(path.delimiter),
+    process.env.APPDATA ? path.join(process.env.APPDATA, "npm") : undefined,
   ].filter(Boolean);
   const executable = searchDirectories
-    .map((directory) => path.join(directory, 'railway.exe'))
+    .map((directory) => path.join(directory, "railway.exe"))
     .find((candidate) => existsSync(candidate));
 
   if (executable) {
@@ -455,16 +458,16 @@ function resolveRailwayInvocation() {
   }
 
   const commandShim = searchDirectories
-    .map((directory) => path.join(directory, 'railway.cmd'))
+    .map((directory) => path.join(directory, "railway.cmd"))
     .find((candidate) => existsSync(candidate));
   if (commandShim) {
     const cliEntry = path.join(
       path.dirname(commandShim),
-      'node_modules',
-      '@railway',
-      'cli',
-      'bin',
-      'railway.js',
+      "node_modules",
+      "@railway",
+      "cli",
+      "bin",
+      "railway.js",
     );
 
     if (existsSync(cliEntry)) {
@@ -477,8 +480,8 @@ function resolveRailwayInvocation() {
   }
 
   fail(
-    'Could not resolve the Railway CLI executable. Install it with ' +
-      '`npm install --global @railway/cli`, open a new terminal, and rerun this command.',
+    "Could not resolve the Railway CLI executable. Install it with " +
+      "`npm install --global @railway/cli`, open a new terminal, and rerun this command.",
   );
 }
 
@@ -491,9 +494,9 @@ function run(
     echoCapturedOutput = true,
   } = {},
 ) {
-  console.log(`\n> ${command} ${args.join(' ')}`);
+  console.log(`\n> ${command} ${args.join(" ")}`);
   const invocation =
-    command === 'railway'
+    command === "railway"
       ? resolveRailwayInvocation()
       : { command, prefixArgs: [] };
   const result = spawnSync(
@@ -501,15 +504,15 @@ function run(
     [...invocation.prefixArgs, ...args],
     {
       cwd: process.cwd(),
-      encoding: captureOutput ? 'utf8' : undefined,
+      encoding: captureOutput ? "utf8" : undefined,
       maxBuffer: captureOutput ? CAPTURED_COMMAND_MAX_BUFFER_BYTES : undefined,
-      stdio: captureOutput ? ['inherit', 'pipe', 'pipe'] : 'inherit',
+      stdio: captureOutput ? ["inherit", "pipe", "pipe"] : "inherit",
       shell: false,
     },
   );
 
-  const stdout = captureOutput ? String(result.stdout ?? '') : '';
-  const stderr = captureOutput ? String(result.stderr ?? '') : '';
+  const stdout = captureOutput ? String(result.stdout ?? "") : "";
+  const stderr = captureOutput ? String(result.stderr ?? "") : "";
   if (captureOutput && echoCapturedOutput) {
     if (stdout) {
       process.stdout.write(stdout);
@@ -520,10 +523,10 @@ function run(
   }
 
   if (result.error) {
-    if (result.error.code === 'ENOENT') {
+    if (result.error.code === "ENOENT") {
       fail(
         `Could not find ${command}. Install or update the Railway CLI with ` +
-          '`npm install --global @railway/cli`, then rerun this command.',
+          "`npm install --global @railway/cli`, then rerun this command.",
       );
     }
     throw result.error;
@@ -539,28 +542,24 @@ function run(
 
 function deploymentListArgs(service, environment) {
   return [
-    'deployment',
-    'list',
-    '--service',
+    "deployment",
+    "list",
+    "--service",
     service,
-    '--environment',
+    "--environment",
     environment,
-    '--limit',
+    "--limit",
     `${DEPLOYMENT_LIST_LIMIT}`,
-    '--json',
+    "--json",
   ];
 }
 
 function queryDeployments(service, environment) {
-  const result = run(
-    'railway',
-    deploymentListArgs(service, environment),
-    {
-      allowFailure: true,
-      captureOutput: true,
-      echoCapturedOutput: false,
-    },
-  );
+  const result = run("railway", deploymentListArgs(service, environment), {
+    allowFailure: true,
+    captureOutput: true,
+    echoCapturedOutput: false,
+  });
 
   if (result.status !== 0) {
     return {
@@ -582,7 +581,7 @@ function queryDeployments(service, environment) {
 function printCapturedOutput(label, result) {
   const output = [result?.stdout, result?.stderr]
     .filter((value) => value)
-    .join('\n')
+    .join("\n")
     .trim();
 
   if (output) {
@@ -592,29 +591,29 @@ function printCapturedOutput(label, result) {
 
 function fetchDeploymentLogs({ service, environment, deploymentId }) {
   for (const [kind, flag] of [
-    ['build', '--build'],
-    ['deploy', '--deployment'],
+    ["build", "--build"],
+    ["deploy", "--deployment"],
   ]) {
     const args = [
-      'logs',
-      ...(deploymentId ? [deploymentId] : ['--latest']),
-      '--service',
+      "logs",
+      ...(deploymentId ? [deploymentId] : ["--latest"]),
+      "--service",
       service,
-      '--environment',
+      "--environment",
       environment,
       flag,
-      '--lines',
+      "--lines",
       `${DEPLOYMENT_LOG_LINE_LIMIT}`,
-      '--json',
+      "--json",
     ];
-    const result = run('railway', args, {
+    const result = run("railway", args, {
       allowFailure: true,
       captureOutput: true,
       echoCapturedOutput: false,
     });
 
     printCapturedOutput(
-      `${service} ${kind} logs for ${deploymentId ?? 'latest available deployment'}`,
+      `${service} ${kind} logs for ${deploymentId ?? "latest available deployment"}`,
       result,
     );
     if (result.status !== 0 && !result.stdout && !result.stderr) {
@@ -649,7 +648,7 @@ function requireDeployments(service, environment, reason, deploymentId) {
       deploymentId,
       message:
         `Could not inspect ${service} deployment after ${reason}: ${result.error}. ` +
-        'The exact deployment status could not be verified.',
+        "The exact deployment status could not be verified.",
     });
   }
   return result.deployments;
@@ -672,7 +671,11 @@ function waitForDeploymentSuccess({
 }) {
   let lastStatus;
 
-  for (let attempt = 1; attempt <= DEPLOYMENT_STATUS_MAX_ATTEMPTS; attempt += 1) {
+  for (
+    let attempt = 1;
+    attempt <= DEPLOYMENT_STATUS_MAX_ATTEMPTS;
+    attempt += 1
+  ) {
     const deployments =
       attempt === 1 && Array.isArray(initialDeployments)
         ? initialDeployments
@@ -682,7 +685,9 @@ function waitForDeploymentSuccess({
             `status check ${attempt}`,
             deploymentId,
           );
-    const deployment = deployments.find((candidate) => candidate.id === deploymentId);
+    const deployment = deployments.find(
+      (candidate) => candidate.id === deploymentId,
+    );
     if (!deployment) {
       if (attempt === DEPLOYMENT_STATUS_MAX_ATTEMPTS) {
         failWithDeploymentEvidence({
@@ -700,32 +705,32 @@ function waitForDeploymentSuccess({
 
     lastStatus = deployment.status;
     const outcome = classifyDeploymentStatus(lastStatus);
-    if (outcome === 'success') {
+    if (outcome === "success") {
       console.log(
         `[railway-deploy] Recovered ${service} deployment ${deploymentId}: SUCCESS.`,
       );
       return;
     }
 
-    if (outcome === 'failure') {
+    if (outcome === "failure") {
       failWithDeploymentEvidence({
         service,
         environment,
         deploymentId,
         message:
           `Deployment ${deploymentId} for ${service} reached ${lastStatus}; ` +
-          'the exact Railway deployment failed.',
+          "the exact Railway deployment failed.",
       });
     }
 
-    if (outcome === 'unknown') {
+    if (outcome === "unknown") {
       failWithDeploymentEvidence({
         service,
         environment,
         deploymentId,
         message:
           `Deployment ${deploymentId} for ${service} reported unknown status ` +
-          `"${lastStatus ?? 'missing'}"; deployment stopped.`,
+          `"${lastStatus ?? "missing"}"; deployment stopped.`,
       });
     }
 
@@ -745,7 +750,7 @@ function waitForDeploymentSuccess({
     message:
       `Deployment ${deploymentId} for ${service} did not reach SUCCESS after ` +
       `${DEPLOYMENT_STATUS_MAX_ATTEMPTS} bounded status checks; last status ` +
-      `was ${lastStatus ?? 'missing'}.`,
+      `was ${lastStatus ?? "missing"}.`,
   });
 }
 
@@ -757,18 +762,18 @@ async function deployService({
 }) {
   const priorLookup = queryDeployments(service, environment);
   const upResult = run(
-    'railway',
+    "railway",
     [
-      'up',
+      "up",
       deploymentSource,
-      '--path-as-root',
-      '--service',
+      "--path-as-root",
+      "--service",
       service,
-      '--environment',
+      "--environment",
       environment,
-      '--detach',
-      '--json',
-      '--message',
+      "--detach",
+      "--json",
+      "--message",
       deployMessage,
     ],
     {
@@ -789,7 +794,7 @@ async function deployService({
   });
 
   if (!deploymentId) {
-    const lookupDetail = currentLookup.error ? ` ${currentLookup.error}.` : '';
+    const lookupDetail = currentLookup.error ? ` ${currentLookup.error}.` : "";
     failWithDeploymentEvidence({
       service,
       environment,
@@ -816,7 +821,7 @@ async function deployService({
   } else {
     console.log(
       `[railway-deploy] Identified ${service} deployment ${deploymentId}; ` +
-        'polling until SUCCESS.',
+        "polling until SUCCESS.",
     );
   }
 
@@ -835,130 +840,138 @@ function authenticate({ browserless, reauth }) {
 
   if (reauth && tokenAuth) {
     fail(
-      '--reauth cannot replace credentials while RAILWAY_TOKEN or ' +
-        'RAILWAY_API_TOKEN is set. Remove it from this terminal first, or omit --reauth.',
+      "--reauth cannot replace credentials while RAILWAY_TOKEN or " +
+        "RAILWAY_API_TOKEN is set. Remove it from this terminal first, or omit --reauth.",
     );
   }
 
   if (reauth) {
-    run('railway', ['logout'], { allowFailure: true });
+    run("railway", ["logout"], { allowFailure: true });
   }
 
-  const authenticated = run('railway', ['whoami'], { allowFailure: true }) === 0;
+  const authenticated =
+    run("railway", ["whoami"], { allowFailure: true }) === 0;
   if (!authenticated) {
-    run('railway', ['login', ...(browserless ? ['--browserless'] : [])]);
+    run("railway", ["login", ...(browserless ? ["--browserless"] : [])]);
   }
 
-  run('railway', ['whoami']);
+  run("railway", ["whoami"]);
 }
 
 async function main() {
   restoreTerminalTitle();
-  if (hasFlag('help', 'h')) {
+  if (hasFlag("help", "h")) {
     printHelp();
     process.exit(0);
   }
 
-  if (hasFlag('check-cli')) {
-    run('railway', ['--version']);
-    console.log('\n[railway-deploy] Railway CLI resolution succeeded.');
+  if (hasFlag("check-cli")) {
+    run("railway", ["--version"]);
+    console.log("\n[railway-deploy] Railway CLI resolution succeeded.");
     process.exit(0);
   }
 
-  if (hasFlag('check-snapshot')) {
+  if (hasFlag("check-snapshot")) {
     createDeploymentSnapshot();
-    console.log('\n[railway-deploy] Deployment snapshot validation succeeded.');
+    console.log("\n[railway-deploy] Deployment snapshot validation succeeded.");
     process.exit(0);
   }
 
-  const projectName = getOption('project_name', 'project-name', 'project');
+  const projectName = getOption("project_name", "project-name", "project");
   const environment =
-    getOption('environment', 'environment_name', 'environment-name') ??
+    getOption("environment", "environment_name", "environment-name") ??
     DEFAULT_ENVIRONMENT;
-  const seedUsersValue = getOption('seed-users', 'seed_users');
-  const seedUsers = Number.parseInt(seedUsersValue ?? `${DEFAULT_SEED_USERS}`, 10);
-  const resetDatabase = hasFlag('reset-db', 'reset_db');
-  const confirmation = getOption('confirm');
+  const seedUsersValue = getOption("seed-users", "seed_users");
+  const seedUsers = Number.parseInt(
+    seedUsersValue ?? `${DEFAULT_SEED_USERS}`,
+    10,
+  );
+  const resetDatabase = hasFlag("reset-db", "reset_db");
+  const confirmation = getOption("confirm");
 
   if (!projectName) {
     printHelp();
-    fail('--project_name:<project-name> is required.');
+    fail("--project_name:<project-name> is required.");
   }
 
-  if (!Number.isSafeInteger(seedUsers) || seedUsers < 11 || seedUsers > 10_000) {
-    fail('--seed-users must be an integer from 11 to 10000.');
+  if (
+    !Number.isSafeInteger(seedUsers) ||
+    seedUsers < 11 ||
+    seedUsers > 10_000
+  ) {
+    fail("--seed-users must be an integer from 11 to 10000.");
   }
 
   if (resetDatabase && confirmation !== REMOTE_RESET_CONFIRMATION) {
-    fail(
-      `Destructive reset requires --confirm:${REMOTE_RESET_CONFIRMATION}.`,
-    );
+    fail(`Destructive reset requires --confirm:${REMOTE_RESET_CONFIRMATION}.`);
   }
 
   console.log(
     `[railway-deploy] project=${projectName} environment=${environment} ` +
-      `resetDb=${resetDatabase ? 'yes' : 'no'}`,
+      `resetDb=${resetDatabase ? "yes" : "no"}`,
   );
 
-  run('railway', ['--version']);
+  run("railway", ["--version"]);
   authenticate({
-    browserless: hasFlag('browserless'),
-    reauth: hasFlag('reauth'),
+    browserless: hasFlag("browserless"),
+    reauth: hasFlag("reauth"),
   });
 
-  run('railway', [
-    'link',
-    '--project',
+  run("railway", [
+    "link",
+    "--project",
     projectName,
-    '--environment',
+    "--environment",
     environment,
-    '--service',
+    "--service",
     DEFAULT_LINK_SERVICE,
   ]);
-  run('railway', ['status']);
+  run("railway", ["status"]);
 
-  if (!hasFlag('skip-schema')) {
-    run('railway', [
-      'run',
-      '--service',
-      'Postgres',
-      '--environment',
+  if (!hasFlag("skip-schema")) {
+    run("railway", [
+      "run",
+      "--service",
+      "Postgres",
+      "--environment",
       environment,
-      '--no-local',
-      'node',
-      'tasks/run-with-railway-public-database.mjs',
-      process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
-      'db:push',
+      "--no-local",
+      "node",
+      "tasks/run-with-railway-public-database.mjs",
+      process.platform === "win32" ? "pnpm.cmd" : "pnpm",
+      "db:push",
     ]);
     restoreTerminalTitle();
   }
 
   const deployMessage = `FitTrack CLI deploy ${new Date().toISOString()}`;
   const shouldDeploy =
-    !hasFlag('skip-api') || !hasFlag('skip-ai') || !hasFlag('skip-web');
-  const deploymentSource = shouldDeploy ? createDeploymentSnapshot() : undefined;
+    !hasFlag("skip-api") || !hasFlag("skip-ai") || !hasFlag("skip-web");
+  const deploymentSource = shouldDeploy
+    ? createDeploymentSnapshot()
+    : undefined;
 
-  if (!hasFlag('skip-api')) {
+  if (!hasFlag("skip-api")) {
     await deployService({
-      service: 'api',
+      service: "api",
       environment,
       deploymentSource,
       deployMessage,
     });
   }
 
-  if (!hasFlag('skip-ai')) {
+  if (!hasFlag("skip-ai")) {
     await deployService({
-      service: 'ai',
+      service: "ai",
       environment,
       deploymentSource,
       deployMessage,
     });
   }
 
-  if (!hasFlag('skip-web')) {
+  if (!hasFlag("skip-web")) {
     await deployService({
-      service: 'web',
+      service: "web",
       environment,
       deploymentSource,
       deployMessage,
@@ -966,29 +979,19 @@ async function main() {
   }
 
   if (resetDatabase) {
-    run('railway', [
-      'run',
-      '--service',
-      'Postgres',
-      '--environment',
+    run(process.execPath, [
+      "tasks/reseed-railway-snapshot.mjs",
+      "--environment",
       environment,
-      '--no-local',
-      'node',
-      'tasks/run-with-railway-public-database.mjs',
-      'node',
-      'tasks/seed-realistic.mjs',
-      '--target=railway',
-      '--mode=reset',
       `--users=${seedUsers}`,
-      '--allow-remote-reset',
-      `--confirm=${DYNAMIC_SEED_CONFIRMATION}`,
+      `--confirm=${REMOTE_RESET_CONFIRMATION}`,
     ]);
   }
 
-  console.log('\n[railway-deploy] Completed successfully.');
+  console.log("\n[railway-deploy] Completed successfully.");
 }
 
-if (path.resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) {
+if (path.resolve(process.argv[1] ?? "") === fileURLToPath(import.meta.url)) {
   main().catch((error) => {
     console.error(
       `\n[railway-deploy] ${error instanceof Error ? error.message : String(error)}`,

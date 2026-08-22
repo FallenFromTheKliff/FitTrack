@@ -29,6 +29,7 @@ import {
 } from '../lifecycles-profiles';
 import type { DynamicSeedContext, SeedAccount } from '../types';
 import { activityDateFor, memberVolumeCount } from '../volumes';
+import { createSeedRowsInBatches, mapSeedWithConcurrency } from '../batch';
 
 const PASSWORD_HASH_ROUNDS = 12;
 const credentialHashCache = new Map<string, Promise<string>>();
@@ -119,7 +120,11 @@ function privacyAcceptedAt(ctx: DynamicSeedContext, account: SeedAccount) {
   return candidate <= ctx.config.anchorDate ? candidate : null;
 }
 
-async function seedAccount(ctx: DynamicSeedContext, account: SeedAccount) {
+async function buildAccountRows(
+  ctx: DynamicSeedContext,
+  account: SeedAccount,
+  dateOfBirth = defaultDateOfBirth(ctx, account),
+) {
   const lifecycle = account.lifecycle;
   if (!lifecycle) {
     throw new Error(`Missing lifecycle context for ${account.key}`);
@@ -152,21 +157,7 @@ async function seedAccount(ctx: DynamicSeedContext, account: SeedAccount) {
     ? `dynqr_${hashValue(userId).slice(0, 32)}`
     : null;
 
-  await ctx.prisma.user.upsert({
-    where: { id: userId },
-    update: {
-      created_at: lifecycle.registeredAt,
-      deletedAt,
-      email_verified_at: verifiedAt,
-      has_accepted_privacy: Boolean(acceptedAt),
-      phone_verified_at: verifiedAt,
-      privacy_accepted_at: acceptedAt,
-      qr_code_expires_at: qrCodeExpiresAt,
-      qr_code_rotated_at: qrCodeRotatedAt,
-      qr_code_token: qrCodeToken,
-      role: account.role,
-      status,
-    },
+  const user = {
     create: {
       id: userId,
       created_at: lifecycle.registeredAt,
@@ -181,22 +172,22 @@ async function seedAccount(ctx: DynamicSeedContext, account: SeedAccount) {
       role: account.role,
       status,
     },
-  });
-
-  await ctx.prisma.authIdentity.upsert({
-    where: {
-      user_id_provider_identifier: {
-        identifier: account.email,
-        provider: AuthProvider.email,
-        user_id: userId,
-      },
-    },
     update: {
       created_at: lifecycle.registeredAt,
-      credential_hash: credentialHash,
-      is_primary: true,
-      verified_at: verifiedAt,
+      deletedAt,
+      email_verified_at: verifiedAt,
+      has_accepted_privacy: Boolean(acceptedAt),
+      phone_verified_at: verifiedAt,
+      privacy_accepted_at: acceptedAt,
+      qr_code_expires_at: qrCodeExpiresAt,
+      qr_code_rotated_at: qrCodeRotatedAt,
+      qr_code_token: qrCodeToken,
+      role: account.role,
+      status,
     },
+  };
+
+  const emailIdentity = {
     create: {
       credential_hash: credentialHash,
       created_at: lifecycle.registeredAt,
@@ -206,21 +197,15 @@ async function seedAccount(ctx: DynamicSeedContext, account: SeedAccount) {
       user_id: userId,
       verified_at: verifiedAt,
     },
-  });
-
-  await ctx.prisma.authIdentity.upsert({
-    where: {
-      user_id_provider_identifier: {
-        identifier: account.phone,
-        provider: AuthProvider.phone,
-        user_id: userId,
-      },
-    },
     update: {
       created_at: lifecycle.registeredAt,
-      is_primary: false,
+      is_primary: true,
+      credential_hash: credentialHash,
       verified_at: verifiedAt,
     },
+  };
+
+  const phoneIdentity = {
     create: {
       created_at: lifecycle.registeredAt,
       identifier: account.phone,
@@ -229,7 +214,12 @@ async function seedAccount(ctx: DynamicSeedContext, account: SeedAccount) {
       user_id: userId,
       verified_at: verifiedAt,
     },
-  });
+    update: {
+      created_at: lifecycle.registeredAt,
+      is_primary: false,
+      verified_at: verifiedAt,
+    },
+  };
 
   const heightCm =
     account.heightCm ?? account.physicalBaseline?.heightCm ?? 170;
@@ -238,27 +228,13 @@ async function seedAccount(ctx: DynamicSeedContext, account: SeedAccount) {
     lifecycle.registeredAt.getTime() + 60 * 60 * 1_000,
   );
 
-  await ctx.prisma.userProfile.upsert({
-    where: { user_id: userId },
-    update: {
-      activity_level: defaultActivityLevel(account),
-      avatar_url: null,
-      created_at: profileCreatedAt,
-      date_of_birth: defaultDateOfBirth(ctx, account),
-      first_name: account.firstName,
-      fitness_goal: defaultFitnessGoal(account),
-      gender: defaultGender(account),
-      height_cm: new Prisma.Decimal(heightCm),
-      last_name: account.lastName,
-      phone: account.phone,
-      weight_kg: new Prisma.Decimal(weightKg),
-    },
+  const profile = {
     create: {
       id: seedId(`profile:${account.key}`),
       activity_level: defaultActivityLevel(account),
       avatar_url: null,
       created_at: profileCreatedAt,
-      date_of_birth: defaultDateOfBirth(ctx, account),
+      date_of_birth: dateOfBirth,
       first_name: account.firstName,
       fitness_goal: defaultFitnessGoal(account),
       gender: defaultGender(account),
@@ -268,11 +244,22 @@ async function seedAccount(ctx: DynamicSeedContext, account: SeedAccount) {
       user_id: userId,
       weight_kg: new Prisma.Decimal(weightKg),
     },
-  });
+    update: {
+      activity_level: defaultActivityLevel(account),
+      avatar_url: null,
+      created_at: profileCreatedAt,
+      date_of_birth: dateOfBirth,
+      first_name: account.firstName,
+      fitness_goal: defaultFitnessGoal(account),
+      gender: defaultGender(account),
+      height_cm: new Prisma.Decimal(heightCm),
+      last_name: account.lastName,
+      phone: account.phone,
+      weight_kg: new Prisma.Decimal(weightKg),
+    },
+  };
 
-  await ctx.prisma.notificationPreference.upsert({
-    where: { user_id: userId },
-    update: { created_at: profileCreatedAt },
+  const preference = {
     create: {
       id: seedId(`notification-preference:${account.key}`),
       appointment_confirmed_sms: account.role === UserRole.coach,
@@ -284,6 +271,52 @@ async function seedAccount(ctx: DynamicSeedContext, account: SeedAccount) {
       created_at: profileCreatedAt,
       user_id: userId,
     },
+    update: { created_at: profileCreatedAt },
+  };
+
+  return { user, emailIdentity, phoneIdentity, profile, preference };
+}
+
+async function seedAccount(ctx: DynamicSeedContext, account: SeedAccount) {
+  const rows = await buildAccountRows(ctx, account);
+  const userId = userIdFor(account.key);
+
+  await ctx.prisma.user.upsert({
+    where: { id: userId },
+    update: rows.user.update,
+    create: rows.user.create,
+  });
+  await ctx.prisma.authIdentity.upsert({
+    where: {
+      user_id_provider_identifier: {
+        identifier: account.email,
+        provider: AuthProvider.email,
+        user_id: userId,
+      },
+    },
+    update: rows.emailIdentity.update,
+    create: rows.emailIdentity.create,
+  });
+  await ctx.prisma.authIdentity.upsert({
+    where: {
+      user_id_provider_identifier: {
+        identifier: account.phone,
+        provider: AuthProvider.phone,
+        user_id: userId,
+      },
+    },
+    update: rows.phoneIdentity.update,
+    create: rows.phoneIdentity.create,
+  });
+  await ctx.prisma.userProfile.upsert({
+    where: { user_id: userId },
+    update: rows.profile.update,
+    create: rows.profile.create,
+  });
+  await ctx.prisma.notificationPreference.upsert({
+    where: { user_id: userId },
+    update: rows.preference.update,
+    create: rows.preference.create,
   });
 }
 
@@ -525,8 +558,41 @@ export async function seedUsersAuthProfiles(ctx: DynamicSeedContext) {
   const accounts = buildSeedAccounts(ctx.config);
   populateAccountState(ctx.state, accounts);
 
-  for (const account of accounts) {
-    await seedAccount(ctx, account);
+  if (ctx.config.mode === 'reset') {
+    // Consume the seeded RNG in account order before hashing is parallelized.
+    // This keeps the generated population identical to the old serial path.
+    const dateOfBirthByAccount = new Map(
+      accounts.map((account) => [
+        account.key,
+        defaultDateOfBirth(ctx, account),
+      ]),
+    );
+    const rows = await mapSeedWithConcurrency(accounts, 4, (account) =>
+      buildAccountRows(ctx, account, dateOfBirthByAccount.get(account.key)),
+    );
+    await createSeedRowsInBatches(
+      ctx.prisma.user,
+      rows.map((row) => row.user.create),
+    );
+    await createSeedRowsInBatches(
+      ctx.prisma.authIdentity,
+      rows.flatMap((row) => [
+        row.emailIdentity.create,
+        row.phoneIdentity.create,
+      ]),
+    );
+    await createSeedRowsInBatches(
+      ctx.prisma.userProfile,
+      rows.map((row) => row.profile.create),
+    );
+    await createSeedRowsInBatches(
+      ctx.prisma.notificationPreference,
+      rows.map((row) => row.preference.create),
+    );
+  } else {
+    for (const account of accounts) {
+      await seedAccount(ctx, account);
+    }
   }
 
   await seedSecondaryUserData(ctx);

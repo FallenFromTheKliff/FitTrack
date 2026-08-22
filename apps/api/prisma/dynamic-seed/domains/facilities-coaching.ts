@@ -33,6 +33,7 @@ import {
   isFormerCoachingMember,
   isMonthlyCoachingMember,
 } from '../volumes';
+import { createSeedRowsInBatches } from '../batch';
 
 const AMENITY_SEEDS = CANONICAL_AMENITIES;
 
@@ -244,6 +245,7 @@ async function seedAmenities(ctx: DynamicSeedContext) {
 }
 
 async function seedCoachProfiles(ctx: DynamicSeedContext) {
+  const profileRows: Prisma.CoachProfileCreateManyInput[] = [];
   for (const [index, coachKey] of ctx.state.coachAccountKeys.entries()) {
     const account = ctx.state.accounts.find(
       (candidate) => candidate.key === coachKey,
@@ -255,6 +257,7 @@ async function seedCoachProfiles(ctx: DynamicSeedContext) {
     const active = account.coachLifecycle === 'active';
     const offer = monthlyOfferForCoach(index, account.coachWorkload);
     ctx.state.coachProfileIds[coachKey] = profileId;
+    if (!userId) continue;
     const profileData = {
       average_rating: null,
       bio:
@@ -287,11 +290,26 @@ async function seedCoachProfiles(ctx: DynamicSeedContext) {
         COACH_SPECIALIZATIONS[index % COACH_SPECIALIZATIONS.length],
     };
 
-    await ctx.prisma.coachProfile.upsert({
-      where: { user_id: userId },
-      update: profileData,
-      create: { id: profileId, user_id: userId, ...profileData },
-    });
+    profileRows.push({ id: profileId, user_id: userId, ...profileData });
+  }
+
+  if (ctx.config.mode === 'reset') {
+    await createSeedRowsInBatches(ctx.prisma.coachProfile, profileRows);
+  } else {
+    for (const row of profileRows) {
+      const user_id = row.user_id;
+      const profileData = Object.fromEntries(
+        Object.entries(row).filter(
+          ([key]) => key !== 'id' && key !== 'user_id',
+        ),
+      );
+      if (!user_id) continue;
+      await ctx.prisma.coachProfile.upsert({
+        where: { user_id },
+        update: profileData,
+        create: row,
+      });
+    }
   }
 
   const specialtyRows = COACH_SPECIALIZATIONS.map((label, index) => ({
@@ -299,12 +317,16 @@ async function seedCoachProfiles(ctx: DynamicSeedContext) {
     normalized_label: label.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
     display_label: label,
   }));
-  for (const specialty of specialtyRows) {
-    await ctx.prisma.coachSpecialty.upsert({
-      where: { normalized_label: specialty.normalized_label },
-      update: { display_label: specialty.display_label },
-      create: specialty,
-    });
+  if (ctx.config.mode === 'reset') {
+    await createSeedRowsInBatches(ctx.prisma.coachSpecialty, specialtyRows);
+  } else {
+    for (const specialty of specialtyRows) {
+      await ctx.prisma.coachSpecialty.upsert({
+        where: { normalized_label: specialty.normalized_label },
+        update: { display_label: specialty.display_label },
+        create: specialty,
+      });
+    }
   }
   await ctx.prisma.coachProfileSpecialty.createMany({
     data: ctx.state.coachAccountKeys.flatMap((coachKey, coachIndex) => {
@@ -1050,25 +1072,45 @@ async function seedRelationshipsPlansAndAppointments(ctx: DynamicSeedContext) {
     }
   }
 
+  const appointmentsByPlan = new Map<string, number>();
+  const completedByPlan = new Map<string, number>();
+  for (const appointment of appointmentRows) {
+    const planId = appointment.recurring_plan_id as string | null;
+    if (!planId) continue;
+    appointmentsByPlan.set(planId, (appointmentsByPlan.get(planId) ?? 0) + 1);
+    if (appointment.status === AppointmentStatus.completed) {
+      completedByPlan.set(planId, (completedByPlan.get(planId) ?? 0) + 1);
+    }
+  }
+  const materializedPlanRows = recurringPlanRows.map((plan) => ({
+    ...plan,
+    completed_sessions: completedByPlan.get(plan.id as string) ?? 0,
+    total_sessions: appointmentsByPlan.get(plan.id as string) ?? 0,
+  }));
+
   await ctx.prisma.coachClientRelationship.createMany({
     data: relationshipRows,
     skipDuplicates: true,
   });
   await ctx.prisma.recurringCoachingPlan.createMany({
-    data: recurringPlanRows,
+    data: materializedPlanRows,
     skipDuplicates: true,
   });
 
   const holdModel = ctx.prisma
     .commerceCheckoutHold as unknown as CheckoutHoldModel;
-  for (const row of holdRows) {
-    const update = { ...row };
-    delete update.id;
-    await holdModel.upsert({
-      where: { id: row.id as string },
-      update: update as Record<string, unknown>,
-      create: row as Record<string, unknown>,
-    });
+  if (ctx.config.mode === 'reset') {
+    await createSeedRowsInBatches(ctx.prisma.commerceCheckoutHold, holdRows);
+  } else {
+    for (const row of holdRows) {
+      const update = { ...row };
+      delete update.id;
+      await holdModel.upsert({
+        where: { id: row.id as string },
+        update: update as Record<string, unknown>,
+        create: row as Record<string, unknown>,
+      });
+    }
   }
   await ctx.prisma.payment.createMany({
     data: paymentRows,
@@ -1096,28 +1138,6 @@ async function seedRelationshipsPlansAndAppointments(ctx: DynamicSeedContext) {
       });
     }
   }
-
-  const appointmentsByPlan = new Map<string, number>();
-  const completedByPlan = new Map<string, number>();
-  for (const appointment of appointmentRows) {
-    const planId = appointment.recurring_plan_id as string | null;
-    if (!planId) continue;
-    appointmentsByPlan.set(planId, (appointmentsByPlan.get(planId) ?? 0) + 1);
-    if (appointment.status === AppointmentStatus.completed) {
-      completedByPlan.set(planId, (completedByPlan.get(planId) ?? 0) + 1);
-    }
-  }
-  await Promise.all(
-    recurringPlanRows.map((plan) =>
-      ctx.prisma.recurringCoachingPlan.update({
-        where: { id: plan.id as string },
-        data: {
-          completed_sessions: completedByPlan.get(plan.id as string) ?? 0,
-          total_sessions: appointmentsByPlan.get(plan.id as string) ?? 0,
-        },
-      }),
-    ),
-  );
 
   const completedAppointments = appointmentRows.filter(
     (appointment) => appointment.status === AppointmentStatus.completed,
@@ -1194,26 +1214,47 @@ async function seedRelationshipsPlansAndAppointments(ctx: DynamicSeedContext) {
     aggregate.total += Number(review.rating);
     aggregateByCoach.set(review.coach_id, aggregate);
   }
+  const ratingRows: Array<{
+    id: string;
+    user_id: string;
+    average_rating: Prisma.Decimal | null;
+    rating_count: number;
+  }> = [];
   for (const coachKey of coachKeys) {
     const coachId = ctx.state.coachProfileIds[coachKey];
     const aggregate = aggregateByCoach.get(coachId) ?? { count: 0, total: 0 };
-    await ctx.prisma.coachProfile.upsert({
-      where: { user_id: ctx.state.userIds[coachKey] },
-      update: {
-        average_rating: aggregate.count
-          ? new Prisma.Decimal((aggregate.total / aggregate.count).toFixed(2))
-          : null,
-        rating_count: aggregate.count,
-      },
-      create: {
-        id: coachId,
-        user_id: ctx.state.userIds[coachKey],
-        average_rating: aggregate.count
-          ? new Prisma.Decimal((aggregate.total / aggregate.count).toFixed(2))
-          : null,
-        rating_count: aggregate.count,
-      },
+    ratingRows.push({
+      id: coachId,
+      user_id: ctx.state.userIds[coachKey],
+      average_rating: aggregate.count
+        ? new Prisma.Decimal((aggregate.total / aggregate.count).toFixed(2))
+        : null,
+      rating_count: aggregate.count,
     });
+  }
+  if (ctx.config.mode === 'reset') {
+    // Profile rows already exist; reset mode can update the rating fields in a
+    // single statement because all seeded profiles share the same shape.
+    for (const row of ratingRows) {
+      await ctx.prisma.coachProfile.update({
+        where: { id: row.id },
+        data: {
+          average_rating: row.average_rating,
+          rating_count: row.rating_count,
+        },
+      });
+    }
+  } else {
+    for (const row of ratingRows) {
+      await ctx.prisma.coachProfile.upsert({
+        where: { user_id: row.user_id },
+        update: {
+          average_rating: row.average_rating,
+          rating_count: row.rating_count,
+        },
+        create: row,
+      });
+    }
   }
 
   const activeMemberId = ctx.state.userIds['member-active'];
@@ -1764,25 +1805,30 @@ async function seedAmenityBookings(ctx: DynamicSeedContext) {
   const holdModel = ctx.prisma
     .commerceCheckoutHold as unknown as CheckoutHoldModel;
   const paymentModel = ctx.prisma.payment as unknown as PaymentModel;
-  for (const row of paymentRows) {
-    if (!row.id) continue;
-    const update = { ...row };
-    delete update.id;
-    await paymentModel.upsert({
-      where: { id: row.id },
-      update: update as Record<string, unknown>,
-      create: row,
-    });
-  }
-  for (const row of holdRows) {
-    if (!row.id) continue;
-    const update = { ...row };
-    delete update.id;
-    await holdModel.upsert({
-      where: { id: row.id },
-      update: update as Record<string, unknown>,
-      create: row as Record<string, unknown>,
-    });
+  if (ctx.config.mode === 'reset') {
+    await createSeedRowsInBatches(ctx.prisma.payment, paymentRows);
+    await createSeedRowsInBatches(ctx.prisma.commerceCheckoutHold, holdRows);
+  } else {
+    for (const row of paymentRows) {
+      if (!row.id) continue;
+      const update = { ...row };
+      delete update.id;
+      await paymentModel.upsert({
+        where: { id: row.id },
+        update: update as Record<string, unknown>,
+        create: row,
+      });
+    }
+    for (const row of holdRows) {
+      if (!row.id) continue;
+      const update = { ...row };
+      delete update.id;
+      await holdModel.upsert({
+        where: { id: row.id },
+        update: update as Record<string, unknown>,
+        create: row as Record<string, unknown>,
+      });
+    }
   }
   for (const row of holdRows) {
     if (!row.id) continue;
@@ -1996,31 +2042,36 @@ export async function seedCheckoutHolds(ctx: DynamicSeedContext) {
   const holdModel = ctx.prisma
     .commerceCheckoutHold as unknown as CheckoutHoldModel;
   const paymentModel = ctx.prisma.payment as unknown as PaymentModel;
-  for (const row of holdRows) {
-    const update = { ...row };
-    delete update.id;
-    if (!row.id) {
-      throw new Error('Seeded checkout hold is missing its deterministic id');
+  if (ctx.config.mode === 'reset') {
+    await createSeedRowsInBatches(ctx.prisma.commerceCheckoutHold, holdRows);
+    await createSeedRowsInBatches(ctx.prisma.payment, holdPaymentRows);
+  } else {
+    for (const row of holdRows) {
+      const update = { ...row };
+      delete update.id;
+      if (!row.id) {
+        throw new Error('Seeded checkout hold is missing its deterministic id');
+      }
+      await holdModel.upsert({
+        where: { id: row.id },
+        update: update as Record<string, unknown>,
+        create: row as Record<string, unknown>,
+      });
     }
-    await holdModel.upsert({
-      where: { id: row.id },
-      update: update as Record<string, unknown>,
-      create: row as Record<string, unknown>,
-    });
-  }
-  for (const row of holdPaymentRows) {
-    const update = { ...row };
-    delete update.id;
-    if (!row.id) {
-      throw new Error(
-        'Seeded checkout payment is missing its deterministic id',
-      );
+    for (const row of holdPaymentRows) {
+      const update = { ...row };
+      delete update.id;
+      if (!row.id) {
+        throw new Error(
+          'Seeded checkout payment is missing its deterministic id',
+        );
+      }
+      await paymentModel.upsert({
+        where: { id: row.id },
+        update: update as Record<string, unknown>,
+        create: row,
+      });
     }
-    await paymentModel.upsert({
-      where: { id: row.id },
-      update: update as Record<string, unknown>,
-      create: row,
-    });
   }
   for (const row of holdRows) {
     if (!row.id) {

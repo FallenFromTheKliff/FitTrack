@@ -14,6 +14,7 @@ import { seedExternalId, seedId } from '../ids';
 import { daysFrom } from '../time';
 import type { DynamicSeedContext, MemberPersona, SeedAccount } from '../types';
 import { memberAccessWindow } from '../volumes';
+import { createSeedRowsInBatches } from '../batch';
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
 const MEMBERSHIP_CARD_PRICE = '400';
@@ -759,6 +760,10 @@ async function persistPayments(
   ctx: DynamicSeedContext,
   rows: readonly Prisma.PaymentCreateManyInput[],
 ) {
+  if (ctx.config.mode === 'reset') {
+    await createSeedRowsInBatches(ctx.prisma.payment, rows);
+    return;
+  }
   const paymentModel = ctx.prisma.payment as unknown as PaymentModel;
   for (const row of rows) {
     if (!row.id) {
@@ -779,9 +784,14 @@ function holdUpdate(row: Prisma.CommerceCheckoutHoldCreateManyInput) {
 }
 
 async function persistInitialHolds(
+  ctx: DynamicSeedContext,
   holdModel: HoldModel,
   rows: readonly Prisma.CommerceCheckoutHoldCreateManyInput[],
 ) {
+  if (ctx.config.mode === 'reset') {
+    await createSeedRowsInBatches(ctx.prisma.commerceCheckoutHold, rows);
+    return;
+  }
   for (const row of rows) {
     if (!row.id) {
       throw new Error('Seeded commerce hold is missing its deterministic id');
@@ -824,6 +834,31 @@ async function materializeCards(
   ctx: DynamicSeedContext,
   rows: readonly CardProductSpec[],
 ) {
+  const createRows = rows.map((card) => ({
+    created_at: card.purchasedAt,
+    id: card.cardId,
+    activated_at: card.activatedAt,
+    price: new Prisma.Decimal(MEMBERSHIP_CARD_PRICE),
+    purchased_at: card.purchasedAt,
+    revoked_at: card.revokedAt,
+    revoked_by:
+      card.status === MembershipCardStatus.revoked ? card.adminId : null,
+    revoke_reason:
+      card.status === MembershipCardStatus.revoked
+        ? card.account.memberPersona === 'suspended'
+          ? 'Membership card access revoked while the account is suspended.'
+          : 'Historical membership card retained for account-state review.'
+        : null,
+    source: MembershipCardSource.paymongo,
+    status: card.status,
+    user_id: card.userId,
+    verified_at: card.activatedAt,
+    verified_by: null,
+  }));
+  if (ctx.config.mode === 'reset') {
+    await createSeedRowsInBatches(ctx.prisma.membershipCard, createRows);
+    return;
+  }
   for (const card of rows) {
     await ctx.prisma.membershipCard.upsert({
       where: { user_id: card.userId },
@@ -874,6 +909,26 @@ async function materializeSubscriptions(
   ctx: DynamicSeedContext,
   rows: readonly SubscriptionProductSpec[],
 ) {
+  const createRows = rows.map((subscription) => {
+    const warnings = subscriptionWarningDates(subscription.cycle);
+    return {
+      created_at: subscription.cycle.start,
+      id: subscription.subscriptionId,
+      cancellation_reason: null,
+      cancelled_at: null,
+      expires_at: subscription.cycle.end,
+      payment_id: subscription.paymentId,
+      plan_id: subscription.planId,
+      starts_at: subscription.cycle.start,
+      status: subscription.cycle.status,
+      user_id: subscription.userId,
+      ...warnings,
+    };
+  });
+  if (ctx.config.mode === 'reset') {
+    await createSeedRowsInBatches(ctx.prisma.subscription, createRows);
+    return;
+  }
   for (const subscription of rows) {
     const warnings = subscriptionWarningDates(subscription.cycle);
     await ctx.prisma.subscription.upsert({
@@ -940,7 +995,7 @@ export async function seedMembershipPayments(ctx: DynamicSeedContext) {
   // after its hold/payment lineage exists.
   collectCards(ctx, rows);
   collectSubscriptions(ctx, rows);
-  await persistInitialHolds(holdModel, [
+  await persistInitialHolds(ctx, holdModel, [
     ...rows.successfulHoldRows,
     ...rows.failedHoldRows,
   ]);
