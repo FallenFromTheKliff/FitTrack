@@ -44,8 +44,9 @@ export type PoseRepEngineEvidence = {
 };
 
 const REQUIRED_STREAK = 2;
-const MIN_REP_TRAVEL = 18;
-const BICEP_CURL_MIN_REP_TRAVEL = 24;
+const MIN_REP_TRAVEL = 35;
+const BENCH_PRESS_MIN_REP_TRAVEL = 35;
+const BICEP_CURL_MIN_REP_TRAVEL = 40;
 const BICEP_CURL_MIN_REP_INTERVAL_MS = 800;
 const BICEP_CURL_PEAK_REVERSAL_DELTA = 2;
 const BICEP_CURL_MIN_TORSO_SLOPE_DEG = 48;
@@ -60,10 +61,10 @@ const BICEP_CURL_GRIP_MIN_USABLE_FRAMES = 2;
 const BICEP_CURL_GRIP_MAX_OPEN_FRAMES = 1;
 const BICEP_CURL_GRIP_MAX_OPEN_RATIO = 0.25;
 const DIP_MIN_REP_INTERVAL_MS = 850;
-const DIP_MIN_REP_TRAVEL = 18;
+const DIP_MIN_REP_TRAVEL = 30;
 const DEFAULT_MIN_REP_INTERVAL_MS = 850;
 const PUSH_UP_MIN_REP_INTERVAL_MS = 850;
-const PUSH_UP_MIN_REP_TRAVEL = 10;
+const PUSH_UP_MIN_REP_TRAVEL = 30;
 const PUSH_UP_MIN_SECONDARY_ARM_VISIBILITY = 0.1;
 const PUSH_UP_MIN_SECONDARY_ELBOW_AMPLITUDE = 1.2;
 const PUSH_UP_MIN_SECONDARY_ELBOW_RATIO = 0.1;
@@ -73,7 +74,8 @@ const PUSH_UP_MAX_HIP_X_DRIFT = 0.26;
 const PUSH_UP_MAX_TORSO_SLOPE_DEG = 92;
 const PUSH_UP_PHASE_SYNC_TOLERANCE_MS = 900;
 const PULL_UP_MIN_REP_INTERVAL_MS = 900;
-const PULL_UP_MIN_REP_TRAVEL = 8;
+const PULL_UP_MIN_REP_TRAVEL = 35;
+const SHOULDER_PRESS_MIN_REP_TRAVEL = 30;
 const PULL_UP_PEAK_REVERSAL_DELTA = 2;
 const WEIGHTED_CURL_EQUIPMENT_CONTEXTS = new Set<PoseEquipmentContext>([
   "dumbbell",
@@ -280,28 +282,42 @@ function getRepEngineThresholds(contract: PoseMovementContractRecord) {
   if (canonicalExercise === "push_up") {
     return {
       minRepTravel: PUSH_UP_MIN_REP_TRAVEL,
-      requiredStreak: 1,
+      requiredStreak: REQUIRED_STREAK,
     };
   }
 
   if (canonicalExercise === "bicep_curl") {
     return {
       minRepTravel: BICEP_CURL_MIN_REP_TRAVEL,
-      requiredStreak: 1,
+      requiredStreak: REQUIRED_STREAK,
     };
   }
 
   if (canonicalExercise === "dip") {
     return {
       minRepTravel: DIP_MIN_REP_TRAVEL,
-      requiredStreak: 1,
+      requiredStreak: REQUIRED_STREAK,
     };
   }
 
   if (canonicalExercise === "pull_up") {
     return {
       minRepTravel: PULL_UP_MIN_REP_TRAVEL,
-      requiredStreak: 1,
+      requiredStreak: REQUIRED_STREAK,
+    };
+  }
+
+  if (canonicalExercise === "bench_press") {
+    return {
+      minRepTravel: BENCH_PRESS_MIN_REP_TRAVEL,
+      requiredStreak: REQUIRED_STREAK,
+    };
+  }
+
+  if (canonicalExercise === "shoulder_press") {
+    return {
+      minRepTravel: SHOULDER_PRESS_MIN_REP_TRAVEL,
+      requiredStreak: REQUIRED_STREAK,
     };
   }
 

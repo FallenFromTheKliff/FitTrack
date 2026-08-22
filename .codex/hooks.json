@@ -1,0 +1,17 @@
+{
+  "description": "FitTrack local task clarity hook",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .codex/hooks/task-clarity.mjs",
+            "timeout": 3,
+            "additionalContextLimit": 300
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -386,7 +386,8 @@ export function WorkoutTrackingSection({
                   void Linking.openSettings();
                 }}
                 variant="ghost"
-                style={{ marginTop: 8 }}
+                style={{ alignSelf: "stretch", marginTop: 8, minHeight: 44, paddingHorizontal: 14 }}
+                textStyle={{ fontSize: 15, fontWeight: "600" }}
               />
             ) : null}
           </View>
@@ -604,9 +605,9 @@ export function WorkoutTrackingSection({
         </View>
         {cameraActive && permissionGranted ? (
           cameraTarget ? (
-            <View style={{ flexDirection: "row", gap: 8 }}>
-              <FitButton icon={hasStartedSet ? (isRecording ? Pause : Play) : Circle} label={hasStartedSet ? (isRecording ? "Pause" : "Resume") : "Start Set"} variant={hasStartedSet ? "ghost" : "primary"} disabled={hasStartedSet ? secondaryActionDisabled : primaryActionDisabled} onPress={hasStartedSet ? (isRecording ? onPause : () => { void onResumeRecord(); }) : () => { void onStartRecord(); }} style={{ flex: 1, minWidth: 0 }} />
-              <FitButton icon={StopCircle} label="Finish Set" variant="danger" disabled={countdownValue !== null || isCameraSwitching} onPress={onStopRecord} style={{ display: hasStartedSet ? "flex" : "none", flex: 1, minWidth: 0 }} />
+            <View style={{ alignSelf: "stretch", flexDirection: "row", gap: 10, marginTop: 12, width: "100%" }}>
+              <FitButton icon={hasStartedSet ? (isRecording ? Pause : Play) : Circle} label={hasStartedSet ? (isRecording ? "Pause" : "Resume") : "Start Set"} variant={hasStartedSet ? "ghost" : "primary"} disabled={hasStartedSet ? secondaryActionDisabled : primaryActionDisabled} onPress={hasStartedSet ? (isRecording ? onPause : () => { void onResumeRecord(); }) : () => { void onStartRecord(); }} style={{ flex: 1, minHeight: 48, minWidth: 0, paddingHorizontal: 10 }} textStyle={{ fontSize: 14, fontWeight: "700" }} />
+              <FitButton icon={StopCircle} label="Finish Set" variant="danger" disabled={countdownValue !== null || isCameraSwitching} onPress={onStopRecord} style={{ display: hasStartedSet ? "flex" : "none", flex: 1, minHeight: 48, minWidth: 0, paddingHorizontal: 10 }} textStyle={{ fontSize: 14, fontWeight: "700" }} />
             </View>
           ) : (
           <View style={s.previewControls}>

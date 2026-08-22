@@ -456,7 +456,6 @@ export default function BookingDetailModal({
                   disabled={action.disabled}
                   loading={action.loading}
                   loadingLabel={action.loadingLabel}
-                  flex={1}
                 />
               </View>
             ))}
@@ -465,7 +464,6 @@ export default function BookingDetailModal({
                 label="Close"
                 variant="ghost"
                 onPress={onClose}
-                flex={1}
               />
             </View>
           </Animated.View>

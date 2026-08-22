@@ -568,6 +568,8 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
     },
     statTile: {
       flexBasis: "47%",
+      flexGrow: 1,
+      minWidth: 0,
     },
     tabButton: {
       alignItems: "center",
@@ -616,10 +618,11 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
     },
     modalTitle: {
       color: colors.textPrimary,
-      flex: 1,
       fontSize: 20,
       fontWeight: "800",
       lineHeight: 24,
+      flexShrink: 1,
+      minWidth: 0,
     },
     modalClose: {
       alignItems: "center",
@@ -1121,6 +1124,7 @@ export default function MuscleMasteryScreenContent({ controller }: { controller:
                     borderColor: colors.border,
                     borderRadius: R.lg,
                     borderWidth: 1,
+                    alignItems: "center",
                     padding: 12,
                   },
                 ]}

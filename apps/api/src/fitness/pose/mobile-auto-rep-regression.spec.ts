@@ -3,8 +3,67 @@ import { buildFallbackPoseMovementContract } from '../../../../../packages/utils
 import { createPoseSignalCache } from '../../../../../packages/utils/pose-signal-cache';
 import {
   createPoseRepEngineState,
+  stepPoseRepEngine,
   stepPoseStaticHold,
 } from '../../../../../apps/mobile/lib/workout/poseRepEngine';
+
+const REP_EXERCISE_CASES = [
+  { exercise: 'squat', minTravel: 35 },
+  { exercise: 'bench_press', minTravel: 35 },
+  { exercise: 'bicep_curl', minTravel: 40 },
+  { exercise: 'dip', minTravel: 30 },
+  { exercise: 'pull_up', minTravel: 35 },
+  { exercise: 'push_up', minTravel: 30 },
+  { exercise: 'shoulder_press', minTravel: 30 },
+] as const;
+
+function buildRepAngleSequence(
+  contract: NonNullable<ReturnType<typeof buildFallbackPoseMovementContract>>,
+  minTravel: number,
+) {
+  const increasing =
+    contract.repThresholds.up.angle >= contract.repThresholds.down.angle;
+  const startLimit = increasing
+    ? contract.repThresholds.down.angle + contract.repThresholds.down.tolerance
+    : contract.repThresholds.down.angle - contract.repThresholds.down.tolerance;
+  const peakLimit = increasing
+    ? contract.repThresholds.up.angle - contract.repThresholds.up.tolerance
+    : contract.repThresholds.up.angle + contract.repThresholds.up.tolerance;
+  const start = increasing ? startLimit - 2 : startLimit + 2;
+  const peak = increasing
+    ? Math.max(peakLimit + 2, start + minTravel + 2)
+    : Math.min(peakLimit - 2, start - minTravel - 2);
+  // The extra reversal is needed by movements that count after the peak
+  // rather than immediately on peak arrival.
+  const reversal = increasing ? peak - 5 : peak + 5;
+  return [start, start, peak, peak, reversal];
+}
+
+function buildSmallOscillationSequence(
+  contract: NonNullable<ReturnType<typeof buildFallbackPoseMovementContract>>,
+  minTravel: number,
+) {
+  const increasing =
+    contract.repThresholds.up.angle >= contract.repThresholds.down.angle;
+  const startLimit = increasing
+    ? contract.repThresholds.down.angle + contract.repThresholds.down.tolerance
+    : contract.repThresholds.down.angle - contract.repThresholds.down.tolerance;
+  const start = increasing ? startLimit - 2 : startLimit + 2;
+  const smallTravel = Math.max(5, minTravel - 5);
+  const oscillation = increasing ? start + smallTravel : start - smallTravel;
+  return [start, start, oscillation, oscillation, start];
+}
+
+function runRepSequence(
+  contract: NonNullable<ReturnType<typeof buildFallbackPoseMovementContract>>,
+  angles: number[],
+) {
+  return angles.reduce(
+    (state, angle, index) =>
+      stepPoseRepEngine(state, contract, angle, index * 1000).nextState,
+    createPoseRepEngineState(),
+  );
+}
 
 function makeFrame(capturedAtMs: number, visibility: number) {
   return {
@@ -47,6 +106,44 @@ function makeHoldEvidence(visibility = 1) {
 }
 
 describe('mobile auto-rep regression primitives', () => {
+  it.each(REP_EXERCISE_CASES)(
+    'counts one meaningful $exercise rep with the tuned angle band',
+    ({ exercise, minTravel }) => {
+      const contract = buildFallbackPoseMovementContract(exercise);
+      if (!contract) throw new Error(`${exercise} fallback contract missing`);
+
+      const state = runRepSequence(
+        contract,
+        buildRepAngleSequence(contract, minTravel),
+      );
+
+      expect(state.repCount).toBe(1);
+    },
+  );
+
+  it.each(REP_EXERCISE_CASES)(
+    'rejects a small $exercise angle oscillation as jitter',
+    ({ exercise, minTravel }) => {
+      const contract = buildFallbackPoseMovementContract(exercise);
+      if (!contract) throw new Error(`${exercise} fallback contract missing`);
+
+      const state = runRepSequence(
+        contract,
+        buildSmallOscillationSequence(contract, minTravel),
+      );
+
+      expect(state.repCount).toBe(0);
+    },
+  );
+
+  it('keeps plank as a static hold instead of a repetition movement', () => {
+    const plank = buildFallbackPoseMovementContract('plank');
+    if (!plank) throw new Error('plank fallback contract missing');
+
+    expect(plank.repModel).toBe('static_hold');
+    expect(plank.holdDurationSeconds).toBe(30);
+  });
+
   it('keeps instant visibility independent from the buffered temporal cache', () => {
     const cache = createPoseSignalCache(1000);
     const goodFrame = makeFrame(0, 1);

@@ -64,6 +64,10 @@
     "test:ui:visual:debug": "playwright-cli open http://localhost:8080",
     "test:ui:visual:report": "playwright show-report .artifacts/playwright/visual-report",
     "test:ui:visual:update": "playwright test --config=playwright.visual.config.ts --update-snapshots",
+    "clean:ui:visual": "node tasks/clean-visual-run.mjs",
+    "test:ui:visual:cleanup": "node tests/visual-cleanup.test.mjs",
+    "test:ui:visual:helper": "node --experimental-strip-types tests/ui/visual/expect-visual-match.unit.mjs",
+    "test:hooks:task-clarity": "node tests/hooks/task-clarity.test.mjs",
     "storybook": "pnpm --filter @fittrack/web storybook",
     "storybook:build": "pnpm --filter @fittrack/web storybook:build",
     "registry:build": "pnpm --dir apps/web registry:build",
@@ -74,10 +78,13 @@
     "deploy:railway": "node tasks/deploy-railway.mjs"
   },
   "devDependencies": {
+    "@playwright/cli": "0.1.18",
     "@playwright/mcp": "^0.0.68",
     "@playwright/test": "^1.62.0",
     "@tailwindcss/postcss": "^4.2.1",
     "localtunnel": "^2.0.2",
+    "odiff-bin": "4.5.0",
+    "playwright-odiff": "4.5.0",
     "swagger-mcp": "^1.0.8",
     "turbo": "^2.8.13",
     "typescript": "^5.9.3"

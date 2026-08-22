@@ -1,4 +1,5 @@
 import { getVisualReference } from "./visual/reference-manifest";
+import { expectVisualMatch } from "./visual/expect-visual-match";
 import { auditConventionalLayout, stabilizeVisualPage } from "./visual-stabilizer";
 import { expect, test } from "./visual-fixtures";
 
@@ -29,9 +30,13 @@ test.describe("route visual smoke · admin desktop", () => {
 
     const masks = await stabilizeVisualPage(page, visualCase.maskSelectors);
     const audit = await auditConventionalLayout(page);
-    await testInfo.attach("visual-layout-audit.json", {
-      body: JSON.stringify(audit, null, 2),
-      contentType: "application/json",
+
+    await expectVisualMatch({
+      page,
+      testInfo,
+      visualCase,
+      masks,
+      layoutAudit: audit,
     });
 
     expect(audit.horizontalOverflow, "horizontal overflow").toBe(false);
@@ -40,11 +45,5 @@ test.describe("route visual smoke · admin desktop", () => {
     expect(audit.overlaps, "overlapping interactive controls").toEqual([]);
     expect(audit.nestedScrollbars, "nested scrollbars").toEqual([]);
     expect(audit.awkwardProportions, "awkward interactive proportions").toEqual([]);
-
-    await expect(page).toHaveScreenshot(visualCase.snapshot, {
-      mask: masks,
-      maxDiffPixels: visualCase.diffPolicy.maxDiffPixels,
-      threshold: visualCase.diffPolicy.threshold,
-    });
   });
 });

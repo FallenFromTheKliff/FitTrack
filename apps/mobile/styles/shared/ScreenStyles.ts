@@ -558,7 +558,7 @@ export function makeWorkoutStyles(colors: ThemeColors) {
     previewInner: {
       height: 576,
       minHeight: 456,
-      alignItems: "center",
+      alignItems: "stretch",
       justifyContent: "center",
       overflow: "hidden",
       borderRadius: 0
@@ -568,11 +568,13 @@ export function makeWorkoutStyles(colors: ThemeColors) {
     gridLine: { position: "absolute" as const, backgroundColor: colors.border },
     initButtonWrap: {
       position: "absolute" as const,
-      top: "50%" as const,
+      top: 0,
+      bottom: 0,
       left: 0,
       right: 0,
-      alignItems: "center",
-      transform: [{ translateY: -24 }]
+      alignItems: "stretch",
+      justifyContent: "center",
+      paddingHorizontal: 20,
     },
     cameraSwitchOverlay: {
       ...StyleSheet.absoluteFillObject,

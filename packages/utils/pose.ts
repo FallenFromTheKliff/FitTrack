@@ -213,8 +213,10 @@ const FALLBACK_POSE_MOVEMENT_CONTRACTS: Record<
     primaryJoints: ["left_elbow", "right_elbow"],
     repModel: "bilateral",
     repThresholds: {
-      down: { angle: 78, tolerance: 12 },
-      up: { angle: 166, tolerance: 12 },
+      // Consumer-realistic press depth: enough travel for a real rep without
+      // requiring an extreme bottom position in a phone-camera frame.
+      down: { angle: 98, tolerance: 12 },
+      up: { angle: 157, tolerance: 12 },
     },
     requiredSides: "both",
     secondaryCheck: "bar_path",
@@ -242,8 +244,10 @@ const FALLBACK_POSE_MOVEMENT_CONTRACTS: Record<
     phaseOrder: ["setup", "down", "up"],
     primaryJoints: ["left_elbow", "right_elbow"],
     repThresholds: {
-      down: { angle: 150, tolerance: 12 },
-      up: { angle: 100, tolerance: 22 },
+      // Require a recognisable extension-to-curl arc without requiring a
+      // fully locked elbow or unnaturally tight curl.
+      down: { angle: 150, tolerance: 10 },
+      up: { angle: 90, tolerance: 10 },
     },
     repModel: "bilateral",
     requiredSides: "both",
@@ -275,8 +279,8 @@ const FALLBACK_POSE_MOVEMENT_CONTRACTS: Record<
     primaryJoints: ["left_elbow", "right_elbow"],
     repModel: "bilateral",
     repThresholds: {
-      down: { angle: 118, tolerance: 12 },
-      up: { angle: 150, tolerance: 14 },
+      down: { angle: 108, tolerance: 12 },
+      up: { angle: 152, tolerance: 12 },
     },
     requiredSides: "both",
     secondaryCheck: "vertical_body_travel",
@@ -331,8 +335,8 @@ const FALLBACK_POSE_MOVEMENT_CONTRACTS: Record<
     primaryJoints: ["left_elbow", "right_elbow"],
     repModel: "bilateral",
     repThresholds: {
-      down: { angle: 140, tolerance: 15 },
-      up: { angle: 154, tolerance: 12 },
+      down: { angle: 108, tolerance: 12 },
+      up: { angle: 157, tolerance: 12 },
     },
     requiredSides: "both",
     secondaryCheck: "body_line",
@@ -365,8 +369,8 @@ const FALLBACK_POSE_MOVEMENT_CONTRACTS: Record<
     primaryJoints: ["left_elbow", "right_elbow"],
     repModel: "bilateral",
     repThresholds: {
-      down: { angle: 138, tolerance: 24 },
-      up: { angle: 105, tolerance: 34 },
+      down: { angle: 150, tolerance: 10 },
+      up: { angle: 95, tolerance: 10 },
     },
     requiredSides: "either",
     secondaryCheck: "vertical_pull",
@@ -397,8 +401,8 @@ const FALLBACK_POSE_MOVEMENT_CONTRACTS: Record<
     primaryJoints: ["left_shoulder", "right_shoulder"],
     repModel: "bilateral",
     repThresholds: {
-      down: { angle: 72, tolerance: 12 },
-      up: { angle: 164, tolerance: 12 },
+      down: { angle: 98, tolerance: 12 },
+      up: { angle: 152, tolerance: 12 },
     },
     requiredSides: "both",
     secondaryCheck: "lockout_control",
@@ -419,8 +423,8 @@ const FALLBACK_POSE_MOVEMENT_CONTRACTS: Record<
     primaryJoints: ["left_knee", "right_knee"],
     repModel: "bilateral",
     repThresholds: {
-      down: { angle: 92, tolerance: 12 },
-      up: { angle: 168, tolerance: 12 },
+      down: { angle: 108, tolerance: 12 },
+      up: { angle: 157, tolerance: 12 },
     },
     requiredSides: "both",
     secondaryCheck: "hip_depth",

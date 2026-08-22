@@ -34,6 +34,7 @@ type Props = {
   onStartDateReset?: () => void;
   onEndDateReset?: () => void;
   dropdownStyle?: StyleProp<ViewStyle>;
+  compact?: boolean;
 };
 
 export default function FitFilter({
@@ -57,6 +58,7 @@ export default function FitFilter({
   onStartDateReset,
   onEndDateReset,
   dropdownStyle,
+  compact = false,
 }: Props) {
   const { colors } = useTheme();
   const s = useMemo(() => makeFitFilterStyles(colors), [colors]);
@@ -66,7 +68,16 @@ export default function FitFilter({
 
   const targetHeight = measuredHeight;
 
-  const { height, opacity } = usePanelAnim({ targetHeight, visible: isOpen });
+  const { height, opacity } = usePanelAnim({
+    duration: 200,
+    targetHeight,
+    visible: isOpen,
+  });
+
+  const compactChipStyle = compact
+    ? { minHeight: 34, minWidth: 72, paddingHorizontal: 8, paddingVertical: 6 }
+    : undefined;
+  const compactChipTextStyle = compact ? { fontSize: 12 } : undefined;
 
   const filterPanelStyle = useAnimatedStyle(() => ({
     // The first open has no measured height yet. Applying height: 0 here
@@ -86,17 +97,17 @@ export default function FitFilter({
       style={[s.filterDropdown, dropdownStyle, filterPanelStyle]}
       accessibilityElementsHidden={!isOpen}
       importantForAccessibility={isOpen ? "auto" : "no-hide-descendants"}
+      pointerEvents={isOpen ? "auto" : "none"}
     >
-      {isOpen ? (
-        <View
-          style={s.filterPanel}
-          onLayout={(event) => {
-            const nextHeight = Math.ceil(event.nativeEvent.layout.height);
-            setMeasuredHeight((currentHeight) =>
-              currentHeight === nextHeight ? currentHeight : nextHeight,
-            );
-          }}
-        >
+      <View
+        style={s.filterPanel}
+        onLayout={(event) => {
+          const nextHeight = Math.ceil(event.nativeEvent.layout.height);
+          setMeasuredHeight((currentHeight) =>
+            currentHeight === nextHeight ? currentHeight : nextHeight,
+          );
+        }}
+      >
           {!!topChipOptions?.length && (
             <View style={s.filterSection}>
               <StaticFitText style={s.filterLabel}>{topChipLabel}</StaticFitText>
@@ -108,11 +119,13 @@ export default function FitFilter({
                       key={opt.value}
                       style={[
                         s.filterChip,
+                        compactChipStyle,
                         isActive && {
                           borderColor: colors.brand,
                           backgroundColor: colors.brand + "18",
                         },
                       ]}
+                      hitSlop={compact ? 6 : undefined}
                       onPress={() => onTopChipChange?.(opt.value)}
                       accessibilityRole={topChipAccessibilityRole}
                       accessibilityLabel={`${topChipLabel}: ${opt.label}`}
@@ -121,6 +134,7 @@ export default function FitFilter({
                       <StaticFitText
                         style={[
                           s.filterChipText,
+                          compactChipTextStyle,
                           isActive && {
                             color: colors.brand,
                             fontWeight: "600",
@@ -146,11 +160,13 @@ export default function FitFilter({
                       key={opt.value}
                       style={[
                         s.filterChip,
+                        compactChipStyle,
                         isActive && {
                           borderColor: colors.brand,
                           backgroundColor: colors.brand + "18",
                         },
                       ]}
+                      hitSlop={compact ? 6 : undefined}
                       onPress={() => onChipChange?.(opt.value)}
                       accessibilityRole="button"
                       accessibilityLabel={`Status: ${opt.label}`}
@@ -159,6 +175,7 @@ export default function FitFilter({
                       <StaticFitText
                         style={[
                           s.filterChipText,
+                          compactChipTextStyle,
                           isActive && {
                             color: colors.brand,
                             fontWeight: "600",
@@ -256,8 +273,7 @@ export default function FitFilter({
               ) : null}
             </View>
           )}
-        </View>
-      ) : null}
+      </View>
     </Animated.View>
   );
 }

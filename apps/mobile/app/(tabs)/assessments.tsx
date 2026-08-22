@@ -259,6 +259,7 @@ export default function AssessmentsScreen() {
         </View>
         <FitFilter
           isOpen={isFilterOpen}
+          compact
           chipOptions={FILTER_OPTIONS}
           activeChip={activeFilter}
           onChipChange={(value) => {
