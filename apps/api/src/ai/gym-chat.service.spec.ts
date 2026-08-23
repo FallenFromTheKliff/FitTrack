@@ -64,7 +64,7 @@ describe('GymChatService', () => {
     getGymProfile: jest.fn().mockResolvedValue({
       name: 'SERTFIT Gym',
       phone: '+639281234567',
-      location: '123 Fitness Ave, New York, NY 10001',
+      location: 'Pasay City, Metro Manila, Philippines',
       email: 'contact@sertfit.com',
       opening_time: '06:00',
       closing_time: '22:00',
@@ -143,13 +143,31 @@ describe('GymChatService', () => {
           session_id: 'session-1',
           role: GymChatRole.assistant,
           content: 'We are open until 10 PM today.',
-          grounded_sources: ['operating_hours', 42, 'special_schedules'],
+          grounded_sources: [
+            ' gym_identity ',
+            'OPERATING_HOURS',
+            'gym_identity',
+            'arbitrary_database_table',
+            ' faq ',
+            42,
+            null,
+          ],
           out_of_scope: false,
           created_at: new Date('2026-03-27T06:01:00.000Z'),
           updated_at: new Date('2026-03-27T06:01:00.000Z'),
         },
+        {
+          id: 'message-2',
+          session_id: 'session-1',
+          role: GymChatRole.assistant,
+          content: 'No stored source array.',
+          grounded_sources: { source: 'gym_profile' },
+          out_of_scope: false,
+          created_at: new Date('2026-03-27T06:02:00.000Z'),
+          updated_at: new Date('2026-03-27T06:02:00.000Z'),
+        },
       ],
-      meta: { page: 1, limit: 20, total: 1, total_pages: 1 },
+      meta: { page: 1, limit: 20, total: 2, total_pages: 1 },
     });
 
     await expect(
@@ -164,13 +182,23 @@ describe('GymChatService', () => {
           session_id: 'session-1',
           role: GymChatRole.assistant,
           content: 'We are open until 10 PM today.',
-          grounded_sources: ['operating_hours', 'special_schedules'],
+          grounded_sources: ['gym_profile', 'operating_hours', 'faq'],
           out_of_scope: false,
           created_at: '2026-03-27T06:01:00.000Z',
           updated_at: '2026-03-27T06:01:00.000Z',
         },
+        {
+          id: 'message-2',
+          session_id: 'session-1',
+          role: GymChatRole.assistant,
+          content: 'No stored source array.',
+          grounded_sources: null,
+          out_of_scope: false,
+          created_at: '2026-03-27T06:02:00.000Z',
+          updated_at: '2026-03-27T06:02:00.000Z',
+        },
       ],
-      meta: { page: 1, limit: 20, total: 1, total_pages: 1 },
+      meta: { page: 1, limit: 20, total: 2, total_pages: 1 },
     });
   });
 
@@ -212,21 +240,48 @@ describe('GymChatService', () => {
       },
     ]);
     gymKnowledgeRepository.listSpecialSchedules.mockResolvedValue({
-      data: [],
-      meta: { page: 1, limit: 100, total: 0, total_pages: 0 },
+      data: [
+        {
+          starts_on: new Date('2020-01-01T00:00:00.000Z'),
+          ends_on: new Date('2020-01-02T00:00:00.000Z'),
+          opens_at: null,
+          closes_at: null,
+          is_closed: true,
+          reason: 'Expired closure',
+          pricing_note: null,
+        },
+        {
+          starts_on: new Date('2099-12-24T00:00:00.000Z'),
+          ends_on: new Date('2099-12-25T00:00:00.000Z'),
+          opens_at: new Date('1970-01-01T08:00:00.000Z'),
+          closes_at: new Date('1970-01-01T18:00:00.000Z'),
+          is_closed: false,
+          reason: 'Holiday schedule',
+          pricing_note: null,
+        },
+      ],
+      meta: { page: 1, limit: 100, total: 2, total_pages: 1 },
     });
     gymKnowledgeRepository.listPromotions.mockResolvedValue({
       data: [
         {
+          title: 'Expired promotion',
+          description: 'No longer active.',
+          promo_code: 'OLD',
+          starts_at: new Date('2020-01-01T00:00:00.000Z'),
+          ends_at: new Date('2020-02-01T00:00:00.000Z'),
+          pricing_note: null,
+        },
+        {
           title: 'Summer Starter Pack',
           description: 'Two weeks free.',
           promo_code: 'SUMMER26',
-          starts_at: new Date('2026-05-01T00:00:00.000Z'),
-          ends_at: new Date('2026-05-31T23:59:59.000Z'),
+          starts_at: new Date('2020-01-01T00:00:00.000Z'),
+          ends_at: new Date('2099-12-31T23:59:59.000Z'),
           pricing_note: 'New members only.',
         },
       ],
-      meta: { page: 1, limit: 100, total: 1, total_pages: 1 },
+      meta: { page: 1, limit: 100, total: 2, total_pages: 1 },
     });
     gymKnowledgeRepository.listFaqEntries.mockResolvedValue({
       data: [
@@ -270,7 +325,13 @@ describe('GymChatService', () => {
     aiClient.chatGym.mockResolvedValue({
       reply: 'Current promotion: Summer Starter Pack (SUMMER26).',
       out_of_scope: false,
-      sources: ['promotions', 'membership_plans'],
+      sources: [
+        'gym_identity',
+        'promotions',
+        'membership_plans',
+        'promotions',
+        'database_record_id',
+      ],
       follow_up_suggestions: [
         'Ask whether the current promotion applies to new members.',
       ],
@@ -294,7 +355,7 @@ describe('GymChatService', () => {
     ).resolves.toEqual({
       session_id: 'session-1',
       reply: 'Current promotion: Summer Starter Pack (SUMMER26).',
-      sources: ['promotions', 'membership_plans'],
+      sources: ['gym_profile', 'promotions', 'membership_plans'],
       follow_up_suggestions: [
         'Ask whether the current promotion applies to new members.',
       ],
@@ -304,10 +365,20 @@ describe('GymChatService', () => {
     expect(gymChatSessionRepository.createSession).toHaveBeenCalledWith({
       userId: 'user-1',
     });
+    expect(
+      gymChatMessageRepository.listRecentMessagesBySessionId,
+    ).toHaveBeenCalledWith('session-1', 12);
     const [[chatRequest]] = aiClient.chatGym.mock.calls as [[GymChatInput]];
 
     expect(chatRequest.sessionId).toBe('session-1');
     expect(chatRequest.message).toBe('What promotions are active right now?');
+    expect(chatRequest.grounding.operating_hours).toHaveLength(1);
+    expect(chatRequest.grounding.special_schedules).toEqual([
+      expect.objectContaining({ reason: 'Holiday schedule' }),
+    ]);
+    expect(chatRequest.grounding.promotions).toEqual([
+      expect.objectContaining({ title: 'Summer Starter Pack' }),
+    ]);
     expect(chatRequest.grounding.membership_plans).toEqual([
       expect.objectContaining({
         name: 'Monthly Flex',
@@ -317,12 +388,16 @@ describe('GymChatService', () => {
     expect(chatRequest.grounding.faqs).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
+          question: 'Do you offer day passes?',
+          answer: 'Yes, at the front desk.',
+        }),
+        expect.objectContaining({
           question: 'Gym name',
           answer: 'SERTFIT Gym',
         }),
         expect.objectContaining({
           question: 'Gym address',
-          answer: '123 Fitness Ave, New York, NY 10001',
+          answer: 'Pasay City, Metro Manila, Philippines',
         }),
         expect.objectContaining({
           question: 'Gym opening time',
@@ -341,7 +416,6 @@ describe('GymChatService', () => {
       },
     ]);
     expect(chatRequest.grounding.user_context).toEqual({
-      first_name: 'Alex',
       role: 'member',
     });
     expect(gymChatMessageRepository.createMessage).toHaveBeenNthCalledWith(1, {
@@ -353,7 +427,7 @@ describe('GymChatService', () => {
       sessionId: 'session-1',
       role: GymChatRole.assistant,
       content: 'Current promotion: Summer Starter Pack (SUMMER26).',
-      groundedSources: ['promotions', 'membership_plans'],
+      groundedSources: ['gym_profile', 'promotions', 'membership_plans'],
       outOfScope: false,
     });
     expect(gymChatSessionRepository.updateSessionById).toHaveBeenCalledWith(
@@ -371,6 +445,7 @@ describe('GymChatService', () => {
     expect(interactionLogInput.modelUsed).toBe('fittrack-llama');
     expect(interactionLogInput.tokenCount).toBe(91);
     expect(interactionLogInput.responsePayload).toMatchObject({
+      sources: ['gym_profile', 'promotions', 'membership_plans'],
       follow_up_suggestions: [
         'Ask whether the current promotion applies to new members.',
       ],

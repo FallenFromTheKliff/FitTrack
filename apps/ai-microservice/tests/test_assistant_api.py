@@ -640,6 +640,131 @@ def test_chat_route_extracts_nested_content_block_text_and_action(
     assert '"params"' not in payload["content"]
 
 
+@pytest.mark.parametrize(
+    "provider_content",
+    [
+        (
+            'We need to infer intent: user says "hey bro explain cardio". '
+            "Action policy: allowed actions are ADJUST_TDEE, GENERATE_PLAN, "
+            "LOG_NUTRITION, NONE. The instruction says return strict JSON only, "
+            "so we need to output JSON with action and params."
+        ),
+        {
+            "content": (
+                'We need to infer intent: user says "hey bro explain cardio". '
+                "Action policy lists the allowed actions. Return strict JSON only."
+            ),
+            "action": "NONE",
+            "params": None,
+        },
+    ],
+)
+def test_chat_route_never_exposes_provider_internal_reasoning(
+    monkeypatch: pytest.MonkeyPatch,
+    provider_content: object,
+) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv(
+        "OPENROUTER_ASSISTANT_CHAT_MODEL",
+        "meta-llama/llama-3.3-70b-instruct:free",
+    )
+    calls: list[dict[str, object]] = []
+
+    class ReasoningLeakResponse:
+        status_code = 200
+
+        def json(self) -> dict[str, object]:
+            return {
+                "model": "meta-llama/llama-3.3-70b-instruct:free",
+                "choices": [{"message": {"content": provider_content}}],
+            }
+
+    def fake_post(*args, **kwargs):
+        calls.append(kwargs["json"])
+        return ReasoningLeakResponse()
+
+    monkeypatch.setattr("app.services.assistant.httpx.post", fake_post)
+
+    response = TestClient(app).post(
+        "/chat",
+        json={
+            "messages": [{"role": "user", "content": "Explain cardio."}],
+            "user_context": {},
+            "session_context": {
+                "session_id": "assistant-session-reasoning-leak",
+                "context_type": "general",
+                "allowed_actions": ["NONE"],
+            },
+        },
+    )
+
+    payload = response.json()
+    assert response.status_code == 200
+    assert payload["content"] == (
+        "I couldn't format that response cleanly. Please try again."
+    )
+    assert payload["action"] == "NONE"
+    assert payload["params"] is None
+    assert "infer intent" not in payload["content"].lower()
+    assert calls[0]["reasoning"] == {"exclude": True}
+
+
+def test_chat_route_keeps_legitimate_plain_text_that_mentions_we_need_to(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv(
+        "OPENROUTER_ASSISTANT_CHAT_MODEL",
+        "meta-llama/llama-3.3-70b-instruct:free",
+    )
+
+    class PlainTextResponse:
+        status_code = 200
+
+        def json(self) -> dict[str, object]:
+            return {
+                "model": "meta-llama/llama-3.3-70b-instruct:free",
+                "choices": [
+                    {
+                        "message": {
+                            "content": (
+                                "We need to warm up gradually before hard cardio "
+                                "intervals."
+                            )
+                        }
+                    }
+                ],
+            }
+
+    monkeypatch.setattr(
+        "app.services.assistant.httpx.post",
+        lambda *args, **kwargs: PlainTextResponse(),
+    )
+
+    response = TestClient(app).post(
+        "/chat",
+        json={
+            "messages": [
+                {"role": "user", "content": "How should I start cardio?"}
+            ],
+            "user_context": {},
+            "session_context": {
+                "session_id": "assistant-session-valid-plain-text",
+                "context_type": "general",
+                "allowed_actions": ["NONE"],
+            },
+        },
+    )
+
+    payload = response.json()
+    assert response.status_code == 200
+    assert payload["content"] == (
+        "We need to warm up gradually before hard cardio intervals."
+    )
+    assert payload["action"] == "NONE"
+    assert payload["params"] is None
+
+
 @pytest.mark.parametrize("role", ["ADMIN", "COACH", "STAFF", "MEMBER"])
 @pytest.mark.parametrize(
     ("message", "expected_mode"),

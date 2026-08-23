@@ -41,9 +41,6 @@ import { GymKnowledgeService } from './gym-knowledge.service';
 
 type GymChatUserAggregate = {
   role: string;
-  profile: {
-    first_name: string;
-  };
 };
 
 type GymChatSessionResolution = {
@@ -52,7 +49,7 @@ type GymChatSessionResolution = {
 };
 
 const SESSION_INACTIVITY_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
-const MAX_GYM_CHAT_HISTORY_MESSAGES = 20;
+const MAX_GYM_CHAT_HISTORY_MESSAGES = 12;
 const MAX_SESSION_TITLE_LENGTH = 80;
 const GROUNDING_PAGE_SIZE = 100;
 
@@ -87,6 +84,11 @@ export class GymChatService {
 
     try {
       const response = await this.aiClient.chatGym(requestPayload);
+      const groundedSources = this.normalizeProviderSources(response.sources);
+      const normalizedResponse = {
+        ...response,
+        sources: groundedSources,
+      };
       const latencyMs = Date.now() - startedAt;
 
       await this.gymChatMessageRepository.createMessage({
@@ -98,7 +100,7 @@ export class GymChatService {
         sessionId: resolved.session.id,
         role: GymChatRole.assistant,
         content: response.reply,
-        groundedSources: response.sources,
+        groundedSources,
         outOfScope: response.out_of_scope,
       });
 
@@ -125,7 +127,7 @@ export class GymChatService {
             },
           },
           groundingPayload: grounding,
-          responsePayload: response,
+          responsePayload: normalizedResponse,
           latencyMs,
           modelUsed: response.model_used ?? null,
           tokenCount: response.token_count ?? null,
@@ -136,7 +138,7 @@ export class GymChatService {
       return {
         session_id: resolved.session.id,
         reply: response.reply,
-        sources: response.sources,
+        sources: groundedSources,
         follow_up_suggestions: response.follow_up_suggestions,
         out_of_scope: response.out_of_scope,
       };
@@ -304,23 +306,35 @@ export class GymChatService {
         is_closed: entry.is_closed,
         label: entry.label,
       })),
-      special_schedules: specialSchedules.data.map((entry) => ({
-        starts_on: this.formatDateOnly(entry.starts_on),
-        ends_on: this.formatDateOnly(entry.ends_on),
-        opens_at: entry.opens_at ? this.formatTime(entry.opens_at) : null,
-        closes_at: entry.closes_at ? this.formatTime(entry.closes_at) : null,
-        is_closed: entry.is_closed,
-        reason: entry.reason,
-        pricing_note: entry.pricing_note,
-      })),
-      promotions: promotions.data.map((entry) => ({
-        title: entry.title,
-        description: entry.description,
-        promo_code: entry.promo_code,
-        starts_at: entry.starts_at.toISOString(),
-        ends_at: entry.ends_at.toISOString(),
-        pricing_note: entry.pricing_note,
-      })),
+      special_schedules: specialSchedules.data
+        .filter(
+          (entry) =>
+            this.formatDateOnly(entry.ends_on) >=
+            this.formatGymDateOnly(new Date()),
+        )
+        .map((entry) => ({
+          starts_on: this.formatDateOnly(entry.starts_on),
+          ends_on: this.formatDateOnly(entry.ends_on),
+          opens_at: entry.opens_at ? this.formatTime(entry.opens_at) : null,
+          closes_at: entry.closes_at ? this.formatTime(entry.closes_at) : null,
+          is_closed: entry.is_closed,
+          reason: entry.reason,
+          pricing_note: entry.pricing_note,
+        })),
+      promotions: promotions.data
+        .filter(
+          (entry) =>
+            entry.starts_at.getTime() <= Date.now() &&
+            entry.ends_at.getTime() >= Date.now(),
+        )
+        .map((entry) => ({
+          title: entry.title,
+          description: entry.description,
+          promo_code: entry.promo_code,
+          starts_at: entry.starts_at.toISOString(),
+          ends_at: entry.ends_at.toISOString(),
+          pricing_note: entry.pricing_note,
+        })),
       faqs: [
         ...faqEntries.data.map((entry) => ({
           category: entry.category,
@@ -349,7 +363,6 @@ export class GymChatService {
         ];
       }),
       user_context: {
-        first_name: aggregate.profile.first_name,
         role: aggregate.role,
       },
     };
@@ -502,6 +515,30 @@ export class GymChatService {
     };
   }
 
+  private normalizeProviderSources(value: string[]): string[] {
+    const allowedSources = new Set([
+      'gym_profile',
+      'operating_hours',
+      'membership_plans',
+      'promotions',
+      'special_schedules',
+      'faq',
+      'conversation_history',
+    ]);
+
+    return [
+      ...new Set(
+        value
+          .map((source) =>
+            source.trim().toLowerCase() === 'gym_identity'
+              ? 'gym_profile'
+              : source.trim().toLowerCase(),
+          )
+          .filter((source) => allowedSources.has(source)),
+      ),
+    ];
+  }
+
   private normalizeGroundedSources(
     value: Prisma.JsonValue | null,
   ): string[] | null {
@@ -509,7 +546,23 @@ export class GymChatService {
       return null;
     }
 
-    return value.filter((entry): entry is string => typeof entry === 'string');
+    return this.normalizeProviderSources(
+      value.filter((entry): entry is string => typeof entry === 'string'),
+    );
+  }
+
+  private formatGymDateOnly(value: Date): string {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      day: '2-digit',
+      month: '2-digit',
+      timeZone: 'Asia/Manila',
+      year: 'numeric',
+    }).formatToParts(value);
+    const year = parts.find((part) => part.type === 'year')?.value;
+    const month = parts.find((part) => part.type === 'month')?.value;
+    const day = parts.find((part) => part.type === 'day')?.value;
+
+    return `${year}-${month}-${day}`;
   }
 
   private formatTime(value: Date): string {

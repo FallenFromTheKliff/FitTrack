@@ -1,5 +1,0 @@
-C:\FitTrack_rebuilt_20260330_212527\node_modules\.pnpm\expo-mo_b1818a6ea85dab8860fcdfded29395d8\node_modules\expo-modules-core\android\cmake\common.cmake
-C:\FitTrack_rebuilt_20260330_212527\node_modules\.pnpm\expo-mo_b1818a6ea85dab8860fcdfded29395d8\node_modules\expo-modules-core\android\cmake\jsi.cmake
-C:\FitTrack_rebuilt_20260330_212527\node_modules\.pnpm\expo-mo_b1818a6ea85dab8860fcdfded29395d8\node_modules\expo-modules-core\android\cmake\main.cmake
-C:\FitTrack_rebuilt_20260330_212527\node_modules\.pnpm\expo-mo_b1818a6ea85dab8860fcdfded29395d8\node_modules\expo-modules-core\android\cmake\variables.cmake
-C:\FitTrack_rebuilt_20260330_212527\node_modules\.pnpm\expo-mo_b1818a6ea85dab8860fcdfded29395d8\node_modules\expo-modules-core\android\CMakeLists.txt

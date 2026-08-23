@@ -66,6 +66,16 @@ class OpenRouterAssistantProvider:
     _EMPTY_CHAT_FALLBACK = (
         "I couldn't format that response cleanly. Please try again."
     )
+    _INTERNAL_REASONING_MARKERS = (
+        r"\binfer(?:ring)? (?:the )?(?:user(?:'s)? )?intent\b",
+        r"\buser says\b",
+        r"\baction policy\b",
+        r"\ballowed actions?\b",
+        r"\breturn strict json\b",
+        r"\boutput (?:a )?json\b",
+        r"\bsystem (?:prompt|instructions?)\b",
+        r"\bwe need to (?:infer|respond|produce|include|output)\b",
+    )
 
     def reply_to_message(self, payload: AssistantChatRequest) -> AssistantChatResponse:
         settings = self._get_settings()
@@ -188,6 +198,7 @@ class OpenRouterAssistantProvider:
                 },
             ],
             "temperature": 0.3,
+            "reasoning": {"exclude": True},
             "response_format": response_format,
         }
 
@@ -603,19 +614,32 @@ class OpenRouterAssistantProvider:
             self._extract_assistant_message(response_payload)
         )
         try:
-            return OpenRouterAssistantChatDraft.model_validate(normalized_content)
+            draft = OpenRouterAssistantChatDraft.model_validate(normalized_content)
         except ValidationError as exc:
             fallback_draft = self._coerce_chat_draft_from_payload(normalized_content)
             if fallback_draft is not None:
-                return fallback_draft
+                draft = fallback_draft
+            else:
+                raise ServiceError(
+                    type="BAD_GATEWAY",
+                    title="Invalid Assistant Response",
+                    status=502,
+                    detail=(
+                        "OpenRouter returned a chat payload that did not match the required schema."
+                    ),
+                ) from exc
+
+        if self._looks_like_internal_reasoning(draft.content):
             raise ServiceError(
                 type="BAD_GATEWAY",
                 title="Invalid Assistant Response",
                 status=502,
                 detail=(
-                    "OpenRouter returned a chat payload that did not match the required schema."
+                    "OpenRouter returned internal reasoning instead of a user-facing reply."
                 ),
-            ) from exc
+            )
+
+        return draft
 
     def _parse_plan_draft(
         self,
@@ -865,6 +889,15 @@ class OpenRouterAssistantProvider:
             .replace("\\n", "\n")
             .replace("\\r", "\n")
         )
+
+    def _looks_like_internal_reasoning(self, content: str) -> bool:
+        normalized = self._normalize_chat_text(content).lower()
+        matches = sum(
+            1
+            for marker in self._INTERNAL_REASONING_MARKERS
+            if re.search(marker, normalized)
+        )
+        return matches >= 2
 
     def _coerce_chat_draft_from_payload(
         self,

@@ -1,4 +1,0 @@
-C:/FitTrack_rebuilt_20260330_212527/.cxx/expo-core/RelWithDebInfo/3g1e3jm7/armeabi-v7a/CMakeFiles/expo-modules-jsi.dir
-C:/FitTrack_rebuilt_20260330_212527/.cxx/expo-core/RelWithDebInfo/3g1e3jm7/armeabi-v7a/CMakeFiles/expo-modules-core.dir
-C:/FitTrack_rebuilt_20260330_212527/.cxx/expo-core/RelWithDebInfo/3g1e3jm7/armeabi-v7a/CMakeFiles/edit_cache.dir
-C:/FitTrack_rebuilt_20260330_212527/.cxx/expo-core/RelWithDebInfo/3g1e3jm7/armeabi-v7a/CMakeFiles/rebuild_cache.dir

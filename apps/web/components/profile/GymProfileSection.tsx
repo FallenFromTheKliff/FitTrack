@@ -26,7 +26,7 @@ import { getPhilippinePhoneDigits } from "@/components/profile/profileFieldUtils
 const DEFAULT_GYM_PROFILE: GymProfileRecord = {
   closingTime: "22:00",
   email: "contact@sertfit.com",
-  location: "123 Fitness Ave, New York, NY 10001",
+  location: "Pasay City, Metro Manila, Philippines",
   name: "SERTFIT Gym",
   openingTime: "06:00",
   phone: "+639281234567"

@@ -26,7 +26,7 @@ import {
 const GYM_PROFILE_DEFAULTS: GymProfileResponseDTO = {
   closing_time: '22:00',
   email: 'contact@sertfit.com',
-  location: '123 Fitness Ave, New York, NY 10001',
+  location: 'Pasay City, Metro Manila, Philippines',
   name: 'SERTFIT Gym',
   opening_time: '06:00',
   phone: '+639281234567',

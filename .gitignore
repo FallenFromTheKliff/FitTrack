@@ -13,6 +13,7 @@ apps/mobile/.env
 agents/
 
 # Build outputs
+/.cxx/
 .artifacts/
 artifacts/
 .agents/

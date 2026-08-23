@@ -107,7 +107,7 @@ describe('GymKnowledgeService', () => {
     await expect(service.getGymProfile()).resolves.toEqual({
       name: 'FitTrack Uptown',
       phone: '+639991112222',
-      location: '123 Fitness Ave, New York, NY 10001',
+      location: 'Pasay City, Metro Manila, Philippines',
       email: 'contact@sertfit.com',
       opening_time: '05:30',
       closing_time: '21:00',

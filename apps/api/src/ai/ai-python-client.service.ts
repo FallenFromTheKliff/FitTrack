@@ -720,28 +720,13 @@ export class AiPythonClientService {
   private buildGymProviderGrounding(
     grounding: GymChatGroundingInput,
   ): GymChatGroundingInput {
-    const identityQuestions = new Set([
-      'gym name',
-      'gym address',
-      'gym location',
-      'gym phone',
-      'gym email',
-      'gym opening time',
-      'gym closing time',
-    ]);
-    const publicHours = grounding.operating_hours
-      .filter((entry) => !entry.is_closed)
-      .slice(0, 1);
-
     return {
-      operating_hours: publicHours,
-      special_schedules: [],
-      promotions: [],
-      faqs: grounding.faqs.filter((entry) =>
-        identityQuestions.has(entry.question.trim().toLowerCase()),
-      ),
-      membership_plans: [],
-      session_history: grounding.session_history.slice(-4),
+      operating_hours: grounding.operating_hours,
+      special_schedules: grounding.special_schedules,
+      promotions: grounding.promotions,
+      faqs: grounding.faqs,
+      membership_plans: grounding.membership_plans,
+      session_history: grounding.session_history.slice(-12),
     };
   }
 

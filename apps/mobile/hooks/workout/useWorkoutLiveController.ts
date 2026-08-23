@@ -71,6 +71,7 @@ import {
   stepPoseRepEngine,
 } from "@/lib/workout/poseRepEngine";
 
+import { getWorkoutAutoFinishEvaluation } from "@/lib/workout/workoutAutoFinish";
 type SelectedExercise = {
   exerciseId: string;
   handShapeProfile: ExerciseHandShapeProfileRecord | null;
@@ -1236,6 +1237,9 @@ export function useWorkoutLiveController(
     useState<WorkoutCameraRuntimeState>("ready");
   const [finishVisible, setFinishVisible] = useState(false);
   const [isFinishing, setIsFinishing] = useState(false);
+  const [autoFinishWarningSeconds, setAutoFinishWarningSeconds] = useState<
+    number | null
+  >(null);
   const [isPoseModelLoading, setIsPoseModelLoading] = useState(false);
   const [reps, setReps] = useState(0);
   const [currentKeypoints, setCurrentKeypoints] = useState<
@@ -1355,15 +1359,117 @@ export function useWorkoutLiveController(
   const subjectFingerprintRef = useRef<SubjectPoseFingerprint | null>(null);
   const plannedMovementKeyRef = useRef<string | null>(null);
   const autoCompletionKeyRef = useRef<string | null>(null);
-  const autoFinalizeSetRef = useRef<((repCount: number) => void) | null>(null);
+  const autoFinalizeSetRef = useRef<(() => void) | null>(null);
+  const autoFinishClockRef = useRef<ReturnType<typeof setInterval> | null>(
+    null,
+  );
+  const autoFinishLastActivityAtMsRef = useRef<number | null>(null);
+  const autoFinishPausedRef = useRef(false);
+  const autoFinishWarningSecondsRef = useRef<number | null>(null);
+  const isCameraSwitchingRef = useRef(false);
+  const isFinishingRef = useRef(false);
   const cameraRuntimeStateRef = useRef<WorkoutCameraRuntimeState>("ready");
   const completionLatchRef = useRef<{
     key: string;
     status: "idle" | "saving" | "saved";
   } | null>(null);
 
+  const setAutoFinishWarning = useCallback((nextValue: number | null) => {
+    if (autoFinishWarningSecondsRef.current === nextValue) return;
+    autoFinishWarningSecondsRef.current = nextValue;
+    setAutoFinishWarningSeconds(nextValue);
+  }, []);
+
+  const stopAutoFinishClock = useCallback(() => {
+    if (autoFinishClockRef.current) {
+      clearInterval(autoFinishClockRef.current);
+      autoFinishClockRef.current = null;
+    }
+  }, []);
+
+  const resetAutoFinishTiming = useCallback(() => {
+    stopAutoFinishClock();
+    autoFinishLastActivityAtMsRef.current = null;
+    autoFinishPausedRef.current = false;
+    setAutoFinishWarning(null);
+  }, [setAutoFinishWarning, stopAutoFinishClock]);
+
+  const pauseAutoFinishTiming = useCallback(() => {
+    stopAutoFinishClock();
+    autoFinishLastActivityAtMsRef.current = null;
+    autoFinishPausedRef.current = true;
+    setAutoFinishWarning(null);
+  }, [setAutoFinishWarning, stopAutoFinishClock]);
+
+  const beginAutoFinishTiming = useCallback(
+    (activityAtMs: number) => {
+      const targetReps = cameraTarget?.targetReps ?? 0;
+      const isStaticHoldTarget =
+        movementContractRef.current?.repModel === "static_hold" ||
+        (cameraTarget?.targetDurationSeconds != null && targetReps <= 0);
+      if (
+        !cameraTarget ||
+        isStaticHoldTarget ||
+        targetReps <= 0 ||
+        liveRepCountRef.current < targetReps
+      ) {
+        resetAutoFinishTiming();
+        return;
+      }
+
+      autoFinishPausedRef.current = false;
+      autoFinishLastActivityAtMsRef.current = Number.isFinite(activityAtMs)
+        ? activityAtMs
+        : Date.now();
+      setAutoFinishWarning(null);
+      if (autoFinishClockRef.current) return;
+
+      autoFinishClockRef.current = setInterval(() => {
+        const evaluation = getWorkoutAutoFinishEvaluation({
+          isCameraSwitching: isCameraSwitchingRef.current,
+          isConfirmationBlocking: isExerciseConfirmationVisibleRef.current,
+          isRepInProgress: repEngineStateRef.current.phase !== "primed",
+          isRecording: isRecordingRef.current,
+          isRuntimeTracking:
+            cameraRuntimeStateRef.current === "tracking" &&
+            !autoFinishPausedRef.current,
+          isStaticHold:
+            movementContractRef.current?.repModel === "static_hold" ||
+            (cameraTarget.targetDurationSeconds != null &&
+              cameraTarget.targetReps <= 0),
+          isTrackingReliable: !autoFinishPausedRef.current,
+          lastActivityAtMs: autoFinishLastActivityAtMsRef.current,
+          nowMs: Date.now(),
+          repCount: liveRepCountRef.current,
+          targetReps: cameraTarget.targetReps,
+        });
+
+        if (evaluation.status === "complete") {
+          stopAutoFinishClock();
+          setAutoFinishWarning(null);
+          autoFinalizeSetRef.current?.();
+          return;
+        }
+
+        if (evaluation.status === "ineligible") {
+          stopAutoFinishClock();
+          setAutoFinishWarning(null);
+          return;
+        }
+
+        setAutoFinishWarning(
+          evaluation.status === "warning" ? evaluation.warningSeconds : null,
+        );
+      }, 1000);
+    },
+    [cameraTarget, resetAutoFinishTiming, setAutoFinishWarning, stopAutoFinishClock],
+  );
+
   const setCameraRuntime = (nextState: WorkoutCameraRuntimeState) => {
     cameraRuntimeStateRef.current = nextState;
+    if (nextState !== "tracking") {
+      resetAutoFinishTiming();
+    }
     setCameraRuntimeState(nextState);
   };
 
@@ -1598,6 +1704,8 @@ export function useWorkoutLiveController(
       showMessage("Pause tracking before switching cameras.");
       return;
     }
+
+    resetAutoFinishTiming();
 
     const nextFacing: CameraType = cameraFacing === "back" ? "front" : "back";
     if (!cameraActive) {
@@ -1978,6 +2086,7 @@ export function useWorkoutLiveController(
   isExerciseConfirmationVisibleRef.current = isExerciseConfirmationVisible;
   useEffect(() => {
     const targetKey = getCameraTargetKey(cameraTarget);
+    resetAutoFinishTiming();
     if (!targetKey) {
       completionLatchRef.current = null;
       return;
@@ -1991,6 +2100,7 @@ export function useWorkoutLiveController(
     cameraTarget?.planExerciseId,
     cameraTarget?.sessionId,
     cameraTarget?.setNumber,
+    resetAutoFinishTiming,
   ]);
   const liveActiveSession = useMemo(
     () =>
@@ -2017,7 +2127,38 @@ export function useWorkoutLiveController(
 
   useEffect(() => {
     isRecordingRef.current = isRecording;
-  }, [isRecording]);
+    if (!isRecording) {
+      resetAutoFinishTiming();
+    }
+  }, [isRecording, resetAutoFinishTiming]);
+
+  useEffect(() => {
+    isCameraSwitchingRef.current = isCameraSwitching;
+    if (isCameraSwitching) {
+      pauseAutoFinishTiming();
+    }
+  }, [isCameraSwitching, pauseAutoFinishTiming]);
+
+  useEffect(() => {
+    if (
+      !cameraActive ||
+      !permissionGranted ||
+      !isRecording ||
+      cameraRuntimeState !== "tracking" ||
+      isCameraSwitching ||
+      isExerciseConfirmationVisible
+    ) {
+      resetAutoFinishTiming();
+    }
+  }, [
+    cameraActive,
+    cameraRuntimeState,
+    isCameraSwitching,
+    isExerciseConfirmationVisible,
+    isRecording,
+    permissionGranted,
+    resetAutoFinishTiming,
+  ]);
 
   const resetPoseTrackingBuffers = useCallback(() => {
     poseFrameBufferRef.current = [];
@@ -2145,7 +2286,7 @@ export function useWorkoutLiveController(
         : `${statusPrefix} Valid hold ${holdStep.holdSeconds.toFixed(1)} / ${targetSeconds}s.`,
     );
     if (holdStep.holdCompleted) {
-      autoFinalizeSetRef.current?.(0);
+      autoFinalizeSetRef.current?.();
     }
   };
 
@@ -2371,7 +2512,12 @@ export function useWorkoutLiveController(
       setSubjectLockConfidence(nextConfidence);
     }
 
-    if (!isRecordingRef.current || !poseSessionIdRef.current) {
+    if (
+      !isRecordingRef.current ||
+      !poseSessionIdRef.current ||
+      isExerciseConfirmationVisibleRef.current
+    ) {
+      resetAutoFinishTiming();
       setPoseStatusOverride(
         reliability.isReliable
           ? cameraTarget
@@ -2383,10 +2529,12 @@ export function useWorkoutLiveController(
     }
 
     if (countdownValueRef.current !== null) {
+      resetAutoFinishTiming();
       return;
     }
 
     if (cameraRuntimeStateRef.current !== "tracking") {
+      resetAutoFinishTiming();
       setPoseStatusOverride(
         cameraRuntimeStateRef.current === "saving"
           ? "Saving this set. Keep the camera steady while FitTrack finalizes it."
@@ -2405,6 +2553,7 @@ export function useWorkoutLiveController(
     }
 
     if (!reliability.isReliable) {
+      pauseAutoFinishTiming();
       poseFrameBufferRef.current = [];
       framesSinceAnalyzeRef.current = 0;
       if (movementContractRef.current) {
@@ -2475,6 +2624,7 @@ export function useWorkoutLiveController(
       );
       setCurrentAngle(liveAngle);
       if (!canCountLockedSubject(stableFrame.keypoints, stableFrame.capturedAtMs)) {
+        pauseAutoFinishTiming();
         resetRepEngineForSubjectLockWait();
         setPoseFeedback(
           cameraTarget
@@ -2535,6 +2685,18 @@ export function useWorkoutLiveController(
       repEngineStateRef.current = repStep.nextState;
       setCurrentPhase(repStep.nextState.phase);
       setTrackedReps(repStep.nextState.repCount);
+      if (repStep.repCompleted) {
+        beginAutoFinishTiming(
+          repStep.nextState.lastRepCompletedAtMs ?? stableFrame.capturedAtMs,
+        );
+      } else if (repStep.nextState.phase !== "primed") {
+        pauseAutoFinishTiming();
+      } else if (
+        autoFinishPausedRef.current &&
+        liveRepCountRef.current >= (cameraTarget?.targetReps ?? 0)
+      ) {
+        beginAutoFinishTiming(stableFrame.capturedAtMs);
+      }
 
       const guidanceTips = summarizeMovementGuidance(
         movementContractRef.current,
@@ -2819,6 +2981,9 @@ export function useWorkoutLiveController(
       countdownValueRef.current !== null ||
       isExerciseConfirmationVisibleRef.current
     ) {
+      if (isExerciseConfirmationVisibleRef.current) {
+        pauseAutoFinishTiming();
+      }
       return;
     }
 
@@ -2827,10 +2992,14 @@ export function useWorkoutLiveController(
     }
 
     const analyzer = poseAnalyzerRef.current;
-    if (!analyzer) return;
+    if (!analyzer) {
+      resetAutoFinishTiming();
+      return;
+    }
 
     const frame = await analyzer.readFrame();
     if (!frame) {
+      pauseAutoFinishTiming();
       poseFrameBufferRef.current = [];
       framesSinceAnalyzeRef.current = 0;
       setCurrentKeypoints(null);
@@ -2854,6 +3023,7 @@ export function useWorkoutLiveController(
     setLowConfidenceLandmarks(instantSignals.visibility.lowConfidenceLandmarks);
 
     if (!frame.isReliable) {
+      pauseAutoFinishTiming();
       poseFrameBufferRef.current = [];
       framesSinceAnalyzeRef.current = 0;
       if (movementContractRef.current) {
@@ -2891,6 +3061,7 @@ export function useWorkoutLiveController(
     setLowConfidenceLandmarks(signals.visibility.lowConfidenceLandmarks);
 
     if (cameraRuntimeStateRef.current !== "tracking") {
+      resetAutoFinishTiming();
       setPoseStatusOverride(
         cameraRuntimeStateRef.current === "saving"
           ? "Saving this set. Rep and analysis updates are paused."
@@ -2920,6 +3091,7 @@ export function useWorkoutLiveController(
       );
       setCurrentAngle(liveAngle);
       if (!canCountLockedSubject(frame.keypoints, frame.capturedAtMs)) {
+        pauseAutoFinishTiming();
         resetRepEngineForSubjectLockWait();
         setPoseFeedback(
           cameraTarget
@@ -2980,6 +3152,18 @@ export function useWorkoutLiveController(
       repEngineStateRef.current = repStep.nextState;
       setCurrentPhase(repStep.nextState.phase);
       setTrackedReps(repStep.nextState.repCount);
+      if (repStep.repCompleted) {
+        beginAutoFinishTiming(
+          repStep.nextState.lastRepCompletedAtMs ?? frame.capturedAtMs,
+        );
+      } else if (repStep.nextState.phase !== "primed") {
+        pauseAutoFinishTiming();
+      } else if (
+        autoFinishPausedRef.current &&
+        liveRepCountRef.current >= (cameraTarget?.targetReps ?? 0)
+      ) {
+        beginAutoFinishTiming(frame.capturedAtMs);
+      }
 
       const guidanceTips = summarizeMovementGuidance(
         movementContractRef.current,
@@ -3205,6 +3389,7 @@ export function useWorkoutLiveController(
   };
 
   const handleConfirmExerciseLabel = (label: string) => {
+    resetAutoFinishTiming();
     if (cameraTarget) {
       armPlannedMovementContract(
         currentKeypoints,
@@ -3282,6 +3467,7 @@ export function useWorkoutLiveController(
   };
 
   const handleUseAutoDetection = () => {
+    resetAutoFinishTiming();
     if (cameraTarget) {
       armPlannedMovementContract(
         currentKeypoints,
@@ -3321,6 +3507,7 @@ export function useWorkoutLiveController(
   };
 
   const handleCloseExerciseConfirmation = () => {
+    pauseAutoFinishTiming();
     setIsExerciseConfirmationVisible(false);
     setPoseStatusOverride(
       isWebPoseRuntime
@@ -3414,6 +3601,7 @@ export function useWorkoutLiveController(
     try {
       await ensurePoseAnalyzerReady();
       const livePoseSessionId = await ensureLiveWorkout();
+      resetAutoFinishTiming();
       resetPoseTrackingBuffers();
       resetPoseRuntimeState(true);
       if (cameraTarget) {
@@ -3428,6 +3616,7 @@ export function useWorkoutLiveController(
       }
       resetEquipmentDetectionState();
       setPoseFeedback([]);
+      isRecordingRef.current = true;
       setIsRecording(true);
       setCameraRuntime("tracking");
       setIsExerciseConfirmationVisible(false);
@@ -3460,6 +3649,7 @@ export function useWorkoutLiveController(
     try {
       await ensurePoseAnalyzerReady();
       const livePoseSessionId = await ensureLiveWorkout();
+      resetAutoFinishTiming();
       resetPoseTrackingBuffers();
       if (cameraTarget && !movementContractRef.current) {
         armPlannedMovementContract(
@@ -3467,6 +3657,7 @@ export function useWorkoutLiveController(
           `Planned ${toDisplayExerciseName(cameraTarget.exerciseName)} tracking is armed. Get in frame to resume.`,
         );
       }
+      isRecordingRef.current = true;
       setIsRecording(true);
       setCameraRuntime("tracking");
       resume();
@@ -3478,8 +3669,10 @@ export function useWorkoutLiveController(
   };
 
   const handlePause = () => {
+    isRecordingRef.current = false;
     setIsRecording(false);
     setCameraRuntime("ready");
+    resetAutoFinishTiming();
     stopFrameLoop();
     resetPoseTrackingBuffers();
     pause();
@@ -3495,7 +3688,7 @@ export function useWorkoutLiveController(
   };
 
   const handleFinishConfirm = async () => {
-    if (isFinishing) return;
+    if (isFinishing || isFinishingRef.current) return;
     if (cameraTarget && !poseSessionIdRef.current) {
       setFinishVisible(false);
       showMessage("Start the set before saving it.");
@@ -3507,6 +3700,8 @@ export function useWorkoutLiveController(
       if (latch?.key === targetKey && latch.status !== "idle") return;
       completionLatchRef.current = { key: targetKey, status: "saving" };
     }
+    isFinishingRef.current = true;
+    pauseAutoFinishTiming();
     setIsFinishing(true);
     setCameraRuntime("saving");
     stopFrameLoop();
@@ -3737,9 +3932,13 @@ export function useWorkoutLiveController(
           setConfirmedExerciseLabel(null);
           confirmedExerciseLabelRef.current = null;
           resetWorkoutLoadInput();
-          setCameraRuntime("ready");
+          setCameraRuntime(
+            cameraTarget.restSeconds > 0 ? "rest" : "ready",
+          );
           setPoseStatusOverride(
-            `Ready for ${toDisplayExerciseName(nextTarget.exerciseName)}. Reposition, then start the next exercise.`,
+            cameraTarget.restSeconds > 0
+              ? `Set saved. Rest ${cameraTarget.restSeconds}s before ${toDisplayExerciseName(nextTarget.exerciseName)}.`
+              : `Ready for ${toDisplayExerciseName(nextTarget.exerciseName)}. Reposition, then start the next exercise.`,
           );
         } else {
           setCameraRuntime(
@@ -3785,28 +3984,39 @@ export function useWorkoutLiveController(
       if (targetKey) {
         completionLatchRef.current = { key: targetKey, status: "idle" };
       }
+      autoCompletionKeyRef.current = null;
       setCameraRuntime("ready");
       showMessage("Failed to finish live workout.");
     } finally {
+      isFinishingRef.current = false;
       setIsFinishing(false);
     }
   };
 
   autoFinalizeSetRef.current = () => {
-    if (!cameraTarget || isFinishing) return;
+    if (!cameraTarget || isFinishing || isFinishingRef.current) return;
     const isStaticHoldTarget =
       cameraTarget.targetDurationSeconds != null &&
       cameraTarget.targetReps <= 0;
-    if (!isStaticHoldTarget) return;
+    const isNormalRepTarget =
+      !isStaticHoldTarget &&
+      cameraTarget.targetReps > 0 &&
+      liveRepCountRef.current >= cameraTarget.targetReps;
+    if (!isStaticHoldTarget && !isNormalRepTarget) return;
     const completionKey = `${cameraTarget.sessionId}:${cameraTarget.planExerciseId}:${cameraTarget.setNumber}`;
     if (autoCompletionKeyRef.current === completionKey) return;
+    const latch = completionLatchRef.current;
+    if (latch?.key === completionKey && latch.status !== "idle") return;
     autoCompletionKeyRef.current = completionKey;
+    resetAutoFinishTiming();
     isRecordingRef.current = false;
     setIsRecording(false);
     stopFrameLoop();
     pause();
     showMessage(
-      `${cameraTarget.targetDurationSeconds}s hold reached. Saving set ${cameraTarget.setNumber}...`,
+      isStaticHoldTarget
+        ? `${cameraTarget.targetDurationSeconds}s hold reached. Saving set ${cameraTarget.setNumber}...`
+        : `Target reached. Saving set ${cameraTarget.setNumber}...`,
     );
     void handleFinishConfirm();
   };
@@ -3831,6 +4041,7 @@ export function useWorkoutLiveController(
         clearTimeout(cameraSwitchTimerRef.current);
         cameraSwitchTimerRef.current = null;
       }
+      resetAutoFinishTiming();
       stopFrameLoop();
       resetPoseTrackingBuffers();
       resetPoseRuntimeState(true);
@@ -3841,6 +4052,7 @@ export function useWorkoutLiveController(
   }, [
     cleanupCamera,
     cleanupTimer,
+    resetAutoFinishTiming,
     resetPoseRuntimeState,
     resetPoseTrackingBuffers,
   ]);
@@ -3849,6 +4061,7 @@ export function useWorkoutLiveController(
     base,
     cameraActive,
     cameraRuntimeState,
+    autoFinishWarningSeconds,
     cameraFacing,
     cameraFrameSize,
     cameraRemountKey,

@@ -57,14 +57,14 @@ def _build_grounding_payload() -> dict[str, object]:
             {
                 "category": "general",
                 "question": "How do I book a coach appointment?",
-                "answer": "Open Bookings, choose a coach, pick an available slot, and submit the request.",
+                "answer": "Open Bookings, choose a coach, select an available slot, and complete full payment.",
                 "keywords": ["book", "booking", "coach", "appointment"],
             },
             {
                 "category": "rates",
-                "question": "How do downpayments work?",
-                "answer": "A downpayment reserves the booking; the remaining balance is settled before completion.",
-                "keywords": ["payment", "downpayment", "balance"],
+                "question": "How do online payments work?",
+                "answer": "Pay the full amount through PayMongo to confirm an online booking.",
+                "keywords": ["payment", "PayMongo", "booking"],
             },
             {
                 "category": "general",
@@ -75,7 +75,7 @@ def _build_grounding_payload() -> dict[str, object]:
             {
                 "category": "general",
                 "question": "Gym address",
-                "answer": "123 Fitness Ave, New York, NY 10001",
+                "answer": "Pasay City, Metro Manila, Philippines",
                 "keywords": ["gym", "address", "location"],
             },
             {
@@ -113,25 +113,10 @@ def _build_grounding_payload() -> dict[str, object]:
         ],
         "session_history": [
             {
-                "role": "user",
-                "content": "Turn one.",
-            },
-            {
-                "role": "assistant",
-                "content": "Turn two.",
-            },
-            {
-                "role": "user",
-                "content": "Turn three.",
-            },
-            {
-                "role": "assistant",
-                "content": "Turn four.",
-            },
-            {
-                "role": "user",
-                "content": "Turn five.",
-            },
+                "role": "user" if index % 2 == 0 else "assistant",
+                "content": f"Turn {index + 1}.",
+            }
+            for index in range(14)
         ],
         "user_context": {
             "first_name": "Alex",
@@ -185,7 +170,7 @@ def _configure_openrouter(
     monkeypatch.setattr("app.services.assistant.httpx.post", fake_post)
 
 
-def test_gym_chat_route_calls_openrouter_with_bounded_identity_context(
+def test_gym_chat_route_calls_openrouter_with_structured_public_grounding(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[dict[str, object]] = []
@@ -197,7 +182,7 @@ def test_gym_chat_route_calls_openrouter_with_bounded_identity_context(
                 {
                     "reply": "The model confirms the gym opens at 06:00 and closes at 22:00.",
                     "out_of_scope": False,
-                    "sources": ["gym_identity"],
+                    "sources": ["gym_profile", "operating_hours"],
                     "follow_up_suggestions": ["Ask about today's gym hours."],
                 }
             )
@@ -220,7 +205,7 @@ def test_gym_chat_route_calls_openrouter_with_bounded_identity_context(
     assert response.json() == {
         "reply": "The model confirms the gym opens at 06:00 and closes at 22:00.",
         "out_of_scope": False,
-        "sources": ["gym_identity"],
+        "sources": ["gym_profile", "operating_hours"],
         "follow_up_suggestions": ["Ask about today's gym hours."],
         "model_used": "primary-model",
         "token_count": 41,
@@ -234,24 +219,36 @@ def test_gym_chat_route_calls_openrouter_with_bounded_identity_context(
         "require_parameters": True,
         "allow_fallbacks": True,
     }
-    assert "strict JSON" in request_payload["messages"][0]["content"]
+    system_prompt = request_payload["messages"][0]["content"]
+    assert "strict JSON" in system_prompt
+    assert "authoritative source" in system_prompt
+    assert "recent_turns" in system_prompt
+
     provider_input = json.loads(request_payload["messages"][1]["content"])
-    assert provider_input == {
-        "current_message": "When do you open today?",
-        "gym_identity": {
-            "name": "SERTFIT Gym",
-            "address": "123 Fitness Ave, New York, NY 10001",
-            "opening_time": "06:00",
-            "closing_time": "22:00",
-            "contact": {
-                "phone": "+639281234567",
-                "email": "contact@sertfit.com",
-            },
+    assert provider_input["current_message"] == "When do you open today?"
+    assert provider_input["gym_identity"] == {
+        "name": "SERTFIT Gym",
+        "address": "Pasay City, Metro Manila, Philippines",
+        "opening_time": "06:00",
+        "closing_time": "22:00",
+        "contact": {
+            "phone": "+639281234567",
+            "email": "contact@sertfit.com",
         },
-        "recent_turns": grounding["session_history"][-4:],
     }
+    assert provider_input["operating_hours"] == grounding["operating_hours"]
+    assert provider_input["special_schedules"] == grounding["special_schedules"]
+    assert provider_input["promotions"] == [
+        {
+            **grounding["promotions"][0],
+            "starts_at": "2026-05-01T00:00:00Z",
+            "ends_at": "2026-05-31T23:59:59Z",
+        }
+    ]
+    assert provider_input["membership_plans"] == grounding["membership_plans"]
+    assert provider_input["faqs"] == grounding["faqs"]
+    assert provider_input["recent_turns"] == grounding["session_history"][-12:]
     assert "user_context" not in provider_input
-    assert "membership_plans" not in provider_input
     assert "session_history" not in provider_input
 
 

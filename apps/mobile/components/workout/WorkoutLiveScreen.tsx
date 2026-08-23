@@ -11,7 +11,10 @@ import FitButton from "@/components/fit/FitButton";
 import { WorkoutContextSection } from "@/components/workout/WorkoutContextSection";
 import { WorkoutTrackingSection } from "@/components/workout/WorkoutTrackingSection";
 import { MobileWorkoutToday } from "@/components/workout/MobileWorkoutToday";
-import type { WorkoutCameraTarget } from "@/components/workout/workout-camera-target";
+import {
+  shouldAutoResumeWorkoutCamera,
+  type WorkoutCameraTarget,
+} from "@/components/workout/workout-camera-target";
 import { useWorkoutLiveController } from "../../hooks/workout/useWorkoutLiveController";
 
 export function WorkoutLiveScreen() {
@@ -24,13 +27,12 @@ export function WorkoutLiveScreen() {
   const [cameraRestRemaining, setCameraRestRemaining] = useState(0);
   const [autoResumeCamera, setAutoResumeCamera] = useState(false);
   const handleCameraSetCompleted = useCallback((target: WorkoutCameraTarget) => {
+    setCameraCompletion(target);
     if (target.nextTarget) {
-      setCameraCompletion(target);
       setCameraRestRemaining(target.restSeconds);
       setShowCamera(true);
       return;
     }
-    setCameraCompletion(null);
     setCameraRestRemaining(0);
     setShowCamera(false);
     setCameraTarget(null);
@@ -42,6 +44,7 @@ export function WorkoutLiveScreen() {
   const {
     cameraRuntimeState,
     isRecording,
+    onPause,
     onResumeRecord,
   } = controller;
   const targetReps = cameraTarget?.targetReps ?? 0;
@@ -75,17 +78,21 @@ export function WorkoutLiveScreen() {
   useEffect(() => {
     const nextTarget = cameraCompletion?.nextTarget;
     if (!nextTarget || cameraRestRemaining > 0) return;
-    const sameExercise = cameraTarget?.exerciseId === nextTarget.exerciseId;
+    const sameExercise = shouldAutoResumeWorkoutCamera(cameraTarget, nextTarget);
+    if (!sameExercise && cameraRuntimeState === "rest") {
+      onPause();
+    }
     setCameraTarget(nextTarget);
     setCameraCompletion(null);
     setAutoResumeCamera(sameExercise);
-  }, [cameraCompletion, cameraRestRemaining, cameraTarget?.exerciseId]);
+  }, [cameraCompletion, cameraRestRemaining, cameraRuntimeState, cameraTarget?.exerciseId, onPause]);
 
   useEffect(() => {
     if (
       !autoResumeCamera ||
       !cameraTarget ||
-      cameraRuntimeState !== "ready" ||
+      (cameraRuntimeState !== "ready" &&
+        !(cameraRuntimeState === "rest" && cameraRestRemaining <= 0)) ||
       isRecording
     ) {
       return;
@@ -95,6 +102,7 @@ export function WorkoutLiveScreen() {
   }, [
     autoResumeCamera,
     cameraTarget,
+    cameraRestRemaining,
     cameraRuntimeState,
     isRecording,
     onResumeRecord,
@@ -210,53 +218,54 @@ export function WorkoutLiveScreen() {
                 </View>
               ) : null}
               <WorkoutTrackingSection
-            cameraRuntimeState={controller.cameraRuntimeState}
-            cameraTarget={cameraTarget}
-            cameraActive={controller.cameraActive}
-            cameraFrameSize={controller.cameraFrameSize}
-            cameraFacing={controller.cameraFacing}
-            cameraRemountKey={controller.cameraRemountKey}
-            cameraRef={controller.cameraRef}
-            calories={controller.calories}
-            colors={controller.colors}
-            countdownValue={controller.countdownValue}
-            currentAngle={controller.currentAngle}
-            currentKeypoints={controller.currentKeypoints}
-            currentLoadLabel={controller.workoutLoadInputSavedLabel}
-            currentPhase={controller.currentPhase}
-            equipmentDetected={controller.equipmentDetected}
-            equipmentDetectionBoxes={controller.equipmentDetectionBoxes}
-            equipmentDetectionStatusText={controller.equipmentDetectionStatusText}
-            equipmentSnapshotActive={controller.equipmentSnapshotActive}
-            holdProgressSeconds={controller.holdProgressSeconds}
-            holdValid={controller.holdValid}
-            guidanceLabel={controller.trackingOverlayLabel}
-            isFrozen={controller.isFrozen}
-            isCameraSwitching={controller.isCameraSwitching}
-            hasStartedSet={controller.hasStartedSet}
-            isRecording={controller.isRecording}
-            isTrackingReady={controller.isTrackingReady}
-            lowConfidenceLandmarks={controller.lowConfidenceLandmarks}
-            movementContract={controller.movementContract}
-            onInitCamera={controller.onInitCamera}
-            onNativeEquipmentSnapshot={controller.onNativeEquipmentSnapshot}
-            onNativePoseFrame={controller.onNativePoseFrame}
-            onPause={controller.onPause}
-            onResumeRecord={controller.onResumeRecord}
-            onStartRecord={controller.onStartRecord}
-            onStopRecord={controller.onStopRecord}
-            onToggleCameraFacing={controller.onToggleCameraFacing}
-            onToggleSubjectLock={controller.onToggleSubjectLock}
-            permissionGranted={controller.permissionGranted}
-            reps={controller.reps}
-            restRemaining={cameraRestRemaining}
-            seconds={controller.seconds}
-            s={controller.s}
-            subjectLockGestureProgress={controller.subjectLockGestureProgress}
-            subjectLockReady={controller.subjectLockReady}
-            subjectLockStatusText={controller.subjectLockStatusText}
-            subjectLocked={controller.subjectLocked}
-            trackingDisabledReason={controller.trackingDisabledReason}
+                cameraRuntimeState={controller.cameraRuntimeState}
+                cameraTarget={cameraTarget}
+                cameraActive={controller.cameraActive}
+                autoFinishWarningSeconds={controller.autoFinishWarningSeconds}
+                cameraFrameSize={controller.cameraFrameSize}
+                cameraFacing={controller.cameraFacing}
+                cameraRemountKey={controller.cameraRemountKey}
+                cameraRef={controller.cameraRef}
+                calories={controller.calories}
+                colors={controller.colors}
+                countdownValue={controller.countdownValue}
+                currentAngle={controller.currentAngle}
+                currentKeypoints={controller.currentKeypoints}
+                currentLoadLabel={controller.workoutLoadInputSavedLabel}
+                currentPhase={controller.currentPhase}
+                equipmentDetected={controller.equipmentDetected}
+                equipmentDetectionBoxes={controller.equipmentDetectionBoxes}
+                equipmentDetectionStatusText={controller.equipmentDetectionStatusText}
+                equipmentSnapshotActive={controller.equipmentSnapshotActive}
+                holdProgressSeconds={controller.holdProgressSeconds}
+                holdValid={controller.holdValid}
+                guidanceLabel={controller.trackingOverlayLabel}
+                isFrozen={controller.isFrozen}
+                isCameraSwitching={controller.isCameraSwitching}
+                hasStartedSet={controller.hasStartedSet}
+                isRecording={controller.isRecording}
+                isTrackingReady={controller.isTrackingReady}
+                lowConfidenceLandmarks={controller.lowConfidenceLandmarks}
+                movementContract={controller.movementContract}
+                onInitCamera={controller.onInitCamera}
+                onNativeEquipmentSnapshot={controller.onNativeEquipmentSnapshot}
+                onNativePoseFrame={controller.onNativePoseFrame}
+                onPause={controller.onPause}
+                onResumeRecord={controller.onResumeRecord}
+                onStartRecord={controller.onStartRecord}
+                onStopRecord={controller.onStopRecord}
+                onToggleCameraFacing={controller.onToggleCameraFacing}
+                onToggleSubjectLock={controller.onToggleSubjectLock}
+                permissionGranted={controller.permissionGranted}
+                reps={controller.reps}
+                restRemaining={cameraRestRemaining}
+                seconds={controller.seconds}
+                s={controller.s}
+                subjectLockGestureProgress={controller.subjectLockGestureProgress}
+                subjectLockReady={controller.subjectLockReady}
+                subjectLockStatusText={controller.subjectLockStatusText}
+                subjectLocked={controller.subjectLocked}
+                trackingDisabledReason={controller.trackingDisabledReason}
               />
               {cameraTarget ? null : (
                 <WorkoutContextSection

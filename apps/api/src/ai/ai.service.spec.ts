@@ -60,7 +60,7 @@ describe('AiService', () => {
     getGymProfile: jest.fn().mockResolvedValue({
       name: 'SERTFIT Gym',
       phone: '+639281234567',
-      location: '123 Fitness Ave, New York, NY 10001',
+      location: 'Pasay City, Metro Manila, Philippines',
       email: 'contact@sertfit.com',
       opening_time: '06:00',
       closing_time: '22:00',

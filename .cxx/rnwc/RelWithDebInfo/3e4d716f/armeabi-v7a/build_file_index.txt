@@ -1,1 +1,0 @@
-C:\FitTrack_rebuilt_20260330_212527\node_modules\.pnpm\react-n_0a5b26fb9324ca51cf9fb215afc6b9d8\node_modules\react-native-worklets-core\android\CMakeLists.txt

@@ -38,6 +38,9 @@ type MobileWorkoutTodayProps = {
   onShowCamera: (target: WorkoutCameraTarget) => void;
 };
 
+import { getCurrentTrainingPlanWeek, getGymCalendarDayOfWeek } from "@fittrack/app-core";
+import { buildWorkoutCameraTargetChain } from "@/components/workout/workout-camera-target";
+
 function formatSourceLabel(
   plan: Pick<TrainingPlanSummaryRecord, "coachId" | "source">,
 ) {
@@ -133,9 +136,12 @@ export function MobileWorkoutToday({
 
   const plan = planDetailQuery.data ?? null;
   const session = sessionDetailQuery.data ?? null;
-  const today = new Date().getDay();
+  const today = getGymCalendarDayOfWeek();
+const currentPlanWeek = plan ? getCurrentTrainingPlanWeek(plan) : 1;
   const day = plan?.scheduleDays.find(
-    (candidate) => candidate.weekNumber === 1 && candidate.dayOfWeek === today,
+    (candidate) =>
+      candidate.weekNumber === currentPlanWeek &&
+      candidate.dayOfWeek === today,
   );
   const suggestions = useMemo(
     () =>
@@ -224,61 +230,16 @@ export function MobileWorkoutToday({
 
   const openCameraForCurrentSet = () => {
     if (!activeSession || !effectivePlan || !nextTarget) return;
-    const findNextUncompletedTarget = (
-      startExerciseIndex: number,
-      startSetNumber: number,
-    ) => {
-      for (
-        let exerciseIndex = startExerciseIndex;
-        exerciseIndex < orderedExercises.length;
-        exerciseIndex += 1
-      ) {
-        const exercise = orderedExercises[exerciseIndex];
-        const firstSet = exerciseIndex === startExerciseIndex ? startSetNumber : 1;
-        for (let setNumber = firstSet; setNumber <= exercise.sets; setNumber += 1) {
-          if (!completed.has(`${exercise.id}:${setNumber}`)) {
-            return { exercise, setNumber };
-          }
-        }
-      }
-      return null;
-    };
-    const buildTarget = (
-      exercise: (typeof orderedExercises)[number],
-      setNumber: number,
-    ): WorkoutCameraTarget => {
-      const exerciseIndex = orderedExercises.findIndex(
-        (candidate) => candidate.id === exercise.id,
-      );
-      const followingSeed = findNextUncompletedTarget(
-        setNumber < exercise.sets ? exerciseIndex : exerciseIndex + 1,
-        setNumber < exercise.sets ? setNumber + 1 : 1,
-      );
-      const followingTarget = followingSeed
-        ? buildTarget(followingSeed.exercise, followingSeed.setNumber)
-          : null;
-      return {
-        completeWorkoutAfterSet: followingTarget === null,
-        exerciseId: exercise.exerciseId,
-        exerciseName: exercise.exerciseName,
-        nextTarget: followingTarget,
-        planExerciseId: exercise.id,
-        planId: effectivePlan.id,
-        planTitle: effectivePlan.title,
-        restSeconds:
-          exercise.restSecondsBySet?.[setNumber - 1] ?? exercise.restSeconds,
-        sessionId: activeSession.id,
-        setNumber,
-        targetReps: exercise.reps ?? 0,
-        targetDurationSeconds:
-          exercise.durationSeconds != null && exercise.durationSeconds > 0
-            ? exercise.durationSeconds
-            : null,
-        targetWeightKg: exercise.weightKgTarget ?? null,
-        totalSets: exercise.sets,
-      };
-    };
-    onShowCamera(buildTarget(nextTarget.exercise, nextTarget.setNumber));
+    const cameraTarget = buildWorkoutCameraTargetChain({
+      completedSetKeys: completed,
+      currentExercise: nextTarget.exercise,
+      currentSetNumber: nextTarget.setNumber,
+      orderedExercises,
+      planId: effectivePlan.id,
+      planTitle: effectivePlan.title,
+      sessionId: activeSession.id,
+    });
+    if (cameraTarget) onShowCamera(cameraTarget);
   };
   const openManualEntry = () => {
     if (!currentExercise || !nextTarget) return;

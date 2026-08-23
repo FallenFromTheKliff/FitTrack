@@ -23,6 +23,7 @@ import { createCoverCropTransform, formatTime } from "@fittrack/utils";
 import FitButton from "@/components/fit/FitButton";
 import FitSection from "@/components/fit/FitSection";
 import { FitText } from "@/components/fit/FitText";
+import { getWorkoutCameraRestLabel } from "@/components/workout/workout-camera-target";
 import { NativeVisionPoseCamera } from "@/components/workout/NativeVisionPoseCamera";
 import type {
   NativeEquipmentSnapshot,
@@ -37,6 +38,7 @@ type WorkoutTrackingSectionProps = {
   cameraRuntimeState: WorkoutCameraRuntimeState;
   cameraTarget: WorkoutCameraTarget | null;
   cameraActive: boolean;
+  autoFinishWarningSeconds: number | null;
   cameraRef: RefObject<CameraView | null>;
   calories: number;
   cameraFacing: CameraType;
@@ -87,6 +89,7 @@ export function WorkoutTrackingSection({
   cameraRuntimeState,
   cameraTarget,
   cameraActive,
+  autoFinishWarningSeconds,
   cameraRef,
   calories,
   cameraFacing,
@@ -476,11 +479,45 @@ export function WorkoutTrackingSection({
                 </View>
               </View>
             ) : null}
+            {autoFinishWarningSeconds !== null ? (
+              <View accessibilityLiveRegion="polite" style={{ gap: 5, marginTop: 8 }}>
+                <FitText
+                  style={{
+                    color: colors.warning,
+                    fontSize: 10,
+                    fontWeight: "900",
+                    letterSpacing: 0.6,
+                  }}
+                >
+                  SET MAY BE DONE
+                </FitText>
+                <FitText style={{ color: "rgba(255,255,255,0.82)", fontSize: 10 }}>
+                  Auto-finishing in {autoFinishWarningSeconds}s
+                </FitText>
+                <View
+                  style={{
+                    backgroundColor: "rgba(255,255,255,0.2)",
+                    borderRadius: 999,
+                    height: 4,
+                    overflow: "hidden",
+                  }}
+                >
+                  <View
+                    style={{
+                      backgroundColor: colors.warning,
+                      borderRadius: 999,
+                      height: 4,
+                      width: `${(autoFinishWarningSeconds / 5) * 100}%`,
+                    }}
+                  />
+                </View>
+              </View>
+            ) : null}
             {cameraRuntimeState === "rest" ? (
               <FitText
                 style={{ color: colors.brand, fontSize: 10, fontWeight: "900", marginTop: 3 }}
               >
-                REST {restRemaining > 0 ? `${restRemaining}s` : "COMPLETE"}
+                {getWorkoutCameraRestLabel(restRemaining)}
               </FitText>
             ) : cameraRuntimeState === "saving" ? (
               <FitText

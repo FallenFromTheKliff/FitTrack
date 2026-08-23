@@ -1,3 +1,0 @@
-C:/FitTrack_rebuilt_20260330_212527/.cxx/rnr/RelWithDebInfo/2sf2w4m2/armeabi-v7a/CMakeFiles/reanimated.dir
-C:/FitTrack_rebuilt_20260330_212527/.cxx/rnr/RelWithDebInfo/2sf2w4m2/armeabi-v7a/CMakeFiles/edit_cache.dir
-C:/FitTrack_rebuilt_20260330_212527/.cxx/rnr/RelWithDebInfo/2sf2w4m2/armeabi-v7a/CMakeFiles/rebuild_cache.dir

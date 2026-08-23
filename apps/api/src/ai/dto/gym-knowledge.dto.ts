@@ -192,7 +192,7 @@ export class UpdateGymProfileDTO {
   @IsPhilippineMobileNumber('phone')
   phone: string;
 
-  @ApiProperty({ example: '123 Fitness Ave, New York, NY 10001' })
+  @ApiProperty({ example: 'Pasay City, Metro Manila, Philippines' })
   @TrimString()
   @IsString({ message: 'location must be a string' })
   @IsNotEmpty({ message: 'location is required' })
@@ -220,7 +220,7 @@ export class GymProfileResponseDTO {
   @ApiProperty({ example: '+639281234567' })
   phone: string;
 
-  @ApiProperty({ example: '123 Fitness Ave, New York, NY 10001' })
+  @ApiProperty({ example: 'Pasay City, Metro Manila, Philippines' })
   location: string;
 
   @ApiProperty({ example: 'contact@sertfit.com' })

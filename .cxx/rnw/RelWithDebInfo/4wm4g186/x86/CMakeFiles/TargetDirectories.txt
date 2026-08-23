@@ -1,3 +1,0 @@
-C:/FitTrack_rebuilt_20260330_212527/.cxx/rnw/RelWithDebInfo/4wm4g186/x86/CMakeFiles/worklets.dir
-C:/FitTrack_rebuilt_20260330_212527/.cxx/rnw/RelWithDebInfo/4wm4g186/x86/CMakeFiles/edit_cache.dir
-C:/FitTrack_rebuilt_20260330_212527/.cxx/rnw/RelWithDebInfo/4wm4g186/x86/CMakeFiles/rebuild_cache.dir

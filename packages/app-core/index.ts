@@ -2,6 +2,7 @@ export * from "./bookings/booking-transforms";
 export * from "./fitness/coach-plan-calendar";
 export * from "./fitness/recurring-coaching";
 export * from "./fitness/recurring-plan-selection";
+export * from "./fitness/training-plan-week";
 export * from "./fitness/workout-day-semantics";
 export * from "./auth/auth-session";
 export * from "./auth/createAuthController";
