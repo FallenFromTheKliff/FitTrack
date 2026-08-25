@@ -404,6 +404,7 @@ function resetCycleAfterRejectedRep(
 function countsRepOnPeakArrival(contract: PoseMovementContractRecord) {
   const canonicalExercise = toCanonicalPoseExerciseLabel(contract.exercise);
   return (
+    canonicalExercise === "squat" ||
     canonicalExercise === "push_up" ||
     canonicalExercise === "bicep_curl" ||
     canonicalExercise === "dip" ||

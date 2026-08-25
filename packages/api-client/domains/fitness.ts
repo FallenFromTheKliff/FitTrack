@@ -10,10 +10,15 @@ import type {
   FitnessAchievementReviewRecord,
   ExerciseLogRecord,
   ExerciseHandShapeProfileRecord,
+  ExerciseAliasRecord,
+  ExerciseAliasInput,
+  ExerciseMovementFamilySummaryRecord,
+  ExerciseMovementContractIdentityRecord,
   ExerciseMovementProfileRecord,
   ExerciseMuscleTargetRecord,
   ExerciseMuscleTargetRole,
   ExerciseRigKeyframeKind,
+  ExerciseTrackingMode,
   FinalizePoseSessionInput,
   PoseEquipmentContext,
   PoseEquipmentDetectionBoxRecord,
@@ -82,12 +87,17 @@ export type {
   CreateMuscleDefinitionInput,
   DetectPoseEquipmentInput,
   ExerciseHandShapeProfileRecord,
+  ExerciseAliasRecord,
+  ExerciseAliasInput,
+  ExerciseMovementFamilySummaryRecord,
+  ExerciseMovementContractIdentityRecord,
   FitnessAchievementReviewRecord,
   FitnessExerciseCategory,
   ExerciseMovementProfileRecord,
   ExerciseMuscleTargetRecord,
   ExerciseMuscleTargetRole,
   ExerciseRigKeyframeKind,
+  ExerciseTrackingMode,
   ExerciseLogRecord,
   FinalizePoseSessionInput,
   FitnessExerciseListParams,
@@ -143,6 +153,12 @@ export type {
 } from "@fittrack/types";
 
 type FitnessExerciseApiRecord = {
+  aliases?: Array<{
+    id: string;
+    kind: ExerciseAliasRecord["kind"];
+    label: string;
+    normalized_label: string;
+  }>;
   category: FitnessExerciseRecord["category"];
   created_at: string;
   description: string | null;
@@ -152,9 +168,20 @@ type FitnessExerciseApiRecord = {
   instructions: string | null;
   is_active: boolean;
   movement_profile?: ExerciseMovementProfileRecord | null;
+  movement_profile_override?: Partial<ExerciseMovementProfileRecord> | null;
+  movement_family?: {
+    canonical_exercise_id: string | null;
+    contract_revision: number;
+    display_name: string;
+    id: string;
+    inheriting_exercise_ids: string[];
+    key: ExerciseMovementFamilySummaryRecord["key"];
+  } | null;
+  movement_contract_identity?: ExerciseMovementContractIdentityRecord;
   muscle_group: string;
   muscle_targets?: ExerciseMuscleTargetRecord[] | null;
   name: string;
+  tracking_mode?: ExerciseTrackingMode;
   updated_at: string;
   video_url: string | null;
 };
@@ -331,7 +358,7 @@ type PoseFrameAnalysisApiRecord = {
     body_orientation?: "upright" | "horizontal" | "inclined" | "floor" | "any";
     contract_version?: string;
     degraded_conditions?: string[];
-    dominant_joint: "elbow" | "shoulder" | "hip" | "knee";
+    dominant_joint: "elbow" | "shoulder" | "hip" | "knee" | "ankle";
     exercise: string;
     no_count_conditions?: string[];
     oscillating_joints: string[];
@@ -373,6 +400,7 @@ type PoseFrameAnalysisApiRecord = {
       required_sides?: "both" | "left" | "right" | "either" | "alternating";
     } | null;
   } | null;
+  movement_contract_identity?: ExerciseMovementContractIdentityRecord | null;
   needs_confirmation?: boolean;
   phase?: string | null;
   processing_mode?: "legacy_frame" | "sequence";
@@ -665,6 +693,12 @@ function roundNumericRecord(record: Record<string, number>) {
 
 function mapExercise(record: FitnessExerciseApiRecord): FitnessExerciseRecord {
   return {
+    aliases: (record.aliases ?? []).map((alias) => ({
+      id: alias.id,
+      kind: alias.kind,
+      label: alias.label,
+      normalizedLabel: alias.normalized_label,
+    })),
     category: record.category,
     createdAt: record.created_at,
     description: record.description,
@@ -674,9 +708,29 @@ function mapExercise(record: FitnessExerciseApiRecord): FitnessExerciseRecord {
     instructions: record.instructions,
     isActive: record.is_active,
     movementProfile: record.movement_profile ?? null,
+    movementContractIdentity:
+      record.movement_contract_identity ?? {
+        exerciseId: record.id,
+        familyKey: record.movement_family?.key ?? null,
+        revision: record.movement_family?.contract_revision ?? null,
+        source: "manual",
+        trackingMode: record.tracking_mode ?? "manual",
+      },
+    movementProfileOverride: record.movement_profile_override ?? null,
+    movementFamily: record.movement_family
+      ? {
+          canonicalExerciseId: record.movement_family.canonical_exercise_id,
+          contractRevision: record.movement_family.contract_revision,
+          displayName: record.movement_family.display_name,
+          id: record.movement_family.id,
+          inheritingExerciseIds: record.movement_family.inheriting_exercise_ids,
+          key: record.movement_family.key,
+        }
+      : null,
     muscleGroup: record.muscle_group,
     muscleTargets: record.muscle_targets ?? [],
     name: record.name,
+    trackingMode: record.tracking_mode ?? "manual",
     updatedAt: record.updated_at,
     videoUrl: record.video_url,
   };
@@ -1006,6 +1060,7 @@ function mapPoseFrameAnalysis(
             : undefined,
         }
       : null,
+    movementContractIdentity: record.movement_contract_identity ?? null,
     needsConfirmation: record.needs_confirmation ?? false,
     phase: record.phase ?? null,
     processingMode: record.processing_mode ?? "sequence",
@@ -1387,6 +1442,9 @@ function toExerciseMutationPayload(
   input: CreateFitnessExerciseInput | UpdateFitnessExerciseInput,
 ) {
   return {
+    ...("aliases" in input && input.aliases !== undefined
+      ? { aliases: input.aliases }
+      : {}),
     ...(input.name?.trim() ? { name: input.name.trim() } : {}),
     ...(input.muscleGroup?.trim()
       ? { muscle_group: input.muscleGroup.trim() }
@@ -1396,6 +1454,15 @@ function toExerciseMutationPayload(
       : {}),
     ...("movementProfile" in input && input.movementProfile !== undefined
       ? { movement_profile: input.movementProfile }
+      : {}),
+    ...("movementProfileOverride" in input && input.movementProfileOverride !== undefined
+      ? { movement_profile_override: input.movementProfileOverride }
+      : {}),
+    ...("movementFamilyId" in input && input.movementFamilyId !== undefined
+      ? { movement_family_id: input.movementFamilyId }
+      : {}),
+    ...("trackingMode" in input && input.trackingMode !== undefined
+      ? { tracking_mode: input.trackingMode }
       : {}),
     ...("handShapeProfile" in input && input.handShapeProfile !== undefined
       ? { hand_shape_profile: input.handShapeProfile }
@@ -1668,6 +1735,14 @@ export function createFitnessApi(transport: ApiTransport) {
         data: result.data.map(mapExercise),
       };
     },
+    async getExercise(exerciseId: string) {
+      return mapExercise(
+        await unwrapResponse<FitnessExerciseApiRecord>(
+          transport.get(`/fitness/exercises/${exerciseId}`),
+          "Unable to load fitness exercise.",
+        ),
+      );
+    },
     async createExercise(input: CreateFitnessExerciseInput) {
       return mapExercise(
         await unwrapResponse<FitnessExerciseApiRecord>(
@@ -1691,6 +1766,28 @@ export function createFitnessApi(transport: ApiTransport) {
           ),
           "Unable to update fitness exercise.",
         ),
+      );
+    },
+    async updateMovementFamilyContract(
+      familyId: string,
+      input: {
+        handShapeProfile?: ExerciseHandShapeProfileRecord | null;
+        movementProfile: ExerciseMovementProfileRecord;
+      },
+    ) {
+      return unwrapResponse<{
+        affected_inheritors: Array<{ id: string; name: string }>;
+        contract_revision: number;
+        id: string;
+        key: string;
+      }>(
+        transport.patch(`/fitness/movement-families/${familyId}/contract`, {
+          movement_profile: input.movementProfile,
+          ...(input.handShapeProfile !== undefined
+            ? { hand_shape_profile: input.handShapeProfile }
+            : {}),
+        }),
+        "Unable to update shared movement tracking.",
       );
     },
     async listPlans(
@@ -2209,13 +2306,16 @@ export function createFitnessApi(transport: ApiTransport) {
                   elbow: toRoundedDecimal(entry.elbow),
                   hip: toRoundedDecimal(entry.hip),
                   knee: toRoundedDecimal(entry.knee),
+                  ankle: toRoundedDecimal(entry.ankle),
                   left_elbow: toRoundedDecimal(entry.leftElbow),
                   left_hip: toRoundedDecimal(entry.leftHip),
                   left_knee: toRoundedDecimal(entry.leftKnee),
+                  left_ankle: toRoundedDecimal(entry.leftAnkle),
                   left_shoulder: toRoundedDecimal(entry.leftShoulder),
                   right_elbow: toRoundedDecimal(entry.rightElbow),
                   right_hip: toRoundedDecimal(entry.rightHip),
                   right_knee: toRoundedDecimal(entry.rightKnee),
+                  right_ankle: toRoundedDecimal(entry.rightAnkle),
                   right_shoulder: toRoundedDecimal(entry.rightShoulder),
                   shoulder: toRoundedDecimal(entry.shoulder),
                 })),

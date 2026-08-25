@@ -21,26 +21,26 @@ describe('GymLayout DTO validation', () => {
     const dto = plainToInstance(CreateEquipmentDTO, {
       floor_id: 'floor-1',
       type: 'strength',
-      position_x: 12.5,
-      position_y: 7.25,
+      grid_column: 4,
+      grid_row: 3,
     });
 
     expect(extractMessages(await validate(dto))).toContain('name is required');
   });
 
-  it('requires numeric map positions on create', async () => {
+  it('requires bounded integer grid cells on create', async () => {
     const dto = plainToInstance(CreateEquipmentDTO, {
       floor_id: 'floor-1',
       name: 'Leg Press Station',
       type: 'strength',
-      position_x: 'left',
-      position_y: 'front',
+      grid_column: 999,
+      grid_row: 999,
     });
 
     expect(extractMessages(await validate(dto))).toEqual(
       expect.arrayContaining([
-        'position_x must be a number',
-        'position_y must be a number',
+        'grid_column must be at most 14',
+        'grid_row must be at most 10',
       ]),
     );
   });
@@ -50,8 +50,8 @@ describe('GymLayout DTO validation', () => {
       floor_id: 'basement',
       name: 'Leg Press Station',
       type: 'strength',
-      position_x: 12.5,
-      position_y: 7.25,
+      grid_column: 4,
+      grid_row: 3,
     });
 
     expect(extractMessages(await validate(dto))).toContain(

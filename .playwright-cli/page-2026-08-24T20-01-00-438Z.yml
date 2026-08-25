@@ -1,0 +1,509 @@
+- generic [ref=e1]:
+  - alert [ref=e66]
+  - generic [ref=e68]:
+    - generic:
+      - generic:
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+      - generic:
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+      - generic:
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+      - generic:
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+    - complementary [ref=e70]:
+      - generic [ref=e79]:
+        - generic [ref=e80]: FitTrack
+        - paragraph [ref=e81]: Admin Portal
+      - link [ref=e766] [cursor=pointer]:
+        - /url: /profile
+        - generic [ref=e84]:
+          - generic [ref=e85]: SA
+          - generic [ref=e87]:
+            - generic [ref=e88]: Sera Admin
+            - paragraph [ref=e93]: Manage Profile Details
+      - navigation [ref=e95]:
+        - generic [ref=e96]:
+          - paragraph [ref=e97]: Main
+          - generic [ref=e98]:
+            - link [ref=e767] [cursor=pointer]:
+              - /url: /analytics
+              - generic [ref=e101]: Data Analytics
+            - link [ref=e768] [cursor=pointer]:
+              - /url: /accounts
+              - generic [ref=e110]: Accounts
+            - link [ref=e769] [cursor=pointer]:
+              - /url: /schedule
+              - generic [ref=e114]: Gym Operations
+            - link [ref=e770] [cursor=pointer]:
+              - /url: /facilities
+              - generic [ref=e118]: Facilities
+            - link [ref=e771] [cursor=pointer]:
+              - /url: /inventory
+              - generic [ref=e124]: Inventory
+            - link [ref=e772] [cursor=pointer]:
+              - /url: /gym-actions
+              - generic [ref=e129]: Gym Actions
+        - generic [ref=e130]:
+          - paragraph [ref=e131]: Fitness Ops
+          - generic [ref=e132]:
+            - link [ref=e773] [cursor=pointer]:
+              - /url: /gamification
+              - generic [ref=e140]: Ranking Governance
+            - link [ref=e774] [cursor=pointer]:
+              - /url: /milestones
+              - generic [ref=e148]: Milestones
+            - link [ref=e775] [cursor=pointer]:
+              - /url: /exercise-lab
+              - generic [ref=e156]: Exercise Labs
+            - link [ref=e776] [cursor=pointer]:
+              - /url: /memberships-promos
+              - generic [ref=e161]: Memberships
+        - generic [ref=e162]:
+          - paragraph [ref=e163]: System
+          - generic [ref=e164]:
+            - link [ref=e777] [cursor=pointer]:
+              - /url: /ai
+              - generic [ref=e169]: BrodigyAI
+            - link [ref=e778] [cursor=pointer]:
+              - /url: /settings
+              - generic [ref=e174]: Settings
+      - button [ref=e779] [cursor=pointer]:
+        - generic [ref=e180]: SIGN OUT
+    - main [ref=e182]:
+      - generic [ref=e183]:
+        - generic [ref=e185]:
+          - heading [level=1] [ref=e780]: Data Analytics
+          - paragraph [ref=e187]
+        - button [ref=e781] [cursor=pointer]
+      - generic [ref=e196]:
+        - navigation [ref=e782]:
+          - generic [ref=e198]:
+            - button [ref=e783] [cursor=pointer]:
+              - generic [ref=e200]: All Sections
+            - button [ref=e784] [cursor=pointer]:
+              - generic [ref=e202]: AI Insights
+            - button [ref=e785] [cursor=pointer]:
+              - generic [ref=e204]: Performance KPIs
+            - button [ref=e786] [cursor=pointer]:
+              - generic [ref=e206]: System Alerts
+            - button [ref=e787] [cursor=pointer]:
+              - generic [ref=e208]: Range Insights
+            - button [ref=e788] [cursor=pointer]:
+              - generic [ref=e210]: Revenue
+        - generic [ref=e211]:
+          - generic [ref=e212]:
+            - paragraph [ref=e218]: Analytics date range
+            - paragraph [ref=e219]: "Applied: Last 6 months."
+          - generic [ref=e220]:
+            - generic [ref=e221]: Start date
+            - button [expanded] [ref=e789] [cursor=pointer]:
+              - generic [ref=e223]: Mar 1, 2026
+          - generic [ref=e226]:
+            - generic [ref=e227]: End date
+            - button [ref=e790] [cursor=pointer]:
+              - generic [ref=e229]: Aug 24, 2026
+          - generic [ref=e232]:
+            - generic [ref=e233]: Group results by
+            - button [ref=e791] [cursor=pointer]:
+              - generic [ref=e236]: Monthly
+          - generic [ref=e241]:
+            - button [disabled] [ref=e792]:
+              - generic [ref=e243]: RESET
+            - button [disabled] [ref=e793]:
+              - generic [ref=e245]: APPLY RANGE
+        - generic [ref=e247]:
+          - generic [ref=e248]:
+            - heading [level=4] [ref=e794]: Performance KPIs
+            - button [ref=e795] [cursor=pointer]:
+              - generic [ref=e253]: EXPLORE ATTENDANCE
+          - generic [ref=e254]:
+            - generic [ref=e255]:
+              - generic [ref=e256]:
+                - generic [ref=e261]:
+                  - paragraph [ref=e262]: Headline outcome
+                  - paragraph [ref=e263]: Total Revenue
+                - paragraph [ref=e264]: ₱1,039,376
+                - paragraph [ref=e265]: Last 6 months
+              - generic [ref=e266]:
+                - generic [ref=e267]:
+                  - paragraph [ref=e268]: Revenue mix
+                  - paragraph [ref=e269]: Contributors
+                - generic [ref=e270]:
+                  - generic [ref=e271]:
+                    - paragraph [ref=e275]: Membership
+                    - paragraph [ref=e276]: ₱0
+                  - generic [ref=e277]:
+                    - paragraph [ref=e283]: Venue Booking
+                    - paragraph [ref=e284]: ₱0
+                  - generic [ref=e285]:
+                    - paragraph [ref=e293]: Retail Product
+                    - paragraph [ref=e294]: ₱1,024,256
+              - generic [ref=e295]:
+                - generic [ref=e296]:
+                  - paragraph [ref=e297]: Member activity
+                  - paragraph [ref=e298]: Last 6 months
+                - generic [ref=e299]:
+                  - generic [ref=e300]:
+                    - paragraph [ref=e307]: Members Added
+                    - paragraph [ref=e308]: "59"
+                  - generic [ref=e309]:
+                    - paragraph [ref=e314]: Check-ins
+                    - paragraph [ref=e315]: "938"
+            - generic [ref=e316]:
+              - generic [ref=e317]:
+                - heading [level=4] [ref=e796]: Revenue momentum
+                - generic [ref=e326]:
+                  - list [ref=e328]:
+                    - listitem [ref=e329]: Bookings
+                    - listitem [ref=e332]: Coaching
+                    - listitem [ref=e335]: Membership
+                    - listitem [ref=e338]: Products
+                    - listitem [ref=e341]: Total
+                  - application [ref=e344]:
+                    - generic [ref=e402]:
+                      - generic [ref=e403]:
+                        - generic [ref=e404]: Mar 2026
+                        - generic [ref=e406]: Apr 2026
+                        - generic [ref=e408]: May 2026
+                        - generic [ref=e410]: Jun 2026
+                        - generic [ref=e412]: Jul 2026
+                        - generic [ref=e414]: Aug 2026
+                      - generic [ref=e416]:
+                        - generic [ref=e417]: ₱0
+                        - generic [ref=e419]: ₱70,000
+                        - generic [ref=e421]: ₱140,000
+                        - generic [ref=e423]: ₱210,000
+                        - generic [ref=e425]: ₱280,000
+              - generic [ref=e427]:
+                - heading [level=4] [ref=e842]: Revenue composition
+                - generic [ref=e434]:
+                  - application [ref=e438]
+                  - generic [ref=e448]:
+                    - generic [ref=e449]:
+                      - paragraph [ref=e450]: Selected range
+                      - paragraph [ref=e451]: ₱1,039,376
+                    - generic [ref=e452]:
+                      - generic [ref=e454]: Coaching
+                      - generic [ref=e455]: 1.5%
+                    - generic [ref=e456]:
+                      - generic [ref=e458]: Products
+                      - generic [ref=e459]: 98.5%
+              - generic [ref=e460]:
+                - heading [level=4] [ref=e850]: Attendance rhythm
+                - application [ref=e469]:
+                  - generic [ref=e485]:
+                    - generic [ref=e486]:
+                      - generic [ref=e487]: Mar 2026
+                      - generic [ref=e489]: Apr 2026
+                      - generic [ref=e491]: May 2026
+                      - generic [ref=e493]: Jun 2026
+                      - generic [ref=e495]: Jul 2026
+                      - generic [ref=e497]: Aug 2026
+                    - generic [ref=e499]:
+                      - generic [ref=e500]: "0"
+                      - generic [ref=e502]: "60"
+                      - generic [ref=e504]: "120"
+                      - generic [ref=e506]: "180"
+                      - generic [ref=e508]: "240"
+        - generic [ref=e511]:
+          - heading [level=4] [ref=e851]: AI Insights
+          - generic [ref=e515]:
+            - generic [ref=e516]:
+              - generic [ref=e522]:
+                - paragraph [ref=e523]: Latest AI Insight
+                - paragraph [ref=e524]: Generate a focused readout, then export the selected report sections.
+              - generic [ref=e525]:
+                - button [ref=e852] [cursor=pointer]:
+                  - generic [ref=e530]: GENERATE AI INSIGHTS
+                - button [ref=e853] [cursor=pointer]:
+                  - generic [ref=e535]: EXPORT PDF
+            - generic [ref=e536]:
+              - generic [ref=e538]:
+                - paragraph [ref=e539]: No AI insight generated
+                - paragraph [ref=e540]: Generate a focused readout when a decision needs deeper context.
+              - paragraph [ref=e542]: No generated insight yet. Use Generate AI Insights to create a fresh business readout.
+              - generic [ref=e543]:
+                - paragraph [ref=e544]: Recommended Actions
+                - paragraph [ref=e545]: No recommended actions are attached to this insight yet.
+        - generic [ref=e547]:
+          - generic [ref=e548]:
+            - heading [level=4] [ref=e854]: System Alerts
+            - generic [ref=e550]: 4 live alert lanes
+          - generic [ref=e552]:
+            - button [ref=e855] [cursor=pointer]:
+              - generic [ref=e561]:
+                - paragraph [ref=e562]: Low Stock Alert
+                - paragraph [ref=e563]: Inventory warning
+                - paragraph [ref=e564]: Training Gloves is down to 0 units and needs replenishment to stay above the 10-unit threshold.
+              - generic [ref=e565]: OPEN RESTOCK
+            - button [ref=e856] [cursor=pointer]:
+              - generic [ref=e577]:
+                - paragraph [ref=e578]: Low Stock Alert
+                - paragraph [ref=e579]: Inventory warning
+                - paragraph [ref=e580]: Protein Bar is down to 0 units and needs replenishment to stay above the 20-unit threshold.
+              - generic [ref=e581]: OPEN RESTOCK
+            - button [ref=e857] [cursor=pointer]:
+              - generic [ref=e589]:
+                - paragraph [ref=e590]: Maintenance Due
+                - paragraph [ref=e591]: Equipment warning
+                - paragraph [ref=e592]: Boxing Gloves has 3 pairs unavailable and needs maintenance follow-up.
+              - generic [ref=e593]: REVIEW EQUIPMENT
+            - button [ref=e858] [cursor=pointer]:
+              - generic [ref=e601]:
+                - paragraph [ref=e602]: Maintenance Due
+                - paragraph [ref=e603]: Equipment warning
+                - paragraph [ref=e604]: Foam Rollers has 2 rollers unavailable and needs maintenance follow-up.
+              - generic [ref=e605]: REVIEW EQUIPMENT
+        - generic [ref=e610]:
+          - heading [level=4] [ref=e859]: Range Insights
+          - generic [ref=e614]:
+            - generic [ref=e615]:
+              - generic [ref=e622]:
+                - paragraph [ref=e623]: Members Added
+                - paragraph [ref=e624]: "59"
+              - paragraph [ref=e625]: New member accounts inside last 6 months.
+            - generic [ref=e626]:
+              - generic [ref=e631]:
+                - paragraph [ref=e632]: Coaching Sessions
+                - paragraph [ref=e633]: "73"
+              - paragraph [ref=e634]: Completed coaching sessions inside the selected range.
+            - generic [ref=e635]:
+              - generic [ref=e640]:
+                - paragraph [ref=e641]: Check-ins
+                - paragraph [ref=e642]: "938"
+              - paragraph [ref=e643]: Member check-ins recorded inside the selected range.
+            - generic [ref=e644]:
+              - generic [ref=e648]:
+                - paragraph [ref=e649]: Top Revenue Source
+                - paragraph [ref=e650]: Retail products
+              - paragraph [ref=e651]: ₱1,024,256 inside the selected range.
+            - generic [ref=e652]:
+              - generic [ref=e656]:
+                - paragraph [ref=e657]: Peak Check-in Window
+                - paragraph [ref=e658]: 09:00
+              - paragraph [ref=e659]: 88 check-ins in the current attendance window.
+            - generic [ref=e660]:
+              - generic [ref=e664]:
+                - paragraph [ref=e665]: Range Revenue
+                - paragraph [ref=e666]: ₱1,039,376
+              - paragraph [ref=e667]: All Business Revenue inside the selected range.
+        - generic [ref=e669]:
+          - heading [level=4] [ref=e860]: Revenue
+          - generic [ref=e673]:
+            - generic [ref=e674]:
+              - generic [ref=e675]:
+                - generic [ref=e676]:
+                  - paragraph [ref=e677]: Last 6 months
+                  - paragraph [ref=e678]: All Business Revenue
+                - button [ref=e861] [cursor=pointer]:
+                  - generic [ref=e682]: All Business Revenue
+              - paragraph [ref=e687]: ₱1,039,376.00
+              - paragraph [ref=e688]: Combined membership, venue booking, retail product, and coaching gym-share revenue in the selected revenue window.
+            - generic [ref=e689]:
+              - generic [ref=e690]:
+                - paragraph [ref=e691]: All Business Revenue trend
+                - application [ref=e694]:
+                  - generic [ref=e727]:
+                    - generic [ref=e728]:
+                      - generic [ref=e729]: Mar 2026
+                      - generic [ref=e731]: Apr 2026
+                      - generic [ref=e733]: May 2026
+                      - generic [ref=e735]: Jun 2026
+                      - generic [ref=e737]: Jul 2026
+                      - generic [ref=e739]: Aug 2026
+                    - generic [ref=e741]:
+                      - generic [ref=e742]: "0"
+                      - generic [ref=e744]: "70000"
+                      - generic [ref=e746]: "140000"
+                      - generic [ref=e748]: "210000"
+                      - generic [ref=e750]: "280000"
+              - generic [ref=e752]:
+                - paragraph [ref=e753]: Revenue mix
+                - generic [ref=e754]:
+                  - generic [ref=e755]:
+                    - generic [ref=e756]:
+                      - paragraph [ref=e757]: Retail products
+                      - paragraph [ref=e758]: 98.5% of revenue
+                    - paragraph [ref=e759]: ₱1,024,256
+                  - generic [ref=e760]:
+                    - generic [ref=e761]:
+                      - paragraph [ref=e762]: Coaching gym share
+                      - paragraph [ref=e763]: 1.5% of revenue
+                    - paragraph [ref=e764]: ₱15,120
+  - generic [ref=e765]: ₱0
+  - dialog "March 2026" [active] [ref=e863]:
+    - generic [ref=e864]:
+      - generic [ref=e865]: March 2026
+      - button "Close calendar" [ref=e871] [cursor=pointer]
+    - generic [ref=e875]:
+      - generic [ref=e876]:
+        - button "Days" [pressed] [ref=e877] [cursor=pointer]
+        - button "Months" [ref=e879] [cursor=pointer]
+        - button "Years" [ref=e881] [cursor=pointer]
+      - generic [ref=e883]:
+        - generic [ref=e884]:
+          - generic [ref=e885]: Su
+          - generic [ref=e886]: Mo
+          - generic [ref=e887]: Tu
+          - generic [ref=e888]: We
+          - generic [ref=e889]: Th
+          - generic [ref=e890]: Fr
+          - generic [ref=e891]: Sa
+        - generic [ref=e892]:
+          - button "Select 2026-03-01" [ref=e893] [cursor=pointer]:
+            - generic [ref=e894]: "1"
+          - button "Select 2026-03-02" [ref=e895] [cursor=pointer]:
+            - generic [ref=e896]: "2"
+          - button "Select 2026-03-03" [ref=e897] [cursor=pointer]:
+            - generic [ref=e898]: "3"
+          - button "Select 2026-03-04" [ref=e899] [cursor=pointer]:
+            - generic [ref=e900]: "4"
+          - button "Select 2026-03-05" [ref=e901] [cursor=pointer]:
+            - generic [ref=e902]: "5"
+          - button "Select 2026-03-06" [ref=e903] [cursor=pointer]:
+            - generic [ref=e904]: "6"
+          - button "Select 2026-03-07" [ref=e905] [cursor=pointer]:
+            - generic [ref=e906]: "7"
+          - button "Select 2026-03-08" [ref=e907] [cursor=pointer]:
+            - generic [ref=e908]: "8"
+          - button "Select 2026-03-09" [ref=e909] [cursor=pointer]:
+            - generic [ref=e910]: "9"
+          - button "Select 2026-03-10" [ref=e911] [cursor=pointer]:
+            - generic [ref=e912]: "10"
+          - button "Select 2026-03-11" [ref=e913] [cursor=pointer]:
+            - generic [ref=e914]: "11"
+          - button "Select 2026-03-12" [ref=e915] [cursor=pointer]:
+            - generic [ref=e916]: "12"
+          - button "Select 2026-03-13" [ref=e917] [cursor=pointer]:
+            - generic [ref=e918]: "13"
+          - button "Select 2026-03-14" [ref=e919] [cursor=pointer]:
+            - generic [ref=e920]: "14"
+          - button "Select 2026-03-15" [ref=e921] [cursor=pointer]:
+            - generic [ref=e922]: "15"
+          - button "Select 2026-03-16" [ref=e923] [cursor=pointer]:
+            - generic [ref=e924]: "16"
+          - button "Select 2026-03-17" [ref=e925] [cursor=pointer]:
+            - generic [ref=e926]: "17"
+          - button "Select 2026-03-18" [ref=e927] [cursor=pointer]:
+            - generic [ref=e928]: "18"
+          - button "Select 2026-03-19" [ref=e929] [cursor=pointer]:
+            - generic [ref=e930]: "19"
+          - button "Select 2026-03-20" [ref=e931] [cursor=pointer]:
+            - generic [ref=e932]: "20"
+          - button "Select 2026-03-21" [ref=e933] [cursor=pointer]:
+            - generic [ref=e934]: "21"
+          - button "Select 2026-03-22" [ref=e935] [cursor=pointer]:
+            - generic [ref=e936]: "22"
+          - button "Select 2026-03-23" [ref=e937] [cursor=pointer]:
+            - generic [ref=e938]: "23"
+          - button "Select 2026-03-24" [ref=e939] [cursor=pointer]:
+            - generic [ref=e940]: "24"
+          - button "Select 2026-03-25" [ref=e941] [cursor=pointer]:
+            - generic [ref=e942]: "25"
+          - button "Select 2026-03-26" [ref=e943] [cursor=pointer]:
+            - generic [ref=e944]: "26"
+          - button "Select 2026-03-27" [ref=e945] [cursor=pointer]:
+            - generic [ref=e946]: "27"
+          - button "Select 2026-03-28" [ref=e947] [cursor=pointer]:
+            - generic [ref=e948]: "28"
+          - button "Select 2026-03-29" [ref=e949] [cursor=pointer]:
+            - generic [ref=e950]: "29"
+          - button "Select 2026-03-30" [ref=e951] [cursor=pointer]:
+            - generic [ref=e952]: "30"
+          - button "Select 2026-03-31" [ref=e953] [cursor=pointer]:
+            - generic [ref=e954]: "31"
+    - generic [ref=e967]:
+      - button "Today" [disabled] [ref=e968]
+      - button "Clear" [ref=e971] [cursor=pointer]

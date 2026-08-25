@@ -24,6 +24,7 @@ import type {
   ProgressionSourceTerminalState,
 } from '../progression-source.types';
 import { progressionSourceEventType } from '../progression-source.types';
+import { ExerciseService } from '../exercise/exercise.service';
 import {
   AnalyzePoseSequenceDTO,
   DetectPoseEquipmentDTO,
@@ -80,6 +81,7 @@ import type {
 import {
   buildFallbackPoseMovementContract,
   isValidPoseMovementContract,
+  normalizePoseMovementContract,
 } from '../../../../../packages/utils/pose';
 
 const poseContractConfidenceThreshold = 0.8;
@@ -93,12 +95,21 @@ const localAiEquipmentProviders = new Set([
   'local_yolo',
 ]);
 
-type PoseContractJoint = 'elbow' | 'shoulder' | 'hip' | 'knee';
+type PoseContractJoint = 'elbow' | 'shoulder' | 'hip' | 'knee' | 'ankle';
 type PoseAnalyzeSignalsValue = NonNullable<AnalyzePoseSequenceDTO['signals']>;
 
 type PoseMovementContractValue = NonNullable<
   PoseFrameAnalysisResponseDTO['movement_contract']
 >;
+
+type PoseMovementContractIdentityValue = NonNullable<
+  PoseFrameAnalysisResponseDTO['movement_contract_identity']
+>;
+
+type AuthoritativeMovementContractResolution = {
+  identity: PoseMovementContractIdentityValue;
+  movementContract: PoseMovementContractValue;
+};
 
 type PoseEquipmentResolution = {
   equipmentDetections: PoseEquipmentDetectionResponseDTO['equipment_detections'];
@@ -554,7 +565,10 @@ function normalizeJointLabel(value: unknown): PoseContractJoint | null {
   if (normalized.includes('hip')) {
     return 'hip';
   }
-  if (normalized.includes('knee') || normalized.includes('ankle')) {
+  if (normalized.includes('ankle')) {
+    return 'ankle';
+  }
+  if (normalized.includes('knee')) {
     return 'knee';
   }
   return null;
@@ -1085,40 +1099,58 @@ function filterUsableBootstrapProfiles(
   );
 }
 
-function buildMovementContractFromAnalysis(
-  value: Awaited<
-    ReturnType<AiPythonClientService['analyzePoseSequence']>
-  >['movement_contract'],
+function buildMovementContractFromShared(
+  value: unknown,
 ): PoseMovementContractValue | null {
-  if (!value) {
-    return null;
-  }
-  const extendedValue = value as unknown as Partial<PoseMovementContractValue>;
-
-  const enriched = enrichMovementContract({
-    exercise: value.exercise,
-    dominant_joint: value.dominant_joint,
-    rep_thresholds: value.rep_thresholds,
-    secondary_check: value.secondary_check,
-    oscillating_joints: value.oscillating_joints,
-    rep_model: value.rep_model,
-    required_sides: value.required_sides,
-    primary_joints: value.primary_joints,
-    secondary_joints: value.secondary_joints,
-    phase_order: value.phase_order,
-    spatial_requirements: value.spatial_requirements,
-    no_count_conditions: value.no_count_conditions,
-    degraded_conditions: value.degraded_conditions,
-    body_orientation: extendedValue.body_orientation,
-    contract_version: extendedValue.contract_version,
-    partial_rep_policy: extendedValue.partial_rep_policy,
-    hold_duration_seconds: extendedValue.hold_duration_seconds,
-    tracking_requirements: extendedValue.tracking_requirements,
+  const contract = normalizePoseMovementContract(value);
+  if (!contract || !isValidPoseMovementContract(contract)) return null;
+  return enrichMovementContract({
+    exercise: contract.exercise,
+    dominant_joint: contract.dominantJoint,
+    rep_thresholds: contract.repThresholds,
+    secondary_check: contract.secondaryCheck,
+    oscillating_joints: contract.oscillatingJoints,
+    rep_model: contract.repModel,
+    required_sides: contract.requiredSides,
+    primary_joints: contract.primaryJoints,
+    secondary_joints: contract.secondaryJoints,
+    phase_order: contract.phaseOrder,
+    spatial_requirements: contract.spatialRequirements
+      ? {
+          body_line_tolerance: contract.spatialRequirements.bodyLineTolerance,
+          body_x_drift_max: contract.spatialRequirements.bodyXDriftMax,
+          body_y_travel_min: contract.spatialRequirements.bodyYTravelMin,
+          hip_y_travel_min: contract.spatialRequirements.hipYTravelMin,
+          left_right_symmetry_tolerance:
+            contract.spatialRequirements.leftRightSymmetryTolerance,
+          phase_sync_tolerance_ms:
+            contract.spatialRequirements.phaseSyncToleranceMs,
+          shoulder_hip_travel_min:
+            contract.spatialRequirements.shoulderHipTravelMin,
+          shoulder_y_travel_min:
+            contract.spatialRequirements.shoulderYTravelMin,
+          torso_slope_max_deg: contract.spatialRequirements.torsoSlopeMaxDeg,
+          torso_slope_min_deg: contract.spatialRequirements.torsoSlopeMinDeg,
+          wrist_anchor_drift_max:
+            contract.spatialRequirements.wristAnchorDriftMax,
+        }
+      : undefined,
+    no_count_conditions: contract.noCountConditions,
+    degraded_conditions: contract.degradedConditions,
+    body_orientation: contract.bodyOrientation,
+    contract_version: contract.contractVersion,
+    partial_rep_policy: contract.partialRepPolicy,
+    hold_duration_seconds: contract.holdDurationSeconds,
+    tracking_requirements: contract.trackingRequirements
+      ? {
+          min_confidence: contract.trackingRequirements.minConfidence,
+          min_reliable_frame_landmarks:
+            contract.trackingRequirements.minReliableFrameLandmarks,
+          required_landmarks: contract.trackingRequirements.requiredLandmarks,
+          required_sides: contract.trackingRequirements.requiredSides,
+        }
+      : undefined,
   });
-
-  return isValidPoseMovementContract(toSharedMovementContract(enriched))
-    ? enriched
-    : null;
 }
 
 function toRepThresholdsJson(
@@ -1465,8 +1497,46 @@ export class PoseService {
     private readonly config: ConfigService,
     private readonly aiClient: AiPythonClientService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly exerciseService: ExerciseService,
     @InjectRedis() private readonly redis: Redis,
   ) {}
+
+  private async resolveAuthoritativeMovementContractResolution(
+    exerciseId: string | null | undefined,
+    label: string | null | undefined,
+  ): Promise<AuthoritativeMovementContractResolution | null> {
+    const exercise = await this.exerciseService.resolveExerciseContract({
+      exerciseId,
+      label,
+    });
+    if (!exercise || exercise.tracking_mode === 'manual') return null;
+    const movementProfile = exercise.movement_profile;
+    const sharedContract = movementProfile?.movementContract;
+    const movementContract = buildMovementContractFromShared(sharedContract);
+    const identity = exercise.movement_contract_identity;
+    if (
+      !movementContract ||
+      typeof identity.exerciseId !== 'string' ||
+      typeof identity.familyKey !== 'string' ||
+      typeof identity.revision !== 'number' ||
+      !Number.isInteger(identity.revision) ||
+      identity.revision < 1 ||
+      typeof identity.source !== 'string' ||
+      typeof identity.trackingMode !== 'string'
+    ) {
+      return null;
+    }
+    return {
+      identity: {
+        exerciseId: identity.exerciseId,
+        familyKey: identity.familyKey,
+        revision: identity.revision,
+        source: identity.source,
+        trackingMode: identity.trackingMode,
+      },
+      movementContract,
+    };
+  }
 
   private toProviderEquipmentPredictions(
     payload: unknown,
@@ -1937,13 +2007,14 @@ export class PoseService {
       if (matchedProfileId && !matchedProfileCandidate) {
         matchedProfileId = null;
       }
+      const movementContractResolution = matchedProfileCandidate
+        ? await this.resolveAuthoritativeMovementContractResolution(
+            null,
+            detectedExerciseName ?? matchedProfileCandidate.canonical_name,
+          )
+        : null;
       const movementContract =
-        (matchedProfileCandidate
-          ? buildMovementContractFromAnalysis(analysis.movement_contract)
-          : null) ??
-        (matchedProfileCandidate
-          ? buildMovementContractFromProfile(matchedProfileCandidate)
-          : null);
+        movementContractResolution?.movementContract ?? null;
       const needsConfirmation =
         analysis.needs_confirmation === true || movementContract === null;
       const subjectLocked =
@@ -2014,6 +2085,8 @@ export class PoseService {
           form_feedback: formFeedback,
           frame_transport: 'frame_b64',
           movement_contract: movementContract,
+          movement_contract_identity:
+            movementContractResolution?.identity ?? null,
           needs_confirmation: needsConfirmation,
           phase,
           processing_mode: processingMode,
@@ -2052,6 +2125,8 @@ export class PoseService {
         candidate_exercises: candidateExercises,
         form_feedback: formFeedback,
         movement_contract: movementContract,
+        movement_contract_identity:
+          movementContractResolution?.identity ?? null,
         session_quality_state: quality.sessionQualityState,
         session_quality_reasons: quality.sessionQualityReasons,
         reliable_frame_ratio: quality.reliableFrameRatio,
@@ -2081,11 +2156,15 @@ export class PoseService {
       requestedExerciseHint,
       dto.signals,
     );
-    const presetMovementContract = presetProfile
-      ? buildMovementContractFromProfile(presetProfile)
+    const presetContractResolution = presetProfile
+      ? await this.resolveAuthoritativeMovementContractResolution(
+          null,
+          presetProfile.canonical_name,
+        )
       : null;
 
-    if (presetProfile && presetMovementContract) {
+    if (presetProfile && presetContractResolution) {
+      const presetMovementContract = presetContractResolution.movementContract;
       const subjectLocked = dto.subject_locked ?? true;
       const subjectLockConfidence = dto.subject_lock_confidence ?? null;
       const equipment = resolvePoseEquipment({
@@ -2127,6 +2206,7 @@ export class PoseService {
           form_feedback: [],
           landmark_schema: dto.landmark_schema,
           movement_contract: presetMovementContract,
+          movement_contract_identity: presetContractResolution.identity,
           needs_confirmation: false,
           producer_runtime: 'web',
           equipment_context: equipment.equipmentContext,
@@ -2163,6 +2243,7 @@ export class PoseService {
         candidate_exercises: [presetProfile.canonical_name],
         form_feedback: [],
         movement_contract: presetMovementContract,
+        movement_contract_identity: presetContractResolution.identity,
         session_quality_state: quality.sessionQualityState,
         session_quality_reasons: quality.sessionQualityReasons,
         reliable_frame_ratio: quality.reliableFrameRatio,
@@ -2205,6 +2286,9 @@ export class PoseService {
           right_hip: entry.right_hip ?? null,
           left_knee: entry.left_knee ?? null,
           right_knee: entry.right_knee ?? null,
+          ankle: entry.ankle ?? null,
+          left_ankle: entry.left_ankle ?? null,
+          right_ankle: entry.right_ankle ?? null,
         })),
         orientation: {
           body_orientation: dto.signals.orientation.body_orientation,
@@ -2264,9 +2348,13 @@ export class PoseService {
     if (matchedProfileId && !matchedProfileCandidate) {
       matchedProfileId = null;
     }
-    let movementContract = matchedProfileCandidate
-      ? buildMovementContractFromAnalysis(analysis.movement_contract)
+    let movementContractResolution = matchedProfileCandidate
+      ? await this.resolveAuthoritativeMovementContractResolution(
+          null,
+          detectedExerciseName ?? matchedProfileCandidate.canonical_name,
+        )
       : null;
+    let movementContract = movementContractResolution?.movementContract ?? null;
 
     if (
       !detectedExerciseName &&
@@ -2278,12 +2366,14 @@ export class PoseService {
         null;
     }
 
-    if (detectedExerciseName) {
-      movementContract =
-        movementContract ??
-        (matchedProfileCandidate
-          ? buildMovementContractFromProfile(matchedProfileCandidate)
-          : null);
+    if (detectedExerciseName && !movementContractResolution) {
+      movementContractResolution = matchedProfileCandidate
+        ? await this.resolveAuthoritativeMovementContractResolution(
+            null,
+            matchedProfileCandidate.canonical_name,
+          )
+        : null;
+      movementContract = movementContractResolution?.movementContract ?? null;
     }
     needsConfirmation = needsConfirmation || movementContract === null;
 
@@ -2344,8 +2434,6 @@ export class PoseService {
 
       matchedProfileId = learnedProfile.id;
       detectedExerciseName = learnedProfile.canonical_name;
-      movementContract =
-        movementContract ?? buildMovementContractFromProfile(learnedProfile);
     }
 
     if (
@@ -2436,6 +2524,8 @@ export class PoseService {
         form_feedback: analysis.form_feedback ?? [],
         landmark_schema: dto.landmark_schema,
         movement_contract: movementContract,
+        movement_contract_identity:
+          movementContractResolution?.identity ?? null,
         needs_confirmation: needsConfirmation,
         phase,
         processing_mode: processingMode,
@@ -2477,6 +2567,7 @@ export class PoseService {
       candidate_exercises: analysis.candidate_exercises ?? [],
       form_feedback: analysis.form_feedback ?? [],
       movement_contract: movementContract,
+      movement_contract_identity: movementContractResolution?.identity ?? null,
       session_quality_state: quality.sessionQualityState,
       session_quality_reasons: quality.sessionQualityReasons,
       reliable_frame_ratio: quality.reliableFrameRatio,

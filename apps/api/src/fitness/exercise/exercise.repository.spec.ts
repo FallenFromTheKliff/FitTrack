@@ -16,9 +16,17 @@ describe('ExerciseRepository', () => {
     create: jest.fn(),
     update: jest.fn(),
   };
+  const exerciseAlias = {
+    findMany: jest.fn(),
+  };
+  const exerciseMovementFamily = {
+    update: jest.fn(),
+  };
 
   const prisma = {
     exerciseCatalog,
+    exerciseAlias,
+    exerciseMovementFamily,
     muscleDefinition,
     $transaction: jest.fn(),
   };
@@ -58,6 +66,17 @@ describe('ExerciseRepository', () => {
         ],
       },
       orderBy: [{ muscle_group: 'asc' }, { name: 'asc' }],
+      include: {
+        aliases: { orderBy: [{ normalized_label: 'asc' }] },
+        movement_family: {
+          include: {
+            exercises: {
+              select: { id: true, tracking_mode: true },
+              where: { is_active: true },
+            },
+          },
+        },
+      },
       skip: 10,
       take: 10,
     });
@@ -86,8 +105,17 @@ describe('ExerciseRepository', () => {
 
     expect(exerciseCatalog.findFirst).toHaveBeenCalledWith({
       where: { id: 'exercise-1', is_active: true },
-      include: undefined,
-      orderBy: undefined,
+      include: {
+        aliases: { orderBy: [{ normalized_label: 'asc' }] },
+        movement_family: {
+          include: {
+            exercises: {
+              select: { id: true, tracking_mode: true },
+              where: { is_active: true },
+            },
+          },
+        },
+      },
     });
   });
 
@@ -153,5 +181,30 @@ describe('ExerciseRepository', () => {
       },
       orderBy: [{ sort_order: 'asc' }, { name: 'asc' }],
     });
+  });
+
+  it('increments the family revision atomically when its shared contract changes', async () => {
+    exerciseMovementFamily.update.mockResolvedValue({ id: 'family-squat' });
+
+    await repo.updateMovementFamilyContract('family-squat', {
+      schemaVersion: 'exercise_movement_profile_v1',
+    });
+
+    expect(exerciseMovementFamily.update).toHaveBeenCalledWith({
+      where: { id: 'family-squat' },
+      data: {
+        base_movement_profile: {
+          schemaVersion: 'exercise_movement_profile_v1',
+        },
+        contract_revision: { increment: 1 },
+      },
+      include: {
+        exercises: {
+          where: { is_active: true },
+          select: { id: true, name: true, tracking_mode: true },
+        },
+      },
+    });
+    expect(exerciseCatalog.update).not.toHaveBeenCalled();
   });
 });

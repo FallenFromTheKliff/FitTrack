@@ -1,5 +1,5 @@
-import type { BookingStatus } from "./base";
-import type { MemberProfile } from "./member";
+import type { BookingStatus } from "./base.js";
+import type { MemberProfile } from "./member.js";
 
 export interface Booking {
   amountDueNow?: number;

@@ -8,50 +8,85 @@ import {
 } from '../../../../../apps/mobile/lib/workout/poseRepEngine';
 
 const REP_EXERCISE_CASES = [
-  { exercise: 'squat', minTravel: 35 },
-  { exercise: 'bench_press', minTravel: 35 },
-  { exercise: 'bicep_curl', minTravel: 40 },
-  { exercise: 'dip', minTravel: 30 },
-  { exercise: 'pull_up', minTravel: 35 },
-  { exercise: 'push_up', minTravel: 30 },
-  { exercise: 'shoulder_press', minTravel: 30 },
+  {
+    exercise: 'squat',
+    realisticAngles: [115, 115, 155, 155, 150],
+    partialAngles: [125, 125, 145, 145, 140],
+  },
+  {
+    exercise: 'bench_press',
+    realisticAngles: [105, 105, 155, 155, 150],
+    partialAngles: [120, 120, 145, 145, 140],
+  },
+  {
+    exercise: 'bicep_curl',
+    realisticAngles: [145, 145, 95, 95],
+    partialAngles: [130, 130, 105, 105, 115],
+  },
+  {
+    exercise: 'dip',
+    realisticAngles: [118, 118, 150, 150],
+    partialAngles: [128, 128, 145, 145, 135],
+  },
+  {
+    exercise: 'pull_up',
+    realisticAngles: [145, 145, 100, 100],
+    partialAngles: [130, 130, 110, 110, 120],
+  },
+  {
+    exercise: 'push_up',
+    // 130 degrees is a moderate, camera-visible elbow bend—not a deep
+    // elbows-to-ribs position. The 30-degree travel still requires a real
+    // controlled movement before the rep can count.
+    realisticAngles: [130, 130, 160, 160],
+    partialAngles: [135, 135, 155, 155, 150],
+  },
+  {
+    exercise: 'shoulder_press',
+    realisticAngles: [110, 110, 150, 150, 145],
+    partialAngles: [120, 120, 145, 145, 140],
+  },
 ] as const;
 
 function buildRepAngleSequence(
   contract: NonNullable<ReturnType<typeof buildFallbackPoseMovementContract>>,
-  minTravel: number,
 ) {
-  const increasing =
-    contract.repThresholds.up.angle >= contract.repThresholds.down.angle;
-  const startLimit = increasing
-    ? contract.repThresholds.down.angle + contract.repThresholds.down.tolerance
-    : contract.repThresholds.down.angle - contract.repThresholds.down.tolerance;
-  const peakLimit = increasing
-    ? contract.repThresholds.up.angle - contract.repThresholds.up.tolerance
-    : contract.repThresholds.up.angle + contract.repThresholds.up.tolerance;
-  const start = increasing ? startLimit - 2 : startLimit + 2;
-  const peak = increasing
-    ? Math.max(peakLimit + 2, start + minTravel + 2)
-    : Math.min(peakLimit - 2, start - minTravel - 2);
-  // The extra reversal is needed by movements that count after the peak
-  // rather than immediately on peak arrival.
-  const reversal = increasing ? peak - 5 : peak + 5;
-  return [start, start, peak, peak, reversal];
+  const testCase = REP_EXERCISE_CASES.find(
+    ({ exercise }) => exercise === contract.exercise,
+  );
+  if (!testCase)
+    throw new Error(`Missing realistic angle case for ${contract.exercise}`);
+  return [...testCase.realisticAngles];
 }
 
 function buildSmallOscillationSequence(
   contract: NonNullable<ReturnType<typeof buildFallbackPoseMovementContract>>,
-  minTravel: number,
 ) {
-  const increasing =
-    contract.repThresholds.up.angle >= contract.repThresholds.down.angle;
-  const startLimit = increasing
-    ? contract.repThresholds.down.angle + contract.repThresholds.down.tolerance
-    : contract.repThresholds.down.angle - contract.repThresholds.down.tolerance;
-  const start = increasing ? startLimit - 2 : startLimit + 2;
-  const smallTravel = Math.max(5, minTravel - 5);
-  const oscillation = increasing ? start + smallTravel : start - smallTravel;
-  return [start, start, oscillation, oscillation, start];
+  const testCase = REP_EXERCISE_CASES.find(
+    ({ exercise }) => exercise === contract.exercise,
+  );
+  if (!testCase)
+    throw new Error(`Missing partial angle case for ${contract.exercise}`);
+  return [...testCase.partialAngles];
+}
+
+function runRepSequenceAtInterval(
+  contract: NonNullable<ReturnType<typeof buildFallbackPoseMovementContract>>,
+  angles: number[],
+  frameIntervalMs: number,
+  initialState = createPoseRepEngineState(),
+  startTimeMs = 0,
+) {
+  return angles.reduce(
+    (state, angle, index) =>
+      stepPoseRepEngine(
+        state,
+        contract,
+        angle,
+        startTimeMs + index * frameIntervalMs,
+      ).nextState,
+    initialState,
+  );
 }
 
 function runRepSequence(
@@ -106,33 +141,86 @@ function makeHoldEvidence(visibility = 1) {
 }
 
 describe('mobile auto-rep regression primitives', () => {
+  it('awards a squat immediately after the stable top gate is reached', () => {
+    const squat = buildFallbackPoseMovementContract('squat');
+    if (!squat) throw new Error('squat fallback contract missing');
+
+    const state = runRepSequence(squat, [115, 115, 155, 155]);
+
+    expect(state.repCount).toBe(1);
+    expect(state.lastRepCompletedAtMs).toBe(3000);
+  });
+
   it.each(REP_EXERCISE_CASES)(
-    'counts one meaningful $exercise rep with the tuned angle band',
-    ({ exercise, minTravel }) => {
+    'counts one controlled $exercise rep with a human-realistic angle sequence',
+    ({ exercise }) => {
       const contract = buildFallbackPoseMovementContract(exercise);
       if (!contract) throw new Error(`${exercise} fallback contract missing`);
 
-      const state = runRepSequence(
-        contract,
-        buildRepAngleSequence(contract, minTravel),
-      );
+      const state = runRepSequence(contract, buildRepAngleSequence(contract));
 
       expect(state.repCount).toBe(1);
     },
   );
 
   it.each(REP_EXERCISE_CASES)(
-    'rejects a small $exercise angle oscillation as jitter',
-    ({ exercise, minTravel }) => {
+    'rejects a partial or noisy $exercise angle sequence',
+    ({ exercise }) => {
       const contract = buildFallbackPoseMovementContract(exercise);
       if (!contract) throw new Error(`${exercise} fallback contract missing`);
 
       const state = runRepSequence(
         contract,
-        buildSmallOscillationSequence(contract, minTravel),
+        buildSmallOscillationSequence(contract),
       );
 
       expect(state.repCount).toBe(0);
+    },
+  );
+
+  it.each(REP_EXERCISE_CASES)(
+    'does not double-count a held $exercise peak boundary',
+    ({ exercise }) => {
+      const contract = buildFallbackPoseMovementContract(exercise);
+      if (!contract) throw new Error(`${exercise} fallback contract missing`);
+
+      const realisticAngles = buildRepAngleSequence(contract);
+      const boundary = realisticAngles[realisticAngles.length - 1];
+      const state = runRepSequence(contract, [
+        ...realisticAngles,
+        boundary,
+        boundary,
+        boundary,
+      ]);
+
+      expect(state.repCount).toBe(1);
+    },
+  );
+
+  it.each(REP_EXERCISE_CASES)(
+    'enforces native-time cooldown for $exercise without threshold-derived fixtures',
+    ({ exercise }) => {
+      const contract = buildFallbackPoseMovementContract(exercise);
+      if (!contract) throw new Error(`${exercise} fallback contract missing`);
+
+      const cycle = buildRepAngleSequence(contract);
+      const fastState = runRepSequenceAtInterval(
+        contract,
+        [...cycle, ...cycle],
+        100,
+      );
+
+      expect(fastState.repCount).toBe(1);
+
+      const recoveredState = runRepSequenceAtInterval(
+        contract,
+        cycle,
+        100,
+        fastState,
+        (cycle.length * 2 - 1) * 100 + 1000,
+      );
+
+      expect(recoveredState.repCount).toBe(2);
     },
   );
 

@@ -2,12 +2,18 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { getVenueBookingBlockReason } from "@fittrack/api-client";
+import { facilityMapSnapshotQueryOptions } from "@fittrack/query";
 import {
   CheckCircle2,
   Dumbbell,
   Grid2X2,
   Hand,
+  Paintbrush,
+  Eraser,
+  DoorOpen,
+  LogOut,
   Lock,
   LockOpen,
   MapPinned,
@@ -47,9 +53,12 @@ import {
 } from "@/data/inventory/inventory";
 
 import { EditVenueModal } from "@/components/map";
+import { FacilityMobilePreviewModal } from "@/components/map/FacilityMobilePreviewModal";
 import { FacilitiesArchiveModal } from "@/components/map/FacilitiesArchiveModal";
 import { FacilitiesVenuesTable } from "@/components/map/FacilitiesVenuesTable";
 import type { FacilitiesPageController } from "@/components/map/useFacilitiesPageController";
+import type { FacilityCellEditorTool } from "@/hooks/facilities/useFacilities";
+import { webApiClient } from "@/lib/api-client";
 
 const FacilitiesKonvaMap = dynamic(() => import("./FacilitiesKonvaMap"), {
   ssr: false,
@@ -101,10 +110,17 @@ function EquipmentInspectorImage({
 export default function FacilitiesMapPageView({ controller }: Props) {
   const [zoom, setZoom] = useState("1");
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [mobilePreviewOpen, setMobilePreviewOpen] = useState(false);
+  const mobilePreviewQuery = useQuery({
+    ...facilityMapSnapshotQueryOptions(webApiClient),
+    refetchOnWindowFocus: true,
+  });
   const [assetRailTab, setAssetRailTab] = useState<
     "equipment" | "venues" | "paths"
   >("equipment");
-  const [canvasTool, setCanvasTool] = useState<"select" | "pan">("select");
+  const [canvasTool, setCanvasTool] = useState<
+    "select" | "pan" | "quick-region" | FacilityCellEditorTool
+  >("select");
   const [layoutModalVenue, setLayoutModalVenue] =
     useState<FloorVenueRecord | null>(null);
   const [selectedPlacedEquipmentId, setSelectedPlacedEquipmentId] = useState<
@@ -270,11 +286,11 @@ export default function FacilitiesMapPageView({ controller }: Props) {
   );
   const activeZoom = Number(zoom);
   const mapZoom = activeZoom * 0.82;
-  const activeCanvasTool = controller.quickPlacementTemplate
-    ? controller.quickPlacementTemplate.key === "walkway"
-      ? "path"
-      : "region"
-    : canvasTool;
+  const activeCanvasTool = controller.quickPlacementTemplate ? "quick-region" : canvasTool;
+  const activeCellTool: FacilityCellEditorTool | null = [
+    "building-paint", "building-erase", "rectangle-fill", "path-paint",
+    "path-erase", "set-entry", "set-exit",
+  ].includes(activeCanvasTool) ? activeCanvasTool as FacilityCellEditorTool : null;
 
   const handleFloorChange = (value: string) => {
     controller.setActiveFloor(value as FacilityFloorId);
@@ -287,18 +303,11 @@ export default function FacilitiesMapPageView({ controller }: Props) {
     controller.handleClearCanvasPlacement();
   };
 
-  const handleSelectCanvasTool = (tool: "select" | "pan") => {
+  const handleSelectCanvasTool = (
+    tool: "select" | "pan" | FacilityCellEditorTool,
+  ) => {
     controller.handleClearCanvasPlacement();
     setCanvasTool(tool);
-  };
-
-  const handleActivateQuickTool = (templateKey: string) => {
-    const template = controller.quickRegionTemplates.find(
-      (candidate) => candidate.key === templateKey,
-    );
-    if (!template) return;
-    setCanvasTool("select");
-    controller.handleToggleQuickPlacementTemplate(template);
   };
 
   const handleFitView = () => {
@@ -307,14 +316,8 @@ export default function FacilitiesMapPageView({ controller }: Props) {
   };
 
   const handlePreviewMobileMap = () => {
-    const previewUrl = new URL(window.location.href);
-    previewUrl.searchParams.set("preview", "mobile");
-    const preview = window.open(
-      previewUrl.toString(),
-      "fittrack-facilities-mobile-preview",
-      "popup,width=430,height=900",
-    );
-    preview?.focus();
+    setMobilePreviewOpen(true);
+    void mobilePreviewQuery.refetch();
   };
 
   const handleSelectMapVenue = (venue: FloorVenueRecord) => {
@@ -443,7 +446,13 @@ export default function FacilitiesMapPageView({ controller }: Props) {
         }}
       >
         <CheckCircle2 size={16} />
-        {controller.hasUnsavedChanges ? "Saving changes" : "All changes saved"}
+        {controller.cellMapSaving
+          ? "Saving changes"
+          : controller.lastMutationFailure
+            ? "Save failed / retry available"
+            : controller.hasUnsavedChanges
+              ? "Unsaved map cells"
+              : "All changes saved"}
       </div>
       <FitButton
         variant="primary"
@@ -508,26 +517,21 @@ export default function FacilitiesMapPageView({ controller }: Props) {
             onClick={() => handleSelectCanvasTool("pan")}
             style={{ minHeight: 34 }}
           />
-          <FitButton
-            variant={activeCanvasTool === "path" ? "primary" : "ghost"}
-            label="Path"
-            icon={Route}
-            disabled={!controller.isEditMode}
-            onClick={() => handleActivateQuickTool("walkway")}
-            style={{ minHeight: 34 }}
-          />
-          <FitButton
-            variant={activeCanvasTool === "region" ? "primary" : "ghost"}
-            label={
-              activeCanvasTool === "region"
-                ? "Cancel Quick Region"
-                : "Quick Region"
-            }
-            icon={Scan}
-            disabled={!controller.isEditMode}
-            onClick={() => handleActivateQuickTool("general-floor")}
-            style={{ minHeight: 34 }}
-          />
+          {([
+            ["Building Paint", "building-paint", Paintbrush],
+            ["Building Erase", "building-erase", Eraser],
+            ["Rectangle Fill", "rectangle-fill", Scan],
+            ["Path Paint", "path-paint", Route],
+            ["Path Erase", "path-erase", Eraser],
+            ["Set Entry", "set-entry", DoorOpen],
+            ["Set Exit", "set-exit", LogOut],
+          ] as const).map(([label, tool, icon]) => (
+            <FitButton key={tool}
+              variant={activeCanvasTool === tool ? "primary" : "ghost"}
+              label={label} icon={icon} disabled={!controller.isEditMode}
+              onClick={() => handleSelectCanvasTool(tool)}
+              style={{ minHeight: 34 }} />
+          ))}
           <FitButton
             variant="ghost"
             label="Fit view"
@@ -544,6 +548,13 @@ export default function FacilitiesMapPageView({ controller }: Props) {
               marginLeft: controller.isCompact ? 0 : "auto",
               minHeight: 34,
             }}
+          />
+          <FitButton
+            variant="primary"
+            label="Apply map cells"
+            disabled={!controller.hasUnsavedChanges || controller.cellMapSaving}
+            onClick={() => void controller.applyCellMapDraft()}
+            style={{ minHeight: 34 }}
           />
         </div>
         <div
@@ -562,17 +573,21 @@ export default function FacilitiesMapPageView({ controller }: Props) {
             colors={controller.colors}
             equipmentById={controller.equipmentById}
             equipment={controller.liveEquipment}
-            floorBounds={controller.activeFloorBounds}
+            footprintCells={controller.cellDraft.footprintCells}
+            pathCells={controller.cellDraft.pathCells}
+            entryCells={controller.cellDraft.entryCells}
+            exitCells={controller.cellDraft.exitCells}
+            cellTool={activeCellTool}
             floorImageUrl={controller.activeFloorImageUrl}
-            isEditMode={controller.isEditMode && activeCanvasTool !== "pan"}
+            isEditMode={controller.isEditMode && (activeCanvasTool === "select" || activeCanvasTool === "quick-region")}
             onAssignEquipmentToVenue={
               controller.handleAssignEquipmentFromCanvas
             }
             onDropEquipmentToVenue={controller.handleAssignEquipmentFromCanvas}
             onMoveEquipment={controller.handleMoveEquipmentFromCanvas}
             onMoveVenue={controller.handleMoveVenueFromCanvas}
-            onResizeFloorBounds={controller.handleResizeFloorBounds}
             onResizeVenue={controller.handleResizeRegionByMapId}
+            onCellAction={controller.updateCellMapDraft}
             onPanChange={setPan}
             onPlaceQuickRegionAtCell={
               controller.handleCreateQuickFloorRegionAtFromCanvas
@@ -2096,6 +2111,15 @@ export default function FacilitiesMapPageView({ controller }: Props) {
           if (updated) setEquipmentMaintenanceTarget(null);
         }}
         onCancel={() => setEquipmentMaintenanceTarget(null)}
+      />
+      <FacilityMobilePreviewModal
+        isError={mobilePreviewQuery.isError}
+        isFetching={mobilePreviewQuery.isFetching}
+        isLoading={mobilePreviewQuery.isPending}
+        isOpen={mobilePreviewOpen}
+        onClose={() => setMobilePreviewOpen(false)}
+        onRetry={() => void mobilePreviewQuery.refetch()}
+        snapshot={mobilePreviewQuery.data}
       />
     </FitSection>
   );

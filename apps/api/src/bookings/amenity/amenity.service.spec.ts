@@ -15,6 +15,10 @@ describe('AmenityService', () => {
     findAmenityByIdOrThrow: jest.fn(),
     createAmenity: jest.fn(),
     updateAmenity: jest.fn(),
+    moveAmenityAndEquipment: jest.fn(),
+    getFloorMap: jest.fn(),
+    listMappedAmenitiesForFloor: jest.fn(),
+    listEquipmentForVenue: jest.fn(),
     softDeleteAmenity: jest.fn(),
     restoreAmenity: jest.fn(),
   };
@@ -33,6 +37,14 @@ describe('AmenityService', () => {
       hourly_rate: 0,
       is_reservable: false,
     });
+    repo.getFloorMap.mockResolvedValue({
+      footprint_cells: Array.from({ length: 10 }, (_, row) =>
+        Array.from({ length: 14 }, (_, column) => ({ column: column + 1, row: row + 1 })),
+      ).flat(),
+      path_cells: [],
+    });
+    repo.listMappedAmenitiesForFloor.mockResolvedValue([]);
+    repo.listEquipmentForVenue.mockResolvedValue([]);
   });
 
   it('creates amenities with default optional values', async () => {
@@ -123,6 +135,80 @@ describe('AmenityService', () => {
       requires_subscription: false,
       status: EquipmentStatus.available,
     });
+  });
+
+  it('moves a venue and its equipment by the same grid delta atomically', async () => {
+    repo.findAmenityByIdOrThrow.mockResolvedValue({
+      id: 'amenity-1', hourly_rate: 100, is_reservable: true, is_mapped: true,
+      floor_id: 'floor-1', grid_column: 2, grid_row: 2, grid_width: 3, grid_height: 3,
+    });
+    repo.listEquipmentForVenue.mockResolvedValue([{ id: 'equipment-1', grid_column: 3, grid_row: 3 }]);
+    repo.moveAmenityAndEquipment.mockResolvedValue({ id: 'amenity-1' });
+    await service.updateAmenity('amenity-1', { grid_column: 4, grid_row: 3 });
+    expect(repo.moveAmenityAndEquipment).toHaveBeenCalledWith(
+      'amenity-1', { grid_column: 4, grid_row: 3 },
+      [{ id: 'equipment-1', gridColumn: 5, gridRow: 4 }],
+    );
+  });
+
+  it('rejects overlapping mapped venue geometry before mutation', async () => {
+    repo.findAmenityByIdOrThrow.mockResolvedValue({
+      id: 'amenity-1', hourly_rate: 100, is_reservable: true, is_mapped: true,
+      floor_id: 'floor-1', grid_column: 2, grid_row: 2, grid_width: 2, grid_height: 2,
+    });
+    repo.listMappedAmenitiesForFloor.mockResolvedValue([{
+      grid_column: 4, grid_row: 2, grid_width: 2, grid_height: 2,
+    }]);
+    await expect(service.updateAmenity('amenity-1', { grid_column: 4 }))
+      .rejects.toThrow('Bad Request Exception');
+    expect(repo.moveAmenityAndEquipment).not.toHaveBeenCalled();
+  });
+
+  it('rejects venue geometry outside the fixed grid or published footprint', async () => {
+    repo.findAmenityByIdOrThrow.mockResolvedValue({
+      id: 'amenity-1', hourly_rate: 100, is_reservable: true, is_mapped: true,
+      floor_id: 'floor-1', grid_column: 2, grid_row: 2, grid_width: 2, grid_height: 2,
+    });
+    await expect(service.updateAmenity('amenity-1', { grid_column: 14 }))
+      .rejects.toThrow('Bad Request Exception');
+
+    repo.getFloorMap.mockResolvedValue({
+      footprint_cells: [{ column: 1, row: 1 }],
+      path_cells: [],
+    });
+    await expect(service.updateAmenity('amenity-1', { grid_column: 1, grid_row: 1 }))
+      .rejects.toThrow('Bad Request Exception');
+    expect(repo.moveAmenityAndEquipment).not.toHaveBeenCalled();
+  });
+
+  it('accepts a valid enlarge and rejects a shrink that excludes equipment', async () => {
+    repo.findAmenityByIdOrThrow.mockResolvedValue({
+      id: 'amenity-1', hourly_rate: 100, is_reservable: true, is_mapped: true,
+      floor_id: 'floor-1', grid_column: 2, grid_row: 2, grid_width: 3, grid_height: 3,
+    });
+    repo.listEquipmentForVenue.mockResolvedValue([{ id: 'equipment-1', grid_column: 4, grid_row: 4 }]);
+    repo.moveAmenityAndEquipment.mockResolvedValue({ id: 'amenity-1' });
+    await service.updateAmenity('amenity-1', { grid_width: 4, grid_height: 4 });
+    expect(repo.moveAmenityAndEquipment).toHaveBeenCalledTimes(1);
+
+    repo.moveAmenityAndEquipment.mockClear();
+    await expect(service.updateAmenity('amenity-1', { grid_width: 2 }))
+      .rejects.toThrow('Bad Request Exception');
+    expect(repo.moveAmenityAndEquipment).not.toHaveBeenCalled();
+  });
+
+  it('accepts a shrink when all contained equipment remains inside', async () => {
+    repo.findAmenityByIdOrThrow.mockResolvedValue({
+      id: 'amenity-1', hourly_rate: 100, is_reservable: true, is_mapped: true,
+      floor_id: 'floor-1', grid_column: 2, grid_row: 2, grid_width: 4, grid_height: 4,
+    });
+    repo.listEquipmentForVenue.mockResolvedValue([{ id: 'equipment-1', grid_column: 3, grid_row: 3 }]);
+    repo.moveAmenityAndEquipment.mockResolvedValue({ id: 'amenity-1' });
+    await service.updateAmenity('amenity-1', { grid_width: 2, grid_height: 2 });
+    expect(repo.moveAmenityAndEquipment).toHaveBeenCalledWith(
+      'amenity-1', { grid_width: 2, grid_height: 2 },
+      [{ id: 'equipment-1', gridColumn: 3, gridRow: 3 }],
+    );
   });
 
   it('persists explicit venue image media settings', async () => {

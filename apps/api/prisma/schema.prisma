@@ -638,12 +638,16 @@ model Amenity {
 }
 
 model FacilityFloorPlanMedia {
-  floor_id    String   @id @db.VarChar(20)
-  image_url   String?  @db.VarChar(500)
-  grid_width  Int      @default(15)
-  grid_height Int      @default(10)
-  created_at  DateTime @default(now()) @db.Timestamptz(6)
-  updated_at  DateTime @updatedAt @db.Timestamptz(6)
+  floor_id        String   @id @db.VarChar(20)
+  image_url       String?  @db.VarChar(500)
+  grid_width      Int      @default(14)
+  grid_height     Int      @default(10)
+  footprint_cells Json     @default("[]")
+  path_cells      Json     @default("[]")
+  entry_cells     Json     @default("[]")
+  exit_cells      Json     @default("[]")
+  created_at      DateTime @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime @updatedAt @db.Timestamptz(6)
 
   @@map("facility_floor_plan_media")
 }
@@ -1028,6 +1032,9 @@ model ExerciseCatalog {
   muscle_group       String           @db.VarChar(100)
   muscle_targets     Json?
   movement_profile   Json?
+  movement_family_id String?          @db.Uuid
+  tracking_mode      ExerciseTrackingMode @default(manual)
+  movement_profile_override Json?
   hand_shape_profile Json?
   category           ExerciseCategory
   description        String?
@@ -1041,10 +1048,48 @@ model ExerciseCatalog {
   plan_exercises               PlanExercise[]
   exercise_logs                ExerciseLog[]
   pose_profiles                PoseExerciseProfile[]
+  aliases                      ExerciseAlias[]
+  movement_family              ExerciseMovementFamily? @relation("ExerciseMovementFamilyMembers", fields: [movement_family_id], references: [id], onDelete: SetNull)
+  canonical_for_family         ExerciseMovementFamily? @relation("ExerciseMovementFamilyCanonical")
 
   @@index([muscle_group, is_active])
   @@index([category])
+  @@index([movement_family_id, tracking_mode])
   @@map("exercise_catalog")
+}
+
+model ExerciseMovementFamily {
+  id                      String   @id @default(uuid()) @db.Uuid
+  key                     String   @unique @db.VarChar(64)
+  display_name            String   @db.VarChar(120)
+  canonical_exercise_id   String?  @unique @db.Uuid
+  base_movement_profile   Json
+  base_hand_shape_profile Json?
+  contract_revision       Int      @default(1)
+  is_active               Boolean  @default(true)
+  created_at              DateTime @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime @updatedAt @db.Timestamptz(6)
+
+  canonical_exercise ExerciseCatalog?  @relation("ExerciseMovementFamilyCanonical", fields: [canonical_exercise_id], references: [id], onDelete: SetNull)
+  exercises          ExerciseCatalog[] @relation("ExerciseMovementFamilyMembers")
+
+  @@index([is_active, key])
+  @@map("exercise_movement_families")
+}
+
+model ExerciseAlias {
+  id               String            @id @default(uuid()) @db.Uuid
+  exercise_id      String            @db.Uuid
+  label            String            @db.VarChar(255)
+  normalized_label String            @unique @db.VarChar(255)
+  kind             ExerciseAliasKind @default(synonym)
+  created_at       DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime          @updatedAt @db.Timestamptz(6)
+
+  exercise ExerciseCatalog @relation(fields: [exercise_id], references: [id], onDelete: Cascade)
+
+  @@index([exercise_id])
+  @@map("exercise_aliases")
 }
 
 model MuscleDefinition {
@@ -1072,6 +1117,17 @@ enum ExerciseCategory {
   cardio
   flexibility
   balance
+}
+
+enum ExerciseTrackingMode {
+  manual
+  inherit
+  override
+}
+
+enum ExerciseAliasKind {
+  spelling
+  synonym
 }
 
 enum PoseProfileKind {

@@ -5,6 +5,8 @@ import {
   type GymLayoutEquipmentRecord,
   type FacilityFloorPlanMediaMutationInput,
   type FacilityFloorPlanMediaRecord,
+  type FacilityMapSnapshot,
+  type FacilityMapRegionSnapshot,
 } from "@fittrack/types";
 import { unwrapResponse, unwrapVoidResponse } from "../request";
 import type { ApiTransport } from "../transport/createAxiosTransport";
@@ -12,6 +14,7 @@ import type { ApiTransport } from "../transport/createAxiosTransport";
 export type {
   FacilityFloorPlanMediaMutationInput,
   FacilityFloorPlanMediaRecord,
+  FacilityMapSnapshot,
   GymLayoutEquipmentMutationInput,
   GymLayoutEquipmentRecord,
 } from "@fittrack/types";
@@ -45,7 +48,49 @@ type FacilityFloorPlanMediaApiRecord = {
   grid_height: number;
   grid_width: number;
   image_url: string | null;
+  footprint_cells: FacilityFloorPlanMediaRecord["footprintCells"];
+  path_cells: FacilityFloorPlanMediaRecord["pathCells"];
+  entry_cells: FacilityFloorPlanMediaRecord["entryCells"];
+  exit_cells: FacilityFloorPlanMediaRecord["exitCells"];
   updated_at: string;
+};
+
+type FacilityMapRegionApiRecord = {
+  booking_block_reason: string | null;
+  capacity: number | null;
+  description: string | null;
+  floor_id: FacilityMapRegionSnapshot["floorId"];
+  grid_column: number;
+  grid_height: number;
+  grid_row: number;
+  grid_width: number;
+  hourly_rate: number | null;
+  icon_key: string | null;
+  id: string;
+  image_url: string | null;
+  is_bookable: boolean;
+  is_reservable: boolean;
+  minimum_hours: number | null;
+  name: string;
+  region_kind: FacilityMapRegionSnapshot["regionKind"];
+  source_venue_id: string;
+  status: FacilityMapRegionSnapshot["status"];
+};
+
+type FacilityMapSnapshotApiRecord = {
+  floors: Array<{
+    entry_cells: FacilityFloorPlanMediaRecord["entryCells"];
+    equipment: GymLayoutEquipmentApiRecord[];
+    exit_cells: FacilityFloorPlanMediaRecord["exitCells"];
+    floor_id: FacilityFloorPlanMediaRecord["floorId"];
+    footprint_cells: FacilityFloorPlanMediaRecord["footprintCells"];
+    grid_columns: 14;
+    grid_rows: 10;
+    image_url: string | null;
+    path_cells: FacilityFloorPlanMediaRecord["pathCells"];
+    regions: FacilityMapRegionApiRecord[];
+  }>;
+  generated_at: string;
 };
 
 function mapGymLayoutEquipment(
@@ -84,7 +129,51 @@ function mapFloorPlanMedia(
     gridHeight: record.grid_height,
     gridWidth: record.grid_width,
     imageUrl: record.image_url,
+    footprintCells: record.footprint_cells,
+    pathCells: record.path_cells,
+    entryCells: record.entry_cells,
+    exitCells: record.exit_cells,
     updatedAt: record.updated_at,
+  };
+}
+
+export function mapFacilityMapSnapshot(
+  record: FacilityMapSnapshotApiRecord,
+): FacilityMapSnapshot {
+  return {
+    generatedAt: record.generated_at,
+    floors: record.floors.map((floor) => ({
+      floorId: floor.floor_id,
+      gridColumns: floor.grid_columns,
+      gridRows: floor.grid_rows,
+      imageUrl: floor.image_url,
+      footprintCells: floor.footprint_cells,
+      pathCells: floor.path_cells,
+      entryCells: floor.entry_cells,
+      exitCells: floor.exit_cells,
+      equipment: floor.equipment.map(mapGymLayoutEquipment),
+      regions: floor.regions.map((region) => ({
+        id: region.id,
+        sourceVenueId: region.source_venue_id,
+        floorId: region.floor_id,
+        name: region.name,
+        description: region.description,
+        iconKey: region.icon_key,
+        imageUrl: region.image_url,
+        gridColumn: region.grid_column,
+        gridRow: region.grid_row,
+        gridWidth: region.grid_width,
+        gridHeight: region.grid_height,
+        isReservable: region.is_reservable,
+        isBookable: region.is_bookable,
+        bookingBlockReason: region.booking_block_reason,
+        status: region.status,
+        capacity: region.capacity,
+        hourlyRate: region.hourly_rate,
+        minimumHours: region.minimum_hours,
+        regionKind: region.region_kind,
+      })),
+    })),
   };
 }
 
@@ -97,8 +186,6 @@ function toGymLayoutMutationPayload(payload: GymLayoutEquipmentMutationInput) {
     ...(payload.gridHeight !== undefined ? { grid_height: payload.gridHeight } : {}),
     ...(payload.gridRow !== undefined ? { grid_row: payload.gridRow } : {}),
     ...(payload.gridWidth !== undefined ? { grid_width: payload.gridWidth } : {}),
-    ...(payload.positionX !== undefined ? { position_x: payload.positionX } : {}),
-    ...(payload.positionY !== undefined ? { position_y: payload.positionY } : {}),
     ...(payload.status !== undefined ? { status: payload.status } : {}),
     ...(payload.iconKey !== undefined ? { icon_key: payload.iconKey } : {}),
     ...(payload.inventoryItemId !== undefined
@@ -118,8 +205,6 @@ function toGymLayoutCreatePayload(payload: GymLayoutEquipmentMutationInput) {
     ...(payload.gridHeight !== undefined ? { grid_height: payload.gridHeight } : {}),
     ...(payload.gridRow !== undefined ? { grid_row: payload.gridRow } : {}),
     ...(payload.gridWidth !== undefined ? { grid_width: payload.gridWidth } : {}),
-    ...(payload.positionX !== undefined ? { position_x: payload.positionX } : {}),
-    ...(payload.positionY !== undefined ? { position_y: payload.positionY } : {}),
     ...(payload.iconKey !== undefined ? { icon_key: payload.iconKey } : {}),
     ...(payload.inventoryItemId !== undefined
       ? { inventory_item_id: payload.inventoryItemId }
@@ -130,9 +215,13 @@ function toGymLayoutCreatePayload(payload: GymLayoutEquipmentMutationInput) {
 
 function toFloorPlanMediaPayload(payload: FacilityFloorPlanMediaMutationInput) {
   return {
-    ...(payload.gridHeight !== undefined ? { grid_height: payload.gridHeight } : {}),
-    ...(payload.gridWidth !== undefined ? { grid_width: payload.gridWidth } : {}),
     ...(payload.imageUrl !== undefined ? { image_url: payload.imageUrl } : {}),
+    ...(payload.footprintCells !== undefined
+      ? { footprint_cells: payload.footprintCells }
+      : {}),
+    ...(payload.pathCells !== undefined ? { path_cells: payload.pathCells } : {}),
+    ...(payload.entryCells !== undefined ? { entry_cells: payload.entryCells } : {}),
+    ...(payload.exitCells !== undefined ? { exit_cells: payload.exitCells } : {}),
   };
 }
 
@@ -158,6 +247,14 @@ export function createGymLayoutApi(transport: ApiTransport) {
         "Unable to load floor plan media.",
       );
       return media.map(mapFloorPlanMedia);
+    },
+    async getSnapshot() {
+      return mapFacilityMapSnapshot(
+        await unwrapResponse<FacilityMapSnapshotApiRecord>(
+          transport.get("/gym-layout/snapshot"),
+          "Unable to load the facility map.",
+        ),
+      );
     },
     async createEquipment(payload: GymLayoutEquipmentMutationInput) {
       return mapGymLayoutEquipment(

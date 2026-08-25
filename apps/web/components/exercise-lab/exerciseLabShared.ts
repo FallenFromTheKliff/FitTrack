@@ -2,14 +2,16 @@ import type {
   CreateFitnessExerciseInput,
   ExerciseHandShapeProfileRecord,
   ExerciseMovementProfileRecord,
+  ExerciseAliasInput,
+  ExerciseMovementFamilySummaryRecord,
   ExerciseMuscleTargetRecord,
   FitnessExerciseCategory,
   FitnessExerciseRecord,
+  ExerciseTrackingMode,
 } from "@fittrack/api-client";
 import {
   getPrimaryExerciseMuscleGroup,
   normalizeExerciseHandShapeProfile,
-  normalizeExerciseMovementProfile,
   normalizeExerciseMuscleTargets,
 } from "@fittrack/utils";
 
@@ -29,14 +31,24 @@ export type SheetState =
 export type ConfirmationState =
   | { mode: "archive"; exercise: FitnessExerciseRecord; nextActive: boolean }
   | { mode: "discard-sheet" }
+  | {
+      mode: "shared-family";
+      affectedNames: string[];
+      family: ExerciseMovementFamilySummaryRecord;
+      movementProfile: ExerciseMovementProfileRecord;
+    }
   | null;
 export type ExerciseDraft = {
+  aliases: ExerciseAliasInput[];
   category: FitnessExerciseCategory;
   description: string;
   imageUrl: string;
   instructions: string;
   handShapeProfile: ExerciseHandShapeProfileRecord;
   movementProfile: ExerciseMovementProfileRecord | null;
+  movementProfileOverride: Partial<ExerciseMovementProfileRecord> | null;
+  movementFamily: ExerciseMovementFamilySummaryRecord | null;
+  trackingMode: ExerciseTrackingMode;
   muscleGroup: string;
   muscleTargets: ExerciseMuscleTargetRecord[];
   name: string;
@@ -86,11 +98,20 @@ export function filterEmptyExerciseDraft(
     draft.muscleGroup,
   );
   return {
+    aliases: draft.aliases,
     name: draft.name.trim(),
     category: draft.category,
     muscleGroup,
     muscleTargets,
-    movementProfile: normalizeExerciseMovementProfile(draft.movementProfile),
+    ...(draft.trackingMode === "manual"
+      ? { movementFamilyId: null, movementProfile: null, movementProfileOverride: null }
+      : draft.trackingMode === "override"
+        ? {
+            movementFamilyId: draft.movementFamily?.id ?? null,
+            movementProfileOverride: draft.movementProfile,
+          }
+        : { movementFamilyId: draft.movementFamily?.id ?? null }),
+    trackingMode: draft.trackingMode,
     handShapeProfile: normalizeExerciseHandShapeProfile(draft.handShapeProfile),
     ...(draft.description.trim()
       ? { description: draft.description.trim() }

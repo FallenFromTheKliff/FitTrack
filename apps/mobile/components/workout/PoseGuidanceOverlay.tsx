@@ -67,6 +67,7 @@ const JOINT_POINTS: Record<PoseJointName, [number, number, number, number, numbe
   hip: [11, 23, 25, 12, 24, 26],
   knee: [23, 25, 27, 24, 26, 28],
   shoulder: [13, 11, 23, 14, 12, 24],
+  ankle: [25, 27, 31, 26, 28, 32],
 };
 
 function normalizeAngle(value: number) {

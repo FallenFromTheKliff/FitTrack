@@ -7,6 +7,8 @@ from fastapi.testclient import TestClient
 
 from app.api.routes import equipment_detection_service, pose_session_service
 from app.main import app
+from app.models.pose import PoseAngleSignalEntry, PoseKeypoint, PoseMovementContract
+from app.services.pose_sessions import PoseSessionService
 
 
 @pytest.fixture(autouse=True)
@@ -25,6 +27,45 @@ def test_health_route_returns_ok(client: TestClient) -> None:
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_ankle_contract_and_landmark_angle_are_supported() -> None:
+    contract = PoseMovementContract.model_validate(
+        {
+            "exercise": "calf_raise",
+            "dominant_joint": "ankle",
+            "rep_thresholds": {
+                "down": {"angle": 80, "tolerance": 10},
+                "up": {"angle": 115, "tolerance": 10},
+            },
+            "secondary_check": "calf_raise_vertical_control",
+            "oscillating_joints": ["ankle"],
+            "rep_model": "bilateral",
+            "required_sides": "both",
+            "primary_joints": ["left_ankle", "right_ankle"],
+        }
+    )
+    angle_signal = PoseAngleSignalEntry(
+        captured_at_ms=0,
+        ankle=90,
+        left_ankle=90,
+        right_ankle=90,
+    )
+    def point(x: float, y: float) -> PoseKeypoint:
+        return PoseKeypoint(x=x, y=y, z=0, visibility=1)
+    keypoints = [point(0, 0) for _ in range(33)]
+    keypoints[25] = point(0, 1)
+    keypoints[27] = point(0, 0)
+    keypoints[31] = point(1, 0)
+    keypoints[26] = point(0, -1)
+    keypoints[28] = point(0, 0)
+    keypoints[32] = point(1, 0)
+
+    signals = PoseSessionService()._build_keypoint_angle_signals(keypoints)
+
+    assert contract.dominant_joint == "ankle"
+    assert angle_signal.left_ankle == 90
+    assert signals == {"left_ankle": 90.0, "right_ankle": 90.0, "ankle": 90.0}
 
 
 def test_equipment_detect_reports_missing_local_model(

@@ -1,4 +1,4 @@
-import type { EquipmentStatus } from "./base";
+import type { EquipmentStatus } from "./base.js";
 
 export type VenueEntityId = string | number;
 export type VenueImageFit = "cover" | "contain";
@@ -58,6 +58,8 @@ export type FloorVenueRecord = VenueRecord & {
   mapId: string;
   floorId: FacilityFloorId;
   sourceVenueId?: VenueEntityId;
+  isBookable?: boolean;
+  bookingBlockReason?: string | null;
 };
 
 const FLOOR_ONE: FacilityFloorDefinition = {

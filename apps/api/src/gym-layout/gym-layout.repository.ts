@@ -51,14 +51,9 @@ export type GymLayoutVenueRecord = NonNullable<
   GymLayoutEquipmentRecord['venue']
 >;
 
-export type FacilityFloorPlanMediaRow = {
-  created_at: Date;
-  floor_id: string;
-  grid_height: number;
-  grid_width: number;
-  image_url: string | null;
-  updated_at: Date;
-};
+export type FacilityFloorPlanMediaRow = Prisma.FacilityFloorPlanMediaGetPayload<
+  Record<string, never>
+>;
 
 @Injectable()
 export class GymLayoutRepository extends BaseRepository {
@@ -73,6 +68,13 @@ export class GymLayoutRepository extends BaseRepository {
       gymLayoutEquipmentOrderBy,
       gymLayoutEquipmentInclude,
     );
+  }
+
+  listSnapshotRegions() {
+    return this.prisma.amenity.findMany({
+      where: { is_active: true, is_mapped: true },
+      orderBy: [{ floor_id: 'asc' }, { display_order: 'asc' }, { name: 'asc' }],
+    });
   }
 
   listArchivedEquipment(): Promise<GymLayoutEquipmentRecord[]> {
@@ -126,7 +128,8 @@ export class GymLayoutRepository extends BaseRepository {
           type: 'CONFLICT',
           title: 'Inactive Inventory Item',
           status: 409,
-          detail: 'Inactive inventory equipment cannot be placed on a venue layout.',
+          detail:
+            'Inactive inventory equipment cannot be placed on a venue layout.',
         });
       }
 
@@ -187,12 +190,16 @@ export class GymLayoutRepository extends BaseRepository {
           },
         });
 
-        if (!inventory?.is_active || placedCount >= inventory.quantity_current) {
+        if (
+          !inventory?.is_active ||
+          placedCount >= inventory.quantity_current
+        ) {
           throw new ConflictException({
             type: 'PLACEMENT_CAPACITY_EXCEEDED',
             title: 'No Placeable Inventory Remaining',
             status: 409,
-            detail: 'The available inventory quantity cannot support this placement.',
+            detail:
+              'The available inventory quantity cannot support this placement.',
           });
         }
       }
@@ -243,12 +250,16 @@ export class GymLayoutRepository extends BaseRepository {
           },
         });
 
-        if (!inventory?.is_active || placedCount >= inventory.quantity_current) {
+        if (
+          !inventory?.is_active ||
+          placedCount >= inventory.quantity_current
+        ) {
           throw new ConflictException({
             type: 'PLACEMENT_CAPACITY_EXCEEDED',
             title: 'No Placeable Inventory Remaining',
             status: 409,
-            detail: 'The available inventory quantity cannot support restoring this placement.',
+            detail:
+              'The available inventory quantity cannot support restoring this placement.',
           });
         }
       }
@@ -296,32 +307,58 @@ export class GymLayoutRepository extends BaseRepository {
   }
 
   listFloorPlanMedia(): Promise<FacilityFloorPlanMediaRow[]> {
-    return this.prisma.$queryRaw<FacilityFloorPlanMediaRow[]>`
-      SELECT floor_id, image_url, grid_width, grid_height, created_at, updated_at
-      FROM facility_floor_plan_media
-      ORDER BY floor_id ASC
-    `;
+    return this.prisma.facilityFloorPlanMedia.findMany({
+      orderBy: { floor_id: 'asc' },
+    });
   }
 
   async upsertFloorPlanMedia(
     floorId: string,
-    updates: { gridHeight?: number; gridWidth?: number; imageUrl?: string | null },
+    updates: {
+      entryCells?: Prisma.InputJsonValue;
+      exitCells?: Prisma.InputJsonValue;
+      footprintCells?: Prisma.InputJsonValue;
+      imageUrl?: string | null;
+      pathCells?: Prisma.InputJsonValue;
+    },
   ): Promise<FacilityFloorPlanMediaRow> {
-    const rows = await this.prisma.$queryRaw<FacilityFloorPlanMediaRow[]>`
-      INSERT INTO facility_floor_plan_media (floor_id, image_url, grid_width, grid_height)
-      VALUES (${floorId}, ${updates.imageUrl ?? null}, ${updates.gridWidth ?? 15}, ${updates.gridHeight ?? 10})
-      ON CONFLICT (floor_id)
-      DO UPDATE SET
-        image_url = CASE
-          WHEN ${updates.imageUrl !== undefined} THEN ${updates.imageUrl ?? null}
-          ELSE facility_floor_plan_media.image_url
-        END,
-        grid_width = COALESCE(${updates.gridWidth}, facility_floor_plan_media.grid_width),
-        grid_height = COALESCE(${updates.gridHeight}, facility_floor_plan_media.grid_height),
-        updated_at = CURRENT_TIMESTAMP
-      RETURNING floor_id, image_url, grid_width, grid_height, created_at, updated_at
-    `;
-
-    return rows[0];
+    const fullFootprint = Array.from({ length: 10 }, (_, row) =>
+      Array.from({ length: 14 }, (_, column) => ({
+        column: column + 1,
+        row: row + 1,
+      })),
+    ).flat();
+    return this.prisma.facilityFloorPlanMedia.upsert({
+      where: { floor_id: floorId },
+      create: {
+        floor_id: floorId,
+        grid_width: 14,
+        grid_height: 10,
+        image_url: updates.imageUrl ?? null,
+        footprint_cells: updates.footprintCells ?? fullFootprint,
+        path_cells: updates.pathCells ?? [],
+        entry_cells: updates.entryCells ?? [],
+        exit_cells: updates.exitCells ?? [],
+      },
+      update: {
+        grid_width: 14,
+        grid_height: 10,
+        ...(updates.imageUrl !== undefined
+          ? { image_url: updates.imageUrl }
+          : {}),
+        ...(updates.footprintCells !== undefined
+          ? { footprint_cells: updates.footprintCells }
+          : {}),
+        ...(updates.pathCells !== undefined
+          ? { path_cells: updates.pathCells }
+          : {}),
+        ...(updates.entryCells !== undefined
+          ? { entry_cells: updates.entryCells }
+          : {}),
+        ...(updates.exitCells !== undefined
+          ? { exit_cells: updates.exitCells }
+          : {}),
+      },
+    });
   }
 }

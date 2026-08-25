@@ -1,11 +1,11 @@
 import { Type } from 'class-transformer';
 import {
+  IsArray,
   IsBoolean,
   IsEnum,
   IsInt,
   IsIn,
   IsNotEmpty,
-  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
@@ -13,6 +13,7 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { EquipmentStatus } from '@prisma/client';
@@ -20,6 +21,22 @@ import { EquipmentStatus } from '@prisma/client';
 import { TrimString } from '../../common/validators';
 
 const FACILITY_FLOOR_IDS = ['floor-1', 'floor-2', 'floor-3'] as const;
+
+export class FacilityGridCellDTO {
+  @ApiProperty({ example: 1, minimum: 1, maximum: 14 })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(14)
+  column: number;
+
+  @ApiProperty({ example: 1, minimum: 1, maximum: 10 })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(10)
+  row: number;
+}
 
 export class CreateEquipmentDTO {
   @ApiProperty({ example: 'Leg Press Station' })
@@ -52,31 +69,19 @@ export class CreateEquipmentDTO {
   @IsUUID(undefined, { message: 'venue_id must be a UUID' })
   venue_id: string;
 
-  @ApiPropertyOptional({ example: 10 })
-  @IsOptional()
+  @ApiProperty({ example: 10, minimum: 1, maximum: 14 })
   @Type(() => Number)
   @IsInt({ message: 'grid_column must be an integer' })
   @Min(1, { message: 'grid_column must be at least 1' })
-  grid_column?: number;
+  @Max(14, { message: 'grid_column must be at most 14' })
+  grid_column: number;
 
-  @ApiPropertyOptional({ example: 4 })
-  @IsOptional()
+  @ApiProperty({ example: 4, minimum: 1, maximum: 10 })
   @Type(() => Number)
   @IsInt({ message: 'grid_row must be an integer' })
   @Min(1, { message: 'grid_row must be at least 1' })
-  grid_row?: number;
-
-  @ApiPropertyOptional({ example: 67.86 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber({}, { message: 'position_x must be a number' })
-  position_x?: number;
-
-  @ApiPropertyOptional({ example: 35 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber({}, { message: 'position_y must be a number' })
-  position_y?: number;
+  @Max(10, { message: 'grid_row must be at most 10' })
+  grid_row: number;
 
   @ApiPropertyOptional({ example: 2 })
   @IsOptional()
@@ -139,6 +144,7 @@ export class UpdateEquipmentDTO {
   @Type(() => Number)
   @IsInt({ message: 'grid_column must be an integer' })
   @Min(1, { message: 'grid_column must be at least 1' })
+  @Max(14, { message: 'grid_column must be at most 14' })
   grid_column?: number;
 
   @ApiPropertyOptional({ example: 5 })
@@ -146,19 +152,8 @@ export class UpdateEquipmentDTO {
   @Type(() => Number)
   @IsInt({ message: 'grid_row must be an integer' })
   @Min(1, { message: 'grid_row must be at least 1' })
+  @Max(10, { message: 'grid_row must be at most 10' })
   grid_row?: number;
-
-  @ApiPropertyOptional({ example: 13 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber({}, { message: 'position_x must be a number' })
-  position_x?: number;
-
-  @ApiPropertyOptional({ example: 8.5 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber({}, { message: 'position_y must be a number' })
-  position_y?: number;
 
   @ApiPropertyOptional({ example: 2 })
   @IsOptional()
@@ -228,13 +223,22 @@ export class GymLayoutEquipmentResponseDTO {
   @ApiPropertyOptional({ example: 2, nullable: true })
   grid_height: number | null;
 
-  @ApiPropertyOptional({ example: '22222222-2222-4222-8222-222222222222', nullable: true })
+  @ApiPropertyOptional({
+    example: '22222222-2222-4222-8222-222222222222',
+    nullable: true,
+  })
   inventory_item_id: string | null;
 
-  @ApiPropertyOptional({ example: '33333333-3333-4333-8333-333333333333', nullable: true })
+  @ApiPropertyOptional({
+    example: '33333333-3333-4333-8333-333333333333',
+    nullable: true,
+  })
   venue_id: string | null;
 
-  @ApiPropertyOptional({ example: 'https://cdn.fittrack.test/images/bench.png', nullable: true })
+  @ApiPropertyOptional({
+    example: 'https://cdn.fittrack.test/images/bench.png',
+    nullable: true,
+  })
   image_url: string | null;
 
   @ApiProperty({ example: 1 })
@@ -270,19 +274,33 @@ export class UpdateFacilityFloorPlanMediaDTO {
   @MaxLength(500, { message: 'image_url must not exceed 500 characters' })
   image_url?: string | null;
 
-  @ApiPropertyOptional({ example: 15, minimum: 8, maximum: 30 })
+  @ApiPropertyOptional({ type: [FacilityGridCellDTO] })
   @IsOptional()
-  @IsInt()
-  @Min(8)
-  @Max(30)
-  grid_width?: number;
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => FacilityGridCellDTO)
+  footprint_cells?: FacilityGridCellDTO[];
 
-  @ApiPropertyOptional({ example: 10, minimum: 6, maximum: 20 })
+  @ApiPropertyOptional({ type: [FacilityGridCellDTO] })
   @IsOptional()
-  @IsInt()
-  @Min(6)
-  @Max(20)
-  grid_height?: number;
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => FacilityGridCellDTO)
+  path_cells?: FacilityGridCellDTO[];
+
+  @ApiPropertyOptional({ type: [FacilityGridCellDTO] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => FacilityGridCellDTO)
+  entry_cells?: FacilityGridCellDTO[];
+
+  @ApiPropertyOptional({ type: [FacilityGridCellDTO] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => FacilityGridCellDTO)
+  exit_cells?: FacilityGridCellDTO[];
 }
 
 export class FacilityFloorPlanMediaResponseDTO {
@@ -295,11 +313,23 @@ export class FacilityFloorPlanMediaResponseDTO {
   })
   image_url: string | null;
 
-  @ApiProperty({ example: 15 })
+  @ApiProperty({ example: 14 })
   grid_width: number;
 
   @ApiProperty({ example: 10 })
   grid_height: number;
+
+  @ApiProperty({ type: [FacilityGridCellDTO] })
+  footprint_cells: FacilityGridCellDTO[];
+
+  @ApiProperty({ type: [FacilityGridCellDTO] })
+  path_cells: FacilityGridCellDTO[];
+
+  @ApiProperty({ type: [FacilityGridCellDTO] })
+  entry_cells: FacilityGridCellDTO[];
+
+  @ApiProperty({ type: [FacilityGridCellDTO] })
+  exit_cells: FacilityGridCellDTO[];
 
   @ApiProperty({ example: '2026-04-28T03:00:00.000Z' })
   created_at: string;

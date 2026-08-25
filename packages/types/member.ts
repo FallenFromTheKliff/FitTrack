@@ -1,4 +1,4 @@
-import type { Role } from "./base";
+import type { Role } from "./base.js";
 
 export interface MemberProfile {
   firstName?: string | null;

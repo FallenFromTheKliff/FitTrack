@@ -65,7 +65,9 @@ describe('GymLayoutController', () => {
   });
 
   it('lists archived equipment through the service', async () => {
-    gymLayoutService.listArchivedEquipment.mockResolvedValue([{ id: 'equipment-1' }]);
+    gymLayoutService.listArchivedEquipment.mockResolvedValue([
+      { id: 'equipment-1' },
+    ]);
 
     await controller.listArchivedEquipment();
 
@@ -92,13 +94,16 @@ describe('GymLayoutController', () => {
     });
   });
 
-  it.each(['listArchivedEquipment', 'createEquipment', 'updateEquipment', 'restoreEquipment', 'deleteEquipment'] as const)(
-    'locks %s to admin users',
-    (methodName) => {
-      expect(getGuardMetadata(methodName)).toEqual([JwtAuthGuard, RolesGuard]);
-      expect(getRolesMetadata(methodName)).toEqual([UserRole.admin]);
-    },
-  );
+  it.each([
+    'listArchivedEquipment',
+    'createEquipment',
+    'updateEquipment',
+    'restoreEquipment',
+    'deleteEquipment',
+  ] as const)('locks %s to admin users', (methodName) => {
+    expect(getGuardMetadata(methodName)).toEqual([JwtAuthGuard, RolesGuard]);
+    expect(getRolesMetadata(methodName)).toEqual([UserRole.admin]);
+  });
 
   it('restores equipment through the service', async () => {
     gymLayoutService.restoreEquipment.mockResolvedValue({ id: 'equipment-1' });

@@ -19,6 +19,9 @@ describe('GymLayoutService', () => {
     updateEquipment: jest.fn(),
     softDeleteEquipment: jest.fn(),
     restoreEquipment: jest.fn(),
+    listFloorPlanMedia: jest.fn(),
+    listSnapshotRegions: jest.fn(),
+    upsertFloorPlanMedia: jest.fn(),
   };
 
   const jwtService = {
@@ -53,6 +56,9 @@ describe('GymLayoutService', () => {
 
     service = module.get<GymLayoutService>(GymLayoutService);
     jest.clearAllMocks();
+    repo.listFloorPlanMedia.mockResolvedValue([]);
+    repo.listSnapshotRegions.mockResolvedValue([]);
+    repo.listActiveEquipment.mockResolvedValue([]);
   });
 
   it('authenticates socket tokens and mirrors HTTP guard blacklist checks', async () => {
@@ -157,6 +163,157 @@ describe('GymLayoutService', () => {
         position_y: 35,
       }),
     ]);
+  });
+
+  it('returns one member-safe snapshot with support, maintenance, paths, and equipment', async () => {
+    repo.listFloorPlanMedia.mockResolvedValue([
+      {
+        floor_id: 'floor-1',
+        image_url: null,
+        grid_width: 14,
+        grid_height: 10,
+        footprint_cells: [{ column: 1, row: 1 }],
+        path_cells: [{ column: 1, row: 1 }],
+        entry_cells: [{ column: 1, row: 1 }],
+        exit_cells: [],
+        created_at: new Date(),
+        updated_at: new Date(),
+      },
+    ]);
+    repo.listSnapshotRegions.mockResolvedValue([
+      {
+        id: 'available',
+        name: 'Court',
+        floor_id: 'floor-1',
+        grid_column: 2,
+        grid_row: 1,
+        grid_width: 1,
+        grid_height: 1,
+        is_active: true,
+        is_mapped: true,
+        is_reservable: true,
+        status: EquipmentStatus.available,
+        hourly_rate: 100,
+        minimum_hours: 1,
+        capacity: 4,
+      },
+      {
+        id: 'maintenance',
+        name: 'Ring',
+        floor_id: 'floor-1',
+        grid_column: 3,
+        grid_row: 1,
+        grid_width: 1,
+        grid_height: 1,
+        is_active: true,
+        is_mapped: true,
+        is_reservable: true,
+        status: EquipmentStatus.maintenance,
+        hourly_rate: 100,
+        minimum_hours: 1,
+        capacity: 4,
+      },
+      {
+        id: 'support',
+        name: 'Reception',
+        floor_id: 'floor-1',
+        grid_column: 4,
+        grid_row: 1,
+        grid_width: 1,
+        grid_height: 1,
+        is_active: true,
+        is_mapped: true,
+        is_reservable: false,
+        status: EquipmentStatus.available,
+        hourly_rate: 0,
+        minimum_hours: 1,
+        capacity: 4,
+      },
+    ]);
+    repo.listActiveEquipment.mockResolvedValue([
+      {
+        id: 'equipment-1',
+        floor_id: 'floor-1',
+        grid_column: 1,
+        grid_row: 1,
+        name: 'Bench',
+        type: 'strength',
+        position_x: 3.57,
+        position_y: 5,
+        status: EquipmentStatus.available,
+        icon_key: null,
+        is_active: true,
+        created_at: new Date(),
+        updated_at: new Date(),
+      },
+    ]);
+    const snapshot = await service.getSnapshot();
+    expect(snapshot.floors[0].regions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'available', is_bookable: true }),
+        expect.objectContaining({ id: 'maintenance', is_bookable: false }),
+        expect.objectContaining({ id: 'support', region_kind: 'support' }),
+      ]),
+    );
+    expect(snapshot.floors[0].equipment).toHaveLength(1);
+    expect(snapshot.floors[0].path_cells).toEqual([{ column: 1, row: 1 }]);
+  });
+
+  it('rejects malformed floor cells instead of silently dropping them', async () => {
+    await expect(
+      service.updateFloorPlanMedia('floor-1', {
+        path_cells: [{ column: 15, row: 1 }],
+      }),
+    ).rejects.toThrow('Bad Request Exception');
+    expect(repo.upsertFloorPlanMedia).not.toHaveBeenCalled();
+  });
+
+  it('rejects a footprint edit that excludes a mapped region', async () => {
+    repo.listSnapshotRegions.mockResolvedValue([
+      {
+        floor_id: 'floor-1',
+        grid_column: 2,
+        grid_row: 1,
+        grid_width: 1,
+        grid_height: 1,
+      },
+    ]);
+    await expect(
+      service.updateFloorPlanMedia('floor-1', {
+        footprint_cells: [{ column: 1, row: 1 }],
+      }),
+    ).rejects.toThrow('Bad Request Exception');
+    expect(repo.upsertFloorPlanMedia).not.toHaveBeenCalled();
+  });
+
+  it('rejects a path cell inside a mapped region', async () => {
+    repo.listSnapshotRegions.mockResolvedValue([
+      {
+        floor_id: 'floor-1',
+        grid_column: 1,
+        grid_row: 1,
+        grid_width: 1,
+        grid_height: 1,
+      },
+    ]);
+    await expect(
+      service.updateFloorPlanMedia('floor-1', {
+        path_cells: [{ column: 1, row: 1 }],
+      }),
+    ).rejects.toThrow('Bad Request Exception');
+    expect(repo.upsertFloorPlanMedia).not.toHaveBeenCalled();
+  });
+
+  it('rejects a footprint edit that excludes mapped equipment', async () => {
+    repo.listActiveEquipment.mockResolvedValue([
+      { floor_id: 'floor-1', grid_column: 2, grid_row: 1 },
+    ]);
+    await expect(
+      service.updateFloorPlanMedia('floor-1', {
+        footprint_cells: [{ column: 1, row: 1 }],
+      }),
+    ).rejects.toThrow('Bad Request Exception');
+    expect(repo.upsertFloorPlanMedia).not.toHaveBeenCalled();
   });
 
   it('hydrates the Redis status cache when the realtime snapshot is cold', async () => {
@@ -277,6 +434,76 @@ describe('GymLayoutService', () => {
     );
   });
 
+  it('rejects missing, legacy percentage, and out-of-range placement input', async () => {
+    repo.findActiveVenueByIdOrThrow.mockResolvedValue({
+      floor_id: 'floor-1',
+      grid_column: 1,
+      grid_row: 1,
+      grid_width: 14,
+      grid_height: 10,
+    });
+    const base = {
+      floor_id: 'floor-1' as const,
+      name: 'Strict Cell Node',
+      type: 'strength',
+      inventory_item_id: '22222222-2222-4222-8222-222222222222',
+      venue_id: '33333333-3333-4333-8333-333333333333',
+    };
+
+    await expect(service.createEquipment(base as never)).rejects.toThrow(
+      'Bad Request Exception',
+    );
+    await expect(
+      service.createEquipment({
+        ...base,
+        position_x: 50,
+        position_y: 50,
+      } as never),
+    ).rejects.toThrow('Bad Request Exception');
+    await expect(
+      service.createEquipment({ ...base, grid_column: 999, grid_row: 1 }),
+    ).rejects.toThrow('Bad Request Exception');
+    expect(repo.createEquipment).not.toHaveBeenCalled();
+  });
+
+  it('uses the safe full-grid footprint when floor media is absent', async () => {
+    repo.findActiveVenueByIdOrThrow.mockResolvedValue({
+      floor_id: 'floor-1',
+      grid_column: 1,
+      grid_row: 1,
+      grid_width: 14,
+      grid_height: 10,
+    });
+    repo.createEquipment.mockResolvedValue({
+      id: 'equipment-edge',
+      floor_id: 'floor-1',
+      grid_column: 14,
+      grid_row: 10,
+      name: 'Edge Node',
+      type: 'strength',
+      position_x: 96.43,
+      position_y: 95,
+      status: EquipmentStatus.available,
+      icon_key: null,
+      is_active: true,
+      created_at: new Date(),
+      updated_at: new Date(),
+    });
+
+    await service.createEquipment({
+      floor_id: 'floor-1',
+      grid_column: 14,
+      grid_row: 10,
+      name: 'Edge Node',
+      type: 'strength',
+      inventory_item_id: '22222222-2222-4222-8222-222222222222',
+      venue_id: '33333333-3333-4333-8333-333333333333',
+    });
+    expect(repo.createEquipment).toHaveBeenCalledWith(
+      expect.objectContaining({ grid_column: 14, grid_row: 10 }),
+    );
+  });
+
   it('updates only fields provided in the DTO', async () => {
     repo.findEquipmentByIdOrThrow.mockResolvedValue({
       id: 'equipment-1',
@@ -298,6 +525,8 @@ describe('GymLayoutService', () => {
       floor_id: 'floor-2',
       grid_column: 11,
       grid_row: 4,
+      grid_width: 1,
+      grid_height: 1,
       name: 'Leg Press Station',
       type: 'strength',
       position_x: 75,
@@ -319,6 +548,8 @@ describe('GymLayoutService', () => {
     expect(repo.updateEquipment).toHaveBeenCalledWith('equipment-1', {
       grid_column: 11,
       grid_row: 4,
+      grid_width: 1,
+      grid_height: 1,
       position_x: 75,
       position_y: 35,
       status: EquipmentStatus.maintenance,

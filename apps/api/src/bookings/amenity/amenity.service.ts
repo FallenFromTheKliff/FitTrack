@@ -7,6 +7,14 @@ import {
   CreateAmenityFeedbackDTO,
   UpdateAmenityDTO,
 } from './dto/amenity.dto';
+import {
+  assertNoRegionOverlap,
+  assertRectangleInFootprint,
+  expandFacilityRectangle,
+  facilityCellKey,
+  normalizeFacilityCells,
+  type FacilityGridRectangle,
+} from '../../gym-layout/facility-layout.validation';
 
 const AMENITY_UPDATE_FIELDS = [
   'name',
@@ -34,11 +42,16 @@ const AMENITY_UPDATE_FIELDS = [
   'is_active',
 ] as const;
 
-function getAmenityFeedbackUserName(profile?: {
-  first_name?: string | null;
-  last_name?: string | null;
-} | null) {
-  const name = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ').trim();
+function getAmenityFeedbackUserName(
+  profile?: {
+    first_name?: string | null;
+    last_name?: string | null;
+  } | null,
+) {
+  const name = [profile?.first_name, profile?.last_name]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
   return name || 'Unknown user';
 }
 
@@ -202,8 +215,17 @@ export class AmenityService {
     return this.repo.findActiveAmenityByIdOrThrow(id);
   }
 
-  createAmenity(dto: CreateAmenityDTO): Promise<Amenity> {
-    return this.repo.createAmenity(this.toCreateInput(dto));
+  async createAmenity(dto: CreateAmenityDTO): Promise<Amenity> {
+    const data = this.toCreateInput(dto);
+    await this.validateLayout(null, {
+      floorId: String(data.floor_id),
+      gridColumn: Number(data.grid_column),
+      gridRow: Number(data.grid_row),
+      gridWidth: Number(data.grid_width),
+      gridHeight: Number(data.grid_height),
+      isMapped: true,
+    });
+    return this.repo.createAmenity(data);
   }
 
   async updateAmenity(id: string, dto: UpdateAmenityDTO): Promise<Amenity> {
@@ -212,7 +234,150 @@ export class AmenityService {
     const nextHourlyRate = dto.hourly_rate ?? existing.hourly_rate;
     assertReservableHourlyRate(nextReservable, nextHourlyRate);
 
-    return this.repo.updateAmenity(id, this.toUpdateInput(dto));
+    const data = this.toUpdateInput(dto);
+    const layoutRequested =
+      dto.floor_id !== undefined ||
+      dto.grid_column !== undefined ||
+      dto.grid_row !== undefined ||
+      dto.grid_width !== undefined ||
+      dto.grid_height !== undefined ||
+      dto.is_mapped !== undefined;
+    if (!layoutRequested) return this.repo.updateAmenity(id, data);
+    const next = {
+      floorId: dto.floor_id ?? existing.floor_id,
+      gridColumn: dto.grid_column ?? existing.grid_column,
+      gridRow: dto.grid_row ?? existing.grid_row,
+      gridWidth: dto.grid_width ?? existing.grid_width,
+      gridHeight: dto.grid_height ?? existing.grid_height,
+      isMapped: dto.is_mapped ?? existing.is_mapped,
+    };
+    const equipmentMoves = await this.validateLayout(
+      id,
+      {
+        floorId: next.floorId,
+        gridColumn: next.gridColumn,
+        gridRow: next.gridRow,
+        gridWidth: next.gridWidth,
+        gridHeight: next.gridHeight,
+        isMapped: next.isMapped,
+      },
+      existing,
+    );
+    return this.repo.moveAmenityAndEquipment(id, data, equipmentMoves);
+  }
+
+  private async validateLayout(
+    amenityId: string | null,
+    layout: {
+      floorId: string | null;
+      gridColumn: number | null;
+      gridRow: number | null;
+      gridWidth: number | null;
+      gridHeight: number | null;
+      isMapped: boolean;
+    },
+    existing?: Amenity,
+  ) {
+    if (!layout.isMapped) return [];
+    if (
+      layout.floorId == null ||
+      layout.gridColumn == null ||
+      layout.gridRow == null ||
+      layout.gridWidth == null ||
+      layout.gridHeight == null
+    ) {
+      throw new BadRequestException({
+        type: 'INVALID_FACILITY_LAYOUT',
+        title: 'Mapped Region Geometry Required',
+        status: 400,
+        detail: 'Mapped regions require a floor and complete grid rectangle.',
+      });
+    }
+    const rectangle: FacilityGridRectangle = {
+      gridColumn: layout.gridColumn,
+      gridRow: layout.gridRow,
+      gridWidth: layout.gridWidth,
+      gridHeight: layout.gridHeight,
+    };
+    const [floorMap, others, equipment] = await Promise.all([
+      this.repo.getFloorMap(layout.floorId),
+      this.repo.listMappedAmenitiesForFloor(
+        layout.floorId,
+        amenityId ?? undefined,
+      ),
+      amenityId
+        ? this.repo.listEquipmentForVenue(amenityId)
+        : Promise.resolve<
+            Awaited<ReturnType<AmenityRepository['listEquipmentForVenue']>>
+          >([]),
+    ]);
+    const footprint = normalizeFacilityCells(floorMap?.footprint_cells);
+    assertRectangleInFootprint(rectangle, footprint);
+    assertNoRegionOverlap(
+      rectangle,
+      others.flatMap((region) =>
+        region.grid_column == null ||
+        region.grid_row == null ||
+        region.grid_width == null ||
+        region.grid_height == null
+          ? []
+          : [
+              {
+                gridColumn: region.grid_column,
+                gridRow: region.grid_row,
+                gridWidth: region.grid_width,
+                gridHeight: region.grid_height,
+              },
+            ],
+      ),
+    );
+    const occupied = new Set(
+      expandFacilityRectangle(rectangle).map(facilityCellKey),
+    );
+    if (
+      normalizeFacilityCells(floorMap?.path_cells).some((cell) =>
+        occupied.has(facilityCellKey(cell)),
+      )
+    ) {
+      throw new BadRequestException({
+        type: 'INVALID_FACILITY_LAYOUT',
+        title: 'Region Crosses Path',
+        status: 400,
+        detail: 'Mapped regions cannot overlap published path cells.',
+      });
+    }
+    const columnDelta =
+      existing?.grid_column == null
+        ? 0
+        : rectangle.gridColumn - existing.grid_column;
+    const rowDelta =
+      existing?.grid_row == null ? 0 : rectangle.gridRow - existing.grid_row;
+    const footprintKeys = new Set(footprint.map(facilityCellKey));
+    const moves = equipment.map((item) => ({
+      id: item.id,
+      gridColumn: (item.grid_column ?? 1) + columnDelta,
+      gridRow: (item.grid_row ?? 1) + rowDelta,
+    }));
+    const uniqueCells = new Set(
+      moves.map((move) => `${move.gridColumn}:${move.gridRow}`),
+    );
+    if (
+      uniqueCells.size !== moves.length ||
+      moves.some(
+        (move) =>
+          !occupied.has(`${move.gridColumn}:${move.gridRow}`) ||
+          !footprintKeys.has(`${move.gridColumn}:${move.gridRow}`),
+      )
+    ) {
+      throw new BadRequestException({
+        type: 'INVALID_VENUE_CONTAINMENT',
+        title: 'Equipment Outside Venue Bounds',
+        status: 400,
+        detail:
+          'The venue change would leave equipment outside its venue or overlap equipment cells.',
+      });
+    }
+    return moves;
   }
 
   async deleteAmenity(id: string): Promise<void> {
@@ -251,7 +416,11 @@ export class AmenityService {
     return feedback.map((entry) => this.toFeedbackResponse(entry));
   }
 
-  private toFeedbackResponse(entry: Awaited<ReturnType<AmenityRepository['listAmenityFeedback']>>[number]) {
+  private toFeedbackResponse(
+    entry: Awaited<
+      ReturnType<AmenityRepository['listAmenityFeedback']>
+    >[number],
+  ) {
     return {
       amenity: {
         id: entry.amenity.id,

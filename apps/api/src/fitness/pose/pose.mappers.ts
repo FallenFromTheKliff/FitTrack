@@ -212,12 +212,13 @@ export function toDecimalNumber(
 
 export function toPoseJointName(
   value: string | null | undefined,
-): 'elbow' | 'shoulder' | 'hip' | 'knee' | null {
+): 'elbow' | 'shoulder' | 'hip' | 'knee' | 'ankle' | null {
   if (
     value === 'elbow' ||
     value === 'shoulder' ||
     value === 'hip' ||
-    value === 'knee'
+    value === 'knee' ||
+    value === 'ankle'
   ) {
     return value;
   }

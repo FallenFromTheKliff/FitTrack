@@ -4,6 +4,7 @@ import { JwtModule } from '@nestjs/jwt';
 
 import { AiPythonClientService } from '../../ai/ai-python-client.service';
 import { MembershipModule } from '../../membership/membership.module';
+import { ExerciseModule } from '../exercise/exercise.module';
 import { PoseController } from './pose.controller';
 import { PoseGateway } from './pose.gateway';
 import { PoseRepository } from './pose.repository';
@@ -16,6 +17,7 @@ type JwtExpiresIn =
 
 @Module({
   imports: [
+    ExerciseModule,
     MembershipModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],

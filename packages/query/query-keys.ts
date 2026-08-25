@@ -196,6 +196,7 @@ const notificationKeys = {
 };
 
 const gymLayoutKeys = {
+  snapshot: () => ["gym-layout", "snapshot"] as const,
   equipment: () => ["gym-layout", "equipment"] as const,
   archivedEquipment: () => ["gym-layout", "equipment", "archived"] as const,
   floorPlanMedia: () => ["gym-layout", "floor-plans", "media"] as const,
@@ -682,6 +683,7 @@ export const queryKeys = {
   fitnessIntegritySummary: fitnessKeys.integritySummary,
   fitnessPoseSession: fitnessKeys.poseSession,
   gymLayoutEquipment: gymLayoutKeys.equipment,
+  facilityMapSnapshot: gymLayoutKeys.snapshot,
   gymLayoutArchivedEquipment: gymLayoutKeys.archivedEquipment,
   gymLayoutFloorPlanMedia: gymLayoutKeys.floorPlanMedia,
   gymKnowledgeProfile: gymKnowledgeKeys.profile,

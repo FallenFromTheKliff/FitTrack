@@ -21,6 +21,7 @@ import { seedId } from '../ids';
 import { dateOnly, daysFrom, fixedTime } from '../time';
 import type { DynamicSeedContext } from '../types';
 import { activityDateFor, memberVolumeCount } from '../volumes';
+import { buildGymEquipmentSeedUpdate } from '../../../../../packages/utils/facility-map-seed';
 
 export const GYM_EQUIPMENT = [
   [
@@ -28,44 +29,52 @@ export const GYM_EQUIPMENT = [
     'Power Rack 1',
     'rack',
     'floor-1',
-    2,
+    4,
     2,
     140,
     110,
     EquipmentStatus.available,
+    'resistance-bands',
+    'general-floor',
   ],
   [
     'rack-2',
     'Power Rack 2',
     'rack',
     'floor-1',
-    4,
+    5,
     2,
     260,
     110,
     EquipmentStatus.occupied,
+    'resistance-bands',
+    'general-floor',
   ],
   [
     'bench-1',
     'Flat Bench 1',
     'bench',
     'floor-1',
-    3,
     4,
+    3,
     210,
     250,
     EquipmentStatus.available,
+    'foam-rollers',
+    'general-floor',
   ],
   [
     'treadmill-1',
     'Treadmill 1',
     'cardio',
     'floor-2',
-    2,
-    1,
+    3,
+    3,
     120,
     80,
     EquipmentStatus.available,
+    'jump-ropes',
+    'boxing-ring',
   ],
   [
     'bike-1',
@@ -73,10 +82,12 @@ export const GYM_EQUIPMENT = [
     'cardio',
     'floor-2',
     4,
-    1,
+    3,
     260,
     90,
     EquipmentStatus.maintenance,
+    'boxing-gloves',
+    'boxing-ring',
   ],
   [
     'cable-1',
@@ -88,6 +99,8 @@ export const GYM_EQUIPMENT = [
     420,
     220,
     EquipmentStatus.available,
+    'resistance-bands',
+    'general-floor',
   ],
 ] as const;
 
@@ -740,35 +753,49 @@ async function seedGymLayoutAndKnowledge(ctx: DynamicSeedContext) {
       positionX,
       positionY,
       status,
+      inventoryItemKey,
+      venueKey,
     ] = equipment;
-    await ctx.prisma.gymEquipment.upsert({
-      where: { id: seedId(`gym-equipment:${key}`) },
-      update: {
-        floor_id: floorId,
-        grid_column: gridColumn,
-        grid_row: gridRow,
-        icon_key: type,
-        is_active: true,
-        name,
-        position_x: new Prisma.Decimal(positionX),
-        position_y: new Prisma.Decimal(positionY),
-        status,
-        type,
-      },
-      create: {
-        id: seedId(`gym-equipment:${key}`),
-        floor_id: floorId,
-        grid_column: gridColumn,
-        grid_row: gridRow,
-        icon_key: type,
-        is_active: true,
-        name,
-        position_x: new Prisma.Decimal(positionX),
-        position_y: new Prisma.Decimal(positionY),
-        status,
-        type,
-      },
-    });
+    const desiredId = seedId(`gym-equipment:${key}`);
+    const [existingById, existingByName] = await Promise.all([
+      ctx.prisma.gymEquipment.findUnique({
+        where: { id: desiredId },
+        select: { id: true },
+      }),
+      ctx.prisma.gymEquipment.findFirst({
+        where: { name },
+        orderBy: { created_at: 'asc' },
+        select: { id: true },
+      }),
+    ]);
+    const data = {
+      floor_id: floorId,
+      grid_column: gridColumn,
+      grid_row: gridRow,
+      grid_width: 1,
+      grid_height: 1,
+      icon_key: type,
+      inventory_item_id: seedId(`equipment-item:${inventoryItemKey}`),
+      is_active: true,
+      name,
+      position_x: new Prisma.Decimal(positionX),
+      position_y: new Prisma.Decimal(positionY),
+      status,
+      type,
+      venue_id:
+        ctx.state.amenityIds[venueKey] ?? seedId(`amenity:${venueKey}`),
+    };
+    const existing = existingById ?? existingByName;
+    if (existing) {
+      await ctx.prisma.gymEquipment.update({
+        where: { id: existing.id },
+        data: buildGymEquipmentSeedUpdate(ctx.config.mode, data),
+      });
+    } else {
+      await ctx.prisma.gymEquipment.create({
+        data: { id: desiredId, ...data },
+      });
+    }
   }
 
   for (let day = 0; day < 7; day += 1) {

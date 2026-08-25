@@ -68,9 +68,11 @@ import TimeSlotModal, {
 import SearchableBookingPickerModal, {
   type BookingPickerOption,
 } from "@/components/modals/booking/SearchableBookingPickerModal";
+import { resolveReservationPreselection } from "./reservationPreselection";
 
 type Props = {
   isVisible: boolean;
+  preselectedVenueId?: string | null;
   onClose: () => void;
   onSuccess?: () => void;
 };
@@ -349,6 +351,7 @@ function formatCurrency(value: number) {
 
 export default function ReservationModal({
   isVisible,
+  preselectedVenueId,
   onClose,
   onSuccess,
 }: Props) {
@@ -474,6 +477,17 @@ export default function ReservationModal({
         : null,
     [bookableVenues, selectedVenue],
   );
+  useEffect(() => {
+    if (!isVisible || !preselectedVenueId) return;
+    const match = resolveReservationPreselection(
+      bookableVenues.map(({ venue }) => venue),
+      preselectedVenueId,
+    );
+    if (match) {
+      setSelectedVenue(match);
+      setVenueFieldError("");
+    }
+  }, [bookableVenues, isVisible, preselectedVenueId]);
   const selectedVenuePresentation = useMemo(
     () =>
       selectedBookableVenue

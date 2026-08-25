@@ -5,6 +5,7 @@ import { Group, Image as KonvaImage, Layer, Rect, Stage, Text, Transformer } fro
 import type Konva from "konva";
 import type {
   GymLayoutEquipmentRecord,
+  FacilityGridCell,
   ThemeColors,
 } from "@fittrack/types";
 import {
@@ -28,6 +29,12 @@ type Props = {
   colors: ThemeColors;
   equipmentById: Record<string, EquipmentDisplay>;
   equipment?: GymLayoutEquipmentRecord[];
+  footprintCells?: FacilityGridCell[];
+  pathCells?: FacilityGridCell[];
+  entryCells?: FacilityGridCell[];
+  exitCells?: FacilityGridCell[];
+  routeCells?: FacilityGridCell[];
+  cellTool?: import("@/hooks/facilities/useFacilities").FacilityCellEditorTool | null;
   floorImageUrl?: string | null;
   floorBounds?: { gridHeight: number; gridWidth: number };
   height?: number;
@@ -48,7 +55,7 @@ type Props = {
     equipmentId: string,
     venueMapId: string,
     placement: { gridColumn: number; gridRow: number },
-  ) => void;
+  ) => boolean | Promise<boolean>;
   onMoveVenue?: (
     venueMapId: string,
     placement: { gridColumn: number; gridRow: number },
@@ -73,6 +80,10 @@ type Props = {
   ) => void;
   onSelectVenue: (venue: FloorVenueRecord) => void;
   onSelectEquipment?: (equipment: GymLayoutEquipmentRecord) => void;
+  onCellAction?: (
+    tool: import("@/hooks/facilities/useFacilities").FacilityCellEditorTool,
+    cell: FacilityGridCell,
+  ) => void;
 };
 
 type ZoneTone = "available" | "equipment" | "reservable" | "support";
@@ -250,6 +261,7 @@ const EquipmentNode = memo(function EquipmentNode({
   onMove,
   onSelect,
   venue,
+  venues,
   planX,
   planY,
   cellWidth,
@@ -267,9 +279,10 @@ const EquipmentNode = memo(function EquipmentNode({
     equipmentId: string,
     venueMapId: string,
     placement: { gridColumn: number; gridRow: number },
-  ) => void;
+  ) => boolean | Promise<boolean>;
   onSelect?: (equipment: GymLayoutEquipmentRecord) => void;
   venue: FloorVenueRecord;
+  venues: FloorVenueRecord[];
   planX: number;
   planY: number;
   cellWidth: number;
@@ -278,18 +291,45 @@ const EquipmentNode = memo(function EquipmentNode({
 }) {
   const image = useLoadedImage(record.imageUrl);
   const accent = statusColor(record.status, colors);
-  const draggable = isEditMode && Boolean(onMove);
-  const venueColumn = venue.gridColumn ?? 1;
-  const venueRow = venue.gridRow ?? 1;
-  const venueWidth = venue.gridWidth ?? 1;
-  const venueHeight = venue.gridHeight ?? 1;
+  const [pendingPlacement, setPendingPlacement] = useState<{
+    gridColumn: number;
+    gridRow: number;
+    venueMapId: string;
+  } | null>(null);
+  const draggable = isEditMode && Boolean(onMove) && !pendingPlacement;
+  const activeVenue =
+    pendingPlacement
+      ? venues.find((candidate) => candidate.mapId === pendingPlacement.venueMapId) ?? venue
+      : venue;
+  const activePlacement = pendingPlacement ?? resolveEquipmentGridPlacement(record);
+  const renderX = pendingPlacement
+    ? planX + (activePlacement.gridColumn - 0.5) * cellWidth
+    : x;
+  const renderY = pendingPlacement
+    ? planY + (activePlacement.gridRow - 0.5) * cellHeight
+    : y;
+
+  useEffect(() => {
+    if (!pendingPlacement) return;
+    const placement = resolveEquipmentGridPlacement(record);
+    const persistedVenueId = String(record.venueId ?? "");
+    const targetVenueId = String(activeVenue.sourceVenueId ?? activeVenue.id);
+    if (
+      placement.gridColumn === pendingPlacement.gridColumn &&
+      placement.gridRow === pendingPlacement.gridRow &&
+      (persistedVenueId === targetVenueId || isEquipmentInsideVenue(record, activeVenue))
+    ) {
+      setPendingPlacement(null);
+    }
+  }, [activeVenue, pendingPlacement, record]);
 
   return (
     <Group
       key={record.id}
       equipmentId={record.id}
-      x={x}
-      y={y}
+      x={renderX}
+      y={renderY}
+      opacity={pendingPlacement ? 0.72 : 1}
       draggable={draggable}
       onMouseDown={(event) => {
         event.cancelBubble = true;
@@ -306,17 +346,41 @@ const EquipmentNode = memo(function EquipmentNode({
         if (!onMove) return;
         const nextColumn = clamp(
           Math.floor((event.target.x() - planX) / cellWidth) + 1,
-          venueColumn,
-          venueColumn + venueWidth - 1,
+          1,
+          COLS,
         );
         const nextRow = clamp(
           Math.floor((event.target.y() - planY) / cellHeight) + 1,
-          venueRow,
-          venueRow + venueHeight - 1,
+          1,
+          ROWS,
         );
-        onMove(record.id, venue.mapId, {
+        const targetVenue = venues.find((candidate) => {
+          if (candidate.floorId !== venue.floorId || candidate.isMapped === false) {
+            return false;
+          }
+          const left = candidate.gridColumn ?? 1;
+          const top = candidate.gridRow ?? 1;
+          const right = left + (candidate.gridWidth ?? 1) - 1;
+          const bottom = top + (candidate.gridHeight ?? 1) - 1;
+          return (
+            nextColumn >= left &&
+            nextColumn <= right &&
+            nextRow >= top &&
+            nextRow <= bottom
+          );
+        });
+        setPendingPlacement({
           gridColumn: nextColumn,
           gridRow: nextRow,
+          venueMapId: targetVenue?.mapId ?? "",
+        });
+        void Promise.resolve(
+          onMove(record.id, targetVenue?.mapId ?? "", {
+            gridColumn: nextColumn,
+            gridRow: nextRow,
+          }),
+        ).then((persisted) => {
+          if (!persisted) setPendingPlacement(null);
         });
       }}
       onClick={(event) => {
@@ -336,7 +400,8 @@ const EquipmentNode = memo(function EquipmentNode({
         cornerRadius={8}
         fill={`${colors.surfaceRaised}f5`}
         stroke={accent}
-        strokeWidth={selected || record.status === "maintenance" ? 2.5 : 1.5}
+        strokeWidth={selected || pendingPlacement || record.status === "maintenance" ? 2.5 : 1.5}
+        dash={pendingPlacement ? [7, 4] : undefined}
         shadowColor={accent}
         shadowBlur={selected || record.status === "maintenance" ? 12 : 4}
         perfectDrawEnabled={false}
@@ -372,7 +437,7 @@ const EquipmentNode = memo(function EquipmentNode({
         x={-width / 2 + 4}
         y={Math.min(3, height / 5)}
         width={width - 8}
-        text={record.status}
+        text={pendingPlacement ? "Saving..." : record.status}
         fill={accent}
         fontSize={Math.max(7, Math.min(9, width / 8))}
         align="center"
@@ -462,7 +527,6 @@ const VenueNode = memo(function VenueNode({
     ? planY + (gridRow - 1) * cellHeight + 6
     : y;
   const tone = venue.isReservable === false ? "support" : "reservable";
-  const isWalkway = /walkway|path/i.test(venue.name);
   const isMaintained = venue.status === "maintenance";
   const accent = isMaintained ? colors.danger : toneColor(tone, colors);
   const draggable =
@@ -472,9 +536,7 @@ const VenueNode = memo(function VenueNode({
     !isQuickPlacementActive;
   const sublabel = isMaintained
     ? "Maintenance"
-    : isWalkway
-      ? "Path / Walkway"
-      : venue.isReservable === false
+    : venue.isReservable === false
         ? "Support Zone"
         : "Reservable";
 
@@ -533,17 +595,11 @@ const VenueNode = memo(function VenueNode({
       onDragEnd={async (event) => {
         event.cancelBubble = true;
         if (!onMove) return;
+        const rawColumn = Math.round((event.target.x() - planX - 6) / cellWidth) + 1;
+        const rawRow = Math.round((event.target.y() - planY - 6) / cellHeight) + 1;
         const nextLayout: VenueLayout = {
-          gridColumn: clamp(
-            Math.round((event.target.x() - planX - 6) / cellWidth) + 1,
-            1,
-            COLS - gridWidth + 1,
-          ),
-          gridRow: clamp(
-            Math.round((event.target.y() - planY - 6) / cellHeight) + 1,
-            1,
-            ROWS - gridHeight + 1,
-          ),
+          gridColumn: rawColumn,
+          gridRow: rawRow,
           gridWidth,
           gridHeight,
         };
@@ -564,12 +620,12 @@ const VenueNode = memo(function VenueNode({
         if (!node || !onResize) return;
         const nextGridWidth = clamp(
           Math.round(gridWidth * node.scaleX()),
-          2,
+          1,
           COLS - gridColumn + 1,
         );
         const nextGridHeight = clamp(
           Math.round(gridHeight * node.scaleY()),
-          2,
+          1,
           ROWS - gridRow + 1,
         );
         const nextGridColumn = clamp(
@@ -694,7 +750,10 @@ const VenueNode = memo(function VenueNode({
         ref={transformerRef}
         rotateEnabled={false}
         flipEnabled={false}
-        enabledAnchors={["bottom-right"]}
+        enabledAnchors={[
+          "top-left", "top-center", "top-right", "middle-left",
+          "middle-right", "bottom-left", "bottom-center", "bottom-right",
+        ]}
         anchorFill={colors.brand}
         anchorStroke={colors.surfaceRaised}
         anchorSize={14}
@@ -702,8 +761,8 @@ const VenueNode = memo(function VenueNode({
         borderDash={[8, 5]}
         keepRatio={false}
         boundBoxFunc={(oldBox, nextBox) =>
-          nextBox.width >= cellWidth * 2 - 12 &&
-          nextBox.height >= cellHeight * 2 - 12
+          nextBox.width >= cellWidth - 12 &&
+          nextBox.height >= cellHeight - 12
             ? nextBox
             : oldBox
         }
@@ -718,6 +777,12 @@ export default function FacilitiesKonvaMap({
   colors,
   equipmentById,
   equipment = [],
+  footprintCells = [],
+  pathCells = [],
+  entryCells = [],
+  exitCells = [],
+  routeCells = [],
+  cellTool = null,
   floorImageUrl,
   floorBounds = { gridHeight: ROWS, gridWidth: COLS },
   height: requestedHeight,
@@ -732,6 +797,7 @@ export default function FacilitiesKonvaMap({
   onPlaceQuickRegionAtCell,
   onSelectVenue,
   onSelectEquipment,
+  onCellAction,
   pan,
   quickRegionTemplate,
   selectedEquipmentId,
@@ -807,6 +873,7 @@ export default function FacilitiesKonvaMap({
     onPlaceQuickRegionAtCell,
     onSelectEquipment,
     onSelectVenue,
+    onCellAction,
   });
 
   useEffect(() => {
@@ -821,6 +888,7 @@ export default function FacilitiesKonvaMap({
       onPlaceQuickRegionAtCell,
       onSelectEquipment,
       onSelectVenue,
+      onCellAction,
     };
   }, [
     onAssignEquipmentToVenue,
@@ -833,6 +901,7 @@ export default function FacilitiesKonvaMap({
     onPlaceQuickRegionAtCell,
     onSelectEquipment,
     onSelectVenue,
+    onCellAction,
   ]);
 
   const handleAssignEquipmentToVenue = useCallback((
@@ -847,7 +916,7 @@ export default function FacilitiesKonvaMap({
     venueMapId: string,
     placement: GridCell,
   ) => {
-    callbacksRef.current.onMoveEquipment?.(equipmentId, venueMapId, placement);
+    return callbacksRef.current.onMoveEquipment?.(equipmentId, venueMapId, placement) ?? false;
   }, []);
 
   const handleMoveVenue = useCallback((
@@ -928,14 +997,67 @@ export default function FacilitiesKonvaMap({
       gridRow: clamp(Math.floor(localY / cellHeight) + 1, 1, ROWS),
     };
   };
-
-  const setStageCursor = (
-    event: Konva.KonvaEventObject<MouseEvent | TouchEvent>,
-    cursor: string,
-  ) => {
-    const container = event.target.getStage()?.container();
-    container?.style.setProperty("cursor", cursor);
+  const lastPaintedCellRef = useRef<string | null>(null);
+  const applyCellToolAtStage = (stage: Konva.Stage) => {
+    if (!cellTool || !onCellAction) return;
+    const cell = resolvePointerCell(stage);
+    if (!cell) return;
+    const key = `${cell.gridColumn}:${cell.gridRow}`;
+    if (lastPaintedCellRef.current === key) return;
+    lastPaintedCellRef.current = key;
+    onCellAction(cellTool, { column: cell.gridColumn, row: cell.gridRow });
   };
+
+  const publishedCellNodes = useMemo(() => {
+    const renderCells = (cells: FacilityGridCell[], fill: string, prefix: string, opacity: number) =>
+      cells.map((cell) => (
+        <Rect key={`${prefix}-${cell.column}-${cell.row}`}
+          x={planX + (cell.column - 1) * cellWidth}
+          y={planY + (cell.row - 1) * cellHeight}
+          width={cellWidth} height={cellHeight} fill={fill} opacity={opacity}
+          listening={false} perfectDrawEnabled={false} />
+      ));
+    return {
+      footprint: renderCells(footprintCells, colors.surfaceRaised, "footprint", 0.42),
+      navigation: [
+      ...renderCells(pathCells, colors.brand, "path", 0.2),
+      ...renderCells(entryCells, colors.success, "entry", 0.5),
+      ...renderCells(exitCells, colors.warning, "exit", 0.5),
+      ],
+      route: renderCells(routeCells, colors.brand, "route", 0.65),
+    };
+  }, [cellHeight, cellWidth, colors, entryCells, exitCells, footprintCells, pathCells, planX, planY, routeCells]);
+
+  const unpaintedCellNodes = useMemo(() => {
+    const painted = new Set(
+      footprintCells.map((cell) => `${cell.column}:${cell.row}`),
+    );
+    return Array.from({ length: ROWS }, (_, row) =>
+      Array.from({ length: COLS }, (_, column) => ({
+        column: column + 1,
+        row: row + 1,
+      })),
+    )
+      .flat()
+      .filter((cell) => !painted.has(`${cell.column}:${cell.row}`))
+      .map((cell) => (
+        <Rect
+          key={`unpainted-${cell.column}-${cell.row}`}
+          name="unpainted-planning-cell"
+          x={planX + (cell.column - 1) * cellWidth + 1}
+          y={planY + (cell.row - 1) * cellHeight + 1}
+          width={Math.max(1, cellWidth - 2)}
+          height={Math.max(1, cellHeight - 2)}
+          fill={colors.base}
+          opacity={0.72}
+          stroke={colors.border}
+          strokeWidth={1}
+          dash={[3, 4]}
+          listening={false}
+          perfectDrawEnabled={false}
+        />
+      ));
+  }, [cellHeight, cellWidth, colors.base, colors.border, footprintCells, planX, planY]);
 
   const constrainPan = useCallback((nextPan: { x: number; y: number }) => ({
     x: clamp(nextPan.x, -panLimitX, panLimitX),
@@ -967,152 +1089,6 @@ export default function FacilitiesKonvaMap({
       quickRegionTemplate ? "crosshair" : "grab",
     );
   }, [constrainPan, handlePanChange, quickRegionTemplate]);
-
-  const renderVenue = (venue: FloorVenueRecord) => {
-    const gridColumn = Math.max(1, venue.gridColumn ?? 1);
-    const gridRow = Math.max(1, venue.gridRow ?? 1);
-    const gridWidth = Math.max(1, venue.gridWidth ?? 2);
-    const gridHeight = Math.max(1, venue.gridHeight ?? 2);
-    const x = planX + (gridColumn - 1) * cellWidth + 6;
-    const y = planY + (gridRow - 1) * cellHeight + 6;
-    const w = gridWidth * cellWidth - 12;
-    const h = gridHeight * cellHeight - 12;
-    const selected = selectedVenueMapId === venue.mapId;
-    const tone = venue.isReservable === false ? "support" : "reservable";
-    const isWalkway = /walkway|path/i.test(venue.name);
-    const isMaintained = venue.status === "maintenance";
-    const accent = isMaintained ? colors.danger : toneColor(tone, colors);
-    const assigned = (assignedEquipment[venue.mapId] ?? [])
-        .map((id) => equipmentById[id])
-        .filter(Boolean);
-    const draggable =
-      isEditMode &&
-      !venue.isSystem &&
-      !selectedEquipmentId &&
-      !quickRegionTemplate;
-    const title = venue.name;
-    const sublabel = isMaintained
-      ? "Maintenance"
-      : isWalkway
-        ? "Path / Walkway"
-        : venue.isReservable === false
-          ? "Support Zone"
-          : "Reservable";
-
-    return (
-      <Group
-        key={venue.mapId}
-        venueMapId={venue.mapId}
-        x={x}
-        y={y}
-        draggable={draggable}
-        onMouseDown={(event) => {
-          event.cancelBubble = true;
-        }}
-        onTouchStart={(event) => {
-          event.cancelBubble = true;
-        }}
-        onMouseEnter={(event) => {
-          setStageCursor(
-            event,
-            selectedEquipmentId && isEditMode ? "copy" : draggable ? "move" : "pointer",
-          );
-        }}
-        onMouseLeave={(event) => {
-          setStageCursor(event, isPanning ? "grabbing" : "grab");
-        }}
-        onDragEnd={(event) => {
-          if (!onMoveVenue) return;
-          onMoveVenue(venue.mapId, {
-            gridColumn: clamp(Math.round((event.target.x() - planX) / cellWidth) + 1, 1, COLS - gridWidth + 1),
-            gridRow: clamp(Math.round((event.target.y() - planY) / cellHeight) + 1, 1, ROWS - gridHeight + 1),
-          });
-        }}
-        onClick={(event) => {
-          event.cancelBubble = true;
-          if (selectedEquipmentId && isEditMode) {
-            onAssignEquipmentToVenue(selectedEquipmentId, venue.mapId);
-            return;
-          }
-          onSelectVenue(venue);
-        }}
-        onTap={(event) => {
-          event.cancelBubble = true;
-          onSelectVenue(venue);
-        }}
-      >
-        <Rect
-          width={w}
-          height={h}
-          cornerRadius={10}
-          fill={selected ? `${colors.brand}33` : `${colors.surfaceRaised}f2`}
-          stroke={selected ? colors.brand : accent}
-          strokeWidth={selected ? 2.5 : 1.5}
-          shadowColor={accent}
-          shadowBlur={selected ? 18 : 4}
-          opacity={0.96}
-        />
-        <VenueImage
-          colors={colors}
-          cropZoom={venue.imageCropZoom}
-          fit={venue.imageFit}
-          focalX={venue.imageFocalX}
-          focalY={venue.imageFocalY}
-          height={h}
-          src={venue.imageUrl}
-          width={w}
-          x={0}
-          y={0}
-        />
-        {selected ? (
-          <Rect
-            x={-6}
-            y={-6}
-            width={w + 12}
-            height={h + 12}
-            cornerRadius={12}
-            stroke={colors.brand}
-            strokeWidth={2}
-            dash={[14, 8]}
-          />
-        ) : null}
-        <Text
-          x={12}
-          y={Math.max(12, h * 0.36 - 12)}
-          width={Math.max(40, w - 24)}
-          text={title}
-          fill={colors.textPrimary}
-          fontSize={Math.max(11, Math.min(15, w / 14))}
-          fontStyle="bold"
-          align="center"
-          ellipsis
-          wrap="none"
-        />
-        <Text
-          x={12}
-          y={Math.max(34, h * 0.36 + 10)}
-          width={Math.max(40, w - 24)}
-          text={sublabel}
-          fill={accent}
-          fontSize={10}
-          align="center"
-          ellipsis
-          wrap="none"
-        />
-        <Text
-          x={12}
-          y={Math.max(52, h - 28)}
-          width={Math.max(40, w - 24)}
-          text={`${assigned.length} equipment${assigned.length === 1 ? "" : "s"}`}
-          fill={colors.textSecondary}
-          fontSize={9}
-          align="center"
-          ellipsis
-          wrap="none"
-        />
-      </Group>
-    );
-  };
 
   const cullingViewport = useMemo(() => ({
     bottom: height - pan.y + panLimitY + 96,
@@ -1260,6 +1236,7 @@ export default function FacilitiesKonvaMap({
         onMove={handleMoveEquipment}
         onSelect={handleSelectEquipment}
         venue={venue}
+        venues={venues}
         planX={planX}
         planY={planY}
         cellWidth={cellWidth}
@@ -1339,14 +1316,28 @@ export default function FacilitiesKonvaMap({
       <Stage
         width={width}
         height={height}
+        onMouseDown={(event) => {
+          if (!cellTool) return;
+          const stage = event.target.getStage();
+          if (stage) applyCellToolAtStage(stage);
+        }}
+        onMouseUp={() => { lastPaintedCellRef.current = null; }}
         onMouseMove={(event) => {
           const stage = event.target.getStage();
+          if (stage && cellTool && event.evt.buttons === 1) {
+            applyCellToolAtStage(stage);
+            return;
+          }
           if (!stage || !quickRegionTemplate) return;
           updateHoverCell(resolvePointerCell(stage));
         }}
         onMouseLeave={() => updateHoverCell(null)}
         onTouchMove={(event) => {
           const stage = event.target.getStage();
+          if (stage && cellTool) {
+            applyCellToolAtStage(stage);
+            return;
+          }
           if (!stage || !quickRegionTemplate) return;
           updateHoverCell(resolvePointerCell(stage));
         }}
@@ -1379,7 +1370,7 @@ export default function FacilitiesKonvaMap({
           <Group
             x={pan.x}
             y={pan.y}
-            draggable={!quickRegionTemplate}
+            draggable={!quickRegionTemplate && !cellTool}
             dragBoundFunc={constrainPan}
             onDragStart={handlePanDragStart}
             onDragEnd={handlePanDragEnd}
@@ -1440,6 +1431,8 @@ export default function FacilitiesKonvaMap({
             }}
             perfectDrawEnabled={false}
           />
+          {publishedCellNodes.footprint}
+          {unpaintedCellNodes}
           {floorBoundsSelected && isEditMode && onResizeFloorBounds ? (
             <Transformer
               ref={floorTransformerRef}
@@ -1466,9 +1459,11 @@ export default function FacilitiesKonvaMap({
               perfectDrawEnabled={false}
             />
           ) : null}
+          {publishedCellNodes.navigation}
           {gridLines}
           {venueNodes}
           {equipmentNodes}
+          {publishedCellNodes.route}
           {quickPlacement && quickRegionTemplate ? (
             <Rect
               x={planX + (quickPlacement.gridColumn - 1) * cellWidth + 6}

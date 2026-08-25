@@ -24,6 +24,11 @@ import {
   resolveCanonicalReferenceId,
 } from '../../../../../packages/utils/fitness-catalog';
 import {
+  buildFacilityFloorMapSeedUpdate,
+  FACILITY_FLOOR_MAP_SEEDS,
+  shouldApplyCanonicalAmenityUpdate,
+} from '../../../../../packages/utils/facility-map-seed';
+import {
   activityDateFor,
   futureDateFor,
   KeyedIntervalAllocator,
@@ -195,16 +200,27 @@ async function seedAmenities(ctx: DynamicSeedContext) {
                 hourly_rate: new Prisma.Decimal(amenity.hourlyRate),
                 icon_key: amenity.iconKey,
                 is_active: true,
-                is_reservable: true,
+                is_reservable:
+                  'isReservable' in amenity ? amenity.isReservable : true,
                 minimum_hours: amenity.minimumHours,
                 name: amenity.name,
                 requires_subscription: amenity.requiresSubscription,
                 type: amenity.type,
+                status:
+                  'status' in amenity && amenity.status === 'maintenance'
+                    ? EquipmentStatus.maintenance
+                    : EquipmentStatus.available,
               },
               select: { id: true },
             });
 
-    if (persisted.id === desiredId) {
+    if (
+      shouldApplyCanonicalAmenityUpdate(
+        ctx.config.mode,
+        persisted.id,
+        desiredId,
+      )
+    ) {
       await ctx.prisma.amenity.update({
         where: { id: desiredId },
         data: {
@@ -219,28 +235,53 @@ async function seedAmenities(ctx: DynamicSeedContext) {
           hourly_rate: new Prisma.Decimal(amenity.hourlyRate),
           icon_key: amenity.iconKey,
           is_active: true,
-          is_reservable: true,
+          is_reservable:
+            'isReservable' in amenity ? amenity.isReservable : true,
           minimum_hours: amenity.minimumHours,
           name: amenity.name,
           requires_subscription: amenity.requiresSubscription,
           type: amenity.type,
+          status:
+            'status' in amenity && amenity.status === 'maintenance'
+              ? EquipmentStatus.maintenance
+              : EquipmentStatus.available,
         },
       });
     }
     ctx.state.amenityIds[amenity.key] = persisted.id;
   }
 
-  for (const floorId of ['floor-1', 'floor-2', 'floor-3']) {
-    await ctx.prisma.facilityFloorPlanMedia.upsert({
+  const floorMaps = FACILITY_FLOOR_MAP_SEEDS;
+  for (const floorId of ['floor-1', 'floor-2', 'floor-3'] as const) {
+    const map = floorMaps[floorId];
+    const existing = await ctx.prisma.facilityFloorPlanMedia.findUnique({
       where: { floor_id: floorId },
-      update: {
-        image_url: null,
-      },
-      create: {
-        floor_id: floorId,
-        image_url: null,
+      select: {
+        footprint_cells: true,
+        path_cells: true,
+        entry_cells: true,
+        exit_cells: true,
       },
     });
+    if (existing) {
+      await ctx.prisma.facilityFloorPlanMedia.update({
+        where: { floor_id: floorId },
+        data: buildFacilityFloorMapSeedUpdate(ctx.config.mode, existing, map),
+      });
+    } else {
+      await ctx.prisma.facilityFloorPlanMedia.create({
+        data: {
+          floor_id: floorId,
+          image_url: null,
+          grid_width: 14,
+          grid_height: 10,
+          footprint_cells: map.footprint,
+          path_cells: map.paths,
+          entry_cells: map.entries,
+          exit_cells: map.exits,
+        },
+      });
+    }
   }
 }
 

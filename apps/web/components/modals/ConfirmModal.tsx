@@ -109,10 +109,10 @@ export default function ConfirmModal({
     if (!isOpen || !portalRoot) return;
 
     const overlay = overlayRef.current;
-    const releaseModalInteractionLock = acquireModalInteractionLock(overlay);
-    const focusFrame = requestAnimationFrame(() => {
-      dialogRef.current?.focus({ preventScroll: true });
-    });
+    const releaseModalInteractionLock = acquireModalInteractionLock(
+      overlay,
+      dialogRef.current,
+    );
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !isLoading) {
@@ -149,7 +149,6 @@ export default function ConfirmModal({
 
     document.addEventListener("keydown", handleKeyDown);
     return () => {
-      cancelAnimationFrame(focusFrame);
       document.removeEventListener("keydown", handleKeyDown);
       releaseModalInteractionLock();
     };

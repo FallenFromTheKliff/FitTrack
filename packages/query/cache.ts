@@ -72,6 +72,9 @@ export function invalidateGymLayoutQueries(queryClient: QueryClient) {
     queryClient.invalidateQueries({
       queryKey: queryKeys.gymLayoutFloorPlanMedia(),
     }),
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.facilityMapSnapshot(),
+    }),
   ]);
 }
 

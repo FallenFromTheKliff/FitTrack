@@ -1,4 +1,4 @@
-import type { PaginationMeta } from "./membership";
+import type { PaginationMeta } from "./membership.js";
 
 export type AnalyticsPeriod =
   | "hourly"
@@ -49,6 +49,7 @@ export type ExportAnalyticsPdfInput = {
   attendanceEndDate?: string;
   attendancePeriod?: AnalyticsPeriod;
   attendanceStartDate?: string;
+  insightId?: string;
   revenueEndDate?: string;
   revenuePeriod?: AnalyticsPeriod;
   revenueStartDate?: string;

@@ -4,6 +4,7 @@ import { validate } from 'class-validator';
 import {
   CreateExerciseDTO,
   ExerciseFilterDTO,
+  UpdateMovementFamilyContractDTO,
   UpdateExerciseDTO,
 } from './exercise.dto';
 
@@ -67,5 +68,28 @@ describe('Exercise DTO validation', () => {
     });
 
     expect(await validate(dto)).toHaveLength(0);
+  });
+
+  it('accepts the documented movement-family contract object', async () => {
+    const dto = plainToInstance(UpdateMovementFamilyContractDTO, {
+      movement_profile: {
+        movementContract: { exercise: 'squat' },
+        schemaVersion: 'exercise_movement_profile_v1',
+      },
+    });
+
+    expect(
+      await validate(dto, { forbidNonWhitelisted: true, whitelist: true }),
+    ).toHaveLength(0);
+  });
+
+  it('rejects a non-object movement-family contract', async () => {
+    const dto = plainToInstance(UpdateMovementFamilyContractDTO, {
+      movement_profile: 'squat',
+    });
+
+    expect(extractMessages(await validate(dto))).toContain(
+      'movement_profile must be an object',
+    );
   });
 });

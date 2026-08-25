@@ -484,6 +484,7 @@ function toGenerateInsightPayload(input: GenerateBusinessInsightInput) {
 
 function toExportPdfPayload(input?: ExportAnalyticsPdfInput) {
   return {
+    ...(input?.insightId ? { insight_run_id: input.insightId } : {}),
     ...(input?.revenueStartDate
       ? { revenue_start_date: input.revenueStartDate }
       : {}),

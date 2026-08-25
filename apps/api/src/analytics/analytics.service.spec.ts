@@ -452,8 +452,61 @@ describe('AnalyticsService', () => {
       window: {
         start_date: '2025-01-05',
         end_date: '2025-01-10',
+        previous_start_date: '2024-12-30',
+        previous_end_date: '2025-01-04',
         period: InsightPeriod.custom,
         focus: InsightFocus.overview,
+      },
+      comparisons: {
+        total_revenue: {
+          current: '8849.00',
+          previous: '8849.00',
+          absolute_change: '0.00',
+          percentage_change: 0,
+          direction: 'flat',
+        },
+        check_ins: {
+          current: 30,
+          previous: 30,
+          absolute_change: 0,
+          percentage_change: 0,
+          direction: 'flat',
+        },
+        new_members: {
+          current: 18,
+          previous: 18,
+          absolute_change: 0,
+          percentage_change: 0,
+          direction: 'flat',
+        },
+        completed_coaching_sessions: {
+          current: 4,
+          previous: 4,
+          absolute_change: 0,
+          percentage_change: 0,
+          direction: 'flat',
+        },
+      },
+      derived_signals: {
+        revenue_mix_percentages: {
+          memberships: 56.5,
+          bookings: 13.6,
+          products: 9.6,
+          coaching: 20.3,
+        },
+        top_revenue_source_concentration: {
+          source_key: 'memberships',
+          source_label: 'Memberships',
+          percentage: 56.5,
+        },
+        peak_hour_attendance_concentration: {
+          hour_label: '06:00',
+          check_ins: 14,
+          percentage: 46.7,
+        },
+        equipment_availability_percentage: 87.5,
+        low_stock_exposure_percentage: 14.3,
+        out_of_stock_exposure_percentage: 7.1,
       },
       overview: {
         total_revenue: '8849.00',
@@ -559,6 +612,157 @@ describe('AnalyticsService', () => {
       InsightPeriod.custom,
     );
     expect(repo.getInventorySummary).toHaveBeenCalled();
+    expect(repo.getRevenueMetrics).toHaveBeenCalledWith(
+      new Date('2024-12-30T00:00:00.000Z'),
+      new Date('2025-01-04T23:59:59.999Z'),
+      InsightPeriod.custom,
+    );
+  });
+
+  it('calculates the preceding same-length window and handles zero baselines without fabricated percentages', async () => {
+    const revenue = (total: string, sessions: number) => ({
+      coaching: {
+        coaching_gym_revenue: new Prisma.Decimal('0.00'),
+        completed_coaching_sessions: sessions,
+      },
+      coachingSeries: [],
+      paymentSeries: [],
+      payments: {
+        membership_revenue: new Prisma.Decimal(total),
+        booking_revenue: new Prisma.Decimal('0.00'),
+        product_revenue: new Prisma.Decimal('0.00'),
+        coaching_payments_collected: new Prisma.Decimal('0.00'),
+      },
+    });
+    const attendance = (total: number) => ({
+      peakHours: total ? [{ hour_of_day: 18, check_ins: total / 2 }] : [],
+      series: [],
+      summary: { total_check_ins: total },
+    });
+    repo.getRevenueMetrics
+      .mockResolvedValueOnce(revenue('100.00', 3))
+      .mockResolvedValueOnce(revenue('0.00', 4));
+    repo.getAttendanceMetrics
+      .mockResolvedValueOnce(attendance(10))
+      .mockResolvedValueOnce(attendance(8));
+    repo.getMemberMetrics
+      .mockResolvedValueOnce({ new_members: 2, active_members: 10 })
+      .mockResolvedValueOnce({ new_members: 0, active_members: 8 });
+    repo.getCoachEarningsMetrics.mockResolvedValue({ coaches: [] });
+    repo.getTopMembershipPlans.mockResolvedValue([]);
+
+    const payload = await service.buildBusinessInsightGroundingPayload({
+      start_date: '2026-08-10',
+      end_date: '2026-08-12',
+      period: InsightPeriod.custom,
+      focus: InsightFocus.revenue,
+    });
+
+    expect(payload.window).toMatchObject({
+      previous_start_date: '2026-08-07',
+      previous_end_date: '2026-08-09',
+    });
+    expect(payload.comparisons).toEqual({
+      total_revenue: {
+        current: '100.00',
+        previous: '0.00',
+        absolute_change: '100.00',
+        percentage_change: null,
+        direction: 'new_from_zero',
+      },
+      check_ins: {
+        current: 10,
+        previous: 8,
+        absolute_change: 2,
+        percentage_change: 25,
+        direction: 'increase',
+      },
+      new_members: {
+        current: 2,
+        previous: 0,
+        absolute_change: 2,
+        percentage_change: null,
+        direction: 'new_from_zero',
+      },
+      completed_coaching_sessions: {
+        current: 3,
+        previous: 4,
+        absolute_change: -1,
+        percentage_change: -25,
+        direction: 'decrease',
+      },
+    });
+    expect(payload.derived_signals).toMatchObject({
+      revenue_mix_percentages: {
+        memberships: 100,
+        bookings: 0,
+        products: 0,
+        coaching: 0,
+      },
+      top_revenue_source_concentration: {
+        source_key: 'memberships',
+        percentage: 100,
+      },
+      peak_hour_attendance_concentration: {
+        hour_label: '18:00',
+        check_ins: 5,
+        percentage: 50,
+      },
+    });
+  });
+
+  it('uses the fake-clock current month and the immediately preceding same-length inclusive default window', async () => {
+    const revenue = {
+      coaching: {
+        coaching_gym_revenue: new Prisma.Decimal('0.00'),
+        completed_coaching_sessions: 0,
+      },
+      coachingSeries: [],
+      paymentSeries: [],
+      payments: {
+        membership_revenue: new Prisma.Decimal('0.00'),
+        booking_revenue: new Prisma.Decimal('0.00'),
+        product_revenue: new Prisma.Decimal('0.00'),
+        coaching_payments_collected: new Prisma.Decimal('0.00'),
+      },
+    };
+    repo.getRevenueMetrics.mockResolvedValue(revenue);
+    repo.getAttendanceMetrics.mockResolvedValue({
+      peakHours: [],
+      series: [],
+      summary: { total_check_ins: 0 },
+    });
+    repo.getMemberMetrics.mockResolvedValue({
+      new_members: 0,
+      active_members: 0,
+    });
+    repo.getCoachEarningsMetrics.mockResolvedValue({ coaches: [] });
+    repo.getTopMembershipPlans.mockResolvedValue([]);
+
+    const payload = await service.buildBusinessInsightGroundingPayload({
+      focus: InsightFocus.revenue,
+    });
+
+    expect(payload.window).toEqual({
+      start_date: '2026-03-01',
+      end_date: '2026-03-31',
+      previous_start_date: '2026-01-29',
+      previous_end_date: '2026-02-28',
+      period: InsightPeriod.monthly,
+      focus: InsightFocus.revenue,
+    });
+    expect(repo.getRevenueMetrics).toHaveBeenNthCalledWith(
+      1,
+      new Date('2026-03-01T00:00:00.000Z'),
+      new Date('2026-03-31T23:59:59.999Z'),
+      InsightPeriod.monthly,
+    );
+    expect(repo.getRevenueMetrics).toHaveBeenNthCalledWith(
+      2,
+      new Date('2026-01-29T00:00:00.000Z'),
+      new Date('2026-02-28T23:59:59.999Z'),
+      InsightPeriod.monthly,
+    );
   });
 
   it('omits inventory grounding when the focus does not need inventory rollups', async () => {

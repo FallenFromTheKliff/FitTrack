@@ -67,7 +67,6 @@
     "clean:ui:visual": "node tasks/clean-visual-run.mjs",
     "test:ui:visual:cleanup": "node tests/visual-cleanup.test.mjs",
     "test:ui:visual:helper": "node --experimental-strip-types tests/ui/visual/expect-visual-match.unit.mjs",
-    "test:hooks:task-clarity": "node tests/hooks/task-clarity.test.mjs",
     "storybook": "pnpm --filter @fittrack/web storybook",
     "storybook:build": "pnpm --filter @fittrack/web storybook:build",
     "registry:build": "pnpm --dir apps/web registry:build",
@@ -114,4 +113,3 @@
     }
   }
 }
-

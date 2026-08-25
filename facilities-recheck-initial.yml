@@ -1,0 +1,361 @@
+- generic [active] [ref=e1]:
+  - alert [ref=e2]: Facilities
+  - generic [ref=e3]:
+    - generic:
+      - generic:
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+      - generic:
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+      - generic:
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+      - generic:
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+    - complementary [ref=e5]:
+      - generic [ref=e6]:
+        - img [ref=e8]
+        - generic [ref=e14]:
+          - generic [ref=e15]: FitTrack
+          - paragraph [ref=e16]: Admin Portal
+      - link "SA Sera Admin Manage Profile Details" [ref=e18] [cursor=pointer]:
+        - /url: /profile
+        - generic [ref=e19]:
+          - generic [ref=e21]: SA
+          - generic [ref=e22]:
+            - generic [ref=e23]: Sera Admin
+            - generic [ref=e24]:
+              - img [ref=e25]
+              - paragraph [ref=e28]: Manage Profile Details
+      - navigation [ref=e30]:
+        - generic [ref=e31]:
+          - paragraph [ref=e32]: Main
+          - generic [ref=e33]:
+            - link "Data Analytics" [ref=e34] [cursor=pointer]:
+              - /url: /analytics
+              - img [ref=e35]
+              - generic [ref=e36]: Data Analytics
+            - link "Accounts" [ref=e37] [cursor=pointer]:
+              - /url: /accounts
+              - img [ref=e38]
+              - generic [ref=e43]: Accounts
+            - link "Gym Operations" [ref=e44] [cursor=pointer]:
+              - /url: /schedule
+              - img [ref=e45]
+              - generic [ref=e47]: Gym Operations
+            - link "Facilities" [ref=e48] [cursor=pointer]:
+              - /url: /facilities
+              - img [ref=e49]
+              - generic [ref=e51]: Facilities
+              - img [ref=e52]
+            - link "Inventory" [ref=e54] [cursor=pointer]:
+              - /url: /inventory
+              - img [ref=e55]
+              - generic [ref=e59]: Inventory
+            - link "Gym Actions" [ref=e60] [cursor=pointer]:
+              - /url: /gym-actions
+              - img [ref=e61]
+              - generic [ref=e64]: Gym Actions
+        - generic [ref=e65]:
+          - paragraph [ref=e66]: Fitness Ops
+          - generic [ref=e67]:
+            - link "Ranking Governance" [ref=e68] [cursor=pointer]:
+              - /url: /gamification
+              - img [ref=e69]
+              - generic [ref=e75]: Ranking Governance
+            - link "Milestones" [ref=e76] [cursor=pointer]:
+              - /url: /milestones
+              - img [ref=e77]
+              - generic [ref=e83]: Milestones
+            - link "Exercise Labs" [ref=e84] [cursor=pointer]:
+              - /url: /exercise-lab
+              - img [ref=e85]
+              - generic [ref=e91]: Exercise Labs
+            - link "Memberships" [ref=e92] [cursor=pointer]:
+              - /url: /memberships-promos
+              - img [ref=e93]
+              - generic [ref=e96]: Memberships
+        - generic [ref=e97]:
+          - paragraph [ref=e98]: System
+          - generic [ref=e99]:
+            - link "BrodigyAI" [ref=e100] [cursor=pointer]:
+              - /url: /ai
+              - img [ref=e101]
+              - generic [ref=e104]: BrodigyAI
+            - link "Settings" [ref=e105] [cursor=pointer]:
+              - /url: /settings
+              - img [ref=e106]
+              - generic [ref=e109]: Settings
+      - button "SIGN OUT" [ref=e111] [cursor=pointer]:
+        - img [ref=e112]
+        - generic [ref=e115]: SIGN OUT
+    - main [ref=e117]:
+      - generic [ref=e118]:
+        - generic [ref=e120]:
+          - heading "Facilities" [level=1] [ref=e121]
+          - paragraph [ref=e122]: Keep zones ready.
+        - button "Toggle notifications panel" [ref=e125] [cursor=pointer]:
+          - img [ref=e126]
+      - generic [ref=e131]:
+        - generic [ref=e133]:
+          - generic [ref=e135]:
+            - generic [ref=e136]: Facilities Planner
+            - generic [ref=e137]: Build and maintain the gym floor map.
+          - 'button "Facilities floor selector: Floor 1" [ref=e138] [cursor=pointer]':
+            - generic [ref=e140]: Floor 1
+            - img [ref=e142]
+          - generic [ref=e144]:
+            - button "Layout" [ref=e145] [cursor=pointer]:
+              - img [ref=e146]
+              - generic [ref=e148]: Layout
+            - button "Venues" [ref=e149] [cursor=pointer]:
+              - img [ref=e150]
+              - generic [ref=e154]: Venues
+          - generic [ref=e155]:
+            - img [ref=e156]
+            - text: All changes saved
+          - button "Preview mobile map" [ref=e159] [cursor=pointer]:
+            - img [ref=e160]
+            - generic [ref=e162]: Preview mobile map
+        - generic [ref=e165]:
+          - complementary [ref=e166]:
+            - generic [ref=e167]:
+              - generic [ref=e168]: Asset Library
+              - generic [ref=e169]: Floor 1
+            - generic [ref=e170]:
+              - img [ref=e171]
+              - textbox "Search facilities assets" [ref=e174]:
+                - /placeholder: Search assets
+            - generic [ref=e175]:
+              - button "Equipment" [ref=e176] [cursor=pointer]
+              - button "Venues" [ref=e177] [cursor=pointer]
+              - button "Paths" [ref=e178] [cursor=pointer]
+            - generic [ref=e180]:
+              - generic [ref=e181]:
+                - generic [ref=e182]: Available Equipment
+                - generic [ref=e183]: 9/9
+              - 'button "Filter available equipment: All categories" [ref=e185] [cursor=pointer]':
+                - generic [ref=e187]: All categories
+                - img [ref=e189]
+              - generic [ref=e191]:
+                - button "Adjustable Bench Strength 5 Remaining" [ref=e192]:
+                  - img [ref=e194]
+                  - generic [ref=e200]:
+                    - generic [ref=e201]: Adjustable Bench
+                    - generic [ref=e202]: Strength
+                  - generic [ref=e203]:
+                    - generic [ref=e204]: "5"
+                    - generic [ref=e205]: Remaining
+                - button "Boxing Gloves Strength 15 Remaining" [ref=e206]:
+                  - img [ref=e208]
+                  - generic [ref=e214]:
+                    - generic [ref=e215]: Boxing Gloves
+                    - generic [ref=e216]: Strength
+                  - generic [ref=e217]:
+                    - generic [ref=e218]: "15"
+                    - generic [ref=e219]: Remaining
+                - button "Concept Rower Cardio 4 Remaining" [ref=e220]:
+                  - img [ref=e222]
+                  - generic [ref=e224]:
+                    - generic [ref=e225]: Concept Rower
+                    - generic [ref=e226]: Cardio
+                  - generic [ref=e227]:
+                    - generic [ref=e228]: "4"
+                    - generic [ref=e229]: Remaining
+                - button "Foam Rollers Mobility 18 Remaining" [ref=e230]:
+                  - img [ref=e232]
+                  - generic [ref=e236]:
+                    - generic [ref=e237]: Foam Rollers
+                    - generic [ref=e238]: Mobility
+                  - generic [ref=e239]:
+                    - generic [ref=e240]: "18"
+                    - generic [ref=e241]: Remaining
+                - button "Hex Dumbbell Set Strength 18 Remaining" [ref=e242]:
+                  - img [ref=e244]
+                  - generic [ref=e250]:
+                    - generic [ref=e251]: Hex Dumbbell Set
+                    - generic [ref=e252]: Strength
+                  - generic [ref=e253]:
+                    - generic [ref=e254]: "18"
+                    - generic [ref=e255]: Remaining
+                - button "Jump Ropes Conditioning 21 Remaining" [ref=e256]:
+                  - img [ref=e258]
+                  - generic [ref=e260]:
+                    - generic [ref=e261]: Jump Ropes
+                    - generic [ref=e262]: Conditioning
+                  - generic [ref=e263]:
+                    - generic [ref=e264]: "21"
+                    - generic [ref=e265]: Remaining
+                - button "Resistance Bands Strength 54 Remaining" [ref=e266]:
+                  - img [ref=e268]
+                  - generic [ref=e274]:
+                    - generic [ref=e275]: Resistance Bands
+                    - generic [ref=e276]: Strength
+                  - generic [ref=e277]:
+                    - generic [ref=e278]: "54"
+                    - generic [ref=e279]: Remaining
+                - button "Spin Bike Cardio 7 Remaining" [ref=e280]:
+                  - img [ref=e282]
+                  - generic [ref=e287]:
+                    - generic [ref=e288]: Spin Bike
+                    - generic [ref=e289]: Cardio
+                  - generic [ref=e290]:
+                    - generic [ref=e291]: "7"
+                    - generic [ref=e292]: Remaining
+                - button "Yoga Mats Accessories 32 Remaining" [ref=e293]:
+                  - img [ref=e295]
+                  - generic [ref=e299]:
+                    - generic [ref=e300]: Yoga Mats
+                    - generic [ref=e301]: Accessories
+                  - generic [ref=e302]:
+                    - generic [ref=e303]: "32"
+                    - generic [ref=e304]: Remaining
+          - generic [ref=e305]:
+            - generic [ref=e306]:
+              - button "Select" [ref=e307] [cursor=pointer]:
+                - img [ref=e308]
+                - generic [ref=e310]: Select
+              - button "Pan" [ref=e311] [cursor=pointer]:
+                - img [ref=e312]
+                - generic [ref=e317]: Pan
+              - button "Building Paint" [disabled] [ref=e318]:
+                - img [ref=e319]
+                - generic [ref=e323]: Building Paint
+              - button "Building Erase" [disabled] [ref=e324]:
+                - img [ref=e325]
+                - generic [ref=e328]: Building Erase
+              - button "Rectangle Fill" [disabled] [ref=e329]:
+                - img [ref=e330]
+                - generic [ref=e335]: Rectangle Fill
+              - button "Path Paint" [disabled] [ref=e336]:
+                - img [ref=e337]
+                - generic [ref=e341]: Path Paint
+              - button "Path Erase" [disabled] [ref=e342]:
+                - img [ref=e343]
+                - generic [ref=e346]: Path Erase
+              - button "Set Entry" [disabled] [ref=e347]:
+                - img [ref=e348]
+                - generic [ref=e351]: Set Entry
+              - button "Set Exit" [disabled] [ref=e352]:
+                - img [ref=e353]
+                - generic [ref=e356]: Set Exit
+              - button "Fit view" [ref=e357] [cursor=pointer]:
+                - img [ref=e358]
+                - generic [ref=e363]: Fit view
+              - button "Edit layout" [ref=e364] [cursor=pointer]:
+                - img [ref=e365]
+                - generic [ref=e368]: Edit layout
+              - button "Apply map cells" [disabled] [ref=e369]:
+                - generic [ref=e370]: Apply map cells
+            - generic [ref=e371]:
+              - generic "Facilities minimap" [ref=e375]
+              - generic [ref=e379]:
+                - button "Zoom out" [ref=e380] [cursor=pointer]:
+                  - img [ref=e381]
+                - 'button "Facilities map zoom: 100%" [ref=e382] [cursor=pointer]':
+                  - generic [ref=e384]: 100%
+                  - img [ref=e386]
+                - button "Zoom in" [ref=e388] [cursor=pointer]:
+                  - img [ref=e389]
+            - generic [ref=e390]:
+              - generic [ref=e391]: "Tip: select a region or placed item to inspect details, then enable edit mode to move nodes or place inventory."
+              - generic [ref=e392]:
+                - generic [ref=e393]: Available
+                - generic [ref=e395]: Reservable
+                - generic [ref=e397]: Equipment Zone
+                - generic [ref=e399]: Support Zone
+          - complementary [ref=e401]:
+            - generic [ref=e402]:
+              - img [ref=e403]
+              - generic [ref=e407]: No map item selected
+              - generic [ref=e408]: Select a venue or placed equipment node to review its details here.

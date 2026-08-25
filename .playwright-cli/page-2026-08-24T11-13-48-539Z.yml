@@ -1,0 +1,322 @@
+- generic [ref=f1e1]:
+  - alert [ref=f1e2]
+  - generic [ref=f1e3]:
+    - generic:
+      - generic:
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+      - generic:
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+      - generic:
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+      - generic:
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+        - generic: FITTRACK
+        - generic: SERTFIT
+    - complementary [ref=f1e5]:
+      - generic [ref=f1e14]:
+        - generic [ref=f1e15]: FitTrack
+        - paragraph [ref=f1e16]: Admin Portal
+      - link [ref=f1e284] [cursor=pointer]:
+        - /url: /profile
+        - generic [ref=f1e19]:
+          - generic [ref=f1e20]: SA
+          - generic [ref=f1e22]:
+            - generic [ref=f1e23]: Sera Admin
+            - paragraph [ref=f1e28]: Manage Profile Details
+      - navigation [ref=f1e30]:
+        - generic [ref=f1e31]:
+          - paragraph [ref=f1e32]: Main
+          - generic [ref=f1e33]:
+            - link [ref=f1e285] [cursor=pointer]:
+              - /url: /analytics
+              - generic [ref=f1e36]: Data Analytics
+            - link [ref=f1e286] [cursor=pointer]:
+              - /url: /accounts
+              - generic [ref=f1e43]: Accounts
+            - link [ref=f1e287] [cursor=pointer]:
+              - /url: /schedule
+              - generic [ref=f1e47]: Gym Operations
+            - link [ref=f1e288] [cursor=pointer]:
+              - /url: /facilities
+              - generic [ref=f1e51]: Facilities
+            - link [ref=f1e289] [cursor=pointer]:
+              - /url: /inventory
+              - generic [ref=f1e57]: Inventory
+            - link [ref=f1e290] [cursor=pointer]:
+              - /url: /gym-actions
+              - generic [ref=f1e62]: Gym Actions
+        - generic [ref=f1e63]:
+          - paragraph [ref=f1e64]: Fitness Ops
+          - generic [ref=f1e65]:
+            - link [ref=f1e291] [cursor=pointer]:
+              - /url: /gamification
+              - generic [ref=f1e73]: Ranking Governance
+            - link [ref=f1e292] [cursor=pointer]:
+              - /url: /milestones
+              - generic [ref=f1e81]: Milestones
+            - link [ref=f1e293] [cursor=pointer]:
+              - /url: /exercise-lab
+              - generic [ref=f1e89]: Exercise Labs
+            - link [ref=f1e294] [cursor=pointer]:
+              - /url: /memberships-promos
+              - generic [ref=f1e94]: Memberships
+        - generic [ref=f1e97]:
+          - paragraph [ref=f1e98]: System
+          - generic [ref=f1e99]:
+            - link [ref=f1e295] [cursor=pointer]:
+              - /url: /ai
+              - generic [ref=f1e104]: BrodigyAI
+            - link [ref=f1e296] [cursor=pointer]:
+              - /url: /settings
+              - generic [ref=f1e109]: Settings
+      - button [ref=f1e297] [cursor=pointer]:
+        - generic [ref=f1e115]: SIGN OUT
+    - main [ref=f1e117]:
+      - generic [ref=f1e118]:
+        - generic [ref=f1e120]:
+          - heading [level=1] [ref=f1e298]: Memberships
+          - paragraph [ref=f1e122]: Manage plans and promos.
+        - button [ref=f1e299] [cursor=pointer]
+      - main [ref=f1e130]:
+        - generic [ref=f1e131]:
+          - generic [ref=f1e132]:
+            - generic [ref=f1e133]: MEMBERSHIP OPERATIONS
+            - generic [ref=f1e134]:
+              - link [ref=f1e300] [cursor=pointer]:
+                - /url: /accounts?tier=active_member
+                - text: VIEW MEMBER ACCOUNTS
+              - button [ref=f1e301] [cursor=pointer]:
+                - generic [ref=f1e140]: VIEW MEMBERSHIP PLANS
+              - button [ref=f1e302] [cursor=pointer]:
+                - generic [ref=f1e143]: CREATE PROMO
+              - button [ref=f1e303] [cursor=pointer]:
+                - generic [ref=f1e150]: REFRESH
+          - generic [ref=f1e153]:
+            - generic [ref=f1e154]:
+              - generic [ref=f1e155]: Active Members
+              - paragraph [ref=f1e156]: "94"
+              - paragraph [ref=f1e157]: Subscriptions currently marked active.
+            - generic [ref=f1e158]:
+              - generic [ref=f1e159]: Activation Fee
+              - paragraph [ref=f1e160]: PHP 400.00
+              - paragraph [ref=f1e161]: One-time member-card activation.
+            - generic [ref=f1e162]:
+              - generic [ref=f1e163]: Active Promos
+              - paragraph [ref=f1e164]: "2"
+              - paragraph [ref=f1e165]: Offers currently visible to members.
+        - generic [ref=f1e166]:
+          - generic [ref=f1e167]:
+            - generic [ref=f1e168]: MEMBERSHIP PLANS (3)
+            - button [ref=f1e304] [cursor=pointer]:
+              - generic [ref=f1e173]: MANAGE PLANS
+          - table [ref=f1e305]:
+            - row [ref=f1e306]:
+              - columnheader [ref=f1e307]: Plan name
+              - columnheader [ref=f1e308]: Price
+              - columnheader [ref=f1e309]: Description
+              - columnheader [ref=f1e310]: Action
+            - row [ref=f1e311]:
+              - cell [ref=f1e312]:
+                - paragraph [ref=f1e183]: One-time activation
+                - paragraph [ref=f1e184]: Member card setup before reload access.
+              - cell [ref=f1e313]: PHP 400.00 once
+              - cell [ref=f1e314]: Shown in the member Profile purchase flow.
+              - cell [ref=f1e315]:
+                - button [ref=f1e316] [cursor=pointer]:
+                  - generic [ref=f1e192]: MANAGE
+            - row [ref=f1e317]:
+              - cell [ref=f1e318]:
+                - paragraph [ref=f1e195]: Starter Monthly
+                - paragraph [ref=f1e196]: 1 month
+              - cell [ref=f1e319]:
+                - text: PHP 799.00
+                - generic [ref=f1e198]: / 1 month
+              - cell [ref=f1e320]: General gym access with QR attendance, member card, and standard amenities.
+              - cell [ref=f1e321]:
+                - generic [ref=f1e201]: Active
+                - button [ref=f1e322] [cursor=pointer]
+            - row [ref=f1e323]:
+              - cell [ref=f1e324]:
+                - paragraph [ref=f1e209]: Performance Monthly
+                - paragraph [ref=f1e210]: 1 month
+              - cell [ref=f1e325]:
+                - text: PHP 1,199.00
+                - generic [ref=f1e212]: / 1 month
+              - cell [ref=f1e326]: Higher usage plan with priority amenities and progression-friendly analytics.
+              - cell [ref=f1e327]:
+                - generic [ref=f1e215]: Active
+                - button [ref=f1e328] [cursor=pointer]
+            - row [ref=f1e329]:
+              - cell [ref=f1e330]:
+                - paragraph [ref=f1e223]: Premium Coaching
+                - paragraph [ref=f1e224]: 1 month
+              - cell [ref=f1e331]:
+                - text: PHP 1,999.00
+                - generic [ref=f1e226]: / 1 month
+              - cell [ref=f1e332]:
+                - text: Premium membership with recurring coaching support and richer AI/nutrition surfaces.
+                - generic [ref=f1e228]: Includes coaching
+              - cell [ref=f1e333]:
+                - generic [ref=f1e231]: Active
+                - button [ref=f1e334] [cursor=pointer]
+        - generic [ref=f1e237]:
+          - generic [ref=f1e238]:
+            - generic [ref=f1e239]: ACTIVE PROMOS (2)
+            - button [ref=f1e335] [cursor=pointer]:
+              - generic [ref=f1e242]: CREATE PROMO
+          - table [ref=f1e336]:
+            - row [ref=f1e337]:
+              - columnheader [ref=f1e338]: Promotion
+              - columnheader [ref=f1e339]: Promo code
+              - columnheader [ref=f1e340]: Duration / details
+              - columnheader [ref=f1e341]: Action
+            - row [ref=f1e342]:
+              - cell [ref=f1e343]:
+                - paragraph [ref=f1e252]: Premium Coaching Demo
+                - paragraph [ref=f1e253]: Premium coaching member promo for the current campaign.
+              - cell [ref=f1e344]:
+                - generic [ref=f1e255]: PREMIUMQA
+              - cell [ref=f1e345]:
+                - paragraph [ref=f1e258]: Aug 21, 2026 to Sep 14, 2026
+                - paragraph [ref=f1e259]: Free assessment on first recurring plan.
+              - cell [ref=f1e346]:
+                - generic [ref=f1e261]: Active
+                - button [ref=f1e347] [cursor=pointer]
+            - row [ref=f1e348]:
+              - cell [ref=f1e349]:
+                - paragraph [ref=f1e269]: Amenity Bundle
+                - paragraph [ref=f1e270]: Boxing ring and studio reservation promo for the upcoming campaign.
+              - cell [ref=f1e350]:
+                - generic [ref=f1e272]: BOOKFIT
+              - cell [ref=f1e351]:
+                - paragraph [ref=f1e275]: Aug 26, 2026 to Sep 3, 2026
+                - paragraph [ref=f1e276]: 10% off two-hour amenity blocks.
+              - cell [ref=f1e352]:
+                - generic [ref=f1e278]: Active
+                - button [ref=f1e353] [cursor=pointer]
+  - dialog "Create promotion" [active] [ref=f1e355]:
+    - generic [ref=f1e356]:
+      - generic [ref=f1e362]:
+        - generic [ref=f1e363]: Create promotion
+        - paragraph [ref=f1e364]: Publish a time-bound membership or amenity offer.
+      - button "Close modal" [ref=f1e365] [cursor=pointer]
+    - generic [ref=f1e370]:
+      - generic [ref=f1e371]:
+        - generic [ref=f1e372]:
+          - generic [ref=f1e373]: Promo title
+          - textbox "Promo title" [ref=f1e376]:
+            - /placeholder: Summer Starter Pack
+        - generic [ref=f1e377]:
+          - generic [ref=f1e378]: Promo code (optional)
+          - textbox "Promo code (optional)" [ref=f1e381]:
+            - /placeholder: SUMMER26
+      - generic [ref=f1e382]:
+        - generic [ref=f1e383]:
+          - generic [ref=f1e384]: Start date
+          - button "Start date" [ref=f1e387] [cursor=pointer]:
+            - generic [ref=f1e390]: SELECT START DATE
+        - generic [ref=f1e391]:
+          - generic [ref=f1e392]: End date
+          - button "End date" [ref=f1e395] [cursor=pointer]:
+            - generic [ref=f1e398]: SELECT END DATE
+      - generic [ref=f1e399]:
+        - generic [ref=f1e400]: Description
+        - textbox "Description" [ref=f1e403]:
+          - /placeholder: Get two weeks free on annual plans.
+      - generic [ref=f1e404]:
+        - generic [ref=f1e405]: Pricing note (optional)
+        - textbox "Pricing note (optional)" [ref=f1e407]:
+          - /placeholder: Applies to new signups.
+    - generic [ref=f1e409]:
+      - button "CANCEL" [ref=f1e410] [cursor=pointer]
+      - button "CREATE PROMO" [ref=f1e412] [cursor=pointer]

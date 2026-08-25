@@ -61,6 +61,8 @@ type PoseLandmarkName = (typeof LANDMARK_NAMES)[number];
 type PoseSideJointName =
   | "left_elbow"
   | "right_elbow"
+  | "left_ankle"
+  | "right_ankle"
   | "left_hip"
   | "right_hip"
   | "left_knee"
@@ -69,6 +71,10 @@ type PoseSideJointName =
   | "right_shoulder";
 
 const JOINT_MAP: Record<PoseJointName, JointIndexes[]> = {
+  ankle: [
+    { a: 25, b: 27, c: 31 },
+    { a: 26, b: 28, c: 32 },
+  ],
   elbow: [
     { a: 11, b: 13, c: 15 },
     { a: 12, b: 14, c: 16 },
@@ -87,6 +93,8 @@ const JOINT_MAP: Record<PoseJointName, JointIndexes[]> = {
   ],
 };
 const SIDE_JOINT_MAP: Record<PoseSideJointName, JointIndexes> = {
+  left_ankle: { a: 25, b: 27, c: 31 },
+  right_ankle: { a: 26, b: 28, c: 32 },
   left_elbow: { a: 11, b: 13, c: 15 },
   right_elbow: { a: 12, b: 14, c: 16 },
   left_hip: { a: 11, b: 23, c: 25 },
@@ -102,6 +110,7 @@ const PUSH_UP_SIDE_ANGLE_CONFIDENCE = 0.2;
 const PUSH_UP_SYMMETRY_TOLERANCE = 85;
 const PULL_UP_SIDE_ANGLE_CONFIDENCE = 0.3;
 const PULL_UP_SYMMETRY_TOLERANCE = 60;
+const SQUAT_SIDE_ANGLE_CONFIDENCE = 0.25;
 const MIN_RELIABLE_FRAME_LANDMARKS = 12;
 export const POSE_MOVEMENT_CONTRACT_VERSION = "pose_movement_contract_v2";
 
@@ -213,10 +222,10 @@ const FALLBACK_POSE_MOVEMENT_CONTRACTS: Record<
     primaryJoints: ["left_elbow", "right_elbow"],
     repModel: "bilateral",
     repThresholds: {
-      // Consumer-realistic press depth: enough travel for a real rep without
-      // requiring an extreme bottom position in a phone-camera frame.
-      down: { angle: 98, tolerance: 12 },
-      up: { angle: 157, tolerance: 12 },
+      // A normal camera-visible press arc: a controlled bend and lockout,
+      // without requiring the forearm to disappear under the bar path.
+      down: { angle: 100, tolerance: 12 },
+      up: { angle: 155, tolerance: 12 },
     },
     requiredSides: "both",
     secondaryCheck: "bar_path",
@@ -246,8 +255,8 @@ const FALLBACK_POSE_MOVEMENT_CONTRACTS: Record<
     repThresholds: {
       // Require a recognisable extension-to-curl arc without requiring a
       // fully locked elbow or unnaturally tight curl.
-      down: { angle: 150, tolerance: 10 },
-      up: { angle: 90, tolerance: 10 },
+      down: { angle: 145, tolerance: 10 },
+      up: { angle: 95, tolerance: 10 },
     },
     repModel: "bilateral",
     requiredSides: "both",
@@ -259,6 +268,596 @@ const FALLBACK_POSE_MOVEMENT_CONTRACTS: Record<
       bodyYTravelMin: 0,
       leftRightSymmetryTolerance: 60,
       phaseSyncToleranceMs: 950,
+    },
+  },
+  dumbbell_bench_press: {
+    bodyOrientation: "horizontal",
+    dominantJoint: "elbow",
+    exercise: "dumbbell_bench_press",
+    noCountConditions: [
+      "one_arm_only",
+      "phase_desync",
+      "press_path_unavailable",
+    ],
+    oscillatingJoints: ["elbow", "shoulder"],
+    phaseOrder: ["setup", "down", "up"],
+    primaryJoints: ["left_elbow", "right_elbow"],
+    repModel: "bilateral",
+    repThresholds: {
+      down: { angle: 100, tolerance: 12 },
+      up: { angle: 155, tolerance: 12 },
+    },
+    requiredSides: "both",
+    secondaryCheck: "dumbbell_press_path",
+    secondaryJoints: ["left_shoulder", "right_shoulder"],
+    spatialRequirements: {
+      bodyLineTolerance: 40,
+      bodyXDriftMax: 0.08,
+      leftRightSymmetryTolerance: 30,
+      phaseSyncToleranceMs: 450,
+    },
+    trackingRequirements: {
+      minConfidence: 0.6,
+      minReliableFrameLandmarks: 12,
+      requiredLandmarks: ["shoulders", "elbows", "wrists", "hips"],
+    },
+  },
+  incline_dumbbell_press: {
+    bodyOrientation: "inclined",
+    dominantJoint: "elbow",
+    exercise: "incline_dumbbell_press",
+    noCountConditions: [
+      "one_arm_only",
+      "phase_desync",
+      "press_path_unavailable",
+    ],
+    oscillatingJoints: ["elbow", "shoulder"],
+    phaseOrder: ["setup", "down", "up"],
+    primaryJoints: ["left_elbow", "right_elbow"],
+    repModel: "bilateral",
+    repThresholds: {
+      down: { angle: 105, tolerance: 12 },
+      up: { angle: 150, tolerance: 12 },
+    },
+    requiredSides: "both",
+    secondaryCheck: "inclined_press_path",
+    secondaryJoints: ["left_shoulder", "right_shoulder"],
+    spatialRequirements: {
+      bodyLineTolerance: 45,
+      bodyXDriftMax: 0.1,
+      leftRightSymmetryTolerance: 32,
+      phaseSyncToleranceMs: 500,
+    },
+    trackingRequirements: {
+      minConfidence: 0.6,
+      minReliableFrameLandmarks: 12,
+      requiredLandmarks: ["shoulders", "elbows", "wrists", "hips"],
+    },
+  },
+  cable_fly: {
+    bodyOrientation: "upright",
+    dominantJoint: "shoulder",
+    exercise: "cable_fly",
+    noCountConditions: [
+      "one_arm_only",
+      "phase_desync",
+      "cable_path_unavailable",
+    ],
+    oscillatingJoints: ["shoulder", "elbow"],
+    phaseOrder: ["setup", "down", "up"],
+    primaryJoints: ["left_shoulder", "right_shoulder"],
+    repModel: "bilateral",
+    repThresholds: {
+      down: { angle: 100, tolerance: 12 },
+      up: { angle: 155, tolerance: 12 },
+    },
+    requiredSides: "both",
+    secondaryCheck: "cable_fly_arc",
+    secondaryJoints: ["left_elbow", "right_elbow"],
+    spatialRequirements: {
+      bodyLineTolerance: 40,
+      bodyXDriftMax: 0.12,
+      leftRightSymmetryTolerance: 35,
+      phaseSyncToleranceMs: 550,
+    },
+    trackingRequirements: {
+      minConfidence: 0.6,
+      minReliableFrameLandmarks: 12,
+      requiredLandmarks: ["shoulders", "elbows", "wrists", "hips"],
+    },
+  },
+  lateral_raise: {
+    bodyOrientation: "upright",
+    dominantJoint: "shoulder",
+    exercise: "lateral_raise",
+    noCountConditions: [
+      "one_arm_only",
+      "phase_desync",
+      "shoulder_arc_unavailable",
+    ],
+    oscillatingJoints: ["shoulder", "elbow"],
+    phaseOrder: ["setup", "down", "up"],
+    primaryJoints: ["left_shoulder", "right_shoulder"],
+    repModel: "bilateral",
+    repThresholds: {
+      down: { angle: 100, tolerance: 12 },
+      up: { angle: 155, tolerance: 12 },
+    },
+    requiredSides: "both",
+    secondaryCheck: "lateral_raise_arc",
+    secondaryJoints: ["left_elbow", "right_elbow"],
+    spatialRequirements: {
+      bodyLineTolerance: 38,
+      bodyXDriftMax: 0.12,
+      leftRightSymmetryTolerance: 35,
+      phaseSyncToleranceMs: 500,
+    },
+    trackingRequirements: {
+      minConfidence: 0.6,
+      minReliableFrameLandmarks: 12,
+      requiredLandmarks: ["shoulders", "elbows", "wrists", "hips"],
+    },
+  },
+  lat_pulldown: {
+    bodyOrientation: "upright",
+    dominantJoint: "elbow",
+    exercise: "lat_pulldown",
+    noCountConditions: ["one_arm_only", "phase_desync", "bar_path_unavailable"],
+    oscillatingJoints: ["elbow", "shoulder"],
+    phaseOrder: ["setup", "pull", "release"],
+    primaryJoints: ["left_elbow", "right_elbow"],
+    repModel: "bilateral",
+    repThresholds: {
+      down: { angle: 145, tolerance: 10 },
+      up: { angle: 95, tolerance: 10 },
+    },
+    requiredSides: "both",
+    secondaryCheck: "lat_vertical_pull",
+    secondaryJoints: ["left_shoulder", "right_shoulder", "hip"],
+    spatialRequirements: {
+      bodyLineTolerance: 45,
+      bodyXDriftMax: 0.12,
+      leftRightSymmetryTolerance: 35,
+      phaseSyncToleranceMs: 650,
+    },
+    trackingRequirements: {
+      minConfidence: 0.6,
+      minReliableFrameLandmarks: 12,
+      requiredLandmarks: ["shoulders", "elbows", "wrists", "hips"],
+    },
+  },
+  barbell_row: {
+    bodyOrientation: "inclined",
+    dominantJoint: "elbow",
+    exercise: "barbell_row",
+    noCountConditions: ["one_arm_only", "phase_desync", "torso_brace_failure"],
+    oscillatingJoints: ["elbow", "shoulder", "hip"],
+    phaseOrder: ["setup", "pull", "return"],
+    primaryJoints: ["left_elbow", "right_elbow"],
+    repModel: "bilateral",
+    repThresholds: {
+      down: { angle: 140, tolerance: 10 },
+      up: { angle: 95, tolerance: 10 },
+    },
+    requiredSides: "both",
+    secondaryCheck: "barbell_row_brace",
+    secondaryJoints: ["left_shoulder", "right_shoulder", "hip"],
+    spatialRequirements: {
+      bodyLineTolerance: 36,
+      bodyXDriftMax: 0.1,
+      leftRightSymmetryTolerance: 35,
+      phaseSyncToleranceMs: 550,
+    },
+    trackingRequirements: {
+      minConfidence: 0.6,
+      minReliableFrameLandmarks: 12,
+      requiredLandmarks: ["shoulders", "elbows", "wrists", "hips"],
+    },
+  },
+  leg_press: {
+    bodyOrientation: "inclined",
+    dominantJoint: "knee",
+    exercise: "leg_press",
+    noCountConditions: [
+      "one_leg_only",
+      "phase_desync",
+      "knee_path_unavailable",
+    ],
+    oscillatingJoints: ["knee", "hip"],
+    phaseOrder: ["setup", "down", "press"],
+    primaryJoints: ["left_knee", "right_knee"],
+    repModel: "bilateral",
+    repThresholds: {
+      down: { angle: 100, tolerance: 12 },
+      up: { angle: 155, tolerance: 12 },
+    },
+    requiredSides: "both",
+    secondaryCheck: "leg_press_depth",
+    secondaryJoints: ["left_hip", "right_hip"],
+    spatialRequirements: {
+      bodyLineTolerance: 45,
+      bodyXDriftMax: 0.1,
+      leftRightSymmetryTolerance: 35,
+      phaseSyncToleranceMs: 500,
+    },
+    trackingRequirements: {
+      minConfidence: 0.6,
+      minReliableFrameLandmarks: 12,
+      requiredLandmarks: ["shoulders", "hips", "knees", "ankles"],
+    },
+  },
+  leg_extension: {
+    bodyOrientation: "upright",
+    dominantJoint: "knee",
+    exercise: "leg_extension",
+    noCountConditions: [
+      "one_leg_only",
+      "phase_desync",
+      "knee_path_unavailable",
+    ],
+    oscillatingJoints: ["knee", "hip"],
+    phaseOrder: ["setup", "down", "extend"],
+    primaryJoints: ["left_knee", "right_knee"],
+    repModel: "bilateral",
+    repThresholds: {
+      down: { angle: 100, tolerance: 12 },
+      up: { angle: 155, tolerance: 12 },
+    },
+    requiredSides: "both",
+    secondaryCheck: "knee_extension_control",
+    secondaryJoints: ["left_hip", "right_hip"],
+    spatialRequirements: {
+      bodyLineTolerance: 42,
+      bodyXDriftMax: 0.1,
+      leftRightSymmetryTolerance: 35,
+      phaseSyncToleranceMs: 500,
+    },
+    trackingRequirements: {
+      minConfidence: 0.6,
+      minReliableFrameLandmarks: 12,
+      requiredLandmarks: ["shoulders", "hips", "knees", "ankles"],
+    },
+  },
+  seated_leg_curl: {
+    bodyOrientation: "upright",
+    dominantJoint: "knee",
+    exercise: "seated_leg_curl",
+    noCountConditions: [
+      "one_leg_only",
+      "phase_desync",
+      "knee_path_unavailable",
+    ],
+    oscillatingJoints: ["knee", "hip"],
+    phaseOrder: ["setup", "curl", "return"],
+    primaryJoints: ["left_knee", "right_knee"],
+    repModel: "bilateral",
+    repThresholds: {
+      down: { angle: 145, tolerance: 10 },
+      up: { angle: 95, tolerance: 10 },
+    },
+    requiredSides: "both",
+    secondaryCheck: "hamstring_curl_control",
+    secondaryJoints: ["left_hip", "right_hip"],
+    spatialRequirements: {
+      bodyLineTolerance: 42,
+      bodyXDriftMax: 0.1,
+      leftRightSymmetryTolerance: 35,
+      phaseSyncToleranceMs: 500,
+    },
+    trackingRequirements: {
+      minConfidence: 0.6,
+      minReliableFrameLandmarks: 12,
+      requiredLandmarks: ["shoulders", "hips", "knees", "ankles"],
+    },
+  },
+  calf_raise: {
+    bodyOrientation: "upright",
+    dominantJoint: "ankle",
+    exercise: "calf_raise",
+    noCountConditions: [
+      "one_leg_only",
+      "phase_desync",
+      "ankle_motion_unavailable",
+    ],
+    oscillatingJoints: ["ankle", "knee", "hip"],
+    phaseOrder: ["setup", "raise", "lower"],
+    primaryJoints: ["left_ankle", "right_ankle"],
+    repModel: "bilateral",
+    repThresholds: {
+      down: { angle: 80, tolerance: 10 },
+      up: { angle: 115, tolerance: 10 },
+    },
+    requiredSides: "both",
+    secondaryCheck: "calf_raise_vertical_control",
+    secondaryJoints: ["left_knee", "right_knee", "left_hip", "right_hip"],
+    spatialRequirements: {
+      bodyLineTolerance: 30,
+      bodyXDriftMax: 0.08,
+      leftRightSymmetryTolerance: 28,
+      phaseSyncToleranceMs: 450,
+    },
+    trackingRequirements: {
+      minConfidence: 0.6,
+      minReliableFrameLandmarks: 10,
+      requiredLandmarks: ["hips", "knees", "ankles"],
+    },
+  },
+  hammer_curl: {
+    bodyOrientation: "upright",
+    dominantJoint: "elbow",
+    exercise: "hammer_curl",
+    noCountConditions: [
+      "one_arm_only",
+      "phase_desync",
+      "torso_swing_over_tolerance",
+    ],
+    oscillatingJoints: ["elbow", "shoulder"],
+    phaseOrder: ["setup", "curl", "return"],
+    primaryJoints: ["left_elbow", "right_elbow"],
+    repModel: "bilateral",
+    repThresholds: {
+      down: { angle: 145, tolerance: 10 },
+      up: { angle: 95, tolerance: 10 },
+    },
+    requiredSides: "both",
+    secondaryCheck: "hammer_curl_stability",
+    secondaryJoints: ["left_shoulder", "right_shoulder", "hip"],
+    spatialRequirements: {
+      bodyLineTolerance: 45,
+      bodyXDriftMax: 0.08,
+      leftRightSymmetryTolerance: 60,
+      phaseSyncToleranceMs: 950,
+    },
+    trackingRequirements: {
+      minConfidence: 0.6,
+      minReliableFrameLandmarks: 12,
+      requiredLandmarks: ["shoulders", "elbows", "wrists", "hips"],
+    },
+  },
+  triceps_pushdown: {
+    bodyOrientation: "upright",
+    dominantJoint: "elbow",
+    exercise: "triceps_pushdown",
+    noCountConditions: [
+      "one_arm_only",
+      "phase_desync",
+      "shoulder_swing_over_tolerance",
+    ],
+    oscillatingJoints: ["elbow", "shoulder"],
+    phaseOrder: ["setup", "press", "return"],
+    primaryJoints: ["left_elbow", "right_elbow"],
+    repModel: "bilateral",
+    repThresholds: {
+      down: { angle: 100, tolerance: 12 },
+      up: { angle: 155, tolerance: 12 },
+    },
+    requiredSides: "both",
+    secondaryCheck: "triceps_pushdown_control",
+    secondaryJoints: ["left_shoulder", "right_shoulder"],
+    spatialRequirements: {
+      bodyLineTolerance: 40,
+      bodyXDriftMax: 0.1,
+      leftRightSymmetryTolerance: 50,
+      phaseSyncToleranceMs: 600,
+    },
+    trackingRequirements: {
+      minConfidence: 0.6,
+      minReliableFrameLandmarks: 12,
+      requiredLandmarks: ["shoulders", "elbows", "wrists", "hips"],
+    },
+  },
+  rope_face_pull: {
+    bodyOrientation: "upright",
+    dominantJoint: "shoulder",
+    exercise: "rope_face_pull",
+    noCountConditions: [
+      "one_arm_only",
+      "phase_desync",
+      "shoulder_path_unavailable",
+    ],
+    oscillatingJoints: ["shoulder", "elbow"],
+    phaseOrder: ["setup", "pull", "return"],
+    primaryJoints: ["left_shoulder", "right_shoulder"],
+    repModel: "bilateral",
+    repThresholds: {
+      down: { angle: 90, tolerance: 12 },
+      up: { angle: 145, tolerance: 12 },
+    },
+    requiredSides: "both",
+    secondaryCheck: "face_pull_rotation_control",
+    secondaryJoints: ["left_elbow", "right_elbow"],
+    spatialRequirements: {
+      bodyLineTolerance: 40,
+      bodyXDriftMax: 0.1,
+      leftRightSymmetryTolerance: 35,
+      phaseSyncToleranceMs: 550,
+    },
+    trackingRequirements: {
+      minConfidence: 0.6,
+      minReliableFrameLandmarks: 12,
+      requiredLandmarks: ["shoulders", "elbows", "wrists", "hips"],
+    },
+  },
+  hip_thrust: {
+    bodyOrientation: "horizontal",
+    dominantJoint: "hip",
+    exercise: "hip_thrust",
+    noCountConditions: [
+      "one_leg_only",
+      "phase_desync",
+      "hip_extension_unavailable",
+    ],
+    oscillatingJoints: ["hip", "knee"],
+    phaseOrder: ["setup", "extend", "lower"],
+    primaryJoints: ["left_hip", "right_hip"],
+    repModel: "bilateral",
+    repThresholds: {
+      down: { angle: 100, tolerance: 12 },
+      up: { angle: 155, tolerance: 12 },
+    },
+    requiredSides: "both",
+    secondaryCheck: "hip_extension_control",
+    secondaryJoints: [
+      "left_knee",
+      "right_knee",
+      "left_shoulder",
+      "right_shoulder",
+    ],
+    spatialRequirements: {
+      bodyLineTolerance: 35,
+      bodyXDriftMax: 0.1,
+      bodyYTravelMin: 0.015,
+      hipYTravelMin: 0.01,
+      leftRightSymmetryTolerance: 35,
+      phaseSyncToleranceMs: 500,
+    },
+    trackingRequirements: {
+      minConfidence: 0.6,
+      minReliableFrameLandmarks: 12,
+      requiredLandmarks: ["shoulders", "hips", "knees", "ankles"],
+    },
+  },
+  split_squat: {
+    bodyOrientation: "upright",
+    dominantJoint: "knee",
+    exercise: "split_squat",
+    noCountConditions: [
+      "phase_desync",
+      "leg_travel_unavailable",
+      "unstable_torso",
+    ],
+    oscillatingJoints: ["knee", "hip"],
+    phaseOrder: ["setup", "down", "up"],
+    primaryJoints: ["left_knee", "right_knee"],
+    repModel: "alternating",
+    repThresholds: {
+      down: { angle: 105, tolerance: 12 },
+      up: { angle: 155, tolerance: 12 },
+    },
+    requiredSides: "alternating",
+    secondaryCheck: "split_squat_balance",
+    secondaryJoints: ["left_hip", "right_hip", "left_ankle", "right_ankle"],
+    spatialRequirements: {
+      bodyLineTolerance: 45,
+      bodyXDriftMax: 0.12,
+      bodyYTravelMin: 0.018,
+      leftRightSymmetryTolerance: 45,
+      phaseSyncToleranceMs: 500,
+    },
+    trackingRequirements: {
+      minConfidence: 0.6,
+      minReliableFrameLandmarks: 12,
+      requiredLandmarks: ["shoulders", "hips", "knees", "ankles"],
+    },
+  },
+  cable_crunch: {
+    bodyOrientation: "upright",
+    dominantJoint: "hip",
+    exercise: "cable_crunch",
+    noCountConditions: [
+      "phase_desync",
+      "hip_flexion_unavailable",
+      "unstable_base",
+    ],
+    oscillatingJoints: ["hip", "shoulder"],
+    phaseOrder: ["setup", "crunch", "return"],
+    primaryJoints: ["left_hip", "right_hip"],
+    repModel: "bilateral",
+    repThresholds: {
+      down: { angle: 150, tolerance: 12 },
+      up: { angle: 105, tolerance: 12 },
+    },
+    requiredSides: "both",
+    secondaryCheck: "cable_crunch_control",
+    secondaryJoints: [
+      "left_shoulder",
+      "right_shoulder",
+      "left_knee",
+      "right_knee",
+    ],
+    spatialRequirements: {
+      bodyLineTolerance: 35,
+      bodyXDriftMax: 0.1,
+      bodyYTravelMin: 0.015,
+      hipYTravelMin: 0.01,
+      leftRightSymmetryTolerance: 35,
+      phaseSyncToleranceMs: 500,
+    },
+    trackingRequirements: {
+      minConfidence: 0.6,
+      minReliableFrameLandmarks: 12,
+      requiredLandmarks: ["shoulders", "hips", "knees"],
+    },
+  },
+  romanian_deadlift: {
+    bodyOrientation: "inclined",
+    dominantJoint: "hip",
+    exercise: "romanian_deadlift",
+    noCountConditions: [
+      "phase_desync",
+      "hip_hinge_unavailable",
+      "unstable_torso",
+    ],
+    oscillatingJoints: ["hip", "knee"],
+    phaseOrder: ["setup", "hinge", "stand"],
+    primaryJoints: ["left_hip", "right_hip"],
+    repModel: "bilateral",
+    repThresholds: {
+      down: { angle: 110, tolerance: 12 },
+      up: { angle: 160, tolerance: 12 },
+    },
+    requiredSides: "both",
+    secondaryCheck: "romanian_deadlift_brace",
+    secondaryJoints: [
+      "left_knee",
+      "right_knee",
+      "left_shoulder",
+      "right_shoulder",
+    ],
+    spatialRequirements: {
+      bodyLineTolerance: 32,
+      bodyXDriftMax: 0.1,
+      bodyYTravelMin: 0.02,
+      hipYTravelMin: 0.015,
+      leftRightSymmetryTolerance: 35,
+      phaseSyncToleranceMs: 550,
+    },
+    trackingRequirements: {
+      minConfidence: 0.6,
+      minReliableFrameLandmarks: 12,
+      requiredLandmarks: ["shoulders", "hips", "knees", "ankles"],
+    },
+  },
+  seated_cable_row: {
+    bodyOrientation: "upright",
+    dominantJoint: "elbow",
+    exercise: "seated_cable_row",
+    noCountConditions: [
+      "one_arm_only",
+      "phase_desync",
+      "torso_swing_over_tolerance",
+    ],
+    oscillatingJoints: ["elbow", "shoulder"],
+    phaseOrder: ["setup", "pull", "return"],
+    primaryJoints: ["left_elbow", "right_elbow"],
+    repModel: "bilateral",
+    repThresholds: {
+      down: { angle: 140, tolerance: 10 },
+      up: { angle: 95, tolerance: 10 },
+    },
+    requiredSides: "both",
+    secondaryCheck: "seated_row_brace",
+    secondaryJoints: ["left_shoulder", "right_shoulder", "hip"],
+    spatialRequirements: {
+      bodyLineTolerance: 40,
+      bodyXDriftMax: 0.1,
+      leftRightSymmetryTolerance: 35,
+      phaseSyncToleranceMs: 550,
+    },
+    trackingRequirements: {
+      minConfidence: 0.6,
+      minReliableFrameLandmarks: 12,
+      requiredLandmarks: ["shoulders", "elbows", "wrists", "hips"],
     },
   },
   dip: {
@@ -279,8 +878,8 @@ const FALLBACK_POSE_MOVEMENT_CONTRACTS: Record<
     primaryJoints: ["left_elbow", "right_elbow"],
     repModel: "bilateral",
     repThresholds: {
-      down: { angle: 108, tolerance: 12 },
-      up: { angle: 152, tolerance: 12 },
+      down: { angle: 112, tolerance: 12 },
+      up: { angle: 150, tolerance: 12 },
     },
     requiredSides: "both",
     secondaryCheck: "vertical_body_travel",
@@ -335,7 +934,10 @@ const FALLBACK_POSE_MOVEMENT_CONTRACTS: Record<
     primaryJoints: ["left_elbow", "right_elbow"],
     repModel: "bilateral",
     repThresholds: {
-      down: { angle: 108, tolerance: 12 },
+      // A moderate elbow bend is enough for a controlled push-up. The
+      // existing bilateral, body-line, travel, and phase guards still reject
+      // shallow jitter and random arm movement.
+      down: { angle: 120, tolerance: 15 },
       up: { angle: 157, tolerance: 12 },
     },
     requiredSides: "both",
@@ -369,8 +971,8 @@ const FALLBACK_POSE_MOVEMENT_CONTRACTS: Record<
     primaryJoints: ["left_elbow", "right_elbow"],
     repModel: "bilateral",
     repThresholds: {
-      down: { angle: 150, tolerance: 10 },
-      up: { angle: 95, tolerance: 10 },
+      down: { angle: 145, tolerance: 10 },
+      up: { angle: 100, tolerance: 10 },
     },
     requiredSides: "either",
     secondaryCheck: "vertical_pull",
@@ -401,8 +1003,8 @@ const FALLBACK_POSE_MOVEMENT_CONTRACTS: Record<
     primaryJoints: ["left_shoulder", "right_shoulder"],
     repModel: "bilateral",
     repThresholds: {
-      down: { angle: 98, tolerance: 12 },
-      up: { angle: 152, tolerance: 12 },
+      down: { angle: 105, tolerance: 12 },
+      up: { angle: 150, tolerance: 12 },
     },
     requiredSides: "both",
     secondaryCheck: "lockout_control",
@@ -423,8 +1025,8 @@ const FALLBACK_POSE_MOVEMENT_CONTRACTS: Record<
     primaryJoints: ["left_knee", "right_knee"],
     repModel: "bilateral",
     repThresholds: {
-      down: { angle: 108, tolerance: 12 },
-      up: { angle: 157, tolerance: 12 },
+      down: { angle: 105, tolerance: 12 },
+      up: { angle: 155, tolerance: 12 },
     },
     requiredSides: "both",
     secondaryCheck: "hip_depth",
@@ -554,6 +1156,10 @@ function isPullUpContract(
   contract: Pick<PoseMovementContractRecord, "exercise">,
 ) {
   return toCanonicalPoseExerciseLabel(contract.exercise) === "pull_up";
+}
+
+function isSquatContract(contract: PoseMovementContractRecord) {
+  return toCanonicalPoseExerciseLabel(contract.exercise) === "squat";
 }
 
 function getLatestExtremumTime(
@@ -810,6 +1416,110 @@ export type PoseMovementContractValidation = {
   valid: boolean;
 };
 
+export function validatePoseMovementFamilyCompatibility(
+  value: unknown,
+  exerciseLabel?: string | null,
+): PoseMovementContractValidation {
+  const normalized = normalizePoseMovementContract(value, exerciseLabel);
+  if (!normalized) {
+    return { errors: ["movement_contract_missing"], normalized: null, valid: false };
+  }
+  const fallback = buildFallbackPoseMovementContract(normalized.exercise);
+  if (!fallback) {
+    return {
+      errors: ["exercise_not_supported_for_auto_rep"],
+      normalized,
+      valid: false,
+    };
+  }
+  const errors: string[] = [];
+  const sameStringArray = (left?: string[], right?: string[]) =>
+    JSON.stringify(left ?? []) === JSON.stringify(right ?? []);
+  if (normalized.dominantJoint !== fallback.dominantJoint)
+    errors.push("dominant_joint_mismatch");
+  if ((normalized.repModel ?? "unknown") !== (fallback.repModel ?? "unknown"))
+    errors.push("rep_model_mismatch");
+  if ((normalized.requiredSides ?? "either") !== (fallback.requiredSides ?? "either"))
+    errors.push("required_sides_mismatch");
+  if (normalized.bodyOrientation !== fallback.bodyOrientation)
+    errors.push("body_orientation_mismatch");
+  if (normalized.secondaryCheck !== fallback.secondaryCheck)
+    errors.push("secondary_check_mismatch");
+  if (!sameStringArray(normalized.primaryJoints, fallback.primaryJoints))
+    errors.push("primary_joints_mismatch");
+  if (!sameStringArray(normalized.phaseOrder, fallback.phaseOrder))
+    errors.push("phase_order_mismatch");
+  if (
+    !sameStringArray(
+      normalized.trackingRequirements?.requiredLandmarks,
+      fallback.trackingRequirements?.requiredLandmarks,
+    )
+  ) errors.push("required_landmarks_mismatch");
+  if (normalized.contractVersion !== fallback.contractVersion)
+    errors.push("contract_version_mismatch");
+  return { errors, normalized, valid: errors.length === 0 };
+}
+
+export function validatePoseMovementCalibration(
+  value: unknown,
+  exerciseLabel?: string | null,
+): PoseMovementContractValidation {
+  const rawRecord =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : null;
+  const normalized = normalizePoseMovementContract(value, exerciseLabel);
+  if (!normalized) {
+    return { errors: ["movement_contract_missing"], normalized: null, valid: false };
+  }
+  const errors: string[] = [];
+  const thresholds = [normalized.repThresholds.down, normalized.repThresholds.up];
+  if (thresholds.some((entry) => !Number.isFinite(entry.angle) || entry.angle < 0 || entry.angle > 180))
+    errors.push("rep_angle_out_of_range");
+  if (thresholds.some((entry) => !Number.isFinite(entry.tolerance) || entry.tolerance < 0 || entry.tolerance > 45))
+    errors.push("rep_tolerance_out_of_range");
+  if (
+    normalized.repModel !== "static_hold" &&
+    Math.abs(thresholds[0].angle - thresholds[1].angle) < 15
+  )
+    errors.push("rep_travel_below_minimum");
+  const tracking = normalized.trackingRequirements;
+  if (
+    !tracking ||
+    !Number.isFinite(tracking.minConfidence) ||
+    tracking.minConfidence < 0 || tracking.minConfidence > 1 ||
+    !Number.isInteger(tracking.minReliableFrameLandmarks) ||
+    tracking.minReliableFrameLandmarks < 1 || tracking.minReliableFrameLandmarks > 33 ||
+    !tracking.requiredLandmarks.length
+  ) errors.push("tracking_requirements_invalid");
+  for (const entry of Object.values(normalized.spatialRequirements ?? {})) {
+    if (
+      entry !== undefined &&
+      entry !== null &&
+      (!Number.isFinite(entry) || entry < 0 || entry > 5000)
+    ) {
+      errors.push("spatial_requirement_out_of_range");
+      break;
+    }
+  }
+  if (normalized.repModel === "static_hold") {
+    const duration = normalized.holdDurationSeconds;
+    const rawDuration = rawRecord?.holdDurationSeconds;
+    if (
+      !Number.isFinite(duration) ||
+      (duration ?? 0) < 1 ||
+      (duration ?? 0) > 3600 ||
+      (rawDuration !== undefined &&
+        (typeof rawDuration !== "number" ||
+          !Number.isFinite(rawDuration) ||
+          rawDuration < 1 ||
+          rawDuration > 3600))
+    )
+      errors.push("hold_duration_out_of_range");
+  }
+  return { errors, normalized, valid: errors.length === 0 };
+}
+
 /**
  * Validate an explicit profile against the reviewed shared movement contract.
  * Seed/runtime callers use this gate before enabling automatic counting; an
@@ -885,86 +1595,10 @@ export function validatePoseMovementContract(
     }
   }
 
-  const capability = getPoseAutoRepCapabilityForLabel(normalized.exercise);
-  const fallback = buildFallbackPoseMovementContract(normalized.exercise);
-  if (!capability || !fallback) {
-    errors.push("exercise_not_supported_for_auto_rep");
-    return { errors, normalized, valid: false };
-  }
-
-  if (normalized.dominantJoint !== fallback.dominantJoint) {
-    errors.push("dominant_joint_mismatch");
-  }
-  if ((normalized.repModel ?? "unknown") !== (fallback.repModel ?? "unknown")) {
-    errors.push("rep_model_mismatch");
-  }
-  if (
-    (normalized.requiredSides ?? "either") !==
-    (fallback.requiredSides ?? "either")
-  ) {
-    errors.push("required_sides_mismatch");
-  }
-  if (normalized.bodyOrientation !== fallback.bodyOrientation) {
-    errors.push("body_orientation_mismatch");
-  }
-  if (normalized.secondaryCheck !== fallback.secondaryCheck) {
-    errors.push("secondary_check_mismatch");
-  }
-
-  const sameStringArray = (
-    left: string[] | undefined,
-    right: string[] | undefined,
-  ) => JSON.stringify(left ?? []) === JSON.stringify(right ?? []);
-  if (!sameStringArray(normalized.primaryJoints, fallback.primaryJoints)) {
-    errors.push("primary_joints_mismatch");
-  }
-  if (!sameStringArray(normalized.phaseOrder, fallback.phaseOrder)) {
-    errors.push("phase_order_mismatch");
-  }
-  if (
-    !sameStringArray(
-      normalized.trackingRequirements?.requiredLandmarks,
-      fallback.trackingRequirements?.requiredLandmarks,
-    )
-  ) {
-    errors.push("required_landmarks_mismatch");
-  }
-  if (
-    normalized.trackingRequirements?.minConfidence !==
-      fallback.trackingRequirements?.minConfidence ||
-    normalized.trackingRequirements?.minReliableFrameLandmarks !==
-      fallback.trackingRequirements?.minReliableFrameLandmarks
-  ) {
-    errors.push("tracking_requirements_mismatch");
-  }
-
-  const thresholdsMatch = (key: "down" | "up") => {
-    const actual = normalized.repThresholds?.[key];
-    const expected = fallback.repThresholds?.[key];
-    return (
-      !!actual &&
-      !!expected &&
-      actual.angle === expected.angle &&
-      actual.tolerance === expected.tolerance
-    );
-  };
-  if (!thresholdsMatch("down") || !thresholdsMatch("up")) {
-    errors.push("rep_thresholds_mismatch");
-  }
-  if (normalized.repModel === "static_hold") {
-    const holdDuration = normalized.holdDurationSeconds;
-    if (
-      typeof holdDuration !== "number" ||
-      !Number.isFinite(holdDuration) ||
-      holdDuration < 20 ||
-      holdDuration > 60
-    ) {
-      errors.push("hold_semantics_mismatch");
-    }
-  }
-  if (normalized.contractVersion !== fallback.contractVersion) {
-    errors.push("contract_version_mismatch");
-  }
+  errors.push(
+    ...validatePoseMovementFamilyCompatibility(normalized).errors,
+    ...validatePoseMovementCalibration(value, exerciseLabel).errors,
+  );
 
   return {
     errors: Array.from(new Set(errors)),
@@ -1001,6 +1635,29 @@ export function getPoseMovementContractAngle(
   keypoints: PoseKeypointRecord[],
 ) {
   const primaryJoints = contract.primaryJoints ?? [];
+  if (isSquatContract(contract)) {
+    const sideAngles = primaryJoints
+      .filter(isPoseSideJointName)
+      .map((joint) =>
+        sideJointAngleWithConfidence(
+          keypoints,
+          SIDE_JOINT_MAP[joint],
+          SQUAT_SIDE_ANGLE_CONFIDENCE,
+        ),
+      )
+      .filter(
+        (angle): angle is number =>
+          typeof angle === "number" && Number.isFinite(angle),
+      );
+    if (!sideAngles.length) return null;
+    if (sideAngles.length >= 2) {
+      const symmetryTolerance =
+        contract.spatialRequirements?.leftRightSymmetryTolerance ?? 30;
+      if (Math.max(...sideAngles) - Math.min(...sideAngles) > symmetryTolerance)
+        return null;
+    }
+    return Number(average(sideAngles).toFixed(3));
+  }
   if (isPushUpContract(contract) && contract.requiredSides === "both") {
     const pushUpSideAngles = primaryJoints
       .filter(isPoseSideJointName)
@@ -1097,14 +1754,17 @@ export function computePoseAngleSignals(
 ): PoseAngleFrameSignalRecord[] {
   return frames.map((frame) => ({
     capturedAtMs: frame.capturedAtMs,
+    ankle: getPoseJointAngle(frame.keypoints, "ankle"),
     elbow: getPoseJointAngle(frame.keypoints, "elbow"),
     hip: getPoseJointAngle(frame.keypoints, "hip"),
     knee: getPoseJointAngle(frame.keypoints, "knee"),
     leftElbow: getPoseSideJointAngle(frame.keypoints, "left_elbow"),
+    leftAnkle: getPoseSideJointAngle(frame.keypoints, "left_ankle"),
     leftHip: getPoseSideJointAngle(frame.keypoints, "left_hip"),
     leftKnee: getPoseSideJointAngle(frame.keypoints, "left_knee"),
     leftShoulder: getPoseSideJointAngle(frame.keypoints, "left_shoulder"),
     rightElbow: getPoseSideJointAngle(frame.keypoints, "right_elbow"),
+    rightAnkle: getPoseSideJointAngle(frame.keypoints, "right_ankle"),
     rightHip: getPoseSideJointAngle(frame.keypoints, "right_hip"),
     rightKnee: getPoseSideJointAngle(frame.keypoints, "right_knee"),
     rightShoulder: getPoseSideJointAngle(frame.keypoints, "right_shoulder"),

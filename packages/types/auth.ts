@@ -1,5 +1,5 @@
-import type { MemberTier, Role } from "./base";
-import type { MemberProfile, MembershipCardRecord } from "./member";
+import type { MemberTier, Role } from "./base.js";
+import type { MemberProfile, MembershipCardRecord } from "./member.js";
 
 export interface AuthUser {
   id: string;

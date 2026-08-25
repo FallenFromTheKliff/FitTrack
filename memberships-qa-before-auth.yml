@@ -1,0 +1,36 @@
+- generic [active] [ref=e2]:
+  - alert [ref=e1]
+  - generic [ref=e11]:
+    - generic [ref=e13]:
+      - heading "Ready to start the clock?" [level=1] [ref=e14]
+      - paragraph [ref=e15]: Welcome back, FitTrack team. Admins, staff, and coaches can jump into the tools that keep SertFit moving.
+    - generic [ref=e16]:
+      - link "< Back to FitTrack" [ref=e17] [cursor=pointer]:
+        - /url: /
+      - generic [ref=e18]:
+        - generic [ref=e19]:
+          - generic [ref=e21]:
+            - img [ref=e23]
+            - heading "FitTrack" [level=2] [ref=e29]
+          - paragraph [ref=e31]: Gym Team Portal
+          - generic [ref=e32]: Team Portal
+        - generic [ref=e33]:
+          - generic [ref=e35]:
+            - generic [ref=e37]: Email Address
+            - generic [ref=e38]:
+              - img [ref=e39]
+              - textbox "Email Address" [ref=e42]:
+                - /placeholder: team@fittrack.com
+          - generic [ref=e45]:
+            - generic [ref=e47]: Password
+            - generic [ref=e48]:
+              - img [ref=e49]
+              - textbox "Password" [ref=e52]:
+                - /placeholder: "********"
+              - button "Show password" [ref=e53] [cursor=pointer]:
+                - img [ref=e54]
+          - button "Forgot Password?" [ref=e59] [cursor=pointer]:
+            - generic [ref=e61]: Forgot Password?
+        - button "SIGN IN" [ref=e63] [cursor=pointer]:
+          - generic [ref=e64]: SIGN IN
+        - paragraph [ref=e66]: (c) 2026 FitTrack Gym. All rights reserved.

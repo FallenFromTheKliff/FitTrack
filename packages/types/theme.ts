@@ -1,4 +1,4 @@
-import type { AnimationLevel, FontKey, ThemeKey } from "./base";
+import type { AnimationLevel, FontKey, ThemeKey } from "./base.js";
 
 export type ThemeColors = {
   brand: string;

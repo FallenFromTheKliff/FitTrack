@@ -7,11 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRedis } from '@nestjs-modules/ioredis';
-import {
-  EquipmentStatus,
-  UserStatus,
-  type Prisma,
-} from '@prisma/client';
+import { EquipmentStatus, UserStatus, type Prisma } from '@prisma/client';
 import type Redis from 'ioredis';
 import type { Socket } from 'socket.io';
 
@@ -35,6 +31,14 @@ import {
   type GymLayoutDeltaOperation,
   type GymLayoutRealtimeDelta,
 } from './gym-layout.realtime';
+import { getAmenityBookingBlockReason } from '../bookings/amenity/amenity-reservability';
+import {
+  assertValidFacilityCells,
+  assertRectangleInFootprint,
+  expandFacilityRectangle,
+  facilityCellKey,
+  normalizeFacilityCells,
+} from './facility-layout.validation';
 
 const GYM_LAYOUT_UPDATE_FIELDS = [
   'name',
@@ -67,42 +71,39 @@ function pickDefined<T extends object, K extends readonly (keyof T)[]>(
   );
 }
 
-function clampGridColumn(value: number) {
-  return Math.max(1, Math.min(GYM_LAYOUT_GRID_COLUMNS, Math.round(value)));
-}
-
-function clampGridRow(value: number) {
-  return Math.max(1, Math.min(GYM_LAYOUT_GRID_ROWS, Math.round(value)));
-}
-
 function gridColumnToPositionX(gridColumn: number) {
   return Number(
-    (
-      ((clampGridColumn(gridColumn) - 0.5) / GYM_LAYOUT_GRID_COLUMNS) *
-      100
-    ).toFixed(2),
+    (((gridColumn - 0.5) / GYM_LAYOUT_GRID_COLUMNS) * 100).toFixed(2),
   );
 }
 
 function gridRowToPositionY(gridRow: number) {
-  return Number(
-    (((clampGridRow(gridRow) - 0.5) / GYM_LAYOUT_GRID_ROWS) * 100).toFixed(2),
+  return Number((((gridRow - 0.5) / GYM_LAYOUT_GRID_ROWS) * 100).toFixed(2));
+}
+
+function legacyPositionXToGridColumn(positionX: number) {
+  return Math.max(
+    1,
+    Math.min(
+      GYM_LAYOUT_GRID_COLUMNS,
+      Math.round((positionX / 100) * GYM_LAYOUT_GRID_COLUMNS + 0.5),
+    ),
   );
 }
 
-function positionXToGridColumn(positionX: number) {
-  return clampGridColumn((positionX / 100) * GYM_LAYOUT_GRID_COLUMNS + 0.5);
-}
-
-function positionYToGridRow(positionY: number) {
-  return clampGridRow((positionY / 100) * GYM_LAYOUT_GRID_ROWS + 0.5);
+function legacyPositionYToGridRow(positionY: number) {
+  return Math.max(
+    1,
+    Math.min(
+      GYM_LAYOUT_GRID_ROWS,
+      Math.round((positionY / 100) * GYM_LAYOUT_GRID_ROWS + 0.5),
+    ),
+  );
 }
 
 type PlacementInput = {
   grid_column?: number | null;
   grid_row?: number | null;
-  position_x?: number;
-  position_y?: number;
 };
 
 function isFacilityFloorId(
@@ -137,18 +138,82 @@ export class GymLayoutService {
     return media.map((item) => this.toFloorPlanMediaResponse(item));
   }
 
+  async getSnapshot() {
+    const [media, regions, equipment] = await Promise.all([
+      this.repo.listFloorPlanMedia(),
+      this.repo.listSnapshotRegions(),
+      this.repo.listActiveEquipment(),
+    ]);
+    return {
+      generated_at: new Date().toISOString(),
+      floors: FACILITY_FLOOR_IDS.map((floorId) => {
+        const floorMedia = media.find((item) => item.floor_id === floorId);
+        return {
+          floor_id: floorId,
+          grid_columns: 14 as const,
+          grid_rows: 10 as const,
+          image_url: floorMedia?.image_url ?? null,
+          footprint_cells: normalizeFacilityCells(floorMedia?.footprint_cells),
+          path_cells: normalizeFacilityCells(floorMedia?.path_cells),
+          entry_cells: normalizeFacilityCells(floorMedia?.entry_cells),
+          exit_cells: normalizeFacilityCells(floorMedia?.exit_cells),
+          regions: regions.flatMap((region) => {
+            if (
+              region.floor_id !== floorId ||
+              region.grid_column == null ||
+              region.grid_row == null ||
+              region.grid_width == null ||
+              region.grid_height == null
+            )
+              return [];
+            const bookingBlockReason = getAmenityBookingBlockReason(region);
+            return [
+              {
+                id: region.id,
+                source_venue_id: region.id,
+                floor_id: floorId,
+                name: region.name,
+                description: region.description,
+                icon_key: region.icon_key,
+                image_url: region.image_url,
+                grid_column: region.grid_column,
+                grid_row: region.grid_row,
+                grid_width: region.grid_width,
+                grid_height: region.grid_height,
+                is_reservable: region.is_reservable === true,
+                is_bookable: bookingBlockReason === null,
+                booking_block_reason: bookingBlockReason,
+                status: region.status,
+                capacity: region.capacity,
+                hourly_rate: Number(region.hourly_rate),
+                minimum_hours: region.minimum_hours,
+                region_kind:
+                  region.is_reservable === true
+                    ? ('venue' as const)
+                    : ('support' as const),
+              },
+            ];
+          }),
+          equipment: equipment
+            .filter((item) => item.floor_id === floorId && item.is_active)
+            .map((item) => this.toEquipmentResponse(item)),
+        };
+      }),
+    };
+  }
+
   async createEquipment(
     dto: CreateEquipmentDTO,
   ): Promise<GymLayoutEquipmentResponseDTO> {
+    this.assertNoLegacyPlacementInput(dto);
     const venue = await this.repo.findActiveVenueByIdOrThrow(dto.venue_id);
     const placement = this.resolvePlacement(dto);
-    this.assertPlacementInsideVenue(
+    await this.assertEquipmentCellAvailable(
       dto.floor_id,
-      placement,
-      dto.grid_width ?? 1,
-      dto.grid_height ?? 1,
-      venue,
+      placement.grid_column,
+      placement.grid_row,
     );
+    this.assertPlacementInsideVenue(dto.floor_id, placement, 1, 1, venue);
 
     const equipment = await this.repo.createEquipment(
       this.toCreateInput(dto, placement),
@@ -162,6 +227,7 @@ export class GymLayoutService {
     id: string,
     dto: UpdateEquipmentDTO,
   ): Promise<GymLayoutEquipmentResponseDTO> {
+    this.assertNoLegacyPlacementInput(dto);
     const updateData = await this.toResolvedUpdateInput(id, dto);
     const equipment = await this.repo.updateEquipment(id, updateData);
     await this.publishRealtimeDelta(
@@ -197,14 +263,112 @@ export class GymLayoutService {
       });
     }
 
-    const media = await this.repo.upsertFloorPlanMedia(
-      floorId,
-      {
-        ...(dto.image_url !== undefined ? { imageUrl: dto.image_url } : {}),
-        ...(dto.grid_width !== undefined ? { gridWidth: dto.grid_width } : {}),
-        ...(dto.grid_height !== undefined ? { gridHeight: dto.grid_height } : {}),
-      },
+    for (const [label, cells] of [
+      ['Footprint cells', dto.footprint_cells],
+      ['Path cells', dto.path_cells],
+      ['Entry cells', dto.entry_cells],
+      ['Exit cells', dto.exit_cells],
+    ] as const) {
+      if (cells !== undefined) assertValidFacilityCells(cells, label);
+    }
+
+    const current = (await this.repo.listFloorPlanMedia()).find(
+      (item) => item.floor_id === floorId,
     );
+    const fullFootprint = Array.from({ length: 10 }, (_, row) =>
+      Array.from({ length: 14 }, (_, column) => ({
+        column: column + 1,
+        row: row + 1,
+      })),
+    ).flat();
+    const footprint = normalizeFacilityCells(
+      dto.footprint_cells ?? current?.footprint_cells ?? fullFootprint,
+    );
+    const paths = normalizeFacilityCells(dto.path_cells ?? current?.path_cells);
+    const entries = normalizeFacilityCells(
+      dto.entry_cells ?? current?.entry_cells,
+    );
+    const exits = normalizeFacilityCells(dto.exit_cells ?? current?.exit_cells);
+    if (footprint.length === 0)
+      throw new BadRequestException({
+        type: 'INVALID_FACILITY_LAYOUT',
+        title: 'Building Footprint Required',
+        status: 400,
+        detail: 'A floor must retain at least one building footprint cell.',
+      });
+    const footprintKeys = new Set(footprint.map(facilityCellKey));
+    for (const [label, cells] of [
+      ['Path', paths],
+      ['Entry', entries],
+      ['Exit', exits],
+    ] as const) {
+      if (cells.some((cell) => !footprintKeys.has(facilityCellKey(cell))))
+        throw new BadRequestException({
+          type: 'INVALID_FACILITY_LAYOUT',
+          title: `${label} Outside Building`,
+          status: 400,
+          detail: `${label} cells must remain inside the building footprint.`,
+        });
+    }
+    const [regions, equipment] = await Promise.all([
+      this.repo.listSnapshotRegions(),
+      this.repo.listActiveEquipment(),
+    ]);
+    const floorRegions = regions.flatMap((region) => {
+      if (
+        region.floor_id !== floorId ||
+        region.grid_column == null ||
+        region.grid_row == null ||
+        region.grid_width == null ||
+        region.grid_height == null
+      )
+        return [];
+      return [
+        {
+          gridColumn: region.grid_column,
+          gridRow: region.grid_row,
+          gridWidth: region.grid_width,
+          gridHeight: region.grid_height,
+        },
+      ];
+    });
+    for (const region of floorRegions)
+      assertRectangleInFootprint(region, footprint);
+    const regionKeys = new Set(
+      floorRegions.flatMap((region) =>
+        expandFacilityRectangle(region).map(facilityCellKey),
+      ),
+    );
+    if (paths.some((cell) => regionKeys.has(facilityCellKey(cell))))
+      throw new BadRequestException({
+        type: 'INVALID_FACILITY_LAYOUT',
+        title: 'Path Crosses Region',
+        status: 400,
+        detail:
+          'Path cells cannot pass through mapped venue or support regions.',
+      });
+    if (
+      equipment.some(
+        (item) =>
+          item.floor_id === floorId &&
+          !footprintKeys.has(`${item.grid_column ?? 1}:${item.grid_row ?? 1}`),
+      )
+    ) {
+      throw new BadRequestException({
+        type: 'INVALID_FACILITY_LAYOUT',
+        title: 'Equipment Outside Building',
+        status: 400,
+        detail:
+          'The footprint update would leave mapped equipment outside the building.',
+      });
+    }
+    const media = await this.repo.upsertFloorPlanMedia(floorId, {
+      ...(dto.image_url !== undefined ? { imageUrl: dto.image_url } : {}),
+      footprintCells: footprint,
+      pathCells: paths,
+      entryCells: entries,
+      exitCells: exits,
+    });
     return this.toFloorPlanMediaResponse(media);
   }
 
@@ -281,8 +445,8 @@ export class GymLayoutService {
       floor_id: dto.floor_id,
       inventory_item: { connect: { id: dto.inventory_item_id } },
       venue: { connect: { id: dto.venue_id } },
-      grid_width: dto.grid_width ?? 1,
-      grid_height: dto.grid_height ?? 1,
+      grid_width: 1,
+      grid_height: 1,
       grid_column: placement.grid_column,
       grid_row: placement.grid_row,
       position_x: placement.position_x,
@@ -312,10 +476,7 @@ export class GymLayoutService {
   ): Promise<Prisma.GymEquipmentUpdateInput> {
     const basePatch = this.toUpdateInput(dto);
     const placementRequested =
-      dto.grid_column !== undefined ||
-      dto.grid_row !== undefined ||
-      dto.position_x !== undefined ||
-      dto.position_y !== undefined;
+      dto.grid_column !== undefined || dto.grid_row !== undefined;
     const contractRequested =
       placementRequested ||
       dto.venue_id !== undefined ||
@@ -332,13 +493,11 @@ export class GymLayoutService {
     const placement = this.resolvePlacement({
       grid_column: dto.grid_column ?? current.grid_column,
       grid_row: dto.grid_row ?? current.grid_row,
-      position_x: dto.position_x ?? Number(current.position_x),
-      position_y: dto.position_y ?? Number(current.position_y),
     });
 
     const venueId = dto.venue_id ?? current.venue_id;
-    const gridWidth = dto.grid_width ?? current.grid_width ?? 1;
-    const gridHeight = dto.grid_height ?? current.grid_height ?? 1;
+    const gridWidth = 1;
+    const gridHeight = 1;
     const floorId = dto.floor_id ?? current.floor_id;
 
     if (venueId) {
@@ -352,18 +511,71 @@ export class GymLayoutService {
       );
     }
 
+    await this.assertEquipmentCellAvailable(
+      floorId,
+      placement.grid_column,
+      placement.grid_row,
+      id,
+    );
+
     return {
       ...basePatch,
       ...placement,
+      grid_width: 1,
+      grid_height: 1,
     };
+  }
+
+  private async assertEquipmentCellAvailable(
+    floorId: string,
+    gridColumn: number,
+    gridRow: number,
+    excludingId?: string,
+  ) {
+    const [media, equipment] = await Promise.all([
+      this.repo.listFloorPlanMedia(),
+      this.repo.listActiveEquipment(),
+    ]);
+    const floorMedia = media.find((item) => item.floor_id === floorId);
+    const footprint = floorMedia
+      ? normalizeFacilityCells(floorMedia.footprint_cells)
+      : Array.from({ length: GYM_LAYOUT_GRID_ROWS }, (_, row) =>
+          Array.from({ length: GYM_LAYOUT_GRID_COLUMNS }, (_, column) => ({
+            column: column + 1,
+            row: row + 1,
+          })),
+        ).flat();
+    if (
+      !new Set(footprint.map(facilityCellKey)).has(`${gridColumn}:${gridRow}`)
+    ) {
+      throw new BadRequestException({
+        type: 'INVALID_FACILITY_LAYOUT',
+        title: 'Equipment Outside Building',
+        status: 400,
+        detail: 'Equipment must occupy a footprint cell.',
+      });
+    }
+    if (
+      equipment.some(
+        (item) =>
+          item.id !== excludingId &&
+          item.floor_id === floorId &&
+          item.grid_column === gridColumn &&
+          item.grid_row === gridRow,
+      )
+    ) {
+      throw new BadRequestException({
+        type: 'FACILITY_EQUIPMENT_OVERLAP',
+        title: 'Equipment Cell Occupied',
+        status: 400,
+        detail: 'Only one equipment node can occupy a map cell.',
+      });
+    }
   }
 
   private assertPlacementInsideVenue(
     floorId: string,
-    placement: Pick<
-      Prisma.GymEquipmentCreateInput,
-      'grid_column' | 'grid_row'
-    >,
+    placement: Pick<Prisma.GymEquipmentCreateInput, 'grid_column' | 'grid_row'>,
     gridWidth: number,
     gridHeight: number,
     venue: GymLayoutVenueRecord,
@@ -399,35 +611,35 @@ export class GymLayoutService {
         type: 'INVALID_VENUE_CONTAINMENT',
         title: 'Equipment Outside Venue Bounds',
         status: 400,
-        detail: 'Equipment placement and dimensions must remain inside the selected venue.',
+        detail:
+          'Equipment placement and dimensions must remain inside the selected venue.',
       });
     }
   }
 
   private resolvePlacement(input: PlacementInput) {
-    const gridColumn =
-      input.grid_column ??
-      (input.position_x !== undefined
-        ? positionXToGridColumn(input.position_x)
-        : undefined);
-    const gridRow =
-      input.grid_row ??
-      (input.position_y !== undefined
-        ? positionYToGridRow(input.position_y)
-        : undefined);
+    const gridColumn = input.grid_column;
+    const gridRow = input.grid_row;
 
-    if (gridColumn === undefined || gridRow === undefined) {
+    if (
+      !Number.isInteger(gridColumn) ||
+      !Number.isInteger(gridRow) ||
+      Number(gridColumn) < 1 ||
+      Number(gridColumn) > GYM_LAYOUT_GRID_COLUMNS ||
+      Number(gridRow) < 1 ||
+      Number(gridRow) > GYM_LAYOUT_GRID_ROWS
+    ) {
       throw new BadRequestException({
         type: 'BAD_REQUEST',
         title: 'Invalid Gym Layout Placement',
         status: 400,
         detail:
-          'Provide both placement axes through grid_column/grid_row or position_x/position_y.',
+          'Provide grid_column and grid_row inside the fixed 14 x 10 map.',
       });
     }
 
-    const normalizedGridColumn = clampGridColumn(gridColumn);
-    const normalizedGridRow = clampGridRow(gridRow);
+    const normalizedGridColumn = Number(gridColumn);
+    const normalizedGridRow = Number(gridRow);
 
     return {
       grid_column: normalizedGridColumn,
@@ -440,14 +652,27 @@ export class GymLayoutService {
     >;
   }
 
+  private assertNoLegacyPlacementInput(input: object) {
+    if ('position_x' in input || 'position_y' in input) {
+      throw new BadRequestException({
+        type: 'INVALID_FACILITY_LAYOUT',
+        title: 'Grid Cell Placement Required',
+        status: 400,
+        detail:
+          'position_x and position_y are derived compatibility fields; provide grid_column and grid_row.',
+      });
+    }
+  }
+
   private toEquipmentResponse(
     item: GymLayoutEquipmentRecord,
     cachedStatus?: string,
   ): GymLayoutEquipmentResponseDTO {
     const positionX = Number(item.position_x);
     const positionY = Number(item.position_y);
-    const gridColumn = item.grid_column ?? positionXToGridColumn(positionX);
-    const gridRow = item.grid_row ?? positionYToGridRow(positionY);
+    const gridColumn =
+      item.grid_column ?? legacyPositionXToGridColumn(positionX);
+    const gridRow = item.grid_row ?? legacyPositionYToGridRow(positionY);
 
     return {
       id: item.id,
@@ -487,6 +712,10 @@ export class GymLayoutService {
       image_url: item.image_url,
       grid_width: item.grid_width,
       grid_height: item.grid_height,
+      footprint_cells: normalizeFacilityCells(item.footprint_cells),
+      path_cells: normalizeFacilityCells(item.path_cells),
+      entry_cells: normalizeFacilityCells(item.entry_cells),
+      exit_cells: normalizeFacilityCells(item.exit_cells),
       created_at: item.created_at.toISOString(),
       updated_at: item.updated_at.toISOString(),
     };

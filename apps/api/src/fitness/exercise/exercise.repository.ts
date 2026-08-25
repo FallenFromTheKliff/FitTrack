@@ -1,5 +1,11 @@
 import { ConflictException, Injectable } from '@nestjs/common';
-import { ExerciseCatalog, MuscleDefinition, Prisma } from '@prisma/client';
+import {
+  ExerciseAliasKind,
+  ExerciseCatalog,
+  MuscleDefinition,
+  Prisma,
+} from '@prisma/client';
+import { normalizeExerciseAlias } from '../../../../../packages/utils/exercise-movement-contract';
 
 import {
   BaseRepository,
@@ -16,6 +22,28 @@ const exerciseOrderBy = [
   { name: 'asc' },
 ] satisfies Prisma.ExerciseCatalogOrderByWithRelationInput[];
 
+const exerciseContractInclude = {
+  aliases: { orderBy: [{ normalized_label: 'asc' as const }] },
+  movement_family: {
+    include: {
+      exercises: {
+        select: { id: true, tracking_mode: true },
+        where: { is_active: true },
+      },
+    },
+  },
+} satisfies Prisma.ExerciseCatalogInclude;
+
+export type ExerciseContractRecord = Prisma.ExerciseCatalogGetPayload<{
+  include: typeof exerciseContractInclude;
+}>;
+
+export type ExerciseAliasWrite = {
+  kind: ExerciseAliasKind;
+  label: string;
+  normalizedLabel: string;
+};
+
 export type ActiveExerciseGenerationRecord = Pick<
   ExerciseCatalog,
   'id' | 'name' | 'muscle_group' | 'category'
@@ -31,7 +59,7 @@ export class ExerciseRepository extends BaseRepository {
 
   listExercises(
     dto: ExerciseFilterDTO,
-  ): Promise<PaginatedResult<ExerciseCatalog>> {
+  ): Promise<PaginatedResult<ExerciseContractRecord>> {
     const where: Prisma.ExerciseCatalogWhereInput = dto.include_inactive
       ? {}
       : { is_active: true };
@@ -57,22 +85,58 @@ export class ExerciseRepository extends BaseRepository {
       ];
     }
 
-    return this.paginate<ExerciseCatalog>(
+    return this.paginate<ExerciseContractRecord>(
       this.prisma.exerciseCatalog,
       {
         where,
         orderBy: exerciseOrderBy,
+        include: exerciseContractInclude,
       },
       { page: dto.page, limit: dto.limit },
     );
   }
 
-  findActiveExerciseByIdOrThrow(id: string): Promise<ExerciseCatalog> {
-    return this.findOneOrThrow<ExerciseCatalog>(
-      this.prisma.exerciseCatalog,
-      { id, is_active: true },
-      'Exercise',
+  async findActiveExerciseByIdOrThrow(
+    id: string,
+  ): Promise<ExerciseContractRecord> {
+    const exercise = await this.prisma.exerciseCatalog.findFirst({
+      where: { id, is_active: true },
+      include: exerciseContractInclude,
+    });
+    if (!exercise) {
+      await this.findOneOrThrow(
+        this.prisma.exerciseCatalog,
+        { id, is_active: true },
+        'Exercise',
+      );
+      throw new Error('Exercise lookup invariant failed.');
+    }
+    return exercise;
+  }
+
+  async findActiveExerciseByAlias(
+    label: string,
+  ): Promise<ExerciseContractRecord | null> {
+    const normalized = normalizeExerciseAlias(label);
+    if (!normalized) return null;
+    const alias = await this.prisma.exerciseAlias.findUnique({
+      where: { normalized_label: normalized },
+      select: { exercise_id: true },
+    });
+    if (alias) {
+      return this.prisma.exerciseCatalog.findFirst({
+        where: { id: alias.exercise_id, is_active: true },
+        include: exerciseContractInclude,
+      });
+    }
+    const candidates = await this.prisma.exerciseCatalog.findMany({
+      where: { is_active: true },
+      include: exerciseContractInclude,
+    });
+    const matches = candidates.filter(
+      (candidate) => normalizeExerciseAlias(candidate.name) === normalized,
     );
+    return matches.length === 1 ? matches[0] : null;
   }
 
   listActiveExercisesForGeneration(): Promise<
@@ -135,17 +199,17 @@ export class ExerciseRepository extends BaseRepository {
 
   async createExercise(
     data: Prisma.ExerciseCatalogCreateInput,
-  ): Promise<ExerciseCatalog> {
+  ): Promise<ExerciseContractRecord> {
     const nextName = typeof data.name === 'string' ? data.name.trim() : '';
     if (nextName) {
       await this.ensureExerciseNameAvailable(nextName);
     }
 
     try {
-      return await this.create<ExerciseCatalog>(
-        this.prisma.exerciseCatalog,
+      return await this.prisma.exerciseCatalog.create({
         data,
-      );
+        include: exerciseContractInclude,
+      });
     } catch (error) {
       if (this.isDuplicateExerciseNameError(error)) {
         throw this.buildDuplicateExerciseConflict();
@@ -204,18 +268,34 @@ export class ExerciseRepository extends BaseRepository {
   async updateExercise(
     id: string,
     data: Prisma.ExerciseCatalogUpdateInput,
-  ): Promise<ExerciseCatalog> {
+    aliases?: ExerciseAliasWrite[],
+  ): Promise<ExerciseContractRecord> {
     const nextName = typeof data.name === 'string' ? data.name.trim() : '';
     if (nextName) {
       await this.ensureExerciseNameAvailable(nextName, id);
     }
 
     try {
-      return await this.updateById<ExerciseCatalog>(
-        this.prisma.exerciseCatalog,
-        id,
-        data,
-      );
+      return await this.prisma.$transaction(async (tx) => {
+        if (aliases) {
+          await tx.exerciseAlias.deleteMany({ where: { exercise_id: id } });
+          if (aliases.length) {
+            await tx.exerciseAlias.createMany({
+              data: aliases.map((alias) => ({
+                exercise_id: id,
+                kind: alias.kind,
+                label: alias.label,
+                normalized_label: alias.normalizedLabel,
+              })),
+            });
+          }
+        }
+        return tx.exerciseCatalog.update({
+          where: { id },
+          data,
+          include: exerciseContractInclude,
+        });
+      });
     } catch (error) {
       if (this.isDuplicateExerciseNameError(error)) {
         throw this.buildDuplicateExerciseConflict();
@@ -225,12 +305,80 @@ export class ExerciseRepository extends BaseRepository {
     }
   }
 
-  private buildDuplicateExerciseConflict(): ConflictException {
+  async ensureAliasesAvailable(
+    labels: string[],
+    excludeExerciseId?: string,
+  ): Promise<void> {
+    const normalizedLabels = [
+      ...new Set(labels.map(normalizeExerciseAlias).filter(Boolean)),
+    ];
+    if (!normalizedLabels.length) return;
+    const [aliases, names] = await Promise.all([
+      this.prisma.exerciseAlias.findMany({
+        where: {
+          normalized_label: { in: normalizedLabels },
+          ...(excludeExerciseId
+            ? { exercise_id: { not: excludeExerciseId } }
+            : {}),
+        },
+        select: { normalized_label: true },
+      }),
+      this.prisma.exerciseCatalog.findMany({
+        where: excludeExerciseId ? { id: { not: excludeExerciseId } } : {},
+        select: { name: true },
+      }),
+    ]);
+    const collision =
+      aliases[0]?.normalized_label ??
+      names
+        .map((entry) => normalizeExerciseAlias(entry.name))
+        .find((name) => normalizedLabels.includes(name));
+    if (collision) throw this.buildDuplicateExerciseConflict(collision);
+  }
+
+  updateMovementFamilyContract(
+    familyId: string,
+    baseMovementProfile: Prisma.InputJsonValue,
+    baseHandShapeProfile?: Prisma.InputJsonValue | Prisma.NullTypes.JsonNull,
+  ) {
+    return this.prisma.exerciseMovementFamily.update({
+      where: { id: familyId },
+      data: {
+        base_movement_profile: baseMovementProfile,
+        ...(baseHandShapeProfile !== undefined
+          ? { base_hand_shape_profile: baseHandShapeProfile }
+          : {}),
+        contract_revision: { increment: 1 },
+      },
+      include: {
+        exercises: {
+          where: { is_active: true },
+          select: { id: true, name: true, tracking_mode: true },
+        },
+      },
+    });
+  }
+
+  findMovementFamilyById(id: string) {
+    return this.prisma.exerciseMovementFamily.findUnique({
+      where: { id },
+      include: {
+        exercises: {
+          where: { is_active: true },
+          select: { id: true, name: true, tracking_mode: true },
+        },
+      },
+    });
+  }
+
+  private buildDuplicateExerciseConflict(label?: string): ConflictException {
     return new ConflictException({
       type: 'CONFLICT',
       title: 'Exercise Already Exists',
       status: 409,
-      detail: 'An exercise with this name already exists.',
+      detail: label
+        ? `The normalized exercise label "${label}" already belongs to another exercise.`
+        : 'An exercise with this name already exists.',
     });
   }
 
@@ -276,19 +424,6 @@ export class ExerciseRepository extends BaseRepository {
     name: string,
     excludeId?: string,
   ): Promise<void> {
-    const existing = await this.prisma.exerciseCatalog.findFirst({
-      where: {
-        name: {
-          equals: name,
-          mode: 'insensitive',
-        },
-        ...(excludeId ? { id: { not: excludeId } } : {}),
-      },
-      select: { id: true },
-    });
-
-    if (existing) {
-      throw this.buildDuplicateExerciseConflict();
-    }
+    await this.ensureAliasesAvailable([name], excludeId);
   }
 }

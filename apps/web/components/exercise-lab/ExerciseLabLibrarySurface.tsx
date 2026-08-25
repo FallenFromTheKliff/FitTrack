@@ -39,6 +39,7 @@ export function ExerciseLabLibrarySurface() {
   return (
     <ExerciseLabSurfaceFrame
       className="exercise-library-surface"
+      tableMinWidth={1240}
       actions={
         <>
           <FitButton

@@ -71,6 +71,7 @@ import {
 } from './volumes';
 import {
   CANONICAL_EXERCISE_CATALOG,
+  CANONICAL_LEGACY_POSE_EXERCISE_KEYS,
   CANONICAL_POSE_CAPABILITIES,
 } from '../../../../packages/utils/fitness-catalog';
 import { isValidPoseMovementContract } from '../../../../packages/utils/pose';
@@ -5531,7 +5532,7 @@ export async function runSeedIntegrityAudit(
     );
   }
 
-  for (const legacyKey of ['bench', 'deadlift', 'row'] as const) {
+  for (const legacyKey of CANONICAL_LEGACY_POSE_EXERCISE_KEYS) {
     const profile = poseProfileById.get(seedId(`pose-profile:${legacyKey}`));
     if (!profile) continue;
     check(

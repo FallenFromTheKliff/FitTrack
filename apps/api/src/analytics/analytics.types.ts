@@ -11,7 +11,23 @@ export type ResolvedBusinessInsightWindow = {
   end: Date;
   focus: InsightFocus;
   period: InsightPeriod;
+  previousEnd: Date;
+  previousStart: Date;
   start: Date;
+};
+
+export type BusinessInsightDirection =
+  | 'decrease'
+  | 'flat'
+  | 'increase'
+  | 'new_from_zero';
+
+export type BusinessInsightComparison<T extends number | string> = {
+  absolute_change: T;
+  current: T;
+  direction: BusinessInsightDirection;
+  percentage_change: number | null;
+  previous: T;
 };
 
 export type BusinessAnalyticsGroundingPayload = {
@@ -19,7 +35,36 @@ export type BusinessAnalyticsGroundingPayload = {
     end_date: string;
     focus: InsightFocus;
     period: InsightPeriod;
+    previous_end_date: string;
+    previous_start_date: string;
     start_date: string;
+  };
+  comparisons: {
+    check_ins: BusinessInsightComparison<number>;
+    completed_coaching_sessions: BusinessInsightComparison<number>;
+    new_members: BusinessInsightComparison<number>;
+    total_revenue: BusinessInsightComparison<string>;
+  };
+  derived_signals: {
+    equipment_availability_percentage: number | null;
+    low_stock_exposure_percentage: number | null;
+    out_of_stock_exposure_percentage: number | null;
+    peak_hour_attendance_concentration: {
+      check_ins: number;
+      hour_label: string;
+      percentage: number;
+    } | null;
+    revenue_mix_percentages: {
+      bookings: number;
+      coaching: number;
+      memberships: number;
+      products: number;
+    };
+    top_revenue_source_concentration: {
+      percentage: number;
+      source_key: 'bookings' | 'coaching' | 'memberships' | 'products';
+      source_label: string;
+    } | null;
   };
   overview: {
     completed_coaching_sessions: number;

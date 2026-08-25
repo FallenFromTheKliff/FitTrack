@@ -46,6 +46,7 @@ import {
   fitnessMuscleDefinitionsQueryOptions,
   uploadImageMutationOptions,
   updateFitnessExerciseMutationOptions,
+  updateExerciseMovementFamilyMutationOptions,
   updateMuscleDefinitionMutationOptions,
 } from "@fittrack/query";
 import {
@@ -279,6 +280,7 @@ function useExerciseLabPageState() {
   const [activeEditorTab, setActiveEditorTab] =
     useState<ExerciseEditorTab>("basics");
   const initialDraftRef = useRef<ExerciseDraft>(createExerciseDraft());
+  const sharedFamilySubmitRef = useRef(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [confirmationState, setConfirmationState] =
     useState<ConfirmationState>(null);
@@ -368,6 +370,9 @@ function useExerciseLabPageState() {
   );
   const updateExerciseMutation = useMutation(
     updateFitnessExerciseMutationOptions(webApiClient, queryClient),
+  );
+  const updateMovementFamilyMutation = useMutation(
+    updateExerciseMovementFamilyMutationOptions(webApiClient, queryClient),
   );
   const workbenchMotionKey = mode;
 
@@ -482,11 +487,15 @@ function useExerciseLabPageState() {
     } else if (nextState.mode === "edit") {
       nextDraft = {
         ...createExerciseDraft({
+          aliases: nextState.exercise.aliases.map(({ kind, label }) => ({ kind, label })),
           category: nextState.exercise.category,
           description: nextState.exercise.description,
           handShapeProfile: nextState.exercise.handShapeProfile,
           instructions: nextState.exercise.instructions,
           movementProfile: nextState.exercise.movementProfile,
+          movementProfileOverride: nextState.exercise.movementProfileOverride,
+          movementFamily: nextState.exercise.movementFamily,
+          trackingMode: nextState.exercise.trackingMode,
           muscleGroup: nextState.exercise.muscleGroup,
           muscleTargets: normalizeExerciseMuscleTargets(
             nextState.exercise.muscleTargets,
@@ -786,6 +795,50 @@ function useExerciseLabPageState() {
     }
   };
 
+  const handleSaveSharedMovementContract = () => {
+    const family = draft.movementFamily;
+    if (!family || !draft.movementProfile) return;
+    const affectedNames = family.inheritingExerciseIds.map((id) =>
+      libraryItems.find((exercise) => exercise.id === id)?.name ?? id,
+    );
+    setConfirmationState({
+      affectedNames,
+      family,
+      mode: "shared-family",
+      movementProfile: draft.movementProfile,
+    });
+  };
+
+  const confirmSharedMovementContract = async (
+    state: Extract<ConfirmationState, { mode: "shared-family" }>,
+  ) => {
+    if (sharedFamilySubmitRef.current) return;
+    sharedFamilySubmitRef.current = true;
+    try {
+      const result = await updateMovementFamilyMutation.mutateAsync({
+        familyId: state.family.id,
+        movementProfile: state.movementProfile,
+      });
+      setDraft((current) => ({
+        ...current,
+        movementFamily: current.movementFamily
+          ? {
+              ...current.movementFamily,
+              contractRevision: result.contract_revision,
+            }
+          : null,
+      }));
+      showMessage(
+        `${state.family.displayName} shared tracking updated to revision ${result.contract_revision}.`,
+      );
+      setConfirmationState(null);
+    } catch (error) {
+      showMessage(getErrorMessage(error, "Unable to update shared tracking."));
+    } finally {
+      sharedFamilySubmitRef.current = false;
+    }
+  };
+
   const confirmationTitle =
     confirmationState?.mode === "discard-sheet"
       ? "Discard changes?"
@@ -793,7 +846,9 @@ function useExerciseLabPageState() {
         ? confirmationState.nextActive
           ? "Restore global exercise?"
           : "Archive global exercise?"
-        : "";
+        : confirmationState?.mode === "shared-family"
+          ? `Edit shared tracking for ${confirmationState.family.displayName}?`
+          : "";
   const confirmationMessage =
     confirmationState?.mode === "discard-sheet"
       ? "You have unsaved edits in this sheet. Closing now will drop the draft changes."
@@ -801,7 +856,9 @@ function useExerciseLabPageState() {
           ? confirmationState.nextActive
             ? `${confirmationState.exercise.name} will become available in the active global library again.`
             : `${confirmationState.exercise.name} will be hidden from the active global library, but can still be restored later.`
-          : "";
+          : confirmationState?.mode === "shared-family"
+            ? "This calibration is shared. Every active inheriting exercise listed below will use the new revision."
+            : "";
   const confirmationLabel =
     confirmationState?.mode === "discard-sheet"
       ? "Discard changes"
@@ -809,28 +866,40 @@ function useExerciseLabPageState() {
           ? confirmationState.nextActive
             ? "Restore exercise"
             : "Archive exercise"
-          : "Confirm";
+          : confirmationState?.mode === "shared-family"
+            ? "Update shared tracking"
+            : "Confirm";
   const confirmationLoadingLabel =
     confirmationState?.mode === "archive"
         ? confirmationState.nextActive
           ? "Restoring..."
           : "Archiving..."
-        : undefined;
+        : confirmationState?.mode === "shared-family"
+          ? "Updating shared tracking..."
+          : undefined;
   const confirmationIcon =
     confirmationState?.mode === "archive" && confirmationState.nextActive
       ? RefreshCcw
       : confirmationState?.mode === "discard-sheet"
         ? X
-        : Archive;
+        : confirmationState?.mode === "shared-family"
+          ? RefreshCcw
+          : Archive;
   const confirmationLoading =
     confirmationState?.mode === "archive"
       ? updateExerciseMutation.isPending
-      : false;
+      : confirmationState?.mode === "shared-family"
+        ? updateMovementFamilyMutation.isPending
+        : false;
   const handleConfirmAction = () => {
     if (!confirmationState) return;
     if (confirmationState.mode === "discard-sheet") {
       setConfirmationState(null);
       resetSheet(null);
+      return;
+    }
+    if (confirmationState.mode === "shared-family") {
+      void confirmSharedMovementContract(confirmationState);
       return;
     }
     void handleArchiveToggle(
@@ -842,9 +911,10 @@ function useExerciseLabPageState() {
     {
       key: "name",
       heading: "Exercise",
+      headingStyle: { width: 320 },
       align: "left",
       render: (exercise, c) => (
-        <div style={{ display: "grid", gap: 3, minWidth: 220 }}>
+        <div style={{ display: "grid", gap: 3, minWidth: 0 }}>
           <FitText style={{ fontSize: 14, fontWeight: 850, color: c.textPrimary }}>
             {exercise.name}
           </FitText>
@@ -857,6 +927,7 @@ function useExerciseLabPageState() {
     {
       key: "category",
       heading: "Category",
+      headingStyle: { width: 140 },
       align: "left",
       render: (exercise, c) => (
         <FitPill
@@ -895,6 +966,7 @@ function useExerciseLabPageState() {
     {
       key: "updated",
       heading: "Updated",
+      headingStyle: { width: 150 },
       align: "left",
       render: (exercise, c) => (
         <FitText style={{ fontSize: 12.5, color: c.textSecondary }}>
@@ -907,6 +979,7 @@ function useExerciseLabPageState() {
   const libraryTableActions: FitTableAction<FitnessExerciseRecord>[] = [
     {
       icon: Pencil,
+      iconOnly: isCompact,
       label: "Edit",
       ariaLabel: (exercise) => `Edit ${exercise.name}`,
       onClick: handleOpenEdit,
@@ -914,6 +987,7 @@ function useExerciseLabPageState() {
     },
     {
       icon: Archive,
+      iconOnly: isCompact,
       label: "Archive",
       ariaLabel: (exercise) => `Archive ${exercise.name}`,
       disabled: (exercise) => !exercise.isActive,
@@ -927,6 +1001,7 @@ function useExerciseLabPageState() {
     },
     {
       icon: RefreshCcw,
+      iconOnly: isCompact,
       label: "Restore",
       ariaLabel: (exercise) => `Restore ${exercise.name}`,
       disabled: (exercise) => exercise.isActive,
@@ -944,6 +1019,7 @@ function useExerciseLabPageState() {
     {
       key: "name",
       heading: "Muscle",
+      headingStyle: { width: 160 },
       align: "left",
       render: (definition, c) => (
         <div
@@ -1017,6 +1093,7 @@ function useExerciseLabPageState() {
     {
       key: "status",
       heading: "Status",
+      headingStyle: { width: 120 },
       align: "left",
       render: (definition, c) => (
         <FitPill
@@ -1131,6 +1208,7 @@ function useExerciseLabPageState() {
     handleOpenCreate,
     handleSaveMuscleDefinition,
     handleSheetSubmit,
+    handleSaveSharedMovementContract,
     isCompact,
     libraryCategory,
     libraryItems,
@@ -1170,7 +1248,7 @@ function useExerciseLabPageState() {
     setMusclePage,
     setMuscleSearch,
     selectMuscleLibraryIcon,
-    sheetPending,
+    sheetPending: sheetPending || updateMovementFamilyMutation.isPending,
     sheetState,
     showMessage,
     surfaceControlsStyle,

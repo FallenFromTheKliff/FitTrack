@@ -1,5 +1,5 @@
-import { Injectable } from '@nestjs/common';
-import { InsightFocus, InsightPeriod } from '@prisma/client';
+import { BadRequestException, Injectable } from '@nestjs/common';
+import { InsightFocus } from '@prisma/client';
 
 import type { BusinessAnalyticsInsightResponse } from '../ai/ai-python-client.service';
 import {
@@ -14,7 +14,7 @@ import {
   type AnalyticsQueryDTO,
   ExportAnalyticsPdfDTO,
 } from './dto/analytics.dto';
-import type { GenerateBusinessInsightDTO } from './dto/business-analytics-insight.dto';
+import type { BusinessInsightRunDetailResponseDTO } from './dto/business-analytics-insight.dto';
 
 @Injectable()
 export class AnalyticsPdfExportService {
@@ -40,21 +40,11 @@ export class AnalyticsPdfExportService {
       start_date: dto.attendance_start_date,
     });
     const selectedSectionSet = new Set(selectedSections);
-    const needsOverviewInsight =
-      selectedSectionSet.has('daily') ||
-      selectedSectionSet.has('kpis') ||
-      selectedSectionSet.has('activities') ||
-      selectedSectionSet.has('recommendations');
-    const needsRevenueInsight =
-      selectedSectionSet.has('revenue') ||
-      selectedSectionSet.has('recommendations');
-    const needsAttendanceInsight =
-      selectedSectionSet.has('attendance') ||
-      selectedSectionSet.has('recommendations');
-    const needsInventoryInsight =
-      selectedSectionSet.has('inventory') ||
-      selectedSectionSet.has('alerts') ||
-      selectedSectionSet.has('recommendations');
+    if (selectedSectionSet.has('recommendations') && !dto.insight_run_id) {
+      throw new BadRequestException(
+        'A matching saved AI insight is required when recommendations are selected.',
+      );
+    }
 
     const [snapshot, revenue, attendance, dailyInsightsTrend, inventory] =
       await Promise.all([
@@ -65,41 +55,23 @@ export class AnalyticsPdfExportService {
         this.analyticsService.getInventorySummary(revenueQuery),
       ]);
 
-    const [
-      overviewInsight,
-      revenueInsight,
-      attendanceInsight,
-      inventoryInsight,
-    ] = await Promise.all([
-      needsOverviewInsight
-        ? this.generateInsight({
-            ...revenueQuery,
-            focus: InsightFocus.overview,
-            period: this.toInsightPeriod(revenueQuery.period),
-          })
-        : Promise.resolve(null),
-      needsRevenueInsight
-        ? this.generateInsight({
-            ...revenueQuery,
-            focus: InsightFocus.revenue,
-            period: this.toInsightPeriod(revenueQuery.period),
-          })
-        : Promise.resolve(null),
-      needsAttendanceInsight
-        ? this.generateInsight({
-            ...attendanceQuery,
-            focus: InsightFocus.attendance,
-            period: this.toInsightPeriod(attendanceQuery.period),
-          })
-        : Promise.resolve(null),
-      needsInventoryInsight
-        ? this.generateInsight({
-            ...revenueQuery,
-            focus: InsightFocus.inventory,
-            period: this.toInsightPeriod(revenueQuery.period),
-          })
-        : Promise.resolve(null),
-    ]);
+    const savedInsight = await this.resolveSavedInsight(
+      dto,
+      revenueQuery,
+      attendanceQuery,
+      selectedSectionSet.has('recommendations'),
+    );
+    const insightPayload = savedInsight
+      ? this.toInsightPayload(savedInsight)
+      : null;
+    const overviewInsight =
+      savedInsight?.focus === InsightFocus.overview ? insightPayload : null;
+    const revenueInsight =
+      savedInsight?.focus === InsightFocus.revenue ? insightPayload : null;
+    const attendanceInsight =
+      savedInsight?.focus === InsightFocus.attendance ? insightPayload : null;
+    const inventoryInsight =
+      savedInsight?.focus === InsightFocus.inventory ? insightPayload : null;
 
     const insights = {
       attendance: this.buildAttendanceInsight(attendance, attendanceInsight),
@@ -122,15 +94,7 @@ export class AnalyticsPdfExportService {
         snapshot,
         overviewInsight,
       ),
-      recommendations: this.buildRecommendationsInsight({
-        attendance,
-        attendanceInsight,
-        inventoryInsight,
-        overviewInsight,
-        revenue,
-        revenueInsight,
-        snapshot,
-      }),
+      recommendations: this.buildRecommendationsInsight(insightPayload),
       revenue: this.buildRevenueInsight(revenue, revenueInsight),
       systemAlerts: this.buildSystemAlertsInsight(snapshot, inventoryInsight),
     };
@@ -153,16 +117,59 @@ export class AnalyticsPdfExportService {
     };
   }
 
-  private async generateInsight(
-    dto: GenerateBusinessInsightDTO,
-  ): Promise<BusinessAnalyticsInsightResponse | null> {
-    try {
-      return await this.businessAnalyticsInsightService.generateTransientInsight(
-        dto,
-      );
-    } catch {
+  private async resolveSavedInsight(
+    dto: ExportAnalyticsPdfDTO,
+    revenueQuery: AnalyticsQueryDTO,
+    attendanceQuery: AnalyticsQueryDTO,
+    recommendationsSelected: boolean,
+  ): Promise<BusinessInsightRunDetailResponseDTO | null> {
+    if (!dto.insight_run_id) {
+      if (recommendationsSelected) {
+        throw new BadRequestException(
+          'A matching saved AI insight is required when recommendations are selected.',
+        );
+      }
       return null;
     }
+
+    const insight = await this.businessAnalyticsInsightService.getInsightById(
+      dto.insight_run_id,
+    );
+    const expectedWindow =
+      insight.focus === InsightFocus.attendance
+        ? attendanceQuery
+        : revenueQuery;
+    const startMatches =
+      !expectedWindow.start_date ||
+      insight.start_date.slice(0, 10) === expectedWindow.start_date;
+    const endMatches =
+      !expectedWindow.end_date ||
+      insight.end_date.slice(0, 10) === expectedWindow.end_date;
+    const periodMatches =
+      insight.period === (expectedWindow.period ?? 'monthly');
+
+    if (!startMatches || !endMatches || !periodMatches) {
+      throw new BadRequestException(
+        'The selected AI insight does not match the PDF export window.',
+      );
+    }
+
+    return insight;
+  }
+
+  private toInsightPayload(
+    insight: BusinessInsightRunDetailResponseDTO,
+  ): BusinessAnalyticsInsightResponse {
+    return {
+      summary: insight.summary,
+      highlights: insight.highlights,
+      risks: insight.risks,
+      opportunities: insight.opportunities,
+      anomaly_flags: insight.anomaly_flags,
+      recommended_actions: insight.recommended_actions,
+      model_used: insight.model_used,
+      token_count: insight.token_count,
+    };
   }
 
   private buildDailyInsightsInsight(
@@ -433,89 +440,71 @@ export class AnalyticsPdfExportService {
     return this.mergeInsightBlock(insight, local);
   }
 
-  private buildRecommendationsInsight(args: {
-    attendance: Awaited<ReturnType<AnalyticsService['getAttendance']>>;
-    attendanceInsight: BusinessAnalyticsInsightResponse | null;
-    inventoryInsight: BusinessAnalyticsInsightResponse | null;
-    overviewInsight: BusinessAnalyticsInsightResponse | null;
-    revenue: Awaited<ReturnType<AnalyticsService['getRevenue']>>;
-    revenueInsight: BusinessAnalyticsInsightResponse | null;
-    snapshot: Awaited<ReturnType<AnalyticsService['getSnapshot']>>;
-  }): AnalyticsPdfInsightBlock {
-    const topRevenueSource = args.revenue.top_revenue_sources[0] ?? null;
-    const lowStockCount = args.snapshot.system_alerts.filter(
-      (alert) => alert.kind === 'low_stock',
-    ).length;
-    const maintenanceCount = args.snapshot.system_alerts.filter(
-      (alert) => alert.kind === 'maintenance_due',
-    ).length;
-    const peakAttendance = args.attendance.peak_hours[0] ?? null;
+  private buildRecommendationsInsight(
+    insight: BusinessAnalyticsInsightResponse | null,
+  ): AnalyticsPdfInsightBlock {
+    if (!insight) {
+      return {
+        summary: '',
+        highlights: [],
+        recommendedActions: [],
+        source: 'deterministic',
+      };
+    }
 
-    const local: AnalyticsPdfInsightBlock = {
-      summary: `The current analytics window shows ${this.formatMoney(args.revenue.totals.total_revenue)} in revenue, ${args.attendance.total_check_ins} check-ins, and ${args.snapshot.system_alerts.length} active operational alerts, so the best next gains come from protecting the strongest revenue lane while reducing avoidable operational drag.`,
-      highlights: [
-        topRevenueSource
-          ? `${topRevenueSource.source_label} is the current lead revenue source at ${topRevenueSource.share_percentage.toFixed(1)}% of the mix.`
-          : 'No single revenue source dominated the current export window.',
-        peakAttendance
-          ? `Attendance pressure concentrates around ${peakAttendance.hour_label}, which is the clearest staffing and sales conversion opportunity.`
-          : 'Attendance did not expose a single dominant peak lane.',
-        lowStockCount + maintenanceCount > 0
-          ? `${lowStockCount} stock alerts and ${maintenanceCount} maintenance alerts are live and can suppress conversion if left unresolved.`
-          : 'Operational alerts are currently low, which creates room to focus on growth actions.',
-      ],
-      recommendedActions: this.mergeUniqueStrings([
-        topRevenueSource && topRevenueSource.share_percentage >= 45
-          ? `Grow the weaker revenue lanes so the business is less dependent on ${topRevenueSource.source_label}.`
-          : 'Maintain a balanced offer mix across memberships, bookings, coaching, and retail.',
-        peakAttendance
-          ? `Shift staffing, retail prompts, and coaching availability toward ${peakAttendance.hour_label} so peak demand is monetized cleanly.`
-          : 'Keep monitoring the attendance curve and re-evaluate staffing once a new peak pattern appears.',
-        lowStockCount > 0
-          ? 'Clear the low-stock queue first so top-selling retail items remain available during peak traffic.'
-          : null,
-        maintenanceCount > 0
-          ? 'Resolve maintenance items before capacity loss starts affecting bookings or member experience.'
-          : null,
-        args.snapshot.performance_kpis.total_coaching_appointments <
-        args.snapshot.performance_kpis.total_venue_bookings
-          ? 'Use bookings as an upsell channel for coaching so service revenue grows with venue traffic.'
-          : 'Protect coaching capacity because service demand is already strong enough to support expansion.',
-      ]),
-    };
-
-    return {
-      summary: local.summary,
-      highlights: local.highlights.slice(0, 4),
-      recommendedActions: local.recommendedActions.slice(0, 5),
-    };
+    return this.mergeInsightBlock(insight, {
+      summary: '',
+      highlights: [],
+      recommendedActions: [],
+    });
   }
 
   private mergeInsightBlock(
     insight: BusinessAnalyticsInsightResponse | null,
     local: AnalyticsPdfInsightBlock,
   ): AnalyticsPdfInsightBlock {
-    void insight;
+    const localSummary = this.normalizeInsightText(local.summary, 1200);
+    if (!insight) {
+      return {
+        summary: localSummary,
+        highlights: this.mergeUniqueStrings(local.highlights).slice(0, 3),
+        recommendedActions: this.mergeUniqueStrings(
+          local.recommendedActions,
+        ).slice(0, 3),
+        source: 'deterministic',
+      };
+    }
+
     return {
-      summary: local.summary,
-      highlights: local.highlights.slice(0, 3),
-      recommendedActions: local.recommendedActions.slice(0, 3),
+      anomalyFlags: this.mergeUniqueStrings(insight.anomaly_flags).slice(0, 3),
+      summary: this.normalizeInsightText(insight.summary, 1200) || localSummary,
+      highlights: this.mergeUniqueStrings([
+        ...insight.highlights,
+        ...local.highlights,
+      ]).slice(0, 3),
+      opportunities: this.mergeUniqueStrings(insight.opportunities).slice(0, 3),
+      recommendedActions: this.mergeUniqueStrings([
+        ...insight.recommended_actions,
+        ...local.recommendedActions,
+      ]).slice(0, 3),
+      risks: this.mergeUniqueStrings(insight.risks).slice(0, 3),
+      source: 'saved-ai',
     };
   }
 
-  private isPrimaryInsight(insight: BusinessAnalyticsInsightResponse | null) {
-    return Boolean(
-      insight &&
-      insight.model_used !== 'grounded-fallback' &&
-      !insight.summary.startsWith('Fallback insight:'),
-    );
+  private mergeUniqueStrings(values: Array<string | null | undefined>) {
+    const normalized = values
+      .map((value) => this.normalizeInsightText(value ?? '', 600))
+      .filter(Boolean);
+    return [...new Set(normalized)];
   }
 
-  private mergeUniqueStrings(values: Array<string | null | undefined>) {
-    return values.filter(
-      (value, index, items): value is string =>
-        Boolean(value?.trim()) && items.indexOf(value) === index,
-    );
+  private normalizeInsightText(value: string, maxLength: number) {
+    return value
+      .replace(/[\u0000-\u001f\u007f]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, maxLength);
   }
 
   private toQueryWindow(args: {
@@ -528,10 +517,6 @@ export class AnalyticsPdfExportService {
       ...(args.end_date ? { end_date: args.end_date } : {}),
       period: args.period ?? 'monthly',
     };
-  }
-
-  private toInsightPeriod(period: AnalyticsPeriod | undefined) {
-    return (period ?? 'monthly') as InsightPeriod;
   }
 
   private describeAttendanceWindow(window: AnalyticsQueryDTO) {

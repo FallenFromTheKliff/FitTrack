@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   GymLayoutEquipmentMutationInput,
@@ -37,9 +37,20 @@ import {
 } from "@fittrack/types";
 import type {
   EquipmentStatus,
+  FacilityGridCell,
   InventoryEquipmentStatusCounts
 } from "@fittrack/types";
+import { expandRectangleToCells } from "@fittrack/utils";
 import { webApiClient } from "@/lib/api-client";
+import {
+  createFacilityCellMutationPayload,
+  resolveFacilityCellSaveState,
+  updateFacilityCellDraft,
+  type FacilityCellDraftState,
+  type FacilityCellEditorTool,
+} from "@/components/map/facilityCellDraft";
+
+export type { FacilityCellEditorTool } from "@/components/map/facilityCellDraft";
 
 import { COLS, ROWS, EQUIPMENT } from "@/data/facilities/mapTypes";
 import type { VenueRecord, EquipmentDef } from "@/data/facilities/mapTypes";
@@ -48,6 +59,10 @@ import {
   type FacilityFloorId,
   type FloorVenueRecord
 } from "@/data/facilities/floorPlans";
+import {
+  findDeterministicVenuePlacement,
+  validateVenuePlacement,
+} from "@/app/(auth)/facilities/helpers";
 
 export type VenuePayload = VenueMutationPayload;
 export type FloorLayoutEquipmentDisplay = EquipmentDef & {
@@ -241,8 +256,6 @@ function toGridPlacement(gridColumn: number, gridRow: number) {
   return {
     gridColumn,
     gridRow,
-    positionX: gridColumnToPositionX(gridColumn),
-    positionY: gridRowToPositionY(gridRow),
   };
 }
 
@@ -252,8 +265,6 @@ function buildEquipmentMutationPayload(
   placement: {
     gridColumn: number;
     gridRow: number;
-    positionX: number;
-    positionY: number;
   }
 ): GymLayoutEquipmentMutationInput {
   return {
@@ -263,8 +274,6 @@ function buildEquipmentMutationPayload(
     iconKey: equipment.iconKey ?? equipment.id,
     inventoryItemId: String(equipment.id),
     name: equipment.name,
-    positionX: placement.positionX,
-    positionY: placement.positionY,
     type: equipment.category.toLowerCase(),
     venueId: String(venue.sourceVenueId ?? venue.id),
   };
@@ -440,6 +449,9 @@ export function useVenueMutations() {
 
   const venuesQuery = useQuery(operationalVenuesQueryOptions(webApiClient));
   const { data: venues = [], isLoading: venuesLoading } = venuesQuery;
+  const { data: floorPlanMedia = [] } = useQuery(
+    gymLayoutFloorPlanMediaQueryOptions(webApiClient),
+  );
   const archivedVenuesQuery = useQuery(archivedVenuesQueryOptions(webApiClient));
   const {
     data: archivedVenues = [],
@@ -518,14 +530,50 @@ export function useVenueMutations() {
     editTarget: VenueRecord | null,
     onSuccess: () => void
   ) => {
-    const result = buildPayload(data);
-    if (typeof result === "string") {
-      showMessage(result);
+    const builtResult = buildPayload(data);
+    if (typeof builtResult === "string") {
+      showMessage(builtResult);
       return false;
     }
-    const overlapError = checkVenueOverlap(result, venues, editTarget?.id);
-    if (overlapError) {
-      showMessage(overlapError);
+    let result: VenuePayload = builtResult;
+    const floorMedia = floorPlanMedia.find(
+      (item) => item.floorId === result.floorId,
+    );
+    const getPlacementError = (candidate: VenuePayload) =>
+      checkVenueOverlap(candidate, venues, editTarget?.id) ??
+      validateVenuePlacement({
+        floorId: candidate.floorId as FacilityFloorId,
+        gridColumn: candidate.gridColumn,
+        gridHeight: candidate.gridHeight,
+        gridRow: candidate.gridRow,
+        gridWidth: candidate.gridWidth,
+        entryCells: floorMedia?.entryCells,
+        exitCells: floorMedia?.exitCells,
+        footprintCells: floorMedia?.footprintCells,
+        pathCells: floorMedia?.pathCells,
+        venues,
+        excludeVenueId: editTarget?.id,
+      });
+
+    let placementError = getPlacementError(result);
+    if (!editTarget && placementError) {
+      const openPlacement = findDeterministicVenuePlacement({
+        floorId: result.floorId as FacilityFloorId,
+        gridHeight: result.gridHeight,
+        gridWidth: result.gridWidth,
+        entryCells: floorMedia?.entryCells,
+        exitCells: floorMedia?.exitCells,
+        footprintCells: floorMedia?.footprintCells,
+        pathCells: floorMedia?.pathCells,
+        venues,
+      });
+      if (openPlacement) {
+        result = { ...result, ...openPlacement };
+        placementError = getPlacementError(result);
+      }
+    }
+    if (placementError) {
+      showMessage(placementError);
       return false;
     }
     try {
@@ -538,8 +586,12 @@ export function useVenueMutations() {
       }
       onSuccess();
       return true;
-    } catch {
-      showMessage("Unable to save venue.");
+    } catch (error) {
+      showMessage(
+        error instanceof Error && error.message
+          ? error.message
+          : "Unable to save venue. Review the placement and retry.",
+      );
       return false;
     }
   };
@@ -692,23 +744,44 @@ export function useVenueMutations() {
   ) => {
     const currentPayload = buildVenueMutationPayloadFromRecord(venue);
     const floorId = normalizeFloorId(placement.floorId ?? currentPayload.floorId);
+    const requestedGridWidth = placement.gridWidth ?? currentPayload.gridWidth;
+    const requestedGridHeight = placement.gridHeight ?? currentPayload.gridHeight;
+    const requestedGridColumn = placement.gridColumn ?? currentPayload.gridColumn;
+    const requestedGridRow = placement.gridRow ?? currentPayload.gridRow;
+    if (
+      !Number.isInteger(requestedGridWidth) ||
+      !Number.isInteger(requestedGridHeight) ||
+      !Number.isInteger(requestedGridColumn) ||
+      !Number.isInteger(requestedGridRow) ||
+      requestedGridWidth < 1 ||
+      requestedGridHeight < 1 ||
+      requestedGridColumn < 1 ||
+      requestedGridRow < 1 ||
+      requestedGridColumn + requestedGridWidth - 1 > COLS ||
+      requestedGridRow + requestedGridHeight - 1 > ROWS
+    ) {
+      if (!options?.silent) {
+        showMessage(`Venue placement must stay inside the ${COLS} × ${ROWS} planning grid.`);
+      }
+      return false;
+    }
     const gridWidth = clamp(
-      placement.gridWidth ?? currentPayload.gridWidth,
+      requestedGridWidth,
       1,
       COLS,
     );
     const gridHeight = clamp(
-      placement.gridHeight ?? currentPayload.gridHeight,
+      requestedGridHeight,
       1,
       ROWS,
     );
     const gridColumn = clamp(
-      placement.gridColumn ?? currentPayload.gridColumn,
+      requestedGridColumn,
       1,
       COLS - gridWidth + 1,
     );
     const gridRow = clamp(
-      placement.gridRow ?? currentPayload.gridRow,
+      requestedGridRow,
       1,
       ROWS - gridHeight + 1,
     );
@@ -733,15 +806,40 @@ export function useVenueMutations() {
       return false;
     }
 
+    if (payload.isMapped !== false) {
+      const floorMedia = floorPlanMedia.find((item) => item.floorId === floorId);
+      const placementError = validateVenuePlacement({
+        floorId,
+        gridColumn,
+        gridHeight,
+        gridRow,
+        gridWidth,
+        entryCells: floorMedia?.entryCells,
+        exitCells: floorMedia?.exitCells,
+        footprintCells: floorMedia?.footprintCells,
+        pathCells: floorMedia?.pathCells,
+        venues,
+        excludeVenueId: venue.id,
+      });
+      if (placementError) {
+        if (!options?.silent) showMessage(placementError);
+        return false;
+      }
+    }
+
     try {
       await updateVenueMutation.mutateAsync({ id: venue.id, payload });
       if (!options?.silent) {
         showMessage(`${venue.name} layout updated.`);
       }
       return true;
-    } catch {
+    } catch (error) {
       if (!options?.silent) {
-        showMessage("Unable to update venue layout.");
+        showMessage(
+          error instanceof Error && error.message
+            ? error.message
+            : "Unable to update venue layout. Review the placement and retry.",
+        );
       }
       return false;
     }
@@ -758,7 +856,6 @@ export function useVenueMutations() {
       showMessage("Broken, missing, and occupied venues keep their current status.");
       return false;
     }
-
     try {
       await updateVenueMutation.mutateAsync({
         id: venue.id,
@@ -780,6 +877,7 @@ export function useVenueMutations() {
 
   return {
     venues,
+    venuesReady: venuesQuery.isSuccess,
     venuesError: venuesQuery.isError,
     refetchVenues: venuesQuery.refetch,
     archivedVenues,
@@ -819,7 +917,10 @@ export function useFloorLayout() {
     operationalVenuesQueryOptions(webApiClient),
   );
   const { data: liveEquipment = [] } = useQuery(gymLayoutEquipmentQueryOptions(webApiClient));
-  const { data: floorPlanMedia = [] } = useQuery(gymLayoutFloorPlanMediaQueryOptions(webApiClient));
+  const floorPlanMediaQuery = useQuery(
+    gymLayoutFloorPlanMediaQueryOptions(webApiClient),
+  );
+  const { data: floorPlanMedia = [] } = floorPlanMediaQuery;
   const archivedEquipmentQuery = useQuery(
     archivedGymLayoutEquipmentQueryOptions(webApiClient),
   );
@@ -915,13 +1016,89 @@ export function useFloorLayout() {
       gridWidth: media?.gridWidth ?? COLS,
     };
   }, [activeFloor, floorPlanMedia]);
+  const activeFloorMedia = useMemo(
+    () => floorPlanMedia.find((item) => item.floorId === activeFloor),
+    [activeFloor, floorPlanMedia],
+  );
+  const fullFootprint = useMemo(
+    () => Array.from({ length: ROWS }, (_, row) =>
+      Array.from({ length: COLS }, (_, column) => ({ column: column + 1, row: row + 1 })),
+    ).flat(),
+    [],
+  );
+  const [cellDraft, setCellDraft] = useState<FacilityCellDraftState>(() => ({ floorId: "floor-1", footprintCells: fullFootprint,
+    pathCells: [], entryCells: [], exitCells: [] }));
+  const [cellDraftDirty, setCellDraftDirty] = useState(false);
+  const [cellDraftReady, setCellDraftReady] = useState(false);
+  const [rectangleAnchor, setRectangleAnchor] = useState<FacilityGridCell | null>(null);
+  const [lastMutationFailure, setLastMutationFailure] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (cellDraftDirty && cellDraft.floorId === activeFloor) return;
+    setCellDraft({
+      floorId: activeFloor,
+      footprintCells: activeFloorMedia?.footprintCells ?? fullFootprint,
+      pathCells: activeFloorMedia?.pathCells ?? [],
+      entryCells: activeFloorMedia?.entryCells ?? [],
+      exitCells: activeFloorMedia?.exitCells ?? [],
+    });
+    setCellDraftReady(floorPlanMediaQuery.isSuccess);
+    setCellDraftDirty(false);
+    setRectangleAnchor(null);
+    setLastMutationFailure(null);
+  }, [
+    activeFloor,
+    activeFloorMedia,
+    cellDraft.floorId,
+    cellDraftDirty,
+    floorPlanMediaQuery.isSuccess,
+    fullFootprint,
+  ]);
   const assignedEquipment = useMemo(
     () =>
       buildVenueEquipmentAssignmentsFromRecords(liveEquipment, floorVenues)[activeFloor] ?? {},
     [activeFloor, floorVenues, liveEquipment]
   );
   const assignedCount = Object.values(assignedEquipment).reduce((count, items) => count + items.length, 0);
-  const hasUnsavedChanges = false;
+  const hasUnsavedChanges = cellDraftDirty;
+
+  const updateCellMapDraft = (tool: FacilityCellEditorTool, cell: FacilityGridCell) => {
+    setLastMutationFailure(null);
+    setCellDraft((current) => {
+      const regionCells = floorVenues[current.floorId].flatMap((venue) => expandRectangleToCells({
+          gridColumn: venue.gridColumn ?? 1, gridRow: venue.gridRow ?? 1,
+          gridWidth: venue.gridWidth ?? 1, gridHeight: venue.gridHeight ?? 1,
+        }));
+      const result = updateFacilityCellDraft({
+        anchor: rectangleAnchor,
+        cell,
+        current,
+        regionCells,
+        tool,
+      });
+      setRectangleAnchor(result.anchor);
+      if (result.dirty) setCellDraftDirty(true);
+      return result.draft;
+    });
+  };
+
+  const applyCellMapDraft = async () => {
+    try {
+      await updateFloorPlanMediaMutation.mutateAsync(
+        createFacilityCellMutationPayload(cellDraft),
+      );
+      setCellDraftDirty(resolveFacilityCellSaveState(true).dirty);
+      setLastMutationFailure(null);
+      showMessage("Facility map cells applied.");
+      return true;
+    } catch (error) {
+      const failure = error instanceof Error ? error.message : "Unable to apply facility map cells.";
+      setCellDraftDirty(resolveFacilityCellSaveState(false).dirty);
+      setLastMutationFailure(failure);
+      showMessage("Map save failed. Review the highlighted cells and retry.");
+      return false;
+    }
+  };
 
   const handleSaveLayout = (onSaved?: () => void) => {
     onSaved?.();
@@ -1078,22 +1255,9 @@ export function useFloorLayout() {
     }
   };
 
-  const handleResizeFloorBounds = async (bounds: {
-    gridHeight: number;
-    gridWidth: number;
-  }) => {
-    try {
-      await updateFloorPlanMediaMutation.mutateAsync({
-        floorId: activeFloor,
-        gridHeight: Math.max(6, Math.min(20, bounds.gridHeight)),
-        gridWidth: Math.max(8, Math.min(30, bounds.gridWidth)),
-      });
-      showMessage(`${activeFloor.replace("floor-", "Floor ")} bounds updated.`);
-      return true;
-    } catch {
-      showMessage("Unable to resize the floor bounds.");
-      return false;
-    }
+  const handleResizeFloorBounds = async () => {
+    showMessage("The logical facility grid is fixed at 14 × 10. Edit the building footprint instead.");
+    return false;
   };
 
   const handleUpdateInventoryEquipmentFromFacilities = async (
@@ -1130,6 +1294,9 @@ export function useFloorLayout() {
     );
 
     if (!equipment || !venue) {
+      if (equipment) {
+        showMessage(`${equipment.name} must be dropped inside a mapped venue.`);
+      }
       return false;
     }
 
@@ -1163,15 +1330,17 @@ export function useFloorLayout() {
           floorId: venue.floorId,
           gridColumn: preferredCell.gridColumn,
           gridRow: preferredCell.gridRow,
-          positionX: gridColumnToPositionX(preferredCell.gridColumn),
-          positionY: gridRowToPositionY(preferredCell.gridRow),
           venueId: String(venue.sourceVenueId ?? venue.id),
         },
       });
       showMessage(`${equipment.name} moved to ${venue.name}.`);
       return true;
-    } catch {
-      showMessage("Unable to move equipment on the floor map.");
+    } catch (error) {
+      showMessage(
+        error instanceof Error && error.message
+          ? error.message
+          : "Unable to move equipment on the floor map. Review the placement and retry.",
+      );
       return false;
     }
   };
@@ -1226,6 +1395,10 @@ export function useFloorLayout() {
     assignedEquipment,
     activeFloorImageUrl,
     activeFloorBounds,
+    cellDraft,
+    cellDraftReady: cellDraftReady && cellDraft.floorId === activeFloor,
+    cellMapSaving: updateFloorPlanMediaMutation.isPending,
+    lastMutationFailure,
     archivedEquipment,
     archivedEquipmentError: archivedEquipmentQuery.isError,
     refetchArchivedEquipment: archivedEquipmentQuery.refetch,
@@ -1245,6 +1418,8 @@ export function useFloorLayout() {
     updateInventoryEquipmentMutation,
     message,
     handleSaveLayout,
+    updateCellMapDraft,
+    applyCellMapDraft,
     handleToggleEditMode,
     handleSaveAndExit,
     handleConfirmCellDelete,

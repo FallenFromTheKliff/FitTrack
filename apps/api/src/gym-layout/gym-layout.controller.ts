@@ -54,10 +54,23 @@ function arrayEnvelopeSchema(ref: string) {
 }
 
 @ApiTags('Gym Layout')
-@ApiExtraModels(GymLayoutEquipmentResponseDTO, FacilityFloorPlanMediaResponseDTO)
+@ApiExtraModels(
+  GymLayoutEquipmentResponseDTO,
+  FacilityFloorPlanMediaResponseDTO,
+)
 @Controller('gym-layout')
 export class GymLayoutController {
   constructor(private readonly gymLayoutService: GymLayoutService) {}
+
+  @Get('snapshot')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Return the member-safe authoritative facility map snapshot.',
+  })
+  getSnapshot() {
+    return this.gymLayoutService.getSnapshot();
+  }
 
   @Get('equipment')
   @UseGuards(JwtAuthGuard)
@@ -168,14 +181,13 @@ export class GymLayoutController {
   @ApiBearerAuth('access-token')
   @ApiBody({ type: UpdateFacilityFloorPlanMediaDTO })
   @ApiOperation({
-    summary: 'Update the persisted image for a facility floor plan. Admin only.',
+    summary:
+      'Update the persisted image for a facility floor plan. Admin only.',
   })
   @ApiResponse({
     status: 200,
     description: 'Floor-plan media updated.',
-    schema: apiEnvelopeSchema(
-      getSchemaPath(FacilityFloorPlanMediaResponseDTO),
-    ),
+    schema: apiEnvelopeSchema(getSchemaPath(FacilityFloorPlanMediaResponseDTO)),
   })
   updateFloorPlanMedia(
     @Param('floorId') floorId: string,

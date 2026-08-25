@@ -1237,6 +1237,7 @@ describe('AiPythonClientService', () => {
       ),
     );
     global.fetch = fetchMock;
+    const timeoutSpy = jest.spyOn(AbortSignal, 'timeout');
 
     const service = new AiPythonClientService(config as ConfigService);
     const result = await service.generateBusinessInsight({
@@ -1292,6 +1293,7 @@ describe('AiPythonClientService', () => {
 
     expect(url).toBe('https://ai.fittrack.test/analytics/insights');
     expect(init?.method).toBe('POST');
+    expect(timeoutSpy).toHaveBeenCalledWith(45000);
     expect(body.grounding.window.focus).toBe('overview');
     expect(body.grounding.window.period).toBe('monthly');
     expect(result).toEqual({
@@ -1304,6 +1306,7 @@ describe('AiPythonClientService', () => {
       token_count: 144,
       model_used: 'openrouter/model',
     });
+    timeoutSpy.mockRestore();
   });
 
   it('rejects malformed upstream business insight payloads', async () => {

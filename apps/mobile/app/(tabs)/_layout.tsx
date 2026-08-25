@@ -84,6 +84,7 @@ function TabsLayoutInner() {
     isSidebarOpen,
     setSidebarOpen,
     isReservationOpen,
+    reservationRequest,
     setReservationOpen,
     fireBookingRefresh,
     isCameraActive
@@ -337,6 +338,7 @@ function TabsLayoutInner() {
       {isReservationOpen ? (
         <ReservationModal
           isVisible={isReservationOpen}
+          preselectedVenueId={reservationRequest.preselectedVenueId}
           onClose={() => setReservationOpen(false)}
           onSuccess={() => {
             fireBookingRefresh();

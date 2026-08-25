@@ -1,5 +1,5 @@
-import type { EquipmentStatus } from "./base";
-import type { FacilityFloorId, FloorVenueRecord } from "./facilities";
+import type { EquipmentStatus } from "./base.js";
+import type { FacilityFloorId, FloorVenueRecord } from "./facilities.js";
 
 export type GymLayoutEquipmentRecord = {
   createdAt: string;
@@ -34,8 +34,6 @@ export type GymLayoutEquipmentMutationInput = {
   isActive?: boolean;
   inventoryItemId?: string;
   name?: string;
-  positionX?: number;
-  positionY?: number;
   status?: EquipmentStatus;
   type?: string;
   venueId?: string;
@@ -44,17 +42,71 @@ export type GymLayoutEquipmentMutationInput = {
 export type FacilityFloorPlanMediaRecord = {
   createdAt: string;
   floorId: FacilityFloorId;
+  footprintCells: FacilityGridCell[];
   gridHeight: number;
   gridWidth: number;
   imageUrl: string | null;
+  pathCells: FacilityGridCell[];
+  entryCells: FacilityGridCell[];
+  exitCells: FacilityGridCell[];
   updatedAt: string;
 };
 
 export type FacilityFloorPlanMediaMutationInput = {
   floorId: FacilityFloorId;
-  gridHeight?: number;
-  gridWidth?: number;
+  footprintCells?: FacilityGridCell[];
   imageUrl?: string | null;
+  pathCells?: FacilityGridCell[];
+  entryCells?: FacilityGridCell[];
+  exitCells?: FacilityGridCell[];
+};
+
+export type FacilityGridCell = {
+  column: number;
+  row: number;
+};
+
+export type FacilityGridRectangle = {
+  gridColumn: number;
+  gridHeight: number;
+  gridRow: number;
+  gridWidth: number;
+};
+
+export type FacilityMapRegionSnapshot = FacilityGridRectangle & {
+  bookingBlockReason: string | null;
+  capacity: number | null;
+  description: string | null;
+  floorId: FacilityFloorId;
+  hourlyRate: number | null;
+  iconKey: string | null;
+  id: string;
+  imageUrl: string | null;
+  isBookable: boolean;
+  isReservable: boolean;
+  minimumHours: number | null;
+  name: string;
+  regionKind: "venue" | "support";
+  sourceVenueId: string;
+  status: EquipmentStatus | null;
+};
+
+export type FacilityFloorSnapshot = {
+  entryCells: FacilityGridCell[];
+  equipment: GymLayoutEquipmentRecord[];
+  exitCells: FacilityGridCell[];
+  floorId: FacilityFloorId;
+  footprintCells: FacilityGridCell[];
+  gridColumns: 14;
+  gridRows: 10;
+  imageUrl: string | null;
+  pathCells: FacilityGridCell[];
+  regions: FacilityMapRegionSnapshot[];
+};
+
+export type FacilityMapSnapshot = {
+  floors: FacilityFloorSnapshot[];
+  generatedAt: string;
 };
 
 export type GymLayoutDeltaOperation = "remove" | "upsert";
@@ -69,6 +121,8 @@ export const GYM_LAYOUT_DELTA_EVENT = "gym-layout.delta";
 export const GYM_LAYOUT_SNAPSHOT_EVENT = "gym-layout.snapshot";
 export const GYM_LAYOUT_GRID_COLUMNS = 14;
 export const GYM_LAYOUT_GRID_ROWS = 10;
+export const FACILITY_GRID_COLUMNS = GYM_LAYOUT_GRID_COLUMNS;
+export const FACILITY_GRID_ROWS = GYM_LAYOUT_GRID_ROWS;
 
 export type VenueEquipmentAssignments = Record<string, string[]>;
 

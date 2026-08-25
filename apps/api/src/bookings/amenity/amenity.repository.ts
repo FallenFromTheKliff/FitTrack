@@ -48,6 +48,29 @@ export class AmenityRepository extends BaseRepository {
     return this.create<Amenity>(this.prisma.amenity, data);
   }
 
+  listMappedAmenitiesForFloor(floorId: string, excludingId?: string) {
+    return this.prisma.amenity.findMany({
+      where: {
+        floor_id: floorId,
+        is_active: true,
+        is_mapped: true,
+        ...(excludingId ? { id: { not: excludingId } } : {}),
+      },
+    });
+  }
+
+  getFloorMap(floorId: string) {
+    return this.prisma.facilityFloorPlanMedia.findUnique({
+      where: { floor_id: floorId },
+    });
+  }
+
+  listEquipmentForVenue(venueId: string) {
+    return this.prisma.gymEquipment.findMany({
+      where: { venue_id: venueId, is_active: true },
+    });
+  }
+
   createAmenityFeedback(
     data: Prisma.AmenityFeedbackCreateInput,
   ): Promise<AmenityFeedback> {
@@ -113,6 +136,31 @@ export class AmenityRepository extends BaseRepository {
 
   updateAmenity(id: string, data: Prisma.AmenityUpdateInput): Promise<Amenity> {
     return this.updateById<Amenity>(this.prisma.amenity, id, data);
+  }
+
+  moveAmenityAndEquipment(
+    id: string,
+    data: Prisma.AmenityUpdateInput,
+    equipmentMoves: Array<{ id: string; gridColumn: number; gridRow: number }>,
+  ): Promise<Amenity> {
+    return this.transaction(async (tx) => {
+      for (const move of equipmentMoves) {
+        await tx.gymEquipment.update({
+          where: { id: move.id },
+          data: {
+            grid_column: move.gridColumn,
+            grid_row: move.gridRow,
+            grid_width: 1,
+            grid_height: 1,
+            position_x: Number(
+              (((move.gridColumn - 0.5) / 14) * 100).toFixed(2),
+            ),
+            position_y: Number((((move.gridRow - 0.5) / 10) * 100).toFixed(2)),
+          },
+        });
+      }
+      return tx.amenity.update({ where: { id }, data });
+    });
   }
 
   softDeleteAmenity(id: string): Promise<Amenity> {

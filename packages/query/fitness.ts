@@ -56,6 +56,17 @@ export function fitnessMuscleDefinitionsQueryOptions(
   });
 }
 
+export function fitnessExerciseQueryOptions(
+  client: Pick<ApiClient, "fitness">,
+  exerciseId?: string | null,
+) {
+  return queryOptions({
+    queryKey: [...queryKeys.fitnessExercises(), "detail", exerciseId],
+    queryFn: () => (exerciseId ? client.fitness.getExercise(exerciseId) : null),
+    enabled: Boolean(exerciseId),
+  });
+}
+
 export function fitnessMemberMuscleDefinitionsQueryOptions(
   client: Pick<ApiClient, "fitness">,
 ) {
@@ -181,6 +192,27 @@ export function fitnessPlansQueryOptions(
         };
       }
       return client.fitness.listPlans(params);
+    },
+  });
+}
+
+export function updateExerciseMovementFamilyMutationOptions(
+  client: Pick<ApiClient, "fitness">,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: ({
+      familyId,
+      movementProfile,
+    }: {
+      familyId: string;
+      movementProfile: NonNullable<UpdateFitnessExerciseInput["movementProfile"]>;
+    }) =>
+      client.fitness.updateMovementFamilyContract(familyId, { movementProfile }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.fitnessExercises(),
+      });
     },
   });
 }

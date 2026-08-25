@@ -39,8 +39,9 @@ class OpenRouterInsightSettings:
 
 class OpenRouterBusinessInsightProvider:
     _DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
-    _DEFAULT_REQUEST_TIMEOUT_SECONDS = 3.0
+    _DEFAULT_REQUEST_TIMEOUT_SECONDS = 10.0
     _DEFAULT_MAX_ATTEMPTS = 4
+    _MAX_RESPONSE_NORMALIZATION_DEPTH = 4
 
     def generate_business_insight(
         self,
@@ -69,7 +70,7 @@ class OpenRouterBusinessInsightProvider:
         anomaly_flags = self._merge_unique_strings(
             insight.anomaly_flags,
             BusinessInsightService.detect_anomalies(payload.grounding),
-        )
+        )[:8]
 
         return BusinessAnalyticsInsightResponse(
             summary=insight.summary,
@@ -97,11 +98,21 @@ class OpenRouterBusinessInsightProvider:
         settings = self._get_settings()
         anomaly_flags = BusinessInsightService.detect_anomalies(payload.grounding)
         system_prompt = (
-            "You are a grounded gym business analyst. Use only the provided "
-            "analytics grounding. Return strict JSON only, with no markdown, no "
-            "prose outside the JSON object, and no extra keys. If the data is "
-            "thin or mixed, write cautious business analysis from the supplied "
-            "metrics instead of refusing."
+            "You are a grounded gym business decision analyst. Use only the provided "
+            "analytics grounding and its deterministic comparisons and derived_signals. "
+            "Never restate a dashboard metric by itself: a metric may appear only with "
+            "a comparison, anomaly, concentration, tradeoff, or operational implication. "
+            "The summary must answer what changed, why it matters, and what should happen "
+            "next. Comparative language is forbidden unless comparator evidence exists. "
+            "Treat a null percentage_change as an explicit zero-baseline case and never "
+            "invent a percentage. Unsupported causes must be labeled as possible drivers "
+            "or hypotheses. Every highlight, risk, and opportunity must contain evidence "
+            "plus its implication. Return at most three prioritized recommended_actions. "
+            "Every action must use exactly this structure: 'Owner · timeframe — action. "
+            "Success: measurable outcome.' Never recommend merely reviewing, observing, "
+            "or monitoring the dashboard. Return strict JSON only, with no markdown, no "
+            "prose outside the JSON object, and no extra keys. If data is thin, state the "
+            "evidence limitation and still give a bounded operational decision."
         )
         if response_format_type in {"json_object", "prompt_json"}:
             system_prompt += (
@@ -320,7 +331,7 @@ class OpenRouterBusinessInsightProvider:
         except ValueError:
             return self._DEFAULT_REQUEST_TIMEOUT_SECONDS
 
-        return min(max(timeout, 1.0), 15.0)
+        return min(max(timeout, 3.0), 10.0)
 
     def _max_attempts(self) -> int:
         raw_attempts = os.getenv("OPENROUTER_BUSINESS_INSIGHT_MAX_ATTEMPTS", "")
@@ -329,7 +340,7 @@ class OpenRouterBusinessInsightProvider:
         except ValueError:
             return self._DEFAULT_MAX_ATTEMPTS
 
-        return min(max(attempts, 1), 6)
+        return min(max(attempts, 1), 4)
 
     def _get_settings(self) -> OpenRouterInsightSettings:
         api_key = os.getenv("OPENROUTER_API_KEY")
@@ -434,7 +445,9 @@ class OpenRouterBusinessInsightProvider:
 
         try:
             parsed_content = self._load_json_content(content)
-            insight = GeneratedBusinessInsight.model_validate(parsed_content)
+            insight = GeneratedBusinessInsight.model_validate(
+                self._normalize_insight_payload(parsed_content)
+            )
         except (json.JSONDecodeError, ValidationError) as exc:
             raise ServiceError(
                 type="BAD_GATEWAY",
@@ -460,18 +473,25 @@ class OpenRouterBusinessInsightProvider:
         if isinstance(content, str):
             return content
 
+        if isinstance(content, dict):
+            return json.dumps(content, ensure_ascii=False, separators=(",", ":"))
+
         if isinstance(content, list):
             text_parts: list[str] = []
             for item in content:
-                if (
+                if isinstance(item, str):
+                    text_parts.append(item)
+                elif (
                     isinstance(item, dict)
-                    and item.get("type") == "text"
+                    and item.get("type") in {"text", "output_text"}
                     and isinstance(item.get("text"), str)
                 ):
                     text_parts.append(item["text"])
 
             if text_parts:
                 return "".join(text_parts)
+            if content:
+                return json.dumps(content, ensure_ascii=False, separators=(",", ":"))
 
         raise ServiceError(
             type="BAD_GATEWAY",
@@ -481,24 +501,158 @@ class OpenRouterBusinessInsightProvider:
         )
 
     def _load_json_content(self, content: str) -> object:
-        try:
-            return json.loads(content)
-        except json.JSONDecodeError:
-            cleaned = content.strip()
-            if cleaned.startswith("```"):
-                cleaned = cleaned.removeprefix("```json").removeprefix("```JSON")
-                cleaned = cleaned.removeprefix("```").removesuffix("```").strip()
+        cleaned = self._strip_code_fences(content).strip()
+        parsed: object = cleaned
+
+        for _ in range(self._MAX_RESPONSE_NORMALIZATION_DEPTH):
+            try:
+                parsed = json.loads(cleaned)
+            except json.JSONDecodeError:
+                object_start = cleaned.find("{")
+                object_end = cleaned.rfind("}")
+                if object_start == -1 or object_end <= object_start:
+                    raise
+                parsed = json.loads(cleaned[object_start : object_end + 1])
+
+            if not isinstance(parsed, str):
+                return parsed
+
+            nested = self._strip_code_fences(parsed).strip()
+            if not nested or nested == cleaned or not nested.startswith(("{", "[", '"')):
+                return parsed
+            cleaned = nested
+
+        return parsed
+
+    @staticmethod
+    def _strip_code_fences(content: str) -> str:
+        cleaned = content.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.removeprefix("```json").removeprefix("```JSON")
+            cleaned = cleaned.removeprefix("```").removesuffix("```").strip()
+        return cleaned
+
+    def _normalize_insight_payload(
+        self,
+        payload: object,
+        *,
+        depth: int = 0,
+    ) -> object:
+        if depth > self._MAX_RESPONSE_NORMALIZATION_DEPTH:
+            return payload
+
+        if isinstance(payload, str):
+            try:
+                nested = self._load_json_content(payload)
+            except json.JSONDecodeError:
+                return payload
+            if isinstance(nested, str) and nested == payload:
+                return payload
+            return self._normalize_insight_payload(nested, depth=depth + 1)
+
+        if isinstance(payload, list):
+            for item in payload:
+                normalized = self._normalize_insight_payload(
+                    item,
+                    depth=depth + 1,
+                )
+                if isinstance(normalized, dict) and normalized.get("summary"):
+                    return normalized
+            return payload
+
+        if not isinstance(payload, dict):
+            return payload
+
+        contract_keys = {
+            "summary",
+            "executive_summary",
+            "highlights",
+            "risks",
+            "opportunities",
+            "anomaly_flags",
+            "anomalyFlags",
+            "recommended_actions",
+            "recommendedActions",
+            "actions",
+        }
+        if not any(key in payload for key in contract_keys):
+            for wrapper_key in ("data", "result", "insight", "response", "output"):
+                if wrapper_key not in payload:
+                    continue
+                normalized = self._normalize_insight_payload(
+                    payload[wrapper_key],
+                    depth=depth + 1,
+                )
+                if isinstance(normalized, dict):
+                    return normalized
+
+        normalized_payload: dict[str, object] = {}
+        if "summary" in payload or "executive_summary" in payload:
+            normalized_payload["summary"] = self._normalize_summary(
+                payload.get("summary", payload.get("executive_summary"))
+            )
+        for field_name in ("highlights", "risks", "opportunities"):
+            if field_name in payload:
+                normalized_payload[field_name] = self._normalize_string_list(
+                    payload[field_name]
+                )
+        if "anomaly_flags" in payload or "anomalyFlags" in payload:
+            normalized_payload["anomaly_flags"] = self._normalize_string_list(
+                payload.get("anomaly_flags", payload.get("anomalyFlags"))
+            )
+        if any(
+            key in payload
+            for key in ("recommended_actions", "recommendedActions", "actions")
+        ):
+            normalized_payload["recommended_actions"] = self._normalize_string_list(
+                payload.get(
+                    "recommended_actions",
+                    payload.get("recommendedActions", payload.get("actions")),
+                )
+            )
+        return normalized_payload
+
+    def _normalize_summary(self, value: object) -> str:
+        if isinstance(value, str):
+            return value.strip()
+        if isinstance(value, dict):
+            for key in ("text", "content", "summary", "description"):
+                candidate = value.get(key)
+                if isinstance(candidate, str) and candidate.strip():
+                    return candidate.strip()
+        if isinstance(value, list):
+            parts = self._normalize_string_list(value)
+            return " ".join(parts)
+        return ""
+
+    def _normalize_string_list(self, value: object) -> list[str]:
+        values = value if isinstance(value, list) else [value]
+        normalized: list[str] = []
+        for item in values:
+            if isinstance(item, str):
+                cleaned = item.strip()
+                if not cleaned:
+                    continue
                 try:
-                    return json.loads(cleaned)
+                    nested = self._load_json_content(cleaned)
                 except json.JSONDecodeError:
-                    pass
+                    nested = cleaned
+                if not isinstance(nested, str):
+                    normalized.extend(self._normalize_string_list(nested))
+                else:
+                    normalized.append(nested.strip())
+                continue
+            if isinstance(item, (int, float)):
+                normalized.append(str(item))
+                continue
+            if isinstance(item, dict):
+                for key in ("text", "content", "description", "action", "label"):
+                    candidate = item.get(key)
+                    if isinstance(candidate, str) and candidate.strip():
+                        normalized.append(candidate.strip())
+                        break
 
-            object_start = cleaned.find("{")
-            object_end = cleaned.rfind("}")
-            if object_start != -1 and object_end > object_start:
-                return json.loads(cleaned[object_start : object_end + 1])
-
-            raise
+        return list(dict.fromkeys(normalized))
 
     def _is_refusal_like(self, content: str) -> bool:
         normalized = content.strip().lower().replace("\u2019", "'")
@@ -661,133 +815,216 @@ class BusinessInsightService:
     def build_grounded_fallback(
         grounding: BusinessAnalyticsGroundingPayload,
     ) -> BusinessAnalyticsInsightResponse:
-        total_revenue = BusinessInsightService._parse_money(
-            grounding.overview.total_revenue,
-        )
         anomaly_flags = BusinessInsightService.detect_anomalies(grounding)
-        top_plan = grounding.membership.top_plans[0] if grounding.membership.top_plans else None
-        top_coach = grounding.coaching.coaches[0] if grounding.coaching.coaches else None
-        top_product = (
-            grounding.inventory.top_products[0]
-            if grounding.inventory and grounding.inventory.top_products
-            else None
-        )
+        comparisons = grounding.comparisons
+        signals = grounding.derived_signals
         inventory = grounding.inventory
-        peak_hour = grounding.attendance.peak_hours[0] if grounding.attendance.peak_hours else None
-
-        highlights = [
+        concentration = signals.top_revenue_source_concentration
+        peak = signals.peak_hour_attendance_concentration
+        revenue_change = BusinessInsightService._comparison_statement(
+            "Revenue", comparisons.total_revenue, money=True
+        )
+        attendance_change = BusinessInsightService._comparison_statement(
+            "Check-ins", comparisons.check_ins
+        )
+        membership_change = BusinessInsightService._comparison_statement(
+            "New members", comparisons.new_members
+        )
+        coaching_change = BusinessInsightService._comparison_statement(
+            "Completed coaching sessions", comparisons.completed_coaching_sessions
+        )
+        revenue_implication = (
+            f"{concentration.source_label} supplies {concentration.percentage:.1f}% of revenue, so execution in that lane has an outsized effect"
+            if concentration
+            else "no revenue source concentration is established, so the next move should restore completed revenue without assuming a leading lane"
+        )
+        attendance_implication = (
+            f"{peak.percentage:.1f}% of check-ins land at {peak.hour_label}, so coverage should match that demand concentration"
+            if peak
+            else "no reliable peak-hour concentration exists, so staffing changes should remain bounded until demand timing is established"
+        )
+        inventory_evidence_parts = [
             (
-                f"Total revenue for the selected {grounding.window.period} window "
-                f"reached {grounding.overview.total_revenue}."
+                f"equipment availability is {signals.equipment_availability_percentage:.1f}%"
+                if signals.equipment_availability_percentage is not None
+                else None
             ),
             (
-                f"Attendance recorded {grounding.overview.total_check_ins} check-ins "
-                f"with {grounding.membership.active_members} active members."
+                f"low-stock exposure is {signals.low_stock_exposure_percentage:.1f}%"
+                if signals.low_stock_exposure_percentage is not None
+                else None
+            ),
+            (
+                f"out-of-stock exposure is {signals.out_of_stock_exposure_percentage:.1f}%"
+                if signals.out_of_stock_exposure_percentage is not None
+                else None
             ),
         ]
-        if top_plan:
-            highlights.append(
-                f"Top membership plan is {top_plan.name} with {top_plan.subscriber_count} subscribers."
-            )
-        if top_coach:
-            highlights.append(
-                f"Top coach performer is {BusinessInsightService._coach_name(top_coach)} "
-                f"with {top_coach.completed_sessions} completed sessions."
-            )
-        if inventory:
-            highlights.append(
-                f"Inventory currently holds {inventory.retail_items} retail items, "
-                f"with {inventory.low_stock_items} low-stock items and "
-                f"{inventory.equipment_under_maintenance} equipment type(s) under maintenance."
-            )
-
-        risks = (
-            anomaly_flags.copy()
-            if anomaly_flags
-            else ["AI-generated narrative is currently degraded, so this fallback is rule-based."]
+        inventory_evidence_parts = [value for value in inventory_evidence_parts if value]
+        inventory_evidence = (
+            f"Inventory exposure shows {', '.join(inventory_evidence_parts)}"
+            if inventory_evidence_parts
+            else "Inventory availability and stock exposure are unavailable because no reliable equipment or retail denominator exists"
         )
-        if peak_hour and peak_hour.check_ins > 0:
-            risks.append(
-                f"Traffic concentrates around {peak_hour.hour_label}, which can strain staffing and equipment."
-            )
-
-        opportunities = []
-        if top_product:
-            opportunities.append(
-                f"Promote {top_product.name} during peak hours to lift secondary spend."
-            )
-        if inventory and inventory.low_stock_items > 0:
-            opportunities.append(
-                f"Restock the {inventory.low_stock_items} low-stock retail item(s) before peak foot traffic loses add-on sales."
-            )
-        if top_plan:
-            opportunities.append(
-                f"Use {top_plan.name} as the lead offer in retention and upgrade campaigns."
-            )
-        if top_coach:
-            opportunities.append(
-                f"Replicate the session pattern of {BusinessInsightService._coach_name(top_coach)} across the coaching team."
-            )
-        if not opportunities:
-            opportunities.append(
-                "Review the live analytics trends and schedule a manual business review for this window."
-            )
-
-        recommended_actions = []
-        if total_revenue <= 0:
-            recommended_actions.append(
-                "Audit the payment pipelines for the selected window before trusting revenue conclusions."
-            )
-        if grounding.overview.total_check_ins <= 0:
-            recommended_actions.append(
-                "Validate access-control and check-in capture because attendance is currently zero."
-            )
-        if peak_hour and peak_hour.check_ins > 0:
-            recommended_actions.append(
-                f"Align staffing, classes, and retail prompts around the {peak_hour.hour_label} peak."
-            )
-        if top_product:
-            recommended_actions.append(
-                f"Bundle {top_product.name} with memberships or coaching packages to improve spend per visit."
-            )
-        if inventory and inventory.equipment_under_maintenance > 0:
-            recommended_actions.append(
-                f"Resolve {inventory.equipment_under_maintenance} maintenance queue item(s) so equipment availability stays ahead of attendance demand."
-            )
-        if not recommended_actions:
-            recommended_actions.append(
-                "Review this grounded fallback insight and regenerate once the external AI provider stabilizes."
-            )
-
-        summary = (
-            f"Fallback insight: revenue is {grounding.overview.total_revenue}, "
-            f"attendance is {grounding.overview.total_check_ins} check-ins, "
-            f"active membership is {grounding.membership.active_members}, and "
-            f"inventory value is {inventory.retail_inventory_value if inventory else '0.00'} for the selected window."
+        inventory_implication = (
+            "service continuity and retail conversion depend on resolving the measured availability gaps"
+            if inventory_evidence_parts
+            else "the next inventory decision must restore trustworthy denominators before allocation targets are set"
         )
+
+        finance_action = (
+            "Finance · next 3 business days — reconcile the declining revenue lanes and correct confirmed capture gaps. Success: 100% of the absolute revenue change is attributed to a source."
+            if comparisons.total_revenue.direction == "decrease"
+            else "Revenue lead · next 7 days — execute one source-specific conversion offer while protecting revenue mix. Success: total revenue improves in the next same-length window."
+        )
+        attendance_action = (
+            f"Operations · next 7 days — align front-desk and floor coverage to the {peak.hour_label} demand peak. Success: peak-hour member wait time stays under 3 minutes."
+            if peak
+            else "Operations · next 7 days — assign coverage across operating hours and restore valid check-in capture. Success: every operating hour has assigned coverage and recorded demand."
+        )
+        membership_action = "Membership lead · next 7 days — complete a structured onboarding touchpoint for every new member in this window. Success: 100% of the cohort receives the touchpoint."
+        coaching_action = "Coaching lead · next 7 days — match coach capacity and follow-on offers to completed-session demand. Success: every completed session receives a documented next-step offer."
+        if inventory and inventory.out_of_stock_items > 0:
+            inventory_action = f"Inventory lead · next 48 hours — replenish or substitute the {inventory.out_of_stock_items} out-of-stock items. Success: out-of-stock exposure reaches 0%."
+        elif (
+            signals.equipment_availability_percentage is not None
+            and signals.equipment_availability_percentage < 100
+        ):
+            inventory_action = "Facilities lead · next 7 days — return serviceable equipment to the available pool. Success: equipment availability reaches 100%."
+        elif inventory_evidence_parts:
+            inventory_action = "Inventory lead · next 7 days — protect current equipment and retail availability through scheduled replenishment. Success: out-of-stock exposure remains at 0%."
+        else:
+            inventory_action = "Inventory lead · next 3 business days — restore equipment-unit and retail-item denominator capture. Success: availability and stock exposure are calculable."
+        overview_action = "General manager · next 7 days — sequence the revenue, attendance, membership, and coaching owners around the largest measured change. Success: one accountable owner and target are recorded for each declining lane."
+
+        focus = grounding.window.focus
+        if focus == "revenue":
+            primary_evidence = revenue_change
+            implication = revenue_implication
+            primary_action = finance_action
+            highlights = [
+                f"{revenue_change}; {revenue_implication}.",
+                (
+                    f"{concentration.source_label} contributes {concentration.percentage:.1f}% of revenue; source-level execution will materially affect the total."
+                    if concentration
+                    else f"{revenue_change}; a missing source concentration means recovery should avoid assuming which lane will lead."
+                ),
+            ]
+            risks = [
+                (
+                    f"{concentration.source_label} represents {concentration.percentage:.1f}% of revenue; the mix is exposed to disruption in one income stream."
+                    if concentration and concentration.percentage >= 60
+                    else f"{revenue_change}; failure to act on the measured movement would leave operating headroom exposed."
+                )
+            ]
+            opportunities = [f"{revenue_change}; a source-specific conversion action can test whether the measured movement is reversible."]
+            secondary_actions: list[str] = []
+        elif focus == "attendance":
+            primary_evidence = attendance_change
+            implication = attendance_implication
+            primary_action = attendance_action
+            highlights = [
+                f"{attendance_change}; {attendance_implication}.",
+                (
+                    f"{peak.check_ins} check-ins occurred at {peak.hour_label}, or {peak.percentage:.1f}% of the total; concentrating coverage there targets proven demand."
+                    if peak
+                    else f"{attendance_change}; absent peak evidence limits staffing changes to coverage and capture reliability."
+                ),
+            ]
+            risks = [f"{attendance_change}; a mismatch between demand and floor coverage can weaken service quality."]
+            opportunities = [
+                (
+                    f"{peak.percentage:.1f}% of attendance lands at {peak.hour_label}; aligning service and offers there concentrates effort where demand is proven."
+                    if peak
+                    else f"{attendance_change}; restoring demand timing can unlock a defensible staffing allocation."
+                )
+            ]
+            secondary_actions = []
+        elif focus == "membership":
+            primary_evidence = membership_change
+            implication = "the measured cohort changes the immediate onboarding and early-retention workload"
+            primary_action = membership_action
+            highlights = [f"{membership_change}; the cohort size determines how much onboarding capacity is needed now."]
+            risks = [f"{membership_change}; unowned onboarding would put the value of this measured cohort at risk."]
+            opportunities = [f"{membership_change}; a complete first-week touchpoint can convert the measured acquisition into early engagement."]
+            secondary_actions = []
+        elif focus == "coaching":
+            primary_evidence = coaching_change
+            implication = "the session movement changes coach-capacity needs and the available follow-on pipeline"
+            primary_action = coaching_action
+            highlights = [f"{coaching_change}; capacity and next-step offers should follow completed-session demand."]
+            risks = [f"{coaching_change}; an unmatched coach roster can create either service pressure or idle capacity."]
+            opportunities = [f"{coaching_change}; documented follow-on offers can turn completed sessions into a measurable continuation pipeline."]
+            secondary_actions = []
+        elif focus == "inventory":
+            primary_evidence = inventory_evidence
+            implication = inventory_implication
+            primary_action = inventory_action
+            highlights = [f"{inventory_evidence}; {inventory_implication}."]
+            risks = [f"{inventory_evidence}; unresolved availability or denominator gaps can hide service and retail exposure."]
+            opportunities = [f"{inventory_evidence}; targeted replenishment or data repair can make the next allocation decision measurable."]
+            secondary_actions = []
+        else:
+            primary_evidence = f"Cross-domain priority: {revenue_change}, while {attendance_change.lower()}"
+            implication = "the operating response must balance financial movement with service demand and cohort workload"
+            primary_action = overview_action
+            highlights = [
+                f"{primary_evidence}; {implication}.",
+                f"{membership_change}; onboarding ownership must scale with the measured cohort.",
+                f"{coaching_change}; coach capacity and follow-on work should match completed demand.",
+            ]
+            risks = [
+                f"{revenue_change}; continued contraction would reduce operating headroom."
+                if comparisons.total_revenue.direction == "decrease"
+                else f"{attendance_change}; service capacity must remain aligned with measured demand."
+            ]
+            opportunities = [f"{membership_change}; focused onboarding can improve the value captured from the measured cohort."]
+            secondary_actions = [
+                *([finance_action] if comparisons.total_revenue.direction == "decrease" else []),
+                *([attendance_action] if peak else []),
+            ]
+
+        recommended_actions = BusinessInsightService._unique_strings(
+            [primary_action, *secondary_actions]
+        )[:3]
+        next_action = recommended_actions[0].split(" — ", maxsplit=1)[1]
+        summary = f"{primary_evidence}. It matters because {implication}. Next, {next_action}"
 
         return BusinessAnalyticsInsightResponse(
             summary=summary,
-            highlights=highlights,
+            highlights=BusinessInsightService._unique_strings(highlights)[:5],
             risks=BusinessInsightService._unique_strings(risks),
             opportunities=BusinessInsightService._unique_strings(opportunities),
             anomaly_flags=anomaly_flags,
-            recommended_actions=BusinessInsightService._unique_strings(
-                recommended_actions
-            ),
+            recommended_actions=BusinessInsightService._unique_strings(recommended_actions)[:3],
             model_used="grounded-fallback",
             token_count=None,
         )
 
     @staticmethod
-    def _coach_name(coach: object) -> str:
-        if not hasattr(coach, "first_name") and not hasattr(coach, "last_name"):
-            return "the leading coach"
+    def _comparison_statement(label: str, comparison: object, *, money: bool = False) -> str:
+        current = float(comparison.current) if money else int(comparison.current)
+        previous = float(comparison.previous) if money else int(comparison.previous)
+        absolute = float(comparison.absolute_change) if money else int(comparison.absolute_change)
+        formatter = BusinessInsightService._format_money if money else lambda value: f"{int(value):,}"
+        if comparison.direction == "new_from_zero":
+            return f"{label} established a new baseline at {formatter(current)} after a zero prior period"
+        if comparison.direction == "flat":
+            return f"{label} held at {formatter(current)} versus {formatter(previous)} in the prior period"
+        verb = "increased" if comparison.direction == "increase" else "decreased"
+        percentage = (
+            f" ({abs(comparison.percentage_change):.1f}%)"
+            if comparison.percentage_change is not None
+            else ""
+        )
+        return (
+            f"{label} {verb} by {formatter(abs(absolute))}{percentage}, "
+            f"from {formatter(previous)} to {formatter(current)}"
+        )
 
-        first_name = getattr(coach, "first_name", None)
-        last_name = getattr(coach, "last_name", None)
-        full_name = " ".join(part for part in [first_name, last_name] if part)
-        return full_name or "the leading coach"
+    @staticmethod
+    def _format_money(value: float) -> str:
+        return f"₱{value:,.2f}"
 
     @staticmethod
     def _unique_strings(values: list[str]) -> list[str]:

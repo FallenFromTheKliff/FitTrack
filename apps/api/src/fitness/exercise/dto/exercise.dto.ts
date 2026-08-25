@@ -1,12 +1,13 @@
 import { Transform, type TransformFnParams } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ExerciseCategory } from '@prisma/client';
+import { ExerciseCategory, ExerciseTrackingMode } from '@prisma/client';
 import {
   IsBoolean,
   IsEnum,
   IsInt,
   IsArray,
   IsNotEmpty,
+  IsObject,
   IsOptional,
   IsString,
   IsUrl,
@@ -47,6 +48,13 @@ function transformBooleanInput(params: TransformFnParams): unknown {
 }
 
 export class CreateExerciseDTO {
+  @ApiPropertyOptional({
+    type: 'array',
+    description: 'Exact spelling/synonym labels.',
+  })
+  @IsOptional()
+  aliases?: unknown;
+
   @ApiProperty({ example: 'Barbell Back Squat' })
   @TrimString()
   @IsString({ message: 'name must be a string' })
@@ -86,6 +94,24 @@ export class CreateExerciseDTO {
   })
   @IsOptional()
   movement_profile?: unknown;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    type: 'object',
+    additionalProperties: true,
+  })
+  @IsOptional()
+  movement_profile_override?: unknown;
+
+  @ApiPropertyOptional({ nullable: true, format: 'uuid' })
+  @IsOptional()
+  @IsString()
+  movement_family_id?: string | null;
+
+  @ApiPropertyOptional({ enum: ExerciseTrackingMode })
+  @IsOptional()
+  @IsEnum(ExerciseTrackingMode)
+  tracking_mode?: ExerciseTrackingMode;
 
   @ApiPropertyOptional({
     additionalProperties: true,
@@ -139,6 +165,13 @@ export class CreateExerciseDTO {
 }
 
 export class UpdateExerciseDTO {
+  @ApiPropertyOptional({
+    type: 'array',
+    description: 'Exact spelling/synonym labels.',
+  })
+  @IsOptional()
+  aliases?: unknown;
+
   @ApiPropertyOptional({ example: 'Barbell Back Squat' })
   @IsOptional()
   @TrimString()
@@ -173,6 +206,24 @@ export class UpdateExerciseDTO {
   })
   @IsOptional()
   movement_profile?: unknown;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    type: 'object',
+    additionalProperties: true,
+  })
+  @IsOptional()
+  movement_profile_override?: unknown;
+
+  @ApiPropertyOptional({ nullable: true, format: 'uuid' })
+  @IsOptional()
+  @IsString()
+  movement_family_id?: string | null;
+
+  @ApiPropertyOptional({ enum: ExerciseTrackingMode })
+  @IsOptional()
+  @IsEnum(ExerciseTrackingMode)
+  tracking_mode?: ExerciseTrackingMode;
 
   @ApiPropertyOptional({
     additionalProperties: true,
@@ -275,6 +326,9 @@ export class ExerciseFilterDTO extends PaginationDTO {
 }
 
 export class ExerciseResponseDTO {
+  @ApiProperty({ type: 'array' })
+  aliases: unknown[];
+
   @ApiProperty({ example: '11111111-1111-4111-8111-111111111111' })
   id: string;
 
@@ -298,6 +352,30 @@ export class ExerciseResponseDTO {
     type: 'object',
   })
   movement_profile: Record<string, unknown> | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    type: 'object',
+    additionalProperties: true,
+  })
+  movement_profile_override: Record<string, unknown> | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    type: 'object',
+    additionalProperties: true,
+  })
+  movement_family: Record<string, unknown> | null;
+
+  @ApiProperty({ enum: ExerciseTrackingMode })
+  tracking_mode: ExerciseTrackingMode;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    type: 'object',
+    additionalProperties: true,
+  })
+  movement_contract_identity: Record<string, unknown>;
 
   @ApiPropertyOptional({
     additionalProperties: true,
@@ -342,6 +420,20 @@ export class ExerciseResponseDTO {
 
   @ApiProperty({ example: '2026-03-26T03:00:00.000Z' })
   updated_at: string;
+}
+
+export class UpdateMovementFamilyContractDTO {
+  @ApiProperty({ type: 'object', additionalProperties: true })
+  @IsObject()
+  movement_profile: unknown;
+
+  @ApiPropertyOptional({
+    type: 'object',
+    additionalProperties: true,
+    nullable: true,
+  })
+  @IsOptional()
+  hand_shape_profile?: unknown;
 }
 
 export class MuscleDefinitionResponseDTO {

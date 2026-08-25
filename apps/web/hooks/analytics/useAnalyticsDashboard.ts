@@ -17,6 +17,7 @@ import {
 import type {
   AnalyticsAttendanceRecord,
   AnalyticsPdfSection,
+  BusinessInsightFocus,
   BusinessInsightRunDetailRecord,
   MemberRecord,
 } from "@fittrack/types";
@@ -42,6 +43,11 @@ type AttendanceDrilldownSelection = {
   label: string;
 };
 
+type AnalyticsPdfExportOptions = {
+  includeRecommendations?: boolean;
+  insightId?: string;
+};
+
 const PDF_EXPORT_SECTION_OPTIONS: Array<{
   label: string;
   value: AnalyticsPdfSection;
@@ -60,14 +66,25 @@ const DEFAULT_PDF_EXPORT_SECTIONS = PDF_EXPORT_SECTION_OPTIONS.map(
   (option) => option.value,
 );
 const DEFAULT_ANALYTICS_WINDOW = getDefaultAnalyticsDateWindow();
+export const ANALYTICS_INSIGHT_FOCUS_OPTIONS: Array<{
+  label: string;
+  value: BusinessInsightFocus;
+}> = [
+  { label: "Overview", value: "overview" },
+  { label: "Revenue", value: "revenue" },
+  { label: "Attendance", value: "attendance" },
+  { label: "Membership", value: "membership" },
+  { label: "Coaching", value: "coaching" },
+  { label: "Inventory", value: "inventory" },
+];
 
 function isFallbackBusinessInsight(
   insight: BusinessInsightRunDetailRecord | null | undefined,
 ): boolean {
   return Boolean(
     insight &&
-      (insight.modelUsed === "grounded-fallback" ||
-        insight.summary.startsWith("Fallback insight:")),
+    (insight.modelUsed === "grounded-fallback" ||
+      insight.summary.startsWith("Fallback insight:")),
   );
 }
 
@@ -89,8 +106,9 @@ function getAttendanceDrilldownSubtitle(
 export function useAnalyticsDashboard() {
   const queryClient = useQueryClient();
   const { message, showMessage } = useTimedMessage(3000);
-  const [analyticsWindow, setAnalyticsWindow] =
-    useState(DEFAULT_ANALYTICS_WINDOW);
+  const [analyticsWindow, setAnalyticsWindow] = useState(
+    DEFAULT_ANALYTICS_WINDOW,
+  );
   const [draftStartDate, setDraftStartDate] = useState(
     DEFAULT_ANALYTICS_WINDOW.startDate,
   );
@@ -105,6 +123,8 @@ export function useAnalyticsDashboard() {
     useState<AttendanceDrilldownSelection | null>(null);
   const [generatedInsight, setGeneratedInsight] =
     useState<BusinessInsightRunDetailRecord | null>(null);
+  const [selectedInsightFocus, setSelectedInsightFocus] =
+    useState<BusinessInsightFocus>("overview");
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [selectedPdfSections, setSelectedPdfSections] = useState<
     AnalyticsPdfSection[]
@@ -168,6 +188,7 @@ export function useAnalyticsDashboard() {
   });
   const insightHistoryQuery = useQuery({
     ...analyticsInsightsQueryOptions(webApiClient, {
+      focus: selectedInsightFocus,
       limit: 1,
       page: 1,
     }),
@@ -177,7 +198,9 @@ export function useAnalyticsDashboard() {
   const latestInsightId = insightHistoryQuery.data?.data[0]?.id;
   const latestInsightQuery = useQuery({
     ...analyticsInsightDetailQueryOptions(webApiClient, latestInsightId),
-    enabled: Boolean(latestInsightId) && !generatedInsight,
+    enabled:
+      Boolean(latestInsightId) &&
+      generatedInsight?.focus !== selectedInsightFocus,
     staleTime: 30_000,
     gcTime: 300_000,
   });
@@ -196,9 +219,12 @@ export function useAnalyticsDashboard() {
     latestInsightQuery.data?.startDate.slice(0, 10) ===
       analyticsWindow.startDate &&
     latestInsightQuery.data?.endDate.slice(0, 10) === analyticsWindow.endDate &&
-    latestInsightQuery.data?.period === analyticsWindow.period;
+    latestInsightQuery.data?.period === analyticsWindow.period &&
+    latestInsightQuery.data?.focus === selectedInsightFocus;
   const latestInsight =
-    generatedInsight ??
+    (generatedInsight?.focus === selectedInsightFocus
+      ? generatedInsight
+      : null) ??
     (storedInsightMatchesWindow ? latestInsightQuery.data : null) ??
     null;
   const latestInsightIsFallback = isFallbackBusinessInsight(latestInsight);
@@ -246,21 +272,37 @@ export function useAnalyticsDashboard() {
       const result = await generateInsightMutation.mutateAsync({
         input: {
           ...analyticsWindow,
-          focus: "overview",
+          focus: selectedInsightFocus,
           period: analyticsWindow.period,
         },
       });
       setGeneratedInsight(result);
       showMessage("Fresh analytics insight is ready.");
+      return result;
     } catch {
       showMessage("Couldn't generate a new analytics insight.");
+      return null;
     }
   };
 
-  const handleExportPdf = async () => {
-    if (selectedPdfSections.length === 0) {
+  const handleExportPdf = async (
+    options: AnalyticsPdfExportOptions = {},
+  ): Promise<boolean> => {
+    const exportSections =
+      options.includeRecommendations === false
+        ? selectedPdfSections.filter((section) => section !== "recommendations")
+        : selectedPdfSections;
+
+    if (exportSections.length === 0) {
       showMessage("Choose at least one analytics section to export.");
-      return;
+      return false;
+    }
+
+    if (exportSections.includes("recommendations") && !options.insightId) {
+      showMessage(
+        "Generate or select a matching AI insight before exporting recommendations.",
+      );
+      return false;
     }
 
     setIsExportingPdf(true);
@@ -270,10 +312,11 @@ export function useAnalyticsDashboard() {
         attendanceEndDate: analyticsWindow.endDate,
         attendancePeriod: analyticsWindow.period,
         attendanceStartDate: analyticsWindow.startDate,
+        insightId: options.insightId,
         revenueEndDate: analyticsWindow.endDate,
         revenuePeriod: analyticsWindow.period,
         revenueStartDate: analyticsWindow.startDate,
-        selectedSections: selectedPdfSections,
+        selectedSections: exportSections,
       });
 
       const blob = new Blob([result.bytes], {
@@ -291,6 +334,10 @@ export function useAnalyticsDashboard() {
       }, 1000);
 
       showMessage("Analytics PDF download started.");
+      return true;
+    } catch {
+      showMessage("Couldn't export the analytics PDF.");
+      return false;
     } finally {
       setIsExportingPdf(false);
     }
@@ -310,6 +357,10 @@ export function useAnalyticsDashboard() {
 
   const handleCloseDrilldown = () => {
     setSelectedDrilldown(null);
+  };
+
+  const handleSetInsightFocus = (focus: BusinessInsightFocus) => {
+    setSelectedInsightFocus(focus);
   };
 
   const handleApplyAnalyticsWindow = () => {
@@ -391,6 +442,7 @@ export function useAnalyticsDashboard() {
     handleGenerateInsight,
     handleResetAnalyticsWindow,
     handleSelectAttendancePoint,
+    handleSetInsightFocus,
     handleTogglePdfSection,
     isExportingPdf: isExportingPdf || exportPdfMutation.isPending,
     isGeneratingInsight: generateInsightMutation.isPending,
@@ -402,6 +454,7 @@ export function useAnalyticsDashboard() {
     overview,
     overviewLoading: overviewQuery.isLoading,
     pdfExportSectionOptions: PDF_EXPORT_SECTION_OPTIONS,
+    insightFocusOptions: ANALYTICS_INSIGHT_FOCUS_OPTIONS,
     visibleActiveMemberCount,
     revenue,
     revenueLoading: revenueQuery.isLoading,
@@ -409,6 +462,7 @@ export function useAnalyticsDashboard() {
     revenueWindow: analyticsWindow,
     selectedDrilldown,
     selectedPdfSections,
+    selectedInsightFocus,
     setDraftAggregationPeriod,
     setDraftEndDate,
     setDraftStartDate,

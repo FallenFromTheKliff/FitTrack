@@ -178,7 +178,7 @@ export class AnalyticsController {
   @ApiBody({ type: ExportAnalyticsPdfDTO })
   @ApiOperation({
     summary:
-      'Export the current analytics view as a generated PDF with AI insights. Admin only.',
+      'Export the current analytics view as a PDF, optionally reusing a saved AI insight. Admin only.',
   })
   @ApiResponse({
     status: 200,

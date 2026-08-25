@@ -709,6 +709,115 @@ def test_chat_route_never_exposes_provider_internal_reasoning(
     assert calls[0]["reasoning"] == {"exclude": True}
 
 
+def test_chat_route_repairs_rejected_reasoning_for_casual_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv(
+        "OPENROUTER_ASSISTANT_CHAT_MODEL",
+        "meta-llama/llama-3.3-70b-instruct:free",
+    )
+    calls: list[dict[str, object]] = []
+
+    provider_payloads = [
+        {
+            "model": "meta-llama/llama-3.3-70b-instruct:free",
+            "usage": {"total_tokens": 23},
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "content": (
+                                    'We need to infer intent: user says "hello bro, '
+                                    'can I call you Broskie?" Action policy says '
+                                    "return strict JSON only."
+                                ),
+                                "action": "NONE",
+                                "params": None,
+                            }
+                        )
+                    }
+                }
+            ],
+        },
+        {
+            "model": "meta-llama/llama-3.3-70b-instruct:free",
+            "usage": {"total_tokens": 31},
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "content": (
+                                    "You can call me Broskie in this chat. A new "
+                                    "chat may not include this conversation, so "
+                                    "say it again there if needed."
+                                ),
+                                "action": "NONE",
+                                "params": None,
+                            }
+                        )
+                    }
+                }
+            ],
+        },
+    ]
+
+    class SequencedResponse:
+        status_code = 200
+
+        def __init__(self, payload: dict[str, object]) -> None:
+            self._payload = payload
+
+        def json(self) -> dict[str, object]:
+            return self._payload
+
+    def fake_post(*args, **kwargs):
+        calls.append(kwargs["json"])
+        return SequencedResponse(provider_payloads[min(len(calls) - 1, 1)])
+
+    monkeypatch.setattr("app.services.assistant.httpx.post", fake_post)
+
+    response = TestClient(app).post(
+        "/chat",
+        json={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": (
+                        "hello bro can i call you broskie? your name is now "
+                        "broskie or alias. if i say on the next chat hey bro, "
+                        "reply whats up my dude"
+                    ),
+                }
+            ],
+            "user_context": {},
+            "session_context": {
+                "session_id": "assistant-session-casual-repair",
+                "context_type": "general",
+                "allowed_actions": ["NONE"],
+            },
+        },
+    )
+
+    payload = response.json()
+    assert response.status_code == 200
+    assert payload["content"] == (
+        "You can call me Broskie in this chat. A new chat may not include this "
+        "conversation, so say it again there if needed."
+    )
+    assert payload["action"] == "NONE"
+    assert payload["params"] is None
+    assert payload["token_count"] == 31
+    assert len(calls) == 2
+    assert calls[0]["reasoning"] == {"exclude": True}
+    assert calls[1]["response_format"] == {"type": "json_object"}
+    assert "fresh, user-facing answer" in calls[1]["messages"][0]["content"]
+    assert "future or new chat" in calls[0]["messages"][0]["content"]
+    assert "infer intent" not in payload["content"].lower()
+
+
 def test_chat_route_keeps_legitimate_plain_text_that_mentions_we_need_to(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

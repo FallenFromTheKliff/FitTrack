@@ -5,6 +5,7 @@ import type {
   PoseRepModel,
   PoseRequiredSides,
 } from "@fittrack/types";
+import { normalizeExerciseAlias } from "./exercise-movement-contract";
 
 /**
  * Fixed reference data shared by the seeders, exercise editor, and pose
@@ -424,15 +425,47 @@ export type CanonicalAmenityDefinition = {
   grid: readonly [number, number, number, number];
   hourlyRate: string;
   iconKey: string;
+  isReservable?: boolean;
   key: string;
   minimumHours: number;
   name: string;
   requiresSubscription: boolean;
+  status?: "available" | "maintenance";
   type: "basketball_court" | "boxing_ring" | "other";
 };
 
 /** Canonical facility references. Rates intentionally follow the realistic dynamic seed. */
 export const CANONICAL_AMENITIES = [
+  {
+    key: "reception",
+    capacity: 6,
+    description: "Arrival, check-in, and member support desk.",
+    displayOrder: 1,
+    floorId: "floor-1",
+    grid: [1, 1, 3, 2],
+    hourlyRate: "0",
+    iconKey: "reception",
+    isReservable: false,
+    minimumHours: 1,
+    name: "Reception",
+    requiresSubscription: false,
+    type: "other",
+  },
+  {
+    key: "general-floor",
+    capacity: 20,
+    description: "Shared open training area with mapped strength equipment.",
+    displayOrder: 2,
+    floorId: "floor-1",
+    grid: [4, 1, 4, 4],
+    hourlyRate: "0",
+    iconKey: "gym-area",
+    isReservable: false,
+    minimumHours: 1,
+    name: "General Floor",
+    requiresSubscription: false,
+    type: "other",
+  },
   {
     key: "boxing-ring",
     capacity: 4,
@@ -443,6 +476,7 @@ export const CANONICAL_AMENITIES = [
     grid: [3, 3, 5, 4],
     hourlyRate: "450",
     iconKey: "boxing",
+    status: "maintenance",
     minimumHours: 1,
     name: "Boxing Ring",
     requiresSubscription: false,
@@ -492,7 +526,7 @@ export type CanonicalPoseCapability = {
 };
 
 /** Explicit, reviewed auto-rep allowlist. Do not derive this by catalog order or muscle. */
-export const CANONICAL_POSE_CAPABILITIES = [
+const ALL_CANONICAL_POSE_CAPABILITIES = [
   {
     aliases: ["squat", "back squat", "barbell squat", "barbell back squat"],
     exerciseKey: "squat",
@@ -500,6 +534,21 @@ export const CANONICAL_POSE_CAPABILITIES = [
     contractExercise: "squat",
     requiredBodyOrientation: "upright",
     dominantJoint: "knee",
+    repModel: "bilateral",
+    requiredSides: "both",
+  },
+  {
+    aliases: [
+      "dumbbell bench press",
+      "dumbbell bench",
+      "bench dumbbell",
+      "dumbbell_bench_press",
+    ],
+    exerciseKey: "bench",
+    poseExercise: "dumbbell_bench_press",
+    contractExercise: "dumbbell_bench_press",
+    requiredBodyOrientation: "horizontal",
+    dominantJoint: "elbow",
     repModel: "bilateral",
     requiredSides: "both",
   },
@@ -522,6 +571,31 @@ export const CANONICAL_POSE_CAPABILITIES = [
   },
   {
     aliases: [
+      "incline dumbbell press",
+      "incline dumbbell",
+      "incline press",
+      "incline_dumbbell_press",
+    ],
+    exerciseKey: "incline-dumbbell-press",
+    poseExercise: "incline_dumbbell_press",
+    contractExercise: "incline_dumbbell_press",
+    requiredBodyOrientation: "inclined",
+    dominantJoint: "elbow",
+    repModel: "bilateral",
+    requiredSides: "both",
+  },
+  {
+    aliases: ["cable fly", "cable flyes", "cable_fly"],
+    exerciseKey: "cable-fly",
+    poseExercise: "cable_fly",
+    contractExercise: "cable_fly",
+    requiredBodyOrientation: "upright",
+    dominantJoint: "shoulder",
+    repModel: "bilateral",
+    requiredSides: "both",
+  },
+  {
+    aliases: [
       "bicep curl",
       "biceps curl",
       "dumbbell curl",
@@ -539,10 +613,185 @@ export const CANONICAL_POSE_CAPABILITIES = [
     requiredSides: "both",
   },
   {
+    aliases: [
+      "lateral raise",
+      "dumbbell lateral raise",
+      "side lateral raise",
+      "lateral_raise",
+    ],
+    exerciseKey: "lateral-raise",
+    poseExercise: "lateral_raise",
+    contractExercise: "lateral_raise",
+    requiredBodyOrientation: "upright",
+    dominantJoint: "shoulder",
+    repModel: "bilateral",
+    requiredSides: "both",
+  },
+  {
+    aliases: ["lat pulldown", "lat pull down", "lat_pulldown"],
+    exerciseKey: "lat-pulldown",
+    poseExercise: "lat_pulldown",
+    contractExercise: "lat_pulldown",
+    requiredBodyOrientation: "upright",
+    dominantJoint: "elbow",
+    repModel: "bilateral",
+    requiredSides: "both",
+  },
+  {
+    aliases: ["barbell row", "barbell_row"],
+    exerciseKey: "barbell-row",
+    poseExercise: "barbell_row",
+    contractExercise: "barbell_row",
+    requiredBodyOrientation: "inclined",
+    dominantJoint: "elbow",
+    repModel: "bilateral",
+    requiredSides: "both",
+  },
+  {
+    aliases: ["leg press", "machine leg press", "leg_press"],
+    exerciseKey: "leg-press",
+    poseExercise: "leg_press",
+    contractExercise: "leg_press",
+    requiredBodyOrientation: "inclined",
+    dominantJoint: "knee",
+    repModel: "bilateral",
+    requiredSides: "both",
+  },
+  {
+    aliases: ["leg extension", "leg extensions", "leg_extension"],
+    exerciseKey: "leg-extension",
+    poseExercise: "leg_extension",
+    contractExercise: "leg_extension",
+    requiredBodyOrientation: "upright",
+    dominantJoint: "knee",
+    repModel: "bilateral",
+    requiredSides: "both",
+  },
+  {
+    aliases: ["seated leg curl", "leg curl", "seated_leg_curl"],
+    exerciseKey: "seated-leg-curl",
+    poseExercise: "seated_leg_curl",
+    contractExercise: "seated_leg_curl",
+    requiredBodyOrientation: "upright",
+    dominantJoint: "knee",
+    repModel: "bilateral",
+    requiredSides: "both",
+  },
+  {
+    aliases: [
+      "calf raise",
+      "standing calf raise",
+      "standing calf raises",
+      "calf_raise",
+    ],
+    exerciseKey: "calf-raise",
+    poseExercise: "calf_raise",
+    contractExercise: "calf_raise",
+    requiredBodyOrientation: "upright",
+    dominantJoint: "ankle",
+    repModel: "bilateral",
+    requiredSides: "both",
+  },
+  {
     aliases: ["dip", "tricep dip", "parallel bar dip"],
     exerciseKey: "dip",
     poseExercise: "dip",
     contractExercise: "dip",
+    requiredBodyOrientation: "upright",
+    dominantJoint: "elbow",
+    repModel: "bilateral",
+    requiredSides: "both",
+  },
+  {
+    aliases: ["hammer curl", "hammer curls", "hammer_curl"],
+    exerciseKey: "hammer-curl",
+    poseExercise: "hammer_curl",
+    contractExercise: "hammer_curl",
+    requiredBodyOrientation: "upright",
+    dominantJoint: "elbow",
+    repModel: "bilateral",
+    requiredSides: "both",
+  },
+  {
+    aliases: [
+      "triceps pushdown",
+      "tricep pushdown",
+      "cable triceps pushdown",
+      "triceps_pushdown",
+    ],
+    exerciseKey: "triceps-pushdown",
+    poseExercise: "triceps_pushdown",
+    contractExercise: "triceps_pushdown",
+    requiredBodyOrientation: "upright",
+    dominantJoint: "elbow",
+    repModel: "bilateral",
+    requiredSides: "both",
+  },
+  {
+    aliases: ["rope face pull", "face pull", "rope_face_pull"],
+    exerciseKey: "rope-face-pull",
+    poseExercise: "rope_face_pull",
+    contractExercise: "rope_face_pull",
+    requiredBodyOrientation: "upright",
+    dominantJoint: "shoulder",
+    repModel: "bilateral",
+    requiredSides: "both",
+  },
+  {
+    aliases: ["hip thrust", "barbell hip thrust", "hip_thrust"],
+    exerciseKey: "hip-thrust",
+    poseExercise: "hip_thrust",
+    contractExercise: "hip_thrust",
+    requiredBodyOrientation: "horizontal",
+    dominantJoint: "hip",
+    repModel: "bilateral",
+    requiredSides: "both",
+  },
+  {
+    aliases: [
+      "split squat",
+      "bulgarian split squat",
+      "bulgarian squat",
+      "split_squat",
+    ],
+    exerciseKey: "split-squat",
+    poseExercise: "split_squat",
+    contractExercise: "split_squat",
+    requiredBodyOrientation: "upright",
+    dominantJoint: "knee",
+    repModel: "alternating",
+    requiredSides: "alternating",
+  },
+  {
+    aliases: ["cable crunch", "cable crunches", "cable_crunch"],
+    exerciseKey: "cable-crunch",
+    poseExercise: "cable_crunch",
+    contractExercise: "cable_crunch",
+    requiredBodyOrientation: "upright",
+    dominantJoint: "hip",
+    repModel: "bilateral",
+    requiredSides: "both",
+  },
+  {
+    aliases: ["romanian deadlift", "rdl", "deadlift", "romanian_deadlift"],
+    exerciseKey: "deadlift",
+    poseExercise: "romanian_deadlift",
+    contractExercise: "romanian_deadlift",
+    requiredBodyOrientation: "inclined",
+    dominantJoint: "hip",
+    repModel: "bilateral",
+    requiredSides: "both",
+  },
+  {
+    aliases: [
+      "seated cable row",
+      "cable row",
+      "seated row",
+      "seated_cable_row",
+    ],
+    exerciseKey: "row",
+    poseExercise: "seated_cable_row",
+    contractExercise: "seated_cable_row",
     requiredBodyOrientation: "upright",
     dominantJoint: "elbow",
     repModel: "bilateral",
@@ -603,6 +852,21 @@ export const CANONICAL_POSE_CAPABILITIES = [
   },
 ] as const satisfies readonly CanonicalPoseCapability[];
 
+const REVIEWED_AUTO_REP_CONTRACTS = new Set([
+  "squat",
+  "bench_press",
+  "bicep_curl",
+  "dip",
+  "plank",
+  "pull_up",
+  "push_up",
+  "shoulder_press",
+]);
+
+export const CANONICAL_POSE_CAPABILITIES = ALL_CANONICAL_POSE_CAPABILITIES.filter(
+  (capability) => REVIEWED_AUTO_REP_CONTRACTS.has(capability.contractExercise),
+);
+
 export const CANONICAL_POSE_EXERCISE_KEYS = [
   "squat",
   "barbell-bench",
@@ -614,11 +878,7 @@ export const CANONICAL_POSE_EXERCISE_KEYS = [
   "shoulder-press",
 ] as const;
 
-export const CANONICAL_LEGACY_POSE_EXERCISE_KEYS = [
-  "bench",
-  "deadlift",
-  "row",
-] as const;
+export const CANONICAL_LEGACY_POSE_EXERCISE_KEYS: readonly string[] = [];
 
 export function getCanonicalExercise(key: string) {
   return (
@@ -651,21 +911,13 @@ export function getCanonicalPoseCapabilityByLabel(
   label: string | null | undefined,
 ) {
   if (!label) return null;
-  const normalized = label
-    .trim()
-    .toLowerCase()
-    .replace(/[_-]+/g, " ")
-    .replace(/\s+/g, " ");
+  const normalized = normalizeExerciseAlias(label);
   return (
     CANONICAL_POSE_CAPABILITIES.find((capability) =>
       capability.aliases.some(
         (alias) =>
           normalized ===
-          alias
-            .trim()
-            .toLowerCase()
-            .replace(/[_-]+/g, " ")
-            .replace(/\s+/g, " "),
+          normalizeExerciseAlias(alias),
       ),
     ) ?? null
   );

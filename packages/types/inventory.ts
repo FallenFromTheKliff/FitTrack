@@ -1,4 +1,4 @@
-import type { PaginationMeta } from "./membership";
+import type { PaginationMeta } from "./membership.js";
 
 export const INVENTORY_PRODUCT_CATEGORIES = [
   "supplements",

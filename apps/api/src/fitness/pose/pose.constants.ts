@@ -2,31 +2,34 @@ import { POSE_AUTO_REP_EXERCISE_KEYS } from '../../../../../packages/utils/pose'
 
 export const poseStarterCatalog = POSE_AUTO_REP_EXERCISE_KEYS.map(
   (exerciseKey) => {
-    switch (exerciseKey) {
-      case 'barbell-bench':
-        return 'bench_press';
-      case 'biceps-curl':
-        return 'bicep_curl';
-      case 'pull-up':
-        return 'pull_up';
-      case 'push-up':
-        return 'push_up';
-      case 'shoulder-press':
-        return 'shoulder_press';
-      default:
-        return exerciseKey;
-    }
+    const contractByExerciseKey: Record<string, string> = {
+      bench: 'dumbbell_bench_press',
+      'barbell-bench': 'bench_press',
+      'incline-dumbbell-press': 'incline_dumbbell_press',
+      'cable-fly': 'cable_fly',
+      'lateral-raise': 'lateral_raise',
+      'lat-pulldown': 'lat_pulldown',
+      'barbell-row': 'barbell_row',
+      'leg-press': 'leg_press',
+      'leg-extension': 'leg_extension',
+      'seated-leg-curl': 'seated_leg_curl',
+      'calf-raise': 'calf_raise',
+      'biceps-curl': 'bicep_curl',
+      'hammer-curl': 'hammer_curl',
+      'triceps-pushdown': 'triceps_pushdown',
+      'rope-face-pull': 'rope_face_pull',
+      'hip-thrust': 'hip_thrust',
+      'split-squat': 'split_squat',
+      'cable-crunch': 'cable_crunch',
+      deadlift: 'romanian_deadlift',
+      row: 'seated_cable_row',
+      'pull-up': 'pull_up',
+      'push-up': 'push_up',
+      'shoulder-press': 'shoulder_press',
+    };
+    return contractByExerciseKey[exerciseKey] ?? exerciseKey;
   },
-) as unknown as readonly [
-  'squat',
-  'bench_press',
-  'bicep_curl',
-  'dip',
-  'plank',
-  'pull_up',
-  'push_up',
-  'shoulder_press',
-];
+);
 
 export const poseExerciseAliasMap = {
   push_up: ['push_up', 'pushup'],
@@ -43,4 +46,4 @@ export const poseExerciseAliasMap = {
     'barbell_bench',
   ],
   dip: ['dip', 'tricep dip', 'parallel bar dip', 'bench dip', 'assisted dip'],
-} satisfies Record<(typeof poseStarterCatalog)[number], readonly string[]>;
+} satisfies Record<string, readonly string[]>;

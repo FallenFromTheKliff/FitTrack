@@ -15,8 +15,61 @@ def _build_grounding_payload() -> dict[str, object]:
         "window": {
             "start_date": "2025-01-01",
             "end_date": "2025-01-31",
+            "previous_start_date": "2024-12-01",
+            "previous_end_date": "2024-12-31",
             "period": "custom",
             "focus": "overview",
+        },
+        "comparisons": {
+            "total_revenue": {
+                "current": "8849.00",
+                "previous": "9000.00",
+                "absolute_change": "-151.00",
+                "percentage_change": -1.7,
+                "direction": "decrease",
+            },
+            "check_ins": {
+                "current": 30,
+                "previous": 24,
+                "absolute_change": 6,
+                "percentage_change": 25.0,
+                "direction": "increase",
+            },
+            "new_members": {
+                "current": 18,
+                "previous": 0,
+                "absolute_change": 18,
+                "percentage_change": None,
+                "direction": "new_from_zero",
+            },
+            "completed_coaching_sessions": {
+                "current": 4,
+                "previous": 5,
+                "absolute_change": -1,
+                "percentage_change": -20.0,
+                "direction": "decrease",
+            },
+        },
+        "derived_signals": {
+            "revenue_mix_percentages": {
+                "memberships": 56.5,
+                "bookings": 13.6,
+                "products": 9.6,
+                "coaching": 20.3,
+            },
+            "top_revenue_source_concentration": {
+                "source_key": "memberships",
+                "source_label": "Memberships",
+                "percentage": 56.5,
+            },
+            "peak_hour_attendance_concentration": {
+                "hour_label": "06:00",
+                "check_ins": 14,
+                "percentage": 46.7,
+            },
+            "equipment_availability_percentage": 87.5,
+            "low_stock_exposure_percentage": 14.3,
+            "out_of_stock_exposure_percentage": 7.1,
         },
         "overview": {
             "total_revenue": "8849.00",

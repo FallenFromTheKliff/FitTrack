@@ -18,11 +18,17 @@ export type FABConfig = {
   visible: boolean;
 };
 
+export type ReservationOpenRequest = {
+  isOpen: boolean;
+  preselectedVenueId?: string | null;
+};
+
 type FABStateContextType = {
   isFabOpen: boolean;
   setFabOpen: (open: boolean) => void;
   isReservationOpen: boolean;
-  setReservationOpen: (open: boolean) => void;
+  reservationRequest: ReservationOpenRequest;
+  setReservationOpen: (request: boolean | ReservationOpenRequest) => void;
   fabConfig: FABConfig | null;
   registerFAB: (config: FABConfig) => void;
   unregisterFAB: () => void;
@@ -43,6 +49,7 @@ const FABStateContext = createContext<FABStateContextType>({
   isFabOpen: false,
   setFabOpen: () => {},
   isReservationOpen: false,
+  reservationRequest: { isOpen: false, preselectedVenueId: null },
   setReservationOpen: () => {},
   fabConfig: null,
   registerFAB: () => {},
@@ -62,7 +69,11 @@ const FABStateContext = createContext<FABStateContextType>({
 
 export function FABStateProvider({ children }: { children: ReactNode }) {
   const [isFabOpen, setFabOpenState] = useState(false);
-  const [isReservationOpen, setReservationOpenState] = useState(false);
+  const [reservationRequest, setReservationOpenState] = useState<ReservationOpenRequest>({
+    isOpen: false,
+    preselectedVenueId: null,
+  });
+  const isReservationOpen = reservationRequest.isOpen;
   const [fabConfig, setFabConfig] = useState<FABConfig | null>(null);
   const [isSidebarOpen, setSidebarOpenState] = useState(false);
   const [openGoalsSignal, setOpenGoalsSignal] = useState(false);
@@ -75,9 +86,12 @@ export function FABStateProvider({ children }: { children: ReactNode }) {
     if (open) setSidebarOpenState(false);
   }, []);
 
-  const setReservationOpen = useCallback((open: boolean) => {
-    setReservationOpenState(open);
-    if (open) setFabOpenState(false);
+  const setReservationOpen = useCallback((request: boolean | ReservationOpenRequest) => {
+    const next = typeof request === "boolean"
+      ? { isOpen: request, preselectedVenueId: null }
+      : { isOpen: request.isOpen, preselectedVenueId: request.preselectedVenueId ?? null };
+    setReservationOpenState(next);
+    if (next.isOpen) setFabOpenState(false);
   }, []);
 
   const setSidebarOpen = useCallback((open: boolean) => {
@@ -120,6 +134,7 @@ export function FABStateProvider({ children }: { children: ReactNode }) {
         isFabOpen,
         setFabOpen,
         isReservationOpen,
+        reservationRequest,
         setReservationOpen,
         fabConfig,
         registerFAB,

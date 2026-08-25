@@ -49,25 +49,25 @@ void test('additive operating hours preserve existing rows while reset may resto
 });
 
 void test('pose aliases are exact and reject unsupported containing labels', () => {
-  const supportedLabels = [
-    'Barbell Back Squat',
-    'Barbell Bench Press',
-    'Dumbbell Biceps Curl',
-    'Parallel Bar Dip',
-    'Forearm Plank',
-    'Pull Up',
-    'Push-Up',
-    'Seated Dumbbell Shoulder Press',
-  ];
-  assert.equal(supportedLabels.length, CANONICAL_POSE_CAPABILITIES.length);
+  assert.equal(CANONICAL_POSE_CAPABILITIES.length, 8);
+  const supportedLabels = CANONICAL_POSE_CAPABILITIES.flatMap(
+    (capability) => capability.aliases,
+  );
+  assert.equal(
+    new Set(supportedLabels).size,
+    supportedLabels.length,
+    'canonical pose aliases must be unique',
+  );
   for (const label of supportedLabels) {
     assert.ok(getCanonicalPoseCapabilityByLabel(label));
   }
   for (const label of [
     'side plank',
     'bench dip',
-    'dumbbell bench press',
-    'incline dumbbell press',
+    'cable fly',
+    'hammer curl',
+    'dumbbell bench press machine',
+    'incline dumbbell press variation',
     'not-a-push-up-variant',
     'my squat rehabilitation drill',
   ]) {

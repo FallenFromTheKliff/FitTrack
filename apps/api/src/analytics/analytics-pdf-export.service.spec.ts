@@ -10,7 +10,7 @@ describe('AnalyticsPdfExportService', () => {
   };
 
   const businessAnalyticsInsightService = {
-    generateTransientInsight: jest.fn(),
+    getInsightById: jest.fn(),
   };
 
   let service: AnalyticsPdfExportService;
@@ -23,7 +23,7 @@ describe('AnalyticsPdfExportService', () => {
     jest.clearAllMocks();
   });
 
-  it('builds a real PDF buffer using live analytics data and transient insights', async () => {
+  it('builds a real PDF buffer using a matching saved insight without generating a new one', async () => {
     analyticsService.getSnapshot.mockResolvedValue({
       generated_at: '2026-04-23T12:00:00.000Z',
       daily_insights: {
@@ -128,18 +128,33 @@ describe('AnalyticsPdfExportService', () => {
         },
       ],
     });
-    businessAnalyticsInsightService.generateTransientInsight.mockResolvedValue({
-      summary: 'Revenue is holding steady and evening usage remains strongest.',
+    businessAnalyticsInsightService.getInsightById.mockResolvedValue({
+      id: '33333333-3333-4333-8333-333333333333',
+      requested_by: 'admin-1',
+      requester: null,
+      focus: 'revenue',
+      period: 'monthly',
+      start_date: '2025-11-01',
+      end_date: '2026-04-30',
+      summary:
+        'Saved AI evidence: revenue improved against the prior window, so the mix can support a bounded upsell test.',
       highlights: ['Memberships remain stable.'],
-      risks: [],
+      risks: ['Retail concentration could constrain the next sales target.'],
       opportunities: ['Promote coaching bundles.'],
-      anomaly_flags: [],
-      recommended_actions: ['Increase prompts near peak hours.'],
+      anomaly_flags: [
+        'A prior-period variance exceeded the operating threshold.',
+      ],
+      recommended_actions: [
+        'Finance · next 7 days — test one bounded upsell. Success: conversion improves by 5%.',
+      ],
       model_used: 'openrouter/primary',
       token_count: 111,
+      latency_ms: 450,
+      created_at: '2026-04-30T12:00:00.000Z',
     });
 
     const result = await service.exportPdf({
+      insight_run_id: '33333333-3333-4333-8333-333333333333',
       attendance_end_date: '2026-04-23',
       attendance_period: 'daily',
       attendance_start_date: '2026-04-10',
@@ -156,8 +171,13 @@ describe('AnalyticsPdfExportService', () => {
     expect(result.buffer.toString('latin1')).toContain('Daily Insights');
     expect(result.buffer.toString('latin1')).toContain('Inventory Performance');
     expect(result.buffer.toString('latin1')).toContain(
-      'Business Improvement Recommendations',
+      'Saved AI Business Insight',
     );
+    expect(result.buffer.toString('latin1')).toContain('Saved AI evidence');
+    expect(result.buffer.toString('latin1')).toContain(
+      'PRIORITY RISKS & ANOMALIES',
+    );
+    expect(result.buffer.toString('latin1')).toContain('OPPORTUNITIES');
     expect(analyticsService.getRevenue).toHaveBeenCalledWith({
       start_date: '2025-11-01',
       end_date: '2026-04-30',
@@ -178,8 +198,21 @@ describe('AnalyticsPdfExportService', () => {
       end_date: '2026-04-30',
       period: 'monthly',
     });
+    expect(businessAnalyticsInsightService.getInsightById).toHaveBeenCalledWith(
+      '33333333-3333-4333-8333-333333333333',
+    );
+  });
+
+  it('requires a saved insight when recommendations are selected', async () => {
+    await expect(
+      service.exportPdf({ selected_sections: ['recommendations'] }),
+    ).rejects.toThrow(
+      'A matching saved AI insight is required when recommendations are selected.',
+    );
+
+    expect(analyticsService.getSnapshot).not.toHaveBeenCalled();
     expect(
-      businessAnalyticsInsightService.generateTransientInsight,
-    ).toHaveBeenCalledTimes(4);
+      businessAnalyticsInsightService.getInsightById,
+    ).not.toHaveBeenCalled();
   });
 });

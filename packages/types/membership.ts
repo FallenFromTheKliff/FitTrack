@@ -1,4 +1,4 @@
-import type { MembershipCardRecord } from "./member";
+import type { MembershipCardRecord } from "./member.js";
 
 export type PaginationMeta = {
   limit: number;

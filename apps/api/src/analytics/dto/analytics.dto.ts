@@ -1,4 +1,4 @@
-import { IsArray, IsIn, IsISO8601, IsOptional } from 'class-validator';
+import { IsArray, IsIn, IsISO8601, IsOptional, IsUUID } from 'class-validator';
 import {
   ApiProperty,
   ApiPropertyOptional,
@@ -57,6 +57,15 @@ export class AnalyticsQueryDTO {
 }
 
 export class ExportAnalyticsPdfDTO {
+  @ApiPropertyOptional({
+    description:
+      'Existing business insight run to reuse in the recommendations section.',
+    example: '33333333-3333-4333-8333-333333333333',
+  })
+  @IsOptional()
+  @IsUUID('4', { message: 'insight_run_id must be a valid UUID' })
+  insight_run_id?: string;
+
   @ApiPropertyOptional({ example: '2026-01-01' })
   @IsOptional()
   @IsISO8601(

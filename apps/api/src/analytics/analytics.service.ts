@@ -31,6 +31,7 @@ import {
 import {
   type BuildBusinessInsightGroundingInput,
   type BusinessAnalyticsGroundingPayload,
+  type BusinessInsightComparison,
   type ResolvedBusinessInsightWindow,
 } from './analytics.types';
 
@@ -312,6 +313,9 @@ export class AnalyticsService {
       coaching,
       topPlans,
       inventorySummary,
+      previousRevenue,
+      previousAttendance,
+      previousMembership,
     ] = await Promise.all([
       this.repo.getRevenueMetrics(window.start, window.end, window.period),
       this.repo.getAttendanceMetrics(window.start, window.end, window.period),
@@ -329,6 +333,17 @@ export class AnalyticsService {
             GROUNDING_RANK_LIMIT,
           )
         : Promise.resolve(null),
+      this.repo.getRevenueMetrics(
+        window.previousStart,
+        window.previousEnd,
+        window.period,
+      ),
+      this.repo.getAttendanceMetrics(
+        window.previousStart,
+        window.previousEnd,
+        window.period,
+      ),
+      this.repo.getMemberMetrics(window.previousStart, window.previousEnd),
     ]);
     const revenueTotals = this.toRevenueTotals({
       booking_revenue: revenue.payments.booking_revenue,
@@ -338,24 +353,62 @@ export class AnalyticsService {
       product_revenue: revenue.payments.product_revenue,
     });
     const attendanceSeries = this.toAttendanceSeries(attendance.series);
+    const previousRevenueTotals = this.toRevenueTotals({
+      booking_revenue: previousRevenue.payments.booking_revenue,
+      coaching_payments_collected:
+        previousRevenue.payments.coaching_payments_collected,
+      coaching_gym_revenue: previousRevenue.coaching.coaching_gym_revenue,
+      membership_revenue: previousRevenue.payments.membership_revenue,
+      product_revenue: previousRevenue.payments.product_revenue,
+    });
+    const totalCheckIns = this.toCount(attendance.summary.total_check_ins);
+    const previousCheckIns = this.toCount(
+      previousAttendance.summary.total_check_ins,
+    );
+    const newMembers = this.toCount(membership.new_members);
+    const previousNewMembers = this.toCount(previousMembership.new_members);
+    const completedCoachingSessions = this.toCount(
+      revenue.coaching.completed_coaching_sessions,
+    );
+    const previousCompletedCoachingSessions = this.toCount(
+      previousRevenue.coaching.completed_coaching_sessions,
+    );
+    const inventory = inventorySummary
+      ? this.toInventorySummary(inventorySummary)
+      : null;
+    const derivedSignals = this.toBusinessInsightDerivedSignals({
+      attendance,
+      inventory,
+      revenueTotals,
+    });
 
     return {
       window: {
         start_date: this.toDateOnlyString(window.start),
         end_date: this.toDateOnlyString(window.end),
+        previous_start_date: this.toDateOnlyString(window.previousStart),
+        previous_end_date: this.toDateOnlyString(window.previousEnd),
         period: window.period,
         focus: window.focus,
       },
+      comparisons: {
+        total_revenue: this.toMoneyComparison(
+          revenueTotals.total_revenue,
+          previousRevenueTotals.total_revenue,
+        ),
+        check_ins: this.toCountComparison(totalCheckIns, previousCheckIns),
+        new_members: this.toCountComparison(newMembers, previousNewMembers),
+        completed_coaching_sessions: this.toCountComparison(
+          completedCoachingSessions,
+          previousCompletedCoachingSessions,
+        ),
+      },
+      derived_signals: derivedSignals,
       overview: {
         total_revenue: revenueTotals.total_revenue,
-        total_check_ins: attendanceSeries.reduce(
-          (total, point) => total + point.check_ins,
-          0,
-        ),
-        new_members: this.toCount(membership.new_members),
-        completed_coaching_sessions: this.toCount(
-          revenue.coaching.completed_coaching_sessions,
-        ),
+        total_check_ins: totalCheckIns,
+        new_members: newMembers,
+        completed_coaching_sessions: completedCoachingSessions,
       },
       revenue: {
         totals: revenueTotals,
@@ -385,8 +438,8 @@ export class AnalyticsService {
       ...(includeInventory
         ? {
             inventory: {
-              ...this.toInventorySummary(
-                inventorySummary ?? {
+              ...(inventory ??
+                this.toInventorySummary({
                   equipment: {
                     equipment_types: 0,
                     equipment_under_maintenance: 0,
@@ -400,8 +453,7 @@ export class AnalyticsService {
                     retail_items: 0,
                   },
                   topProducts: [],
-                },
-              ),
+                })),
               retail_sales_revenue: revenueTotals.product_revenue,
             },
           }
@@ -444,16 +496,158 @@ export class AnalyticsService {
       Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59, 999),
     );
 
+    const start = input.start_date
+      ? new Date(`${input.start_date}T00:00:00.000Z`)
+      : defaultStart;
+    const end = input.end_date
+      ? new Date(`${input.end_date}T23:59:59.999Z`)
+      : defaultEnd;
+    const inclusiveDurationMs = end.getTime() - start.getTime() + 1;
+    const previousEnd = new Date(start.getTime() - 1);
+    const previousStart = new Date(
+      previousEnd.getTime() - inclusiveDurationMs + 1,
+    );
+
     return {
-      start: input.start_date
-        ? new Date(`${input.start_date}T00:00:00.000Z`)
-        : defaultStart,
-      end: input.end_date
-        ? new Date(`${input.end_date}T23:59:59.999Z`)
-        : defaultEnd,
+      start,
+      end,
+      previousStart,
+      previousEnd,
       focus: input.focus ?? DEFAULT_INSIGHT_FOCUS,
       period: input.period ?? DEFAULT_INSIGHT_PERIOD,
     };
+  }
+
+  private toBusinessInsightDerivedSignals(input: {
+    attendance: AttendanceMetricsRows;
+    inventory: ReturnType<AnalyticsService['toInventorySummary']> | null;
+    revenueTotals: AnalyticsRevenueTotalsDTO;
+  }): BusinessAnalyticsGroundingPayload['derived_signals'] {
+    const revenueSources = [
+      {
+        key: 'memberships' as const,
+        label: 'Memberships',
+        value: this.toMoneyNumber(input.revenueTotals.membership_revenue),
+      },
+      {
+        key: 'bookings' as const,
+        label: 'Venue bookings',
+        value: this.toMoneyNumber(input.revenueTotals.booking_revenue),
+      },
+      {
+        key: 'products' as const,
+        label: 'Retail products',
+        value: this.toMoneyNumber(input.revenueTotals.product_revenue),
+      },
+      {
+        key: 'coaching' as const,
+        label: 'Coaching gym share',
+        value: this.toMoneyNumber(input.revenueTotals.coaching_gym_revenue),
+      },
+    ];
+    const totalRevenue = revenueSources.reduce(
+      (sum, source) => sum + source.value,
+      0,
+    );
+    const topRevenueSource = [...revenueSources].sort(
+      (left, right) => right.value - left.value,
+    )[0];
+    const totalCheckIns = this.toCount(
+      input.attendance.summary.total_check_ins,
+    );
+    const peakHour = input.attendance.peakHours[0];
+
+    return {
+      revenue_mix_percentages: {
+        memberships:
+          this.toPercentage(revenueSources[0].value, totalRevenue) ?? 0,
+        bookings: this.toPercentage(revenueSources[1].value, totalRevenue) ?? 0,
+        products: this.toPercentage(revenueSources[2].value, totalRevenue) ?? 0,
+        coaching: this.toPercentage(revenueSources[3].value, totalRevenue) ?? 0,
+      },
+      top_revenue_source_concentration:
+        topRevenueSource && totalRevenue > 0
+          ? {
+              source_key: topRevenueSource.key,
+              source_label: topRevenueSource.label,
+              percentage:
+                this.toPercentage(topRevenueSource.value, totalRevenue) ?? 0,
+            }
+          : null,
+      peak_hour_attendance_concentration:
+        peakHour && totalCheckIns > 0
+          ? {
+              hour_label: this.toHourLabel(peakHour.hour_of_day),
+              check_ins: this.toCount(peakHour.check_ins),
+              percentage:
+                this.toPercentage(
+                  this.toCount(peakHour.check_ins),
+                  totalCheckIns,
+                ) ?? 0,
+            }
+          : null,
+      equipment_availability_percentage: input.inventory
+        ? this.toPercentage(
+            input.inventory.equipment_units_available,
+            input.inventory.equipment_units_total,
+          )
+        : null,
+      low_stock_exposure_percentage: input.inventory
+        ? this.toPercentage(
+            input.inventory.low_stock_items,
+            input.inventory.retail_items,
+          )
+        : null,
+      out_of_stock_exposure_percentage: input.inventory
+        ? this.toPercentage(
+            input.inventory.out_of_stock_items,
+            input.inventory.retail_items,
+          )
+        : null,
+    };
+  }
+
+  private toCountComparison(
+    current: number,
+    previous: number,
+  ): BusinessInsightComparison<number> {
+    const absoluteChange = current - previous;
+    return {
+      current,
+      previous,
+      absolute_change: absoluteChange,
+      percentage_change: this.toPercentage(absoluteChange, previous),
+      direction: this.toComparisonDirection(current, previous),
+    };
+  }
+
+  private toMoneyComparison(
+    currentValue: string,
+    previousValue: string,
+  ): BusinessInsightComparison<string> {
+    const current = this.toMoneyNumber(currentValue);
+    const previous = this.toMoneyNumber(previousValue);
+    return {
+      current: current.toFixed(2),
+      previous: previous.toFixed(2),
+      absolute_change: (current - previous).toFixed(2),
+      percentage_change: this.toPercentage(current - previous, previous),
+      direction: this.toComparisonDirection(current, previous),
+    };
+  }
+
+  private toComparisonDirection(
+    current: number,
+    previous: number,
+  ): BusinessInsightComparison<number>['direction'] {
+    if (current === previous) return 'flat';
+    if (previous === 0 && current > 0) return 'new_from_zero';
+    return current > previous ? 'increase' : 'decrease';
+  }
+
+  private toPercentage(numerator: number, denominator: number): number | null {
+    if (denominator === 0) return null;
+    return Number(((numerator / denominator) * 100).toFixed(1));
   }
 
   private toRevenueSeries(

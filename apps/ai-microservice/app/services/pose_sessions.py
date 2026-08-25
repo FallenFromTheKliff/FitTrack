@@ -4,6 +4,7 @@ import base64
 import io
 import os
 from dataclasses import dataclass, field
+from math import acos, degrees, sqrt
 from pathlib import Path
 from statistics import mean
 from threading import Lock
@@ -342,6 +343,11 @@ class PoseSessionService:
         state.frames_analyzed += len(payload.frames)
         state.subject_lock_total += subject_lock_confidence
         state.last_joint_angles = self._latest_joint_angles(payload)
+        computed_ankle_signals = self._build_keypoint_angle_signals(
+            payload.frames[-1].keypoints
+        )
+        for name, value in computed_ankle_signals.items():
+            state.last_joint_angles.setdefault(name, value)
         state.last_landmark_signature = self._build_landmark_signature(payload)
         state.last_orientation_signature = payload.signals.orientation.model_dump()
         state.last_movement_pattern = payload.signals.temporal.model_dump()
@@ -457,6 +463,8 @@ class PoseSessionService:
             phase,
             frame_signature,
         )
+        if keypoints is not None:
+            state.last_joint_angles.update(self._build_keypoint_angle_signals(keypoints))
         state.last_orientation_signature = {
             "processing_mode": "legacy_frame",
             "frame_change_score": frame_change_score,
@@ -622,6 +630,57 @@ class PoseSessionService:
 
     def _clamp_unit(self, value: float) -> float:
         return round(min(1.0, max(0.0, value)), 6)
+
+    def _compute_keypoint_angle(
+        self,
+        keypoints: list[PoseKeypoint],
+        first_index: int,
+        vertex_index: int,
+        last_index: int,
+    ) -> float | None:
+        if len(keypoints) <= max(first_index, vertex_index, last_index):
+            return None
+        first = keypoints[first_index]
+        vertex = keypoints[vertex_index]
+        last = keypoints[last_index]
+        if min(first.visibility, vertex.visibility, last.visibility) < 0.45:
+            return None
+        first_vector = (
+            first.x - vertex.x,
+            first.y - vertex.y,
+        )
+        last_vector = (
+            last.x - vertex.x,
+            last.y - vertex.y,
+        )
+        first_length = sqrt(sum(component * component for component in first_vector))
+        last_length = sqrt(sum(component * component for component in last_vector))
+        denominator = first_length * last_length
+        if denominator <= 1e-9:
+            return None
+        cosine = sum(
+            left * right for left, right in zip(first_vector, last_vector)
+        ) / denominator
+        return round(degrees(acos(max(-1.0, min(1.0, cosine)))), 3)
+
+    def _build_keypoint_angle_signals(
+        self,
+        keypoints: list[PoseKeypoint],
+    ) -> dict[str, float]:
+        left_ankle = self._compute_keypoint_angle(keypoints, 25, 27, 31)
+        right_ankle = self._compute_keypoint_angle(keypoints, 26, 28, 32)
+        signals = {
+            name: value
+            for name, value in {
+                "left_ankle": left_ankle,
+                "right_ankle": right_ankle,
+            }.items()
+            if value is not None
+        }
+        usable = [value for value in (left_ankle, right_ankle) if value is not None]
+        if usable:
+            signals["ankle"] = round(mean(usable), 3)
+        return signals
 
     def _classify_sequence(
         self,
@@ -1309,6 +1368,7 @@ class PoseSessionService:
                 "shoulder": latest.shoulder,
                 "hip": latest.hip,
                 "knee": latest.knee,
+                "ankle": latest.ankle,
                 "left_elbow": latest.left_elbow,
                 "right_elbow": latest.right_elbow,
                 "left_shoulder": latest.left_shoulder,
@@ -1317,6 +1377,8 @@ class PoseSessionService:
                 "right_hip": latest.right_hip,
                 "left_knee": latest.left_knee,
                 "right_knee": latest.right_knee,
+                "left_ankle": latest.left_ankle,
+                "right_ankle": latest.right_ankle,
             }.items()
             if value is not None
         }
@@ -1388,6 +1450,7 @@ class PoseSessionService:
             "shoulder": [],
             "hip": [],
             "knee": [],
+            "ankle": [],
             "left_elbow": [],
             "right_elbow": [],
             "left_shoulder": [],
@@ -1396,6 +1459,8 @@ class PoseSessionService:
             "right_hip": [],
             "left_knee": [],
             "right_knee": [],
+            "left_ankle": [],
+            "right_ankle": [],
         }
         for entry in payload.signals.angles:
             if entry.elbow is not None:
@@ -1406,6 +1471,8 @@ class PoseSessionService:
                 values["hip"].append(entry.hip)
             if entry.knee is not None:
                 values["knee"].append(entry.knee)
+            if entry.ankle is not None:
+                values["ankle"].append(entry.ankle)
             if entry.left_elbow is not None:
                 values["left_elbow"].append(entry.left_elbow)
             if entry.right_elbow is not None:
@@ -1422,6 +1489,10 @@ class PoseSessionService:
                 values["left_knee"].append(entry.left_knee)
             if entry.right_knee is not None:
                 values["right_knee"].append(entry.right_knee)
+            if entry.left_ankle is not None:
+                values["left_ankle"].append(entry.left_ankle)
+            if entry.right_ankle is not None:
+                values["right_ankle"].append(entry.right_ankle)
         return {
             name: round(mean(series), 3)
             for name, series in values.items()
@@ -1435,6 +1506,7 @@ class PoseSessionService:
             "shoulder": [],
             "hip": [],
             "knee": [],
+            "ankle": [],
             "left_elbow": [],
             "right_elbow": [],
             "left_shoulder": [],
@@ -1443,6 +1515,8 @@ class PoseSessionService:
             "right_hip": [],
             "left_knee": [],
             "right_knee": [],
+            "left_ankle": [],
+            "right_ankle": [],
         }
         for entry in payload.signals.angles:
             if entry.elbow is not None:
@@ -1453,6 +1527,8 @@ class PoseSessionService:
                 series["hip"].append(entry.hip)
             if entry.knee is not None:
                 series["knee"].append(entry.knee)
+            if entry.ankle is not None:
+                series["ankle"].append(entry.ankle)
             if entry.left_elbow is not None:
                 series["left_elbow"].append(entry.left_elbow)
             if entry.right_elbow is not None:
@@ -1469,6 +1545,10 @@ class PoseSessionService:
                 series["left_knee"].append(entry.left_knee)
             if entry.right_knee is not None:
                 series["right_knee"].append(entry.right_knee)
+            if entry.left_ankle is not None:
+                series["left_ankle"].append(entry.left_ankle)
+            if entry.right_ankle is not None:
+                series["right_ankle"].append(entry.right_ankle)
         return {
             name: round(max(values) - min(values), 3) if values else 0.0
             for name, values in series.items()
@@ -1795,6 +1875,11 @@ class PoseSessionService:
                 "hip_shoulder_elbow": dominant_angle,
                 "shoulder_elbow_wrist": round(max(40.0, dominant_angle - 20.0), 1),
             }
+        if movement_contract.dominant_joint == "ankle":
+            return {
+                "knee_ankle_foot_index": dominant_angle,
+                "ankle": dominant_angle,
+            }
         return {"torso_hip_knee": dominant_angle}
 
     def _normalize_joint_list(self, values: object) -> list[str]:
@@ -1811,7 +1896,9 @@ class PoseSessionService:
                 joint = "shoulder"
             elif "hip" in lowered:
                 joint = "hip"
-            elif "knee" in lowered or "ankle" in lowered:
+            elif "ankle" in lowered:
+                joint = "ankle"
+            elif "knee" in lowered:
                 joint = "knee"
             else:
                 continue
@@ -1824,7 +1911,7 @@ class PoseSessionService:
         normalized = self._normalize_joint_list([tracked_joint] if tracked_joint else [])
         if normalized:
             return normalized[0]
-        for candidate in ("knee", "hip", "elbow", "shoulder"):
+        for candidate in ("knee", "ankle", "hip", "elbow", "shoulder"):
             if candidate in str(profile.angle_signature).lower():
                 return candidate
         return "knee"
@@ -1874,7 +1961,7 @@ class PoseSessionService:
             angle = (float(start) + float(end)) / 2
             return round(angle, 3), round(tolerance, 3)
 
-        keys = [dominant_joint, "knee", "hip", "elbow", "shoulder"]
+        keys = [dominant_joint, "knee", "ankle", "hip", "elbow", "shoulder"]
         down_value = None
         up_value = None
         for key in keys:

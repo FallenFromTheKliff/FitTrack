@@ -3,6 +3,7 @@ export {
   reconcileCommerceCheckoutMutationOptions,
 } from "./commerce-checkout";
 export {
+  facilityMapSnapshotQueryOptions,
   archivedGymLayoutEquipmentQueryOptions,
   deleteGymLayoutEquipmentMutationOptions,
   gymLayoutEquipmentQueryOptions,
@@ -142,6 +143,7 @@ export {
   detectPoseEquipmentMutationOptions,
   fitnessAchievementReviewsQueryOptions,
   fitnessExercisesQueryOptions,
+  fitnessExerciseQueryOptions,
   fitnessLeaderboardQueryOptions,
   fitnessMuscleLeaderboardQueryOptions,
   fitnessMasteryQueryOptions,
@@ -174,6 +176,7 @@ export {
   updateAdminMilestoneMutationOptions,
   updateFitnessRankingProfileMutationOptions,
   updateFitnessExerciseMutationOptions,
+  updateExerciseMovementFamilyMutationOptions,
   updateMuscleDefinitionMutationOptions,
 } from "./fitness";
 export {

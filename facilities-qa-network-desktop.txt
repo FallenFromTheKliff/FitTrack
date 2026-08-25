@@ -1,0 +1,11 @@
+[GET] http://127.0.0.1:3001/v1/users/me => [200] OK
+[GET] http://127.0.0.1:3001/v1/notifications/my?page=1&limit=8 => [200] OK
+[GET] http://127.0.0.1:3001/v1/notifications/unread-count => [200] OK
+[GET] http://127.0.0.1:3001/v1/gym-layout/snapshot => [200] OK
+[GET] http://127.0.0.1:3001/v1/bookings/amenities/operations => [200] OK
+[GET] http://127.0.0.1:3001/v1/gym-layout/floor-plans/media => [200] OK
+[GET] http://127.0.0.1:3001/v1/bookings/amenities/archived => [200] OK
+[GET] http://127.0.0.1:3001/v1/gym-layout/equipment => [200] OK
+[GET] http://127.0.0.1:3001/v1/gym-layout/equipment/archived => [200] OK
+[GET] http://127.0.0.1:3001/v1/inventory/equipment?page=1&limit=100 => [200] OK
+[GET] http://127.0.0.1:3001/v1/bookings/amenity?limit=100 => [200] OK

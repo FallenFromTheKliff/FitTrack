@@ -127,7 +127,10 @@ const restoreModalInteraction = () => {
   }
 };
 
-export const acquireModalInteractionLock = (activeOverlay: HTMLElement | null) => {
+export const acquireModalInteractionLock = (
+  activeOverlay: HTMLElement | null,
+  initialFocus?: HTMLElement | null,
+) => {
   if (modalRestoreFrame !== null) {
     cancelAnimationFrame(modalRestoreFrame);
     modalRestoreFrame = null;
@@ -145,6 +148,9 @@ export const acquireModalInteractionLock = (activeOverlay: HTMLElement | null) =
 
   const lockId = nextModalLockId++;
   activeModalLocks.set(lockId, { overlay: activeOverlay });
+  // Establish focus before siblings are hidden/inert so assistive tech never
+  // observes focus inside an aria-hidden application shell.
+  initialFocus?.focus({ preventScroll: true });
   applyModalInteractionLock(activeOverlay);
 
   let released = false;
@@ -251,11 +257,10 @@ export default function FitModal({
       modalRef.current?.closest<HTMLElement>(
         '[data-fit-modal-overlay="true"]',
       ) ?? null;
-    const releaseModalInteractionLock = acquireModalInteractionLock(activeOverlay);
-
-    const focusFrame = requestAnimationFrame(() => {
-      modalRef.current?.focus({ preventScroll: true });
-    });
+    const releaseModalInteractionLock = acquireModalInteractionLock(
+      activeOverlay,
+      modalRef.current,
+    );
     const handleKeyDown = (event: KeyboardEvent) => {
       const dialogs = Array.from(
         document.querySelectorAll('[role="dialog"][aria-modal="true"]'),
@@ -307,7 +312,6 @@ export default function FitModal({
 
     document.addEventListener("keydown", handleKeyDown);
     return () => {
-      cancelAnimationFrame(focusFrame);
       document.removeEventListener("keydown", handleKeyDown);
       releaseModalInteractionLock();
     };

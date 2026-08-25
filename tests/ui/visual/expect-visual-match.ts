@@ -165,11 +165,15 @@ export async function expectVisualMatch({
     caret: "hide" as const,
     scale: "css" as const,
   };
+  const baselineEligible =
+    visualCase.baselineStatus === "approved" &&
+    visualCase.referenceSource?.provider === "browser-capture";
 
   await writeFile(layoutAuditPath, JSON.stringify(layoutAudit, null, 2), "utf8");
 
   let playwrightError: unknown;
-  const updateSnapshots = testInfo.config.updateSnapshots !== "none";
+  const updateSnapshots =
+    baselineEligible && testInfo.config.updateSnapshots !== "none";
   if (updateSnapshots) {
     try {
       await expect(page).toHaveScreenshot(visualCase.snapshot, {
@@ -183,13 +187,15 @@ export async function expectVisualMatch({
   }
 
   await page.screenshot({ path: actualPath, ...screenshotOptions });
-  const baselineExists = await exists(baselinePath);
+  const baselineExists = baselineEligible && (await exists(baselinePath));
   if (baselineExists) {
     await copyFile(baselinePath, expectedPath);
   }
 
   let diffResult: VisualDiffResult;
-  if (!baselineExists) {
+  if (!baselineEligible) {
+    diffResult = failedDiffResult("baseline-not-approved");
+  } else if (!baselineExists) {
     diffResult = failedDiffResult("file-not-exists");
   } else {
     try {
@@ -208,7 +214,7 @@ export async function expectVisualMatch({
     }
   }
 
-  if (!updateSnapshots) {
+  if (!updateSnapshots && baselineEligible) {
     try {
       await expect(page).toHaveScreenshot(visualCase.snapshot, {
         mask: screenshotOptions.mask,

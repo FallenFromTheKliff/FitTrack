@@ -209,7 +209,7 @@ export type PoseAnalyzeResponse = {
     exercise: string;
     contract_version?: string;
     body_orientation?: 'upright' | 'horizontal' | 'inclined' | 'floor' | 'any';
-    dominant_joint: 'elbow' | 'shoulder' | 'hip' | 'knee';
+    dominant_joint: 'elbow' | 'shoulder' | 'hip' | 'knee' | 'ankle';
     rep_thresholds: {
       down: { angle: number; tolerance: number };
       up: { angle: number; tolerance: number };
@@ -275,7 +275,7 @@ export type PoseAnalyzeResponse = {
     orientation_signature: Record<string, unknown>;
     movement_pattern: Record<string, unknown>;
     visibility_pattern: Record<string, unknown>;
-    dominant_joint?: 'elbow' | 'shoulder' | 'hip' | 'knee' | null;
+    dominant_joint?: 'elbow' | 'shoulder' | 'hip' | 'knee' | 'ankle' | null;
     tolerance?: number | null;
     rep_thresholds?: Record<string, unknown> | null;
     rep_rules?: Record<string, unknown> | null;
@@ -303,6 +303,7 @@ export type PoseAnalyzeSequenceInput = {
       shoulder?: number | null;
       hip?: number | null;
       knee?: number | null;
+      ankle?: number | null;
       left_elbow?: number | null;
       right_elbow?: number | null;
       left_shoulder?: number | null;
@@ -311,6 +312,8 @@ export type PoseAnalyzeSequenceInput = {
       right_hip?: number | null;
       left_knee?: number | null;
       right_knee?: number | null;
+      left_ankle?: number | null;
+      right_ankle?: number | null;
     }>;
     orientation: {
       body_orientation: string;
@@ -353,7 +356,7 @@ export type PoseBootstrapInput = {
     orientation_signature: Record<string, unknown>;
     movement_pattern: Record<string, unknown>;
     visibility_pattern: Record<string, unknown>;
-    dominant_joint?: 'elbow' | 'shoulder' | 'hip' | 'knee' | null;
+    dominant_joint?: 'elbow' | 'shoulder' | 'hip' | 'knee' | 'ankle' | null;
     tolerance?: number | null;
     rep_thresholds?: Record<string, unknown> | null;
     rep_rules?: Record<string, unknown> | null;
@@ -388,7 +391,7 @@ export type PoseFinalizeResponse = {
     orientation_signature: Record<string, unknown>;
     movement_pattern: Record<string, unknown>;
     visibility_pattern: Record<string, unknown>;
-    dominant_joint?: 'elbow' | 'shoulder' | 'hip' | 'knee' | null;
+    dominant_joint?: 'elbow' | 'shoulder' | 'hip' | 'knee' | 'ankle' | null;
     tolerance?: number | null;
     rep_thresholds?: Record<string, unknown> | null;
     rep_rules?: Record<string, unknown> | null;
@@ -750,7 +753,7 @@ export class AiPythonClientService {
           'AI business insight generation is not configured.',
         timeoutDetail:
           'The AI business-insight service took too long to respond.',
-        timeoutMs: 12000,
+        timeoutMs: 45000,
       },
     );
 
@@ -1348,7 +1351,9 @@ export class AiPythonClientService {
         value.body_orientation === 'inclined' ||
         value.body_orientation === 'floor' ||
         value.body_orientation === 'any') &&
-      ['elbow', 'shoulder', 'hip', 'knee'].includes(value.dominant_joint) &&
+      ['elbow', 'shoulder', 'hip', 'knee', 'ankle'].includes(
+        value.dominant_joint,
+      ) &&
       this.isObject(value.rep_thresholds) &&
       this.isObject(value.rep_thresholds.down) &&
       this.isObject(value.rep_thresholds.up) &&
@@ -1399,7 +1404,9 @@ export class AiPythonClientService {
             ) &&
               value.tracking_requirements.min_reliable_frame_landmarks >= 1)) &&
           (value.tracking_requirements.required_landmarks === undefined ||
-            (this.isStringArray(value.tracking_requirements.required_landmarks) &&
+            (this.isStringArray(
+              value.tracking_requirements.required_landmarks,
+            ) &&
               value.tracking_requirements.required_landmarks.length > 0)) &&
           (value.tracking_requirements.required_sides === undefined ||
             value.tracking_requirements.required_sides === 'both' ||

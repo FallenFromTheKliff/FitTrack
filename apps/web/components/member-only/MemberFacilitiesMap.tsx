@@ -17,9 +17,15 @@ import {
   FACILITY_FLOOR_MAP,
   FACILITY_FLOORS,
   type FacilityFloorId,
+  type FacilityGridCell,
+  type GymLayoutEquipmentRecord,
   type FloorVenueRecord,
 } from "@fittrack/types";
-import { buildRenderableAssetUrl } from "@fittrack/utils";
+import {
+  buildRenderableAssetUrl,
+  findRouteAcrossPathCells,
+  getVenueRouteTargets,
+} from "@fittrack/utils";
 
 import FitButton from "@/components/fit/FitButton";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -41,8 +47,14 @@ const FacilitiesKonvaMap = dynamic(() => import("@/components/map/FacilitiesKonv
 type Props = {
   activeFloor: FacilityFloorId;
   floorImageUrl?: string | null;
+  footprintCells?: FacilityGridCell[];
+  pathCells?: FacilityGridCell[];
+  entryCells?: FacilityGridCell[];
+  exitCells?: FacilityGridCell[];
+  equipment?: GymLayoutEquipmentRecord[];
   isLoading?: boolean;
   onFloorChange: (floorId: FacilityFloorId) => void;
+  phonePreview?: boolean;
   venues: FloorVenueRecord[];
 };
 
@@ -57,8 +69,6 @@ type DetailRow = {
   value: string;
 };
 
-const EMPTY_ASSIGNMENTS: VenueEquipmentAssignments = {};
-const EMPTY_EQUIPMENT: Record<string, { color: string; id: string; name: string }> = {};
 const DEFAULT_MEMBER_MAP_ZOOM = 0.86;
 const ZOOM_STEP = 0.1;
 
@@ -125,8 +135,14 @@ function FacilityDetailRow({
 export function MemberFacilitiesMap({
   activeFloor,
   floorImageUrl,
+  footprintCells = [],
+  pathCells = [],
+  entryCells = [],
+  exitCells = [],
+  equipment = [],
   isLoading = false,
   onFloorChange,
+  phonePreview = false,
   venues,
 }: Props) {
   const { colors } = useTheme();
@@ -141,7 +157,7 @@ export function MemberFacilitiesMap({
   const activeFloorConfig = FACILITY_FLOOR_MAP[activeFloor];
   const activeFloorLabel = activeFloorConfig.label;
   const reservableCount = venues.filter(
-    (venue) => venue.isReservable && venue.status !== "maintenance",
+    (venue) => venue.isBookable === true,
   ).length;
   const maintenanceCount = venues.filter(
     (venue) => venue.status === "maintenance",
@@ -150,6 +166,30 @@ export function MemberFacilitiesMap({
     venues.length - reservableCount - maintenanceCount,
     0,
   );
+  const walkableCells = useMemo(
+    () => [...pathCells, ...entryCells, ...exitCells],
+    [entryCells, exitCells, pathCells],
+  );
+  const routeCells = useMemo(() => {
+    if (!selectedVenue) return [];
+    const targets = getVenueRouteTargets({
+      gridColumn: selectedVenue.gridColumn ?? 1,
+      gridRow: selectedVenue.gridRow ?? 1,
+      gridWidth: selectedVenue.gridWidth ?? 1,
+      gridHeight: selectedVenue.gridHeight ?? 1,
+    }, walkableCells);
+    return findRouteAcrossPathCells({ entryCells, exitCells, pathCells, targetCells: targets }) ?? [];
+  }, [entryCells, exitCells, pathCells, selectedVenue, walkableCells]);
+  const equipmentById = useMemo(() => Object.fromEntries(equipment.map((item) => [
+    item.id, { id: item.id, name: item.name, color: colors.brand },
+  ])), [colors.brand, equipment]);
+  const assignedEquipment = useMemo(() => equipment.reduce<VenueEquipmentAssignments>((result, item) => {
+    if (!item.venueId) return result;
+    const venue = venues.find((candidate) => String(candidate.sourceVenueId ?? candidate.id) === String(item.venueId));
+    if (!venue) return result;
+    result[venue.mapId] = [...(result[venue.mapId] ?? []), item.id];
+    return result;
+  }, {}), [equipment, venues]);
   const renderedFloorImageUrl = hidePlaceholderAssetUrl(buildRenderableAssetUrl({
     apiBaseUrl: WEB_API_BASE_URL,
     assetUrl: floorImageUrl,
@@ -195,6 +235,7 @@ export function MemberFacilitiesMap({
   const selectedVenueRows = useMemo<DetailRow[]>(() => {
     if (!selectedVenue) return [];
     const isUnderMaintenance = selectedVenue.status === "maintenance";
+    const isBookingBlocked = selectedVenue.isBookable === false;
 
     return [
       ...(isUnderMaintenance
@@ -202,27 +243,38 @@ export function MemberFacilitiesMap({
             {
               icon: CircleAlert,
               label: "Venue status",
-              meta: "Unavailable for new bookings",
+              meta: selectedVenue.bookingBlockReason ?? "Unavailable for new bookings",
               tone: "warning" as const,
               value: "Under maintenance",
+            },
+          ]
+        : []),
+      ...(!isUnderMaintenance && isBookingBlocked
+        ? [
+            {
+              icon: CircleAlert,
+              label: "Booking status",
+              meta: selectedVenue.bookingBlockReason ?? "Unavailable for new bookings",
+              tone: "warning" as const,
+              value: "Not bookable",
             },
           ]
         : []),
       {
         icon: UsersRound,
         label: "Capacity",
-        meta: isUnderMaintenance
-          ? "Unavailable for new bookings"
+        meta: isBookingBlocked
+          ? selectedVenue.bookingBlockReason ?? "Unavailable for new bookings"
           : selectedVenue.isReservable
             ? "Reservable member zone"
             : "Shared facility area",
-        tone: isUnderMaintenance
+        tone: isBookingBlocked
           ? "warning"
           : selectedVenue.isReservable
             ? "success"
             : "brand",
-        value: isUnderMaintenance
-          ? "Under maintenance"
+        value: isBookingBlocked
+          ? "Booking paused"
           : selectedVenue.capacity
             ? `${selectedVenue.capacity} slots`
             : "Capacity pending",
@@ -235,14 +287,14 @@ export function MemberFacilitiesMap({
           : selectedVenue.isReservable
             ? "Rate pending"
             : "No reservation required",
-        tone: isUnderMaintenance
+        tone: isBookingBlocked
           ? "warning"
           : selectedVenue.isReservable
             ? "success"
             : "muted",
-        value: isUnderMaintenance
-          ? "Unavailable for new bookings"
-          : selectedVenue.isReservable
+        value: isBookingBlocked
+          ? selectedVenue.bookingBlockReason ?? "Unavailable for new bookings"
+          : selectedVenue.isBookable
             ? "Reservations enabled"
             : "Open facility access",
       },
@@ -300,7 +352,11 @@ export function MemberFacilitiesMap({
   );
 
   return (
-    <div className="member-only-facility-map-shell">
+    <div
+      className={`member-only-facility-map-shell${
+        phonePreview ? " member-only-facility-map-shell-phone-preview" : ""
+      }`}
+    >
       <div className="member-only-facility-map-grid">
         <MemberSurface
           className="member-only-facility-map-surface"
@@ -322,9 +378,15 @@ export function MemberFacilitiesMap({
                 <EmptyState icon={Map} title="No mapped zones yet" hint={activeFloorConfig.emptySubtitle} />
               ) : (
                 <FacilitiesKonvaMap
-                  assignedEquipment={EMPTY_ASSIGNMENTS}
+                  assignedEquipment={assignedEquipment}
                   colors={colors}
-                  equipmentById={EMPTY_EQUIPMENT}
+                  equipmentById={equipmentById}
+                  equipment={equipment}
+                  footprintCells={footprintCells}
+                  pathCells={pathCells}
+                  entryCells={entryCells}
+                  exitCells={exitCells}
+                  routeCells={routeCells}
                   floorImageUrl={renderedFloorImageUrl}
                   height={undefined}
                   isEditMode={false}
@@ -338,6 +400,12 @@ export function MemberFacilitiesMap({
                 />
               )}
             </div>
+
+            {selectedVenue && routeCells.length === 0 ? (
+              <MemberText variant="muted">No published path reaches this zone.</MemberText>
+            ) : selectedVenue ? (
+              <MemberText variant="muted">Route highlighted from the nearest published entry.</MemberText>
+            ) : null}
 
             <div className="member-only-facility-map-bottom" aria-label="Map controls">
               <div className="member-only-facility-map-bottom-summary">

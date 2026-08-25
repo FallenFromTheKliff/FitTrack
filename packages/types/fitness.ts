@@ -1,4 +1,4 @@
-import type { PaginationMeta } from "./membership";
+import type { PaginationMeta } from "./membership.js";
 
 export type FitnessGoal =
   | "bulking"
@@ -268,15 +268,19 @@ export type UpdateMuscleDefinitionInput =
 
 
 export type CreateFitnessExerciseInput = {
+  aliases?: ExerciseAliasInput[];
   category: FitnessExerciseCategory;
   description?: string;
   handShapeProfile?: ExerciseHandShapeProfileRecord | null;
   imageUrl?: string;
   instructions?: string;
   movementProfile?: ExerciseMovementProfileRecord | null;
+  movementProfileOverride?: Partial<ExerciseMovementProfileRecord> | null;
+  movementFamilyId?: string | null;
   muscleGroup: string;
   muscleTargets?: ExerciseMuscleTargetRecord[];
   name: string;
+  trackingMode?: ExerciseTrackingMode;
   videoUrl?: string;
 };
 
@@ -425,6 +429,7 @@ export type WorkoutSessionListParams = {
 };
 
 export type FitnessExerciseRecord = {
+  aliases: ExerciseAliasRecord[];
   category: FitnessExerciseCategory;
   createdAt: string;
   description: string | null;
@@ -434,11 +439,63 @@ export type FitnessExerciseRecord = {
   instructions: string | null;
   isActive: boolean;
   movementProfile: ExerciseMovementProfileRecord | null;
+  movementContractIdentity: ExerciseMovementContractIdentityRecord;
+  movementProfileOverride: Partial<ExerciseMovementProfileRecord> | null;
+  movementFamily: ExerciseMovementFamilySummaryRecord | null;
   muscleGroup: string;
   muscleTargets: ExerciseMuscleTargetRecord[];
   name: string;
+  trackingMode: ExerciseTrackingMode;
   updatedAt: string;
   videoUrl: string | null;
+};
+
+export type ExerciseTrackingMode = "manual" | "inherit" | "override";
+export type ExerciseAliasKind = "spelling" | "synonym";
+
+export type ExerciseAliasInput = {
+  kind?: ExerciseAliasKind;
+  label: string;
+};
+
+export type ExerciseAliasRecord = {
+  id: string;
+  kind: ExerciseAliasKind;
+  label: string;
+  normalizedLabel: string;
+};
+
+export type ExerciseMovementFamilySummaryRecord = {
+  canonicalExerciseId: string | null;
+  contractRevision: number;
+  displayName: string;
+  id: string;
+  inheritingExerciseIds: string[];
+  key: ExerciseMovementFamilyKey;
+};
+
+export type ExerciseMovementFamilyKey =
+  | "squat"
+  | "bench_press"
+  | "bicep_curl"
+  | "dip"
+  | "plank"
+  | "pull_up"
+  | "push_up"
+  | "shoulder_press";
+
+export type EffectiveMovementContractSource =
+  | "manual"
+  | "family"
+  | "exercise_override"
+  | "legacy_migration";
+
+export type ExerciseMovementContractIdentityRecord = {
+  exerciseId: string;
+  familyKey: ExerciseMovementFamilyKey | null;
+  revision: number | null;
+  source: EffectiveMovementContractSource;
+  trackingMode: ExerciseTrackingMode;
 };
 
 
@@ -661,7 +718,7 @@ export type PoseProgressionDisposition =
   | "cautionary"
   | "hold_for_review";
 
-export type PoseJointName = "elbow" | "shoulder" | "hip" | "knee";
+export type PoseJointName = "elbow" | "shoulder" | "hip" | "knee" | "ankle";
 
 export type PoseRepModel =
   | "bilateral"
@@ -711,13 +768,16 @@ export type PoseSequenceFrameRecord = {
 
 export type PoseAngleFrameSignalRecord = {
   capturedAtMs: number;
+  ankle?: number | null;
   elbow: number | null;
   hip: number | null;
   knee: number | null;
+  leftAnkle?: number | null;
   leftElbow?: number | null;
   leftHip?: number | null;
   leftKnee?: number | null;
   leftShoulder?: number | null;
+  rightAnkle?: number | null;
   rightElbow?: number | null;
   rightHip?: number | null;
   rightKnee?: number | null;
@@ -1001,6 +1061,7 @@ export type PoseFrameAnalysisRecord = {
   keypoints: PoseKeypointRecord[] | null;
   matchedProfileId: string | null;
   movementContract: PoseMovementContractRecord | null;
+  movementContractIdentity: ExerciseMovementContractIdentityRecord | null;
   needsConfirmation: boolean;
   phase: string | null;
   processingMode: PoseAnalyzeProcessingMode;

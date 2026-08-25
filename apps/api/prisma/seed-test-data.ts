@@ -8,7 +8,9 @@ import {
   ChatContext,
   ChatRole,
   EquipmentStatus,
+  ExerciseAliasKind,
   ExerciseCategory,
+  ExerciseTrackingMode,
   FitnessGoal,
   Gender,
   GymChatRole,
@@ -73,11 +75,17 @@ import {
   toManifestCredentials,
   writeTestDataManifest,
 } from './test-data/manifest';
+import { seedId as dynamicSeedId } from './dynamic-seed/ids';
+import {
+  FACILITY_FLOOR_MAP_SEEDS,
+} from '../../../packages/utils/facility-map-seed';
 import {
   CANONICAL_EXERCISE_CATALOG,
   CANONICAL_POSE_CAPABILITIES,
+  CANONICAL_POSE_EXERCISE_KEYS,
   getCanonicalExercise,
 } from '../../../packages/utils/fitness-catalog';
+import { normalizeExerciseAlias } from '../../../packages/utils/exercise-movement-contract';
 import {
   buildFallbackPoseMovementContract,
   isValidPoseMovementContract,
@@ -1233,7 +1241,8 @@ async function ensureReservableAmenities() {
       type: AmenityType.basketball_court,
       capacity: 10,
       hourlyRate: new Prisma.Decimal('1500'),
-      floorId: 'court-a',
+      floorId: 'floor-1',
+      grid: [9, 1, 6, 4] as const,
     },
     {
       key: 'venue-booking:boxing-ring',
@@ -1241,7 +1250,8 @@ async function ensureReservableAmenities() {
       type: AmenityType.boxing_ring,
       capacity: 4,
       hourlyRate: new Prisma.Decimal('1200'),
-      floorId: 'ring-a',
+      floorId: 'floor-2',
+      grid: [3, 3, 5, 4] as const,
     },
     {
       key: 'venue-booking:yoga-room',
@@ -1249,7 +1259,8 @@ async function ensureReservableAmenities() {
       type: AmenityType.other,
       capacity: 18,
       hourlyRate: new Prisma.Decimal('900'),
-      floorId: 'studio-y',
+      floorId: 'floor-3',
+      grid: [12, 2, 2, 3] as const,
     },
   ] as const;
 
@@ -1265,8 +1276,13 @@ async function ensureReservableAmenities() {
       update: {
         capacity: amenity.capacity,
         floor_id: amenity.floorId,
+        grid_column: amenity.grid[0],
+        grid_row: amenity.grid[1],
+        grid_width: amenity.grid[2],
+        grid_height: amenity.grid[3],
         hourly_rate: amenity.hourlyRate,
         is_active: true,
+        is_mapped: true,
         is_reservable: true,
         name: amenity.name,
         type: amenity.type,
@@ -1275,8 +1291,13 @@ async function ensureReservableAmenities() {
         id: amenityId,
         capacity: amenity.capacity,
         floor_id: amenity.floorId,
+        grid_column: amenity.grid[0],
+        grid_row: amenity.grid[1],
+        grid_width: amenity.grid[2],
+        grid_height: amenity.grid[3],
         hourly_rate: amenity.hourlyRate,
         is_active: true,
+        is_mapped: true,
         is_reservable: true,
         name: amenity.name,
         type: amenity.type,
@@ -1306,7 +1327,8 @@ async function ensureGymOperationsVenueBookings(
       type: AmenityType.basketball_court,
       capacity: 10,
       hourlyRate: new Prisma.Decimal('1500'),
-      floorId: 'court-a',
+      floorId: 'floor-1',
+      grid: [9, 1, 6, 4] as const,
     },
     {
       key: 'venue-booking:boxing-ring',
@@ -1314,7 +1336,8 @@ async function ensureGymOperationsVenueBookings(
       type: AmenityType.boxing_ring,
       capacity: 4,
       hourlyRate: new Prisma.Decimal('1200'),
-      floorId: 'ring-a',
+      floorId: 'floor-2',
+      grid: [3, 3, 5, 4] as const,
     },
     {
       key: 'venue-booking:yoga-room',
@@ -1322,7 +1345,8 @@ async function ensureGymOperationsVenueBookings(
       type: AmenityType.other,
       capacity: 18,
       hourlyRate: new Prisma.Decimal('900'),
-      floorId: 'studio-y',
+      floorId: 'floor-3',
+      grid: [12, 2, 2, 3] as const,
     },
   ] as const;
 
@@ -1342,9 +1366,14 @@ async function ensureGymOperationsVenueBookings(
         type: amenity.type,
         capacity: amenity.capacity,
         hourly_rate: amenity.hourlyRate,
-        is_active: true,
-        is_reservable: true,
         floor_id: amenity.floorId,
+        grid_column: amenity.grid[0],
+        grid_row: amenity.grid[1],
+        grid_width: amenity.grid[2],
+        grid_height: amenity.grid[3],
+        is_active: true,
+        is_mapped: true,
+        is_reservable: true,
       },
       create: {
         id: amenityId,
@@ -1352,9 +1381,14 @@ async function ensureGymOperationsVenueBookings(
         type: amenity.type,
         capacity: amenity.capacity,
         hourly_rate: amenity.hourlyRate,
-        is_active: true,
-        is_reservable: true,
         floor_id: amenity.floorId,
+        grid_column: amenity.grid[0],
+        grid_row: amenity.grid[1],
+        grid_width: amenity.grid[2],
+        grid_height: amenity.grid[3],
+        is_active: true,
+        is_mapped: true,
+        is_reservable: true,
       },
     });
 
@@ -3497,6 +3531,141 @@ async function ensureMasteryProgress(
   }
 }
 
+type SeedExerciseDefinition = (typeof CANONICAL_EXERCISE_CATALOG)[number] & {
+  id: string;
+};
+
+function reviewedMovementFamilyId(exerciseKey: string) {
+  const familyIndex = CANONICAL_POSE_EXERCISE_KEYS.indexOf(
+    exerciseKey as (typeof CANONICAL_POSE_EXERCISE_KEYS)[number],
+  );
+  if (familyIndex < 0) {
+    throw new Error(
+      'Missing reviewed movement-family index for "' + exerciseKey + '".',
+    );
+  }
+  return '81000000-0000-4000-8000-' + String(familyIndex + 1).padStart(12, '0');
+}
+
+function movementFamilyDisplayName(contractExercise: string) {
+  return contractExercise
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function hasCalibratedManualContract(value: Prisma.JsonValue | null) {
+  if (!value || Array.isArray(value) || typeof value !== 'object') return false;
+  return Boolean('movementContract' in value || 'movement_contract' in value);
+}
+
+async function ensureReviewedMovementFamilies(
+  exerciseByKey: ReadonlyMap<string, SeedExerciseDefinition>,
+  mode: TestDataSeedMode,
+) {
+  for (const capability of CANONICAL_POSE_CAPABILITIES) {
+    const exercise = exerciseByKey.get(capability.exerciseKey);
+    const contract = buildFallbackPoseMovementContract(
+      capability.contractExercise,
+    );
+    if (!exercise || !contract || !isValidPoseMovementContract(contract)) {
+      throw new Error(
+        'Missing reviewed movement-family contract for "' +
+          capability.exerciseKey +
+          '".',
+      );
+    }
+
+    const familyId = reviewedMovementFamilyId(capability.exerciseKey);
+    const familyKey = capability.contractExercise;
+    const baseMovementProfile = {
+      movementContract: contract,
+      rig: null,
+      schemaVersion: 'exercise_movement_profile_v1',
+      warnings: [],
+    } as Prisma.InputJsonValue;
+    await prisma.exerciseMovementFamily.upsert({
+      where: { key: familyKey },
+      create: {
+        id: familyId,
+        key: familyKey,
+        display_name: movementFamilyDisplayName(familyKey),
+        canonical_exercise_id: exercise.id,
+        base_movement_profile: baseMovementProfile,
+        base_hand_shape_profile: Prisma.JsonNull,
+        contract_revision: 1,
+        is_active: true,
+      },
+      update:
+        mode === 'reset'
+          ? {
+              display_name: movementFamilyDisplayName(familyKey),
+              canonical_exercise_id: exercise.id,
+              base_movement_profile: baseMovementProfile,
+              contract_revision: 1,
+              is_active: true,
+            }
+          : {
+              canonical_exercise_id: exercise.id,
+              is_active: true,
+            },
+    });
+
+    const currentExercise = await prisma.exerciseCatalog.findUnique({
+      where: { id: exercise.id },
+      select: {
+        movement_family_id: true,
+        movement_profile: true,
+      },
+    });
+    const shouldLink =
+      mode === 'reset' ||
+      (currentExercise?.movement_family_id === null &&
+        !hasCalibratedManualContract(currentExercise.movement_profile));
+    if (shouldLink) {
+      await prisma.exerciseCatalog.update({
+        where: { id: exercise.id },
+        data: {
+          movement_family_id: familyId,
+          movement_profile_override: Prisma.JsonNull,
+          tracking_mode: ExerciseTrackingMode.inherit,
+        },
+      });
+    }
+
+    const aliases = new Map<string, string>();
+    for (const label of [exercise.name, ...capability.aliases]) {
+      aliases.set(normalizeExerciseAlias(label), label);
+    }
+    for (const [normalizedLabel, label] of aliases) {
+      const existingAlias = await prisma.exerciseAlias.findUnique({
+        where: { normalized_label: normalizedLabel },
+      });
+      if (!existingAlias) {
+        await prisma.exerciseAlias.create({
+          data: {
+            id: seedId('exercise-alias:' + normalizedLabel),
+            exercise_id: exercise.id,
+            kind: ExerciseAliasKind.synonym,
+            label,
+            normalized_label: normalizedLabel,
+          },
+        });
+      } else if (mode === 'reset') {
+        await prisma.exerciseAlias.update({
+          where: { normalized_label: normalizedLabel },
+          data: {
+            exercise_id: exercise.id,
+            kind: ExerciseAliasKind.synonym,
+            label,
+          },
+        });
+      }
+    }
+  }
+}
+
 async function ensureWorkoutFixtures(
   ensuredAccounts: readonly EnsuredAccount[],
   mode: TestDataSeedMode,
@@ -3514,7 +3683,7 @@ async function ensureWorkoutFixtures(
       exercise.key,
       {
         ...exercise,
-        id: seedId(`exercise:${exercise.key}`),
+        id: dynamicSeedId(`exercise:${exercise.key}`),
       },
     ]),
   );
@@ -3535,11 +3704,25 @@ async function ensureWorkoutFixtures(
           capability,
           contract,
           exercise,
-          id: seedId(`pose-profile:${capability.exerciseKey}`),
+          id: dynamicSeedId(`pose-profile:${capability.exerciseKey}`),
         },
       ];
     }),
   );
+
+  if (mode === 'reset') {
+    const supersededTestExerciseIds = CANONICAL_EXERCISE_CATALOG.map(
+      (exercise) => seedId('exercise:' + exercise.key),
+    ).filter(
+      (id, index) =>
+        id !==
+        dynamicSeedId('exercise:' + CANONICAL_EXERCISE_CATALOG[index].key),
+    );
+    await prisma.exerciseCatalog.updateMany({
+      where: { id: { in: supersededTestExerciseIds } },
+      data: { is_active: false },
+    });
+  }
 
   for (const exercise of exerciseByKey.values()) {
     const exerciseData = {
@@ -3565,16 +3748,23 @@ async function ensureWorkoutFixtures(
       name: exercise.name,
       video_url: null,
     };
+    const {
+      movement_profile: _defaultMovementProfile,
+      ...additiveExerciseData
+    } = exerciseData;
     await prisma.exerciseCatalog.upsert({
       where: { id: exercise.id },
-      update: exerciseData,
+      update: mode === 'reset' ? exerciseData : additiveExerciseData,
       create: { id: exercise.id, ...exerciseData },
     });
   }
 
+  await ensureReviewedMovementFamilies(exerciseByKey, mode);
+
   const supportedExerciseIds = [...poseProfileByExerciseKey.values()].map(
     ({ exercise }) =>
-      exerciseByKey.get(exercise.key)?.id ?? seedId(`exercise:${exercise.key}`),
+      exerciseByKey.get(exercise.key)?.id ??
+      dynamicSeedId(`exercise:${exercise.key}`),
   );
   await prisma.poseExerciseProfile.updateMany({
     where: {
@@ -4890,20 +5080,16 @@ async function ensureFeatureCoverageFixtures(
   });
 
   await prisma.facilityFloorPlanMedia.createMany({
-    data: [
-      {
-        floor_id: 'floor-1',
-        image_url: null,
-      },
-      {
-        floor_id: 'floor-2',
-        image_url: null,
-      },
-      {
-        floor_id: 'floor-3',
-        image_url: null,
-      },
-    ],
+    data: (['floor-1', 'floor-2', 'floor-3'] as const).map((floorId) => ({
+      floor_id: floorId,
+      image_url: null,
+      grid_width: 14,
+      grid_height: 10,
+      footprint_cells: FACILITY_FLOOR_MAP_SEEDS[floorId].footprint,
+      path_cells: FACILITY_FLOOR_MAP_SEEDS[floorId].paths,
+      entry_cells: FACILITY_FLOOR_MAP_SEEDS[floorId].entries,
+      exit_cells: FACILITY_FLOOR_MAP_SEEDS[floorId].exits,
+    })),
   });
 
   await prisma.gymEquipment.createMany({

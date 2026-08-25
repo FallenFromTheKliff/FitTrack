@@ -1,5 +1,8 @@
 export const visualReferenceManifest = {
   version: 1,
+  // Only approved, deterministic browser captures may become ODiff baselines.
+  // Figma provenance belongs on future cases as referenceSource metadata.
+  baselinePolicy: "explicit-approved-browser-capture",
   cases: [
     {
       id: "admin-schedule-desktop",
@@ -10,7 +13,13 @@ export const visualReferenceManifest = {
       viewport: "desktop-1920x1080",
       expectedState: "Authenticated admin Gym Operations schedule landing",
       snapshot: "admin-schedule-desktop.png",
+      baselineStatus: "approved",
+      referenceSource: {
+        provider: "browser-capture",
+        normalization: "visual config, deterministic seed, viewport, theme, and state",
+      },
       diffPolicy: { maxDiffPixels: 0, threshold: 0, maskVolatile: true },
+      criticalRegions: [],
       maskSelectors: [
         "[data-testid='notification-count']",
         "[data-testid='notifications-badge']",
@@ -26,7 +35,13 @@ export const visualReferenceManifest = {
       viewport: "mobile-390x844",
       expectedState: "Authenticated member home shell at mobile viewport",
       snapshot: "member-home-mobile.png",
+      baselineStatus: "approved",
+      referenceSource: {
+        provider: "browser-capture",
+        normalization: "visual config, deterministic seed, viewport, theme, and state",
+      },
       diffPolicy: { maxDiffPixels: 0, threshold: 0, maskVolatile: true },
+      criticalRegions: [],
       maskSelectors: [
         "[data-testid='notification-count']",
         "[data-testid='notifications-badge']",

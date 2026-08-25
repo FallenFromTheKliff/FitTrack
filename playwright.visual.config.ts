@@ -21,6 +21,9 @@ export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
+  // Reference snapshots are promoted explicitly after approval;
+  // a local smoke run must never silently turn its own screenshot into truth.
+  updateSnapshots: "none",
   timeout: 60_000,
   expect: {
     timeout: 10_000,

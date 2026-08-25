@@ -458,6 +458,32 @@ input::placeholder, textarea::placeholder { color: var(--fit-text-muted) !import
   gap: 12px;
 }
 
+.member-only-facility-map-shell-phone-preview .member-only-facility-map-grid {
+  grid-template-columns: 1fr;
+}
+
+.member-only-facility-map-shell-phone-preview .member-only-facility-map-top {
+  grid-template-columns: 1fr;
+}
+
+.member-only-facility-map-shell-phone-preview .member-only-facility-map-stage {
+  height: 480px;
+  min-height: 480px;
+}
+
+.member-only-facility-map-shell-phone-preview .member-only-facility-map-bottom {
+  grid-template-columns: 1fr;
+}
+
+.member-only-facility-map-shell-phone-preview .member-only-facility-map-bottom-summary {
+  grid-template-columns: 1fr;
+  max-width: none;
+}
+
+.member-only-facility-map-shell-phone-preview .member-only-facility-detail-bottom {
+  overflow: visible;
+}
+
 .member-only-facility-map-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.55fr);

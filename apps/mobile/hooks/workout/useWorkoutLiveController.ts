@@ -8,7 +8,9 @@ import { ApiClientError } from "@fittrack/api-client";
 import type {
   ExerciseHandShapeProfileRecord,
   ExerciseMovementProfileRecord,
+  ExerciseMovementContractIdentityRecord,
   ExerciseMuscleTargetRecord,
+  FitnessExerciseRecord,
   IThemeContext,
   PoseCameraFacingMode,
   PoseEquipmentContext,
@@ -29,12 +31,12 @@ import type {
 import type { WorkoutCameraTarget } from "@/components/workout/workout-camera-target";
 import {
   buildFallbackPoseMovementContract,
-  getPoseAutoRepCapabilityForLabel,
   isValidPoseMovementContract,
   normalizeExerciseMovementProfile,
   createPoseSignalCache,
   getPoseMovementContractAngle,
   summarizeMovementGuidance,
+  normalizeExerciseAlias,
 } from "@fittrack/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -45,6 +47,7 @@ import {
   analyzePoseSessionMutationOptions,
   completeWorkoutSessionMutationOptions,
   fitnessExercisesQueryOptions,
+  fitnessExerciseQueryOptions,
   fitnessPlanDetailQueryOptions,
   fitnessPlansQueryOptions,
   fitnessSessionsQueryOptions,
@@ -70,6 +73,10 @@ import {
   stepPoseStaticHold,
   stepPoseRepEngine,
 } from "@/lib/workout/poseRepEngine";
+import {
+  movementContractIdentityKey,
+  resolveWorkoutExerciseContract,
+} from "@/lib/workout/exerciseContractResolver";
 
 import { getWorkoutAutoFinishEvaluation } from "@/lib/workout/workoutAutoFinish";
 type SelectedExercise = {
@@ -77,22 +84,13 @@ type SelectedExercise = {
   handShapeProfile: ExerciseHandShapeProfileRecord | null;
   label: string;
   movementProfile: ExerciseMovementProfileRecord | null;
+  movementContractIdentity: ExerciseMovementContractIdentityRecord | null;
   muscleGroup: string;
   muscleTargets: ExerciseMuscleTargetRecord[];
   recommendation: string;
 };
 
-type LiveExerciseRecord = {
-  category: string;
-  description: string | null;
-  handShapeProfile: ExerciseHandShapeProfileRecord | null;
-  id: string;
-  instructions: string | null;
-  movementProfile: ExerciseMovementProfileRecord | null;
-  muscleGroup: string;
-  muscleTargets: ExerciseMuscleTargetRecord[];
-  name: string;
-};
+type LiveExerciseRecord = FitnessExerciseRecord;
 
 type LivePlanSummaryRecord = {
   id: string;
@@ -191,23 +189,6 @@ const WEIGHTED_EQUIPMENT_CONTEXTS = new Set<PoseEquipmentContext>([
 const KG_PER_POUND = 0.45359237;
 const MAX_WORKOUT_LOAD_KG = 1000;
 const MIN_WORKOUT_LOAD_SLIDER_VALUE = 1;
-const EXERCISE_NAME_ALIAS_GROUPS = [
-  ["barbell back squat", "back squat", "squat"],
-  ["dumbbell bench press", "bench press", "dumbbell bench"],
-  ["push up", "push-up", "pushup"],
-  ["incline push up", "incline push-up", "incline pushup"],
-  ["dumbbell bicep curl", "dumbbell curl", "bicep curl", "curl", "bicep_curl"],
-  ["dip", "tricep dip", "bench dip", "assisted dip", "parallel bar dip"],
-  ["pull up", "pull-up", "pullup", "chin up", "chin-up", "chinup", "pull_up"],
-  ["seated cable row", "cable row"],
-  ["jump rope", "jump-rope", "jump rope"],
-] as const;
-const NORMALIZED_EXERCISE_ALIAS_GROUPS = EXERCISE_NAME_ALIAS_GROUPS.map(
-  (group) =>
-    group.map((value) =>
-      value.trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " "),
-    ),
-);
 
 type WorkoutLoadUnit = "kg" | "lb";
 
@@ -738,6 +719,8 @@ function toSelectedExercise(
       handShapeProfile: matchingExercise?.handShapeProfile ?? null,
       label: currentPlanExercise.exerciseName,
       movementProfile: matchingExercise?.movementProfile ?? null,
+      movementContractIdentity:
+        matchingExercise?.movementContractIdentity ?? null,
       muscleGroup: currentPlanExercise.muscleGroup,
       muscleTargets: matchingExercise?.muscleTargets ?? [],
       recommendation:
@@ -753,6 +736,7 @@ function toSelectedExercise(
     handShapeProfile: firstExercise.handShapeProfile,
     label: firstExercise.name,
     movementProfile: firstExercise.movementProfile,
+    movementContractIdentity: firstExercise.movementContractIdentity,
     muscleGroup: firstExercise.muscleGroup,
     muscleTargets: firstExercise.muscleTargets,
     recommendation:
@@ -777,29 +761,8 @@ function toExerciseReferences(
   }));
 }
 
-function normalizeExerciseName(value: string | null | undefined) {
-  return (value ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/[_-]+/g, " ")
-    .replace(/\s+/g, " ");
-}
-
-function getExerciseNameVariants(value: string | null | undefined) {
-  const normalized = normalizeExerciseName(value);
-  if (!normalized) return [];
-
-  const variants = new Set([normalized]);
-  for (const group of NORMALIZED_EXERCISE_ALIAS_GROUPS) {
-    if (!group.includes(normalized)) continue;
-    group.forEach((entry) => variants.add(entry));
-  }
-
-  return Array.from(variants);
-}
-
 function toDisplayExerciseName(value: string | null | undefined) {
-  return normalizeExerciseName(value).replace(/\b\w/g, (char) =>
+  return normalizeExerciseAlias(value).replace(/\b\w/g, (char) =>
     char.toUpperCase(),
   );
 }
@@ -835,7 +798,7 @@ function inferEquipmentContextFromDetectionBoxes(
 ): PoseEquipmentContext | null {
   const contexts = new Set<PoseEquipmentContext>();
   for (const detection of detections) {
-    const label = normalizeExerciseName(detection.label);
+    const label = normalizeExerciseAlias(detection.label);
     if (
       /\b(dumbbell|dumbbells|dumbell|dumbells|db|free weight|hand weight)\b/.test(
         label,
@@ -1058,7 +1021,7 @@ async function detectNativeEquipmentSnapshot(input: {
 function inferExerciseEquipmentContext(
   label: string | null | undefined,
 ): PoseEquipmentContext | null {
-  const normalized = normalizeExerciseName(label);
+  const normalized = normalizeExerciseAlias(label);
   if (!normalized) return null;
 
   const matches = new Set<PoseEquipmentContext>();
@@ -1100,7 +1063,7 @@ function inferExerciseEquipmentContext(
 }
 
 function isExplicitWeightedExerciseLabel(label: string | null | undefined) {
-  const normalized = normalizeExerciseName(label);
+  const normalized = normalizeExerciseAlias(label);
   return /\b(dumbbell|dumbell|db|barbell|kettlebell|cable|machine|band|weighted|weight|load)\b/.test(
     normalized,
   );
@@ -1141,7 +1104,7 @@ function mergeExerciseReferences(liveReferences: ExerciseReference[]) {
   const merged = new Map<string, ExerciseReference>();
 
   for (const reference of liveReferences) {
-    const normalizedName = normalizeExerciseName(reference.name);
+    const normalizedName = normalizeExerciseAlias(reference.name);
     if (!normalizedName || merged.has(normalizedName)) continue;
     merged.set(normalizedName, reference);
   }
@@ -1153,21 +1116,17 @@ function findExerciseByDetectedName(
   exercises: LiveExerciseRecord[],
   detectedName: string | null | undefined,
 ): SelectedExercise | null {
-  const detectedVariants = getExerciseNameVariants(detectedName);
-  if (!detectedVariants.length) return null;
-
-  const matchedExercise = exercises.find((exercise) => {
-    const exerciseVariants = getExerciseNameVariants(exercise.name);
-    return detectedVariants.some((variant) =>
-      exerciseVariants.includes(variant),
-    );
-  });
+  const matchedExercise = resolveWorkoutExerciseContract({
+    exercises,
+    label: detectedName,
+  })?.exercise ?? null;
   if (!matchedExercise) return null;
   return {
     exerciseId: matchedExercise.id,
     handShapeProfile: matchedExercise.handShapeProfile,
     label: matchedExercise.name,
     movementProfile: matchedExercise.movementProfile,
+    movementContractIdentity: matchedExercise.movementContractIdentity,
     muscleGroup: matchedExercise.muscleGroup,
     muscleTargets: matchedExercise.muscleTargets,
     recommendation:
@@ -1181,17 +1140,11 @@ function findExerciseReferenceByName(
   references: ExerciseReference[],
   exerciseName: string | null | undefined,
 ) {
-  const detectedVariants = getExerciseNameVariants(exerciseName);
-  if (!detectedVariants.length) return null;
-
-  return (
-    references.find((reference) => {
-      const referenceVariants = getExerciseNameVariants(reference.name);
-      return detectedVariants.some((variant) =>
-        referenceVariants.includes(variant),
-      );
-    }) ?? null
-  );
+  const normalized = normalizeExerciseAlias(exerciseName);
+  if (!normalized) return null;
+  return references.find(
+    (reference) => normalizeExerciseAlias(reference.name) === normalized,
+  ) ?? null;
 }
 
 function toPermissionGranted(
@@ -1205,7 +1158,7 @@ function toSavedExerciseOptions(references: ExerciseReference[]) {
   const options: string[] = [];
 
   for (const reference of references) {
-    const normalizedName = normalizeExerciseName(reference.name);
+    const normalizedName = normalizeExerciseAlias(reference.name);
     if (!normalizedName || seen.has(normalizedName)) continue;
     seen.add(normalizedName);
     options.push(reference.name.trim());
@@ -1340,6 +1293,7 @@ export function useWorkoutLiveController(
   const confirmedExerciseLabelRef = useRef<string | null>(null);
   const workoutLoadKgRef = useRef<number | null>(null);
   const movementContractRef = useRef<PoseMovementContractRecord | null>(null);
+  const movementContractIdentityRef = useRef<string | null>(null);
   const poseSessionIdRef = useRef<string | null>(null);
   const isRecordingRef = useRef(false);
   const repEngineStateRef = useRef(createPoseRepEngineState());
@@ -1838,11 +1792,23 @@ export function useWorkoutLiveController(
     data: exercisesResponse = defaultPaginated<LiveExerciseRecord>(),
     isLoading: exercisesLoading,
   } = useQuery({
-    ...fitnessExercisesQueryOptions(mobileApiClient, { limit: 50, page: 1 }),
+    ...fitnessExercisesQueryOptions(mobileApiClient, { limit: 100, page: 1 }),
     enabled: !!user?.id,
     staleTime: 60_000,
     gcTime: 300_000,
   });
+  const { data: cameraTargetExercise = null } = useQuery(
+    fitnessExerciseQueryOptions(mobileApiClient, cameraTarget?.exerciseId),
+  );
+  const resolvedExercises = useMemo(() => {
+    if (!cameraTargetExercise) return exercisesResponse.data;
+    return [
+      cameraTargetExercise,
+      ...exercisesResponse.data.filter(
+        (exercise) => exercise.id !== cameraTargetExercise.id,
+      ),
+    ];
+  }, [cameraTargetExercise, exercisesResponse.data]);
   const {
     data: plansResponse = defaultPaginated<LivePlanSummaryRecord>(),
     isLoading: plansLoading,
@@ -1902,7 +1868,7 @@ export function useWorkoutLiveController(
   );
   const currentPlanExercise = useMemo(() => {
     if (cameraTarget) {
-      const catalogExercise = exercisesResponse.data.find(
+      const catalogExercise = resolvedExercises.find(
         (exercise) => exercise.id === cameraTarget.exerciseId,
       );
       return {
@@ -1927,15 +1893,15 @@ export function useWorkoutLiveController(
         (left, right) => left.orderIndex - right.orderIndex,
       )[0] ?? null
     );
-  }, [cameraTarget, exercisesResponse.data, planDetail]);
+  }, [cameraTarget, planDetail, resolvedExercises]);
 
   const selectedExercise = useMemo(
-    () => toSelectedExercise(currentPlanExercise, exercisesResponse.data),
-    [currentPlanExercise, exercisesResponse.data],
+    () => toSelectedExercise(currentPlanExercise, resolvedExercises),
+    [currentPlanExercise, resolvedExercises],
   );
   const liveExerciseReferences = useMemo(
-    () => toExerciseReferences(exercisesResponse.data),
-    [exercisesResponse.data],
+    () => toExerciseReferences(resolvedExercises),
+    [resolvedExercises],
   );
   const exerciseReferences = useMemo(
     () => mergeExerciseReferences(liveExerciseReferences),
@@ -2049,16 +2015,33 @@ export function useWorkoutLiveController(
     [exerciseReferences, trackingExerciseLabel],
   );
   const trackingStructuredExercise = useMemo(
-    () =>
-      findExerciseByDetectedName(exercisesResponse.data, trackingExerciseLabel) ??
-      selectedExercise,
-    [exercisesResponse.data, selectedExercise, trackingExerciseLabel],
+    () => {
+      const resolved = resolveWorkoutExerciseContract({
+        exerciseId: cameraTarget?.exerciseId,
+        exercises: resolvedExercises,
+        label: trackingExerciseLabel,
+      })?.exercise;
+      return resolved
+        ? toSelectedExercise(
+            {
+              exerciseId: resolved.id,
+              exerciseName: resolved.name,
+              muscleGroup: resolved.muscleGroup,
+              notes: resolved.instructions,
+              reps: null,
+              sets: 1,
+            },
+            resolvedExercises,
+          )
+        : selectedExercise;
+    }, [cameraTarget?.exerciseId, resolvedExercises, selectedExercise, trackingExerciseLabel],
   );
   const activeHandShapeProfile =
     trackingStructuredExercise?.handShapeProfile ?? null;
   const activeMovementProfile =
     trackingStructuredExercise?.movementProfile ?? null;
-  const activeMuscleTargets = trackingStructuredExercise?.muscleTargets ?? [];
+  const activeMovementIdentity =
+    trackingStructuredExercise?.movementContractIdentity ?? null;
   const planExerciseReference = useMemo(
     () =>
       findExerciseReferenceByName(
@@ -2075,13 +2058,13 @@ export function useWorkoutLiveController(
     if (exercisesLoading) return null;
     if (
       cameraTarget &&
-      !getPoseAutoRepCapabilityForLabel(cameraTarget.exerciseName)
+      cameraTargetExercise?.trackingMode === "manual"
     ) {
       return "Camera tracking is not available for this exercise. Use manual set logging.";
     }
     if (exerciseReferences.length > 0) return null;
     return "The live exercise catalog is empty on this stack. Seed the workout catalog before starting tracked sets and EXP sync.";
-  }, [cameraTarget, exerciseReferences.length, exercisesLoading]);
+  }, [cameraTarget, cameraTargetExercise?.trackingMode, exerciseReferences.length, exercisesLoading]);
   countdownValueRef.current = countdownValue;
   isExerciseConfirmationVisibleRef.current = isExerciseConfirmationVisible;
   useEffect(() => {
@@ -2189,6 +2172,7 @@ export function useWorkoutLiveController(
 
   const resetPoseRuntimeState = useCallback((clearReps: boolean) => {
     movementContractRef.current = null;
+    movementContractIdentityRef.current = null;
     repEngineStateRef.current = createPoseRepEngineState();
     holdProgressSecondsRef.current = 0;
     averageConfidenceRef.current = null;
@@ -2311,12 +2295,16 @@ export function useWorkoutLiveController(
       return null;
     }
 
-    const previousState = repEngineStateRef.current;
-    repEngineStateRef.current = {
-      ...createPoseRepEngineState(),
-      rawAngleData: previousState.rawAngleData,
-      repCount: previousState.repCount,
-    };
+    const nextIdentityKey = movementContractIdentityKey(activeMovementIdentity);
+    if (movementContractIdentityRef.current !== nextIdentityKey) {
+      const previousState = repEngineStateRef.current;
+      repEngineStateRef.current = {
+        ...createPoseRepEngineState(),
+        rawAngleData: previousState.rawAngleData,
+        repCount: previousState.repCount,
+      };
+      movementContractIdentityRef.current = nextIdentityKey;
+    }
     movementContractRef.current = fallbackContract;
     holdProgressSecondsRef.current = 0;
     setHoldProgressSeconds(0);
@@ -2346,12 +2334,16 @@ export function useWorkoutLiveController(
     statusText: string,
   ) => {
     if (!cameraTarget) return null;
-    const capability = getPoseAutoRepCapabilityForLabel(
-      cameraTarget.exerciseName,
-    );
-    if (!capability) return null;
+    const plannedExercise = resolveWorkoutExerciseContract({
+      exerciseId: cameraTarget.exerciseId,
+      exercises: resolvedExercises,
+      label: cameraTarget.exerciseName,
+    });
+    const configuredContract =
+      plannedExercise?.exercise.movementProfile?.movementContract ?? null;
+    if (!plannedExercise || !configuredContract) return null;
 
-    const plannedMovementKey = `${cameraTarget.planExerciseId}:${cameraTarget.setNumber}:${cameraTarget.exerciseName}:${cameraTarget.targetDurationSeconds ?? 0}`;
+    const plannedMovementKey = `${cameraTarget.planExerciseId}:${cameraTarget.setNumber}:${movementContractIdentityKey(plannedExercise.identity) ?? cameraTarget.exerciseId}:${cameraTarget.targetDurationSeconds ?? 0}`;
     if (
       plannedMovementKeyRef.current === plannedMovementKey &&
       movementContractRef.current
@@ -2365,9 +2357,7 @@ export function useWorkoutLiveController(
       return movementContractRef.current;
     }
 
-    const plannedContract = resolveCameraMovementContract(
-      buildFallbackPoseMovementContract(capability.contractExercise),
-    );
+    const plannedContract = resolveCameraMovementContract(configuredContract);
     if (!plannedContract || !isValidPoseMovementContract(plannedContract)) {
       return null;
     }
@@ -2379,6 +2369,9 @@ export function useWorkoutLiveController(
       repCount: previousState.repCount,
     };
     movementContractRef.current = plannedContract;
+    movementContractIdentityRef.current = movementContractIdentityKey(
+      plannedExercise.identity,
+    );
     plannedMovementKeyRef.current = plannedMovementKey;
     confirmedExerciseLabelRef.current = cameraTarget.exerciseName;
     holdProgressSecondsRef.current = 0;
@@ -2413,7 +2406,13 @@ export function useWorkoutLiveController(
       plannedMovementKeyRef.current = null;
       return;
     }
-    if (!getPoseAutoRepCapabilityForLabel(cameraTarget.exerciseName)) return;
+    if (
+      !resolveWorkoutExerciseContract({
+        exerciseId: cameraTarget.exerciseId,
+        exercises: resolvedExercises,
+        label: cameraTarget.exerciseName,
+      })
+    ) return;
     armPlannedMovementContract(
       null,
       `Ready for ${toDisplayExerciseName(cameraTarget.exerciseName)}. Get in frame to begin.`,
@@ -2423,9 +2422,11 @@ export function useWorkoutLiveController(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     cameraTarget?.exerciseName,
+    cameraTarget?.exerciseId,
     cameraTarget?.planExerciseId,
     cameraTarget?.setNumber,
     cameraTarget?.targetDurationSeconds,
+    cameraTargetExercise?.movementContractIdentity.revision,
   ]);
 
   const disposePoseAnalyzer = () => {
@@ -2820,13 +2821,23 @@ export function useWorkoutLiveController(
         if (plannedContract) return;
       }
 
+      const detectedCatalogExercise = findExerciseByDetectedName(
+        resolvedExercises,
+        analysis.exerciseClass,
+      );
+      const detectedConfiguredContract =
+        detectedCatalogExercise?.movementProfile?.movementContract ?? null;
       const nextMovementContract = resolveCameraMovementContract(
-        analysis.movementContract &&
+        detectedConfiguredContract ??
+          (analysis.movementContract &&
           isValidPoseMovementContract(analysis.movementContract)
-          ? analysis.movementContract
-          : null,
+            ? analysis.movementContract
+            : null),
       );
       if (nextMovementContract) {
+        movementContractIdentityRef.current = movementContractIdentityKey(
+          detectedCatalogExercise?.movementContractIdentity,
+        );
         movementContractRef.current = nextMovementContract;
         setMovementContract(nextMovementContract);
         setCurrentPhase("primed");
@@ -3278,13 +3289,23 @@ export function useWorkoutLiveController(
         if (plannedContract) return;
       }
 
+      const detectedCatalogExercise = findExerciseByDetectedName(
+        resolvedExercises,
+        analysis.exerciseClass,
+      );
+      const detectedConfiguredContract =
+        detectedCatalogExercise?.movementProfile?.movementContract ?? null;
       const nextMovementContract = resolveCameraMovementContract(
-        analysis.movementContract &&
+        detectedConfiguredContract ??
+          (analysis.movementContract &&
           isValidPoseMovementContract(analysis.movementContract)
-          ? analysis.movementContract
-          : null,
+            ? analysis.movementContract
+            : null),
       );
       if (nextMovementContract) {
+        movementContractIdentityRef.current = movementContractIdentityKey(
+          detectedCatalogExercise?.movementContractIdentity,
+        );
         movementContractRef.current = nextMovementContract;
         setMovementContract(nextMovementContract);
         setCurrentPhase("primed");
@@ -3584,7 +3605,11 @@ export function useWorkoutLiveController(
     if (isFrozen || countdownValue !== null) return;
     if (
       cameraTarget &&
-      !getPoseAutoRepCapabilityForLabel(cameraTarget.exerciseName)
+      !resolveWorkoutExerciseContract({
+        exerciseId: cameraTarget.exerciseId,
+        exercises: resolvedExercises,
+        label: cameraTarget.exerciseName,
+      })
     ) {
       showMessage("Camera tracking is not available for this exercise. Use manual set logging.");
       return;
@@ -3632,7 +3657,11 @@ export function useWorkoutLiveController(
     if (isFrozen || countdownValue !== null) return;
     if (
       cameraTarget &&
-      !getPoseAutoRepCapabilityForLabel(cameraTarget.exerciseName)
+      !resolveWorkoutExerciseContract({
+        exerciseId: cameraTarget.exerciseId,
+        exercises: resolvedExercises,
+        label: cameraTarget.exerciseName,
+      })
     ) {
       showMessage("Camera tracking is not available for this exercise. Use manual set logging.");
       return;

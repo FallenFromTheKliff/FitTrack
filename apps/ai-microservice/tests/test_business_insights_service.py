@@ -24,8 +24,51 @@ def _build_grounding_payload(
         "window": {
             "start_date": "2025-01-01",
             "end_date": "2025-01-31",
+            "previous_start_date": "2024-12-01",
+            "previous_end_date": "2024-12-31",
             "period": "custom",
             "focus": "overview",
+        },
+        "comparisons": {
+            "total_revenue": {
+                "current": total_revenue,
+                "previous": "9000.00" if total_revenue != "0.00" else "0.00",
+                "absolute_change": "-151.00" if total_revenue != "0.00" else "0.00",
+                "percentage_change": -1.7 if total_revenue != "0.00" else None,
+                "direction": "decrease" if total_revenue != "0.00" else "flat",
+            },
+            "check_ins": {
+                "current": total_check_ins,
+                "previous": 24 if total_check_ins else 0,
+                "absolute_change": total_check_ins - 24 if total_check_ins else 0,
+                "percentage_change": 25.0 if total_check_ins else None,
+                "direction": "increase" if total_check_ins else "flat",
+            },
+            "new_members": {
+                "current": 18, "previous": 0, "absolute_change": 18,
+                "percentage_change": None, "direction": "new_from_zero",
+            },
+            "completed_coaching_sessions": {
+                "current": 4, "previous": 5, "absolute_change": -1,
+                "percentage_change": -20.0, "direction": "decrease",
+            },
+        },
+        "derived_signals": {
+            "revenue_mix_percentages": {
+                "memberships": 56.5, "bookings": 13.6,
+                "products": 9.6, "coaching": 20.3,
+            },
+            "top_revenue_source_concentration": {
+                "source_key": "memberships", "source_label": "Memberships",
+                "percentage": 56.5,
+            } if total_revenue != "0.00" else None,
+            "peak_hour_attendance_concentration": {
+                "hour_label": "06:00", "check_ins": peak_hour_check_ins,
+                "percentage": 46.7,
+            } if total_check_ins else None,
+            "equipment_availability_percentage": 87.5 if include_inventory else None,
+            "low_stock_exposure_percentage": 14.3 if include_inventory else None,
+            "out_of_stock_exposure_percentage": 7.1 if include_inventory else None,
         },
         "overview": {
             "total_revenue": total_revenue,
@@ -139,6 +182,26 @@ def test_detect_anomalies_returns_empty_list_for_healthy_grounding() -> None:
     assert BusinessInsightService.detect_anomalies(request.grounding) == []
 
 
+def test_provider_timeout_and_attempt_bounds_compose_with_nest_outer_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = OpenRouterBusinessInsightProvider()
+    monkeypatch.delenv("OPENROUTER_BUSINESS_INSIGHT_TIMEOUT_SECONDS", raising=False)
+    monkeypatch.delenv("OPENROUTER_BUSINESS_INSIGHT_MAX_ATTEMPTS", raising=False)
+    assert provider._request_timeout_seconds() == 10.0
+    assert provider._max_attempts() == 4
+
+    monkeypatch.setenv("OPENROUTER_BUSINESS_INSIGHT_TIMEOUT_SECONDS", "99")
+    monkeypatch.setenv("OPENROUTER_BUSINESS_INSIGHT_MAX_ATTEMPTS", "99")
+    assert provider._request_timeout_seconds() == 10.0
+    assert provider._max_attempts() == 4
+
+    monkeypatch.setenv("OPENROUTER_BUSINESS_INSIGHT_TIMEOUT_SECONDS", "0")
+    monkeypatch.setenv("OPENROUTER_BUSINESS_INSIGHT_MAX_ATTEMPTS", "0")
+    assert provider._request_timeout_seconds() == 3.0
+    assert provider._max_attempts() == 1
+
+
 def test_build_openrouter_insight_request_includes_schema_and_detected_anomalies(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -154,12 +217,20 @@ def test_build_openrouter_insight_request_includes_schema_and_detected_anomalies
     )
 
     payload = provider.build_openrouter_insight_request(request)
+    system_prompt = payload["messages"][0]["content"]
     user_message = payload["messages"][1]
     user_content = json.loads(user_message["content"])
 
     assert payload["model"] == "openrouter/test-model"
     assert payload["response_format"]["type"] == "json_schema"
     assert payload["response_format"]["json_schema"]["strict"] is True
+    assert "Never restate a dashboard metric by itself" in system_prompt
+    assert "Comparative language is forbidden unless comparator evidence exists" in system_prompt
+    assert "possible drivers" in system_prompt
+    assert "Every highlight, risk, and opportunity must contain evidence" in system_prompt
+    assert "at most three prioritized recommended_actions" in system_prompt
+    assert "Owner · timeframe — action. Success: measurable outcome." in system_prompt
+    assert "reviewing, observing, or monitoring" in system_prompt
     assert user_content["grounding"]["window"]["focus"] == "overview"
     assert user_content["detected_anomaly_flags"] == [
         "No attendance was recorded for the selected window.",
@@ -445,6 +516,72 @@ def test_generate_business_insight_parses_code_fenced_json(
     assert response.model_used == "openrouter/test-model"
 
 
+def test_generate_business_insight_normalizes_nested_aliases_and_output_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv("OPENROUTER_BUSINESS_INSIGHT_MODEL", "openrouter/test-model")
+    provider = OpenRouterBusinessInsightProvider()
+    request = _build_request()
+    nested_payload = {
+        "result": {
+            "executive_summary": "  Revenue improved against the prior window.  ",
+            "highlights": [{"text": "Membership concentration supports one bounded test."}],
+            "risks": "Peak attendance concentration could constrain service.",
+            "opportunities": [{"description": "Shift one offer into the measured peak."}],
+            "anomalyFlags": [{"content": "A measured variance exceeded the threshold."}],
+            "recommendedActions": [
+                {
+                    "action": "Operations · next 7 days — align peak coverage. Success: waits stay below 3 minutes."
+                }
+            ],
+        }
+    }
+
+    class NestedResponse:
+        status_code = 200
+
+        def json(self) -> dict[str, object]:
+            return {
+                "model": "openrouter/test-model",
+                "usage": {"total_tokens": 91},
+                "choices": [
+                    {
+                        "message": {
+                            "content": [
+                                {
+                                    "type": "output_text",
+                                    "text": json.dumps(json.dumps(nested_payload)),
+                                }
+                            ]
+                        }
+                    }
+                ],
+            }
+
+    monkeypatch.setattr(
+        "app.services.business_insights.httpx.post",
+        lambda *args, **kwargs: NestedResponse(),
+    )
+
+    response = provider.generate_business_insight(request)
+
+    assert response.summary == "Revenue improved against the prior window."
+    assert response.highlights == [
+        "Membership concentration supports one bounded test."
+    ]
+    assert response.risks == [
+        "Peak attendance concentration could constrain service."
+    ]
+    assert response.opportunities == [
+        "Shift one offer into the measured peak."
+    ]
+    assert response.recommended_actions == [
+        "Operations · next 7 days — align peak coverage. Success: waits stay below 3 minutes."
+    ]
+    assert response.token_count == 91
+
+
 def test_generate_business_insight_rejects_invalid_provider_schema(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -498,9 +635,67 @@ def test_generate_insight_falls_back_to_grounded_summary_when_provider_is_unavai
     response = service.generate_insight(request)
 
     assert response.model_used == "grounded-fallback"
-    assert response.summary.startswith("Fallback insight:")
+    assert "It matters because" in response.summary
+    assert "Next," in response.summary
+    assert "revenue is" not in response.summary.lower()
     assert (
         "No attendance was recorded for the selected window."
         in response.anomaly_flags
     )
     assert response.recommended_actions
+    assert len(response.recommended_actions) <= 3
+    assert all(" · " in action and " — " in action and "Success:" in action for action in response.recommended_actions)
+    assert not any(word in " ".join(response.recommended_actions).lower() for word in ("review", "observe", "monitor"))
+
+
+@pytest.mark.parametrize(
+    ("focus", "summary_evidence", "first_action_owner"),
+    [
+        ("overview", "Cross-domain priority:", "General manager ·"),
+        ("revenue", "Revenue decreased", "Finance ·"),
+        ("attendance", "Check-ins increased", "Operations ·"),
+        ("membership", "New members established", "Membership lead ·"),
+        (
+            "coaching",
+            "Completed coaching sessions decreased",
+            "Coaching lead ·",
+        ),
+        ("inventory", "Inventory exposure shows", "Inventory lead ·"),
+    ],
+)
+def test_grounded_fallback_is_focus_specific_and_action_bounded(
+    focus: str,
+    summary_evidence: str,
+    first_action_owner: str,
+) -> None:
+    payload = _build_grounding_payload()
+    payload["window"]["focus"] = focus
+    request = BusinessAnalyticsInsightRequest.model_validate({"grounding": payload})
+
+    response = BusinessInsightService.build_grounded_fallback(request.grounding)
+
+    assert summary_evidence in response.summary
+    assert "It matters because" in response.summary
+    assert "Next," in response.summary
+    assert response.recommended_actions[0].startswith(first_action_owner)
+    assert len(response.recommended_actions) <= 3
+    assert all(
+        " · " in action and " — " in action and "Success:" in action
+        for action in response.recommended_actions
+    )
+    assert not any(
+        word in " ".join(response.recommended_actions).lower()
+        for word in ("review", "observe", "monitor")
+    )
+
+
+def test_inventory_fallback_labels_missing_denominators_without_inventing_ratios() -> None:
+    payload = _build_grounding_payload(include_inventory=False)
+    payload["window"]["focus"] = "inventory"
+    request = BusinessAnalyticsInsightRequest.model_validate({"grounding": payload})
+
+    response = BusinessInsightService.build_grounded_fallback(request.grounding)
+
+    assert "unavailable because no reliable equipment or retail denominator exists" in response.summary
+    assert response.recommended_actions[0].startswith("Inventory lead ·")
+    assert "availability and stock exposure are calculable" in response.recommended_actions[0]

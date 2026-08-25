@@ -1,4 +1,4 @@
-import type { EquipmentStatus, StockStatus } from "./base";
+import type { EquipmentStatus, StockStatus } from "./base.js";
 
 export interface Product {
   id: string;

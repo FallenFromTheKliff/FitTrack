@@ -640,57 +640,199 @@ export function createExerciseMovementProfile({
   };
 }
 
-const GENERATED_RIG_LANDMARK_COUNT = 33;
+const GENERATED_FULL_BODY_KEYPOINTS: ReadonlyArray<
+  readonly [x: number, y: number, visibility?: number]
+> = [
+  [0.5, 0.09, 0.96],
+  [0.47, 0.075, 0.86],
+  [0.455, 0.075, 0.86],
+  [0.435, 0.08, 0.82],
+  [0.53, 0.075, 0.86],
+  [0.545, 0.075, 0.86],
+  [0.565, 0.08, 0.82],
+  [0.415, 0.105, 0.84],
+  [0.585, 0.105, 0.84],
+  [0.47, 0.135, 0.86],
+  [0.53, 0.135, 0.86],
+  [0.38, 0.25],
+  [0.62, 0.25],
+  [0.3, 0.41],
+  [0.7, 0.41],
+  [0.27, 0.57],
+  [0.73, 0.57],
+  [0.245, 0.585, 0.86],
+  [0.755, 0.585, 0.86],
+  [0.255, 0.565, 0.88],
+  [0.745, 0.565, 0.88],
+  [0.285, 0.555, 0.88],
+  [0.715, 0.555, 0.88],
+  [0.43, 0.53],
+  [0.57, 0.53],
+  [0.42, 0.72],
+  [0.58, 0.72],
+  [0.41, 0.88],
+  [0.59, 0.88],
+  [0.405, 0.91, 0.9],
+  [0.595, 0.91, 0.9],
+  [0.455, 0.93, 0.92],
+  [0.545, 0.93, 0.92],
+];
+
+type GeneratedRigSide = "left" | "right";
+
+const GENERATED_DOMINANT_CHAINS: Record<
+  PoseMovementContractRecord["dominantJoint"],
+  Record<
+    GeneratedRigSide,
+    {
+      descendants: number[];
+      rotationDirection: -1 | 1;
+      triple: readonly [number, number, number];
+    }
+  >
+> = {
+  ankle: {
+    left: {
+      descendants: [29, 31],
+      rotationDirection: 1,
+      triple: [25, 27, 31],
+    },
+    right: {
+      descendants: [30, 32],
+      rotationDirection: -1,
+      triple: [26, 28, 32],
+    },
+  },
+  elbow: {
+    left: {
+      descendants: [17, 19, 21],
+      rotationDirection: 1,
+      triple: [11, 13, 15],
+    },
+    right: {
+      descendants: [18, 20, 22],
+      rotationDirection: -1,
+      triple: [12, 14, 16],
+    },
+  },
+  hip: {
+    left: {
+      descendants: [27, 29, 31],
+      rotationDirection: -1,
+      triple: [11, 23, 25],
+    },
+    right: {
+      descendants: [28, 30, 32],
+      rotationDirection: 1,
+      triple: [12, 24, 26],
+    },
+  },
+  knee: {
+    left: {
+      descendants: [29, 31],
+      rotationDirection: -1,
+      triple: [23, 25, 27],
+    },
+    right: {
+      descendants: [30, 32],
+      rotationDirection: 1,
+      triple: [24, 26, 28],
+    },
+  },
+  shoulder: {
+    left: {
+      descendants: [15, 17, 19, 21],
+      rotationDirection: -1,
+      triple: [23, 11, 13],
+    },
+    right: {
+      descendants: [16, 18, 20, 22],
+      rotationDirection: 1,
+      triple: [24, 12, 14],
+    },
+  },
+};
+
+function createFullBodyRigKeypoints(): PoseKeypointRecord[] {
+  return GENERATED_FULL_BODY_KEYPOINTS.map(([x, y, visibility = 0.94]) => ({
+    visibility,
+    x,
+    y,
+    z: 0,
+  }));
+}
+
+function rotateGeneratedDominantChain(
+  keypoints: PoseKeypointRecord[],
+  dominantJoint: PoseMovementContractRecord["dominantJoint"],
+  angle: number,
+  side: GeneratedRigSide,
+) {
+  const config = GENERATED_DOMINANT_CHAINS[dominantJoint][side];
+  const [proximalIndex, jointIndex, distalIndex] = config.triple;
+  const proximal = keypoints[proximalIndex];
+  const joint = keypoints[jointIndex];
+  const distal = keypoints[distalIndex];
+  if (!proximal || !joint || !distal) return;
+
+  const proximalDirection = Math.atan2(
+    proximal.y - joint.y,
+    proximal.x - joint.x,
+  );
+  const targetDirection =
+    proximalDirection +
+    config.rotationDirection *
+      ((Math.max(0, Math.min(180, angle)) * Math.PI) / 180);
+  const length = Math.max(
+    0.075,
+    Math.hypot(distal.x - joint.x, distal.y - joint.y),
+  );
+  const nextDistal = {
+    ...distal,
+    visibility: Math.max(distal.visibility, 0.92),
+    x: joint.x + Math.cos(targetDirection) * length,
+    y: joint.y + Math.sin(targetDirection) * length,
+  };
+  const translation = {
+    x: nextDistal.x - distal.x,
+    y: nextDistal.y - distal.y,
+  };
+  keypoints[distalIndex] = nextDistal;
+  config.descendants.forEach((index) => {
+    if (index === distalIndex) return;
+    const point = keypoints[index];
+    if (!point) return;
+    keypoints[index] = {
+      ...point,
+      visibility: Math.max(point.visibility, 0.82),
+      x: point.x + translation.x,
+      y: point.y + translation.y,
+    };
+  });
+}
+
+/** Redraw only the dominant chains while preserving all unrelated rig landmarks. */
+export function applyGeneratedRigDominantAngle(
+  keypoints: PoseKeypointRecord[],
+  dominantJoint: PoseMovementContractRecord["dominantJoint"],
+  angle: number,
+): PoseKeypointRecord[] {
+  const next = keypoints.map((point) => ({ ...point }));
+  (["left", "right"] as const).forEach((side) =>
+    rotateGeneratedDominantChain(next, dominantJoint, angle, side),
+  );
+  return next;
+}
 
 function createGeneratedRigKeypoints(
   dominantJoint: PoseMovementContractRecord["dominantJoint"],
   angle: number,
 ): PoseKeypointRecord[] {
-  const keypoints = Array.from(
-    { length: GENERATED_RIG_LANDMARK_COUNT },
-    (): PoseKeypointRecord => ({
-      visibility: 0.08,
-      x: 0.5,
-      y: 0.5,
-      z: 0,
-    }),
+  return applyGeneratedRigDominantAngle(
+    createFullBodyRigKeypoints(),
+    dominantJoint,
+    angle,
   );
-  const triples: Record<
-    PoseMovementContractRecord["dominantJoint"],
-    Array<[number, number, number]>
-  > = {
-    elbow: [
-      [11, 13, 15],
-      [12, 14, 16],
-    ],
-    shoulder: [
-      [13, 11, 23],
-      [14, 12, 24],
-    ],
-    hip: [
-      [11, 23, 25],
-      [12, 24, 26],
-    ],
-    knee: [
-      [23, 25, 27],
-      [24, 26, 28],
-    ],
-  };
-  const radians = (Math.max(0, Math.min(180, angle)) * Math.PI) / 180;
-  triples[dominantJoint].forEach(([a, b, c], side) => {
-    const centerX = side === 0 ? 0.42 : 0.58;
-    const centerY = 0.5;
-    const radius = 0.14;
-    keypoints[a] = { visibility: 0.92, x: centerX + radius, y: centerY, z: 0 };
-    keypoints[b] = { visibility: 0.92, x: centerX, y: centerY, z: 0 };
-    keypoints[c] = {
-      visibility: 0.92,
-      x: centerX + radius * Math.cos(radians),
-      y: centerY + radius * Math.sin(radians),
-      z: 0,
-    };
-  });
-  return keypoints;
 }
 
 function createGeneratedRigKeyframe(
@@ -1106,7 +1248,21 @@ export function validateExerciseEditorContract(input: {
     Array.isArray(rig.keyframes) &&
     movementContract.repModel === "bilateral"
   ) {
-    const requiredIndexes = [11, 12, 13, 14, 15, 16];
+    const landmarkIndexes: Record<string, number[]> = {
+      shoulders: [11, 12],
+      elbows: [13, 14],
+      wrists: [15, 16],
+      hips: [23, 24],
+      knees: [25, 26],
+      ankles: [27, 28],
+    };
+    const requiredIndexes = [
+      ...new Set(
+        (
+          movementContract.trackingRequirements?.requiredLandmarks ?? []
+        ).flatMap((landmark) => landmarkIndexes[landmark] ?? []),
+      ),
+    ];
     const hasBothSideFrames = rig.keyframes.every(
       (frame) =>
         Array.isArray(frame.keypoints) &&
@@ -1116,7 +1272,7 @@ export function validateExerciseEditorContract(input: {
     );
     if (!hasBothSideFrames) {
       errors.push(
-        "Bilateral rigs need visible left and right shoulder-elbow-wrist chains.",
+        "The movement angle preview must show every landmark required by this tracking contract.",
       );
     }
   }

@@ -77,6 +77,7 @@ export function ExerciseLabModalLayer() {
     handleConfirmAction,
     handleModeChange,
     handleSheetSubmit,
+    handleSaveSharedMovementContract,
     isCompact,
     setActiveEditorTab,
     setConfirmationState,
@@ -310,6 +311,36 @@ export function ExerciseLabModalLayer() {
                   />
                 </div>
               </ExerciseLabField>
+
+              <ExerciseLabField
+                label="Exact aliases"
+                hint="Comma-separated spelling or synonym labels. Each normalized label can belong to only one exercise."
+              >
+                <div
+                  style={{
+                    borderRadius: 8,
+                    border: `1px solid ${colors.border}`,
+                    backgroundColor: colors.fieldBg,
+                    padding: "12px 14px",
+                  }}
+                >
+                  <FitTextInput
+                    name="exerciseAliases"
+                    value={draft.aliases.map((alias) => alias.label).join(", ")}
+                    onChange={(event) =>
+                      setDraftField(
+                        "aliases",
+                        event.target.value
+                          .split(",")
+                          .map((label) => label.trim())
+                          .filter(Boolean)
+                          .map((label) => ({ kind: "synonym" as const, label })),
+                      )
+                    }
+                    placeholder="Push Up, Push-Up, Pushup"
+                  />
+                </div>
+              </ExerciseLabField>
               </div>
                 </>
               ) : null}
@@ -380,14 +411,159 @@ export function ExerciseLabModalLayer() {
                   </div>
 
                   {activeEditorTab === "movement" ? (
-                    <MovementProfileEditor
-                      colors={editorColors}
-                      exerciseName={draft.name}
-                      onChange={(nextProfile) =>
-                        setDraftField("movementProfile", nextProfile)
-                      }
-                      value={draft.movementProfile}
-                    />
+                    <div style={{ display: "grid", gap: 14 }}>
+                      <section
+                        aria-label="Movement contract status"
+                        style={{
+                          backgroundColor: colors.surfaceRaised,
+                          border: `1px solid ${colors.border}`,
+                          borderRadius: 8,
+                          display: "grid",
+                          gap: 12,
+                          padding: 14,
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "grid",
+                            gap: 10,
+                            gridTemplateColumns: isCompact
+                              ? "minmax(0, 1fr)"
+                              : "repeat(4, minmax(0, 1fr))",
+                          }}
+                        >
+                          <ExerciseLabField label="Movement family">
+                            <FitText style={{ fontSize: 13, fontWeight: 850 }}>
+                              {draft.movementFamily?.displayName ?? "None"}
+                            </FitText>
+                          </ExerciseLabField>
+                          <ExerciseLabField label="Tracking mode">
+                            <FitSelect
+                              fullWidth
+                              value={draft.trackingMode}
+                              onChange={(event) => {
+                                const trackingMode = event.target.value as
+                                  | "manual"
+                                  | "inherit"
+                                  | "override";
+                                setDraft((current) => ({
+                                  ...current,
+                                  movementProfileOverride:
+                                    trackingMode === "override"
+                                      ? current.movementProfile
+                                      : null,
+                                  trackingMode,
+                                }));
+                              }}
+                              options={[
+                                { label: "Manual only", value: "manual" },
+                                { label: "Inherit shared tracking", value: "inherit" },
+                                { label: "Override this exercise", value: "override" },
+                              ]}
+                            />
+                          </ExerciseLabField>
+                          <ExerciseLabField label="Contract source">
+                            <FitText style={{ fontSize: 13, fontWeight: 850 }}>
+                              {draft.trackingMode === "manual"
+                                ? "Manual logging"
+                                : draft.trackingMode === "override"
+                                  ? "Exercise override"
+                                  : "Shared family"}
+                            </FitText>
+                          </ExerciseLabField>
+                          <ExerciseLabField label="Revision">
+                            <FitText style={{ fontSize: 13, fontWeight: 850 }}>
+                              {draft.movementFamily?.contractRevision ?? "—"}
+                            </FitText>
+                          </ExerciseLabField>
+                        </div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                          {draft.aliases.length ? (
+                            draft.aliases.map((alias) => (
+                              <span
+                                key={`${alias.label}-${alias.kind ?? "synonym"}`}
+                                style={{
+                                  border: `1px solid ${colors.border}`,
+                                  borderRadius: 999,
+                                  color: colors.textSecondary,
+                                  fontSize: 11,
+                                  fontWeight: 800,
+                                  padding: "5px 9px",
+                                }}
+                              >
+                                {alias.label}
+                              </span>
+                            ))
+                          ) : (
+                            <FitText style={{ color: colors.textMuted, fontSize: 12 }}>
+                              No exact aliases configured.
+                            </FitText>
+                          )}
+                        </div>
+                        {draft.movementProfile?.movementContract ? (() => {
+                          const contract = draft.movementProfile.movementContract;
+                          const increasing =
+                            contract.repThresholds.up.angle >=
+                            contract.repThresholds.down.angle;
+                          const bottomGate = increasing
+                            ? contract.repThresholds.down.angle + contract.repThresholds.down.tolerance
+                            : contract.repThresholds.down.angle - contract.repThresholds.down.tolerance;
+                          const topGate = increasing
+                            ? contract.repThresholds.up.angle - contract.repThresholds.up.tolerance
+                            : contract.repThresholds.up.angle + contract.repThresholds.up.tolerance;
+                          return (
+                            <FitText style={{ color: colors.textSecondary, fontSize: 12 }}>
+                              Effective gates: bottom trigger {bottomGate}° · standing/top trigger {topGate}° · required landmarks {contract.trackingRequirements?.requiredLandmarks.join(", ") ?? "not configured"}.
+                            </FitText>
+                          );
+                        })() : null}
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                          {sheetState?.mode === "edit" &&
+                          draft.movementFamily?.canonicalExerciseId ===
+                            sheetState.exercise.id ? (
+                            <FitButton
+                              label="Edit shared tracking"
+                              loading={sheetPending}
+                              onClick={() => void handleSaveSharedMovementContract()}
+                            />
+                          ) : null}
+                          {draft.movementFamily && draft.trackingMode !== "override" ? (
+                            <FitButton
+                              label="Create override for this exercise"
+                              variant="ghost"
+                              onClick={() =>
+                                setDraft((current) => ({
+                                  ...current,
+                                  movementProfileOverride: current.movementProfile,
+                                  trackingMode: "override",
+                                }))
+                              }
+                            />
+                          ) : null}
+                          {draft.movementFamily && draft.trackingMode === "override" ? (
+                            <FitButton
+                              label="Reset to inherited"
+                              variant="ghost"
+                              onClick={() =>
+                                setDraft((current) => ({
+                                  ...current,
+                                  movementProfileOverride: null,
+                                  trackingMode: "inherit",
+                                }))
+                              }
+                            />
+                          ) : null}
+                        </div>
+                      </section>
+                      <MovementProfileEditor
+                        colors={editorColors}
+                        exerciseName={draft.name}
+                        onChange={(nextProfile) =>
+                          setDraftField("movementProfile", nextProfile)
+                        }
+                        value={draft.movementProfile}
+                      />
+                    </div>
                   ) : (
                     <HandShapeProfileEditor
                       colors={editorColors}
@@ -583,11 +759,36 @@ export function ExerciseLabModalLayer() {
         isDanger={
           confirmationState?.mode === "archive"
             ? !confirmationState.nextActive
-            : true
+            : confirmationState?.mode === "shared-family"
+              ? false
+              : true
         }
         isLoading={confirmationLoading}
         onConfirm={handleConfirmAction}
         onCancel={() => setConfirmationState(null)}
-      />    </>
+      >
+        {confirmationState?.mode === "shared-family" ? (
+          <ul
+            aria-label="Affected inheriting exercises"
+            style={{
+              color: colors.textSecondary,
+              display: "grid",
+              gap: 6,
+              margin: "8px 0 0",
+              maxHeight: 180,
+              overflowY: "auto",
+              paddingLeft: 22,
+            }}
+          >
+            {(confirmationState.affectedNames.length
+              ? confirmationState.affectedNames
+              : ["No active inheritors"]
+            ).map((name) => (
+              <li key={name}>{name}</li>
+            ))}
+          </ul>
+        ) : null}
+      </ConfirmModal>
+    </>
   );
 }

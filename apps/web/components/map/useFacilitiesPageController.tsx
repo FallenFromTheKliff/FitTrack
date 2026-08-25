@@ -18,7 +18,10 @@ import { facilitiesMapStyles } from "@/styles/pageStyles";
 import { webApiClient } from "@/lib/api-client";
 import { getBrowserViewportState } from "@/utils/browserViewport";
 import { FEEDBACK_DURATION_MS } from "@/constants/feedback";
-import { buildVenueInitialValues } from "@/app/(auth)/facilities/helpers";
+import {
+  buildVenueCreateOpenSnapshot,
+  buildVenueInitialValues,
+} from "@/app/(auth)/facilities/helpers";
 import type { VenueRecord } from "@/components/map";
 import {
   useVenueMutations,
@@ -30,7 +33,10 @@ import {
   buildFacilityFloorVenues,
   type FloorVenueRecord,
 } from "@/data/facilities/floorPlans";
-import { COLS, ROWS } from "@/data/facilities/mapTypes";
+import {
+  persistVenueLayoutSelection,
+  resolveVenueResizeLayout,
+} from "./facilityVenueLayout";
 
 const QUICK_FLOOR_REGION_TEMPLATES: QuickFloorRegionTemplate[] = [
   {
@@ -75,10 +81,6 @@ const QUICK_FLOOR_REGION_TEMPLATES: QuickFloorRegionTemplate[] = [
   },
 ];
 
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value));
-}
-
 export function useFacilitiesPageController() {
   const { colors } = useTheme();
   const fs = facilitiesMapStyles(colors);
@@ -101,6 +103,7 @@ export function useFacilitiesPageController() {
 
   const {
     venues,
+    venuesReady,
     venuesError,
     refetchVenues,
     archivedVenues,
@@ -132,6 +135,10 @@ export function useFacilitiesPageController() {
     assignedEquipment,
     activeFloorImageUrl,
     activeFloorBounds,
+    cellDraft,
+    cellDraftReady,
+    cellMapSaving,
+    lastMutationFailure,
     archivedEquipment,
     archivedEquipmentError,
     refetchArchivedEquipment,
@@ -145,6 +152,8 @@ export function useFacilitiesPageController() {
     equipmentPlacementPending,
     message: layoutMessage,
     handleToggleEditMode,
+    updateCellMapDraft,
+    applyCellMapDraft,
     handleRemoveEquipmentFromCanvas,
     handleRestoreEquipment,
     handleUploadFloorPlanImage,
@@ -164,6 +173,8 @@ export function useFacilitiesPageController() {
   const [venueEditorReturnTab, setVenueEditorReturnTab] = useState<
     "floor" | "venues"
   >("venues");
+  const [venueCreateInitialValues, setVenueCreateInitialValues] = useState<Record<string, string> | null>(null);
+  const [pendingCreateVenueOpen, setPendingCreateVenueOpen] = useState(false);
   const [venueEditTarget, setVenueEditTarget] = useState<VenueRecord | null>(
     null,
   );
@@ -176,6 +187,32 @@ export function useFacilitiesPageController() {
   const [archiveFilter, setArchiveFilter] = useState<
     "all" | "venues" | "equipment"
   >("all");
+
+  const venuePlacementDataReady =
+    venuesReady && cellDraftReady && cellDraft.floorId === activeFloor;
+  useEffect(() => {
+    if (!pendingCreateVenueOpen || !venuePlacementDataReady) return;
+    setVenueCreateInitialValues(
+      buildVenueCreateOpenSnapshot({
+        dataReady: true,
+        entryCells: cellDraft.entryCells,
+        exitCells: cellDraft.exitCells,
+        floorId: activeFloor,
+        footprintCells: cellDraft.footprintCells,
+        pathCells: cellDraft.pathCells,
+        venues,
+      }),
+    );
+    setPendingCreateVenueOpen(false);
+    setVenueEditTarget(null);
+    setVenueEditorMode("create");
+  }, [
+    activeFloor,
+    cellDraft,
+    pendingCreateVenueOpen,
+    venues,
+    venuePlacementDataReady,
+  ]);
 
   const {
     data: activeBookings = [],
@@ -263,19 +300,6 @@ export function useFacilitiesPageController() {
       return false;
     }
 
-    const liveVenueKey = String(movingVenue.sourceVenueId ?? movingVenue.id);
-    const hasContainedEquipment = liveEquipment.some(
-      (item) =>
-        item.venueId === liveVenueKey ||
-        isEquipmentInsideVenue(item, movingVenue),
-    );
-    if (hasContainedEquipment) {
-      showVenueMessage(
-        "Move equipment out of this venue before moving the venue itself.",
-      );
-      return false;
-    }
-
     const moved = await handleUpdateVenueLayout(liveVenue, {
       floorId: activeFloor,
       gridColumn: placement.gridColumn,
@@ -307,10 +331,10 @@ export function useFacilitiesPageController() {
     placement: { gridColumn: number; gridRow: number },
   ) => {
     if (!isEditMode) {
-      return;
+      return false;
     }
 
-    void updateEquipmentPlacement(equipmentId, venueMapId, placement);
+    return updateEquipmentPlacement(equipmentId, venueMapId, placement);
   };
 
   const handleCreateQuickFloorRegionAtFromCanvas = (
@@ -362,27 +386,21 @@ export function useFacilitiesPageController() {
       targetVenue.gridColumn ?? liveVenue.gridColumn ?? 1;
     const currentGridRow = targetVenue.gridRow ?? liveVenue.gridRow ?? 1;
 
-    const isAbsoluteLayout = "gridWidth" in resize;
-    const nextGridWidth = clamp(
-      isAbsoluteLayout ? resize.gridWidth : currentGridWidth + resize.width,
-      2,
-      COLS,
+    const nextLayout = resolveVenueResizeLayout(
+      {
+        gridColumn: currentGridColumn,
+        gridHeight: currentGridHeight,
+        gridRow: currentGridRow,
+        gridWidth: currentGridWidth,
+      },
+      resize,
     );
-    const nextGridHeight = clamp(
-      isAbsoluteLayout ? resize.gridHeight : currentGridHeight + resize.height,
-      2,
-      ROWS,
-    );
-    const nextGridColumn = clamp(
-      isAbsoluteLayout ? resize.gridColumn : currentGridColumn,
-      1,
-      COLS - nextGridWidth + 1,
-    );
-    const nextGridRow = clamp(
-      isAbsoluteLayout ? resize.gridRow : currentGridRow,
-      1,
-      ROWS - nextGridHeight + 1,
-    );
+    const {
+      gridColumn: nextGridColumn,
+      gridHeight: nextGridHeight,
+      gridRow: nextGridRow,
+      gridWidth: nextGridWidth,
+    } = nextLayout;
 
     const nextVenueBounds: FloorVenueRecord = {
       ...targetVenue,
@@ -414,13 +432,17 @@ export function useFacilitiesPageController() {
       return false;
     }
 
-    setSelectedFloorVenue(nextVenueBounds);
-    return handleUpdateVenueLayout(liveVenue, {
-      floorId: activeFloor,
-      gridColumn: nextGridColumn,
-      gridRow: nextGridRow,
-      gridWidth: nextGridWidth,
-      gridHeight: nextGridHeight,
+    return persistVenueLayoutSelection({
+      next: nextVenueBounds,
+      previous: targetVenue,
+      select: setSelectedFloorVenue,
+      persist: () => handleUpdateVenueLayout(liveVenue, {
+        floorId: activeFloor,
+        gridColumn: nextGridColumn,
+        gridRow: nextGridRow,
+        gridWidth: nextGridWidth,
+        gridHeight: nextGridHeight,
+      }),
     });
   };
 
@@ -519,12 +541,19 @@ export function useFacilitiesPageController() {
     setQuickPlacementTemplateKey(null);
   };
 
-  const venueInitialValues = buildVenueInitialValues(venueEditTarget);
+  const venueInitialValues = useMemo(
+    () => venueEditTarget
+      ? buildVenueInitialValues(venueEditTarget)
+      : venueCreateInitialValues ?? buildVenueInitialValues(null),
+    [venueCreateInitialValues, venueEditTarget],
+  );
   const combinedMessage = message || layoutMessage || venueMessage;
   const isVenueEditorOpen = activeTab === "venues" && venueEditorMode !== null;
   const handleCloseVenueEditor = () => {
     setVenueEditorMode(null);
     setVenueEditTarget(null);
+    setVenueCreateInitialValues(null);
+    setPendingCreateVenueOpen(false);
     setActiveTab(venueEditorReturnTab);
   };
 
@@ -535,6 +564,27 @@ export function useFacilitiesPageController() {
     setVenueEditorReturnTab(activeTab);
     setActiveTab("venues");
     setVenueEditTarget(venue);
+    if (mode === "create" && !venuePlacementDataReady) {
+      setVenueCreateInitialValues(null);
+      setPendingCreateVenueOpen(true);
+      setVenueEditorMode(null);
+      showVenueMessage("Loading the selected floor map before opening venue placement…");
+      return;
+    }
+    setPendingCreateVenueOpen(false);
+    setVenueCreateInitialValues(
+      mode === "create"
+        ? buildVenueCreateOpenSnapshot({
+            dataReady: true,
+            entryCells: cellDraft.entryCells,
+            exitCells: cellDraft.exitCells,
+            floorId: activeFloor,
+            footprintCells: cellDraft.footprintCells,
+            pathCells: cellDraft.pathCells,
+            venues,
+          })
+        : null,
+    );
     setVenueEditorMode(mode);
   };
 
@@ -543,6 +593,8 @@ export function useFacilitiesPageController() {
     setActiveTab("floor");
     setVenueEditorMode(null);
     setVenueEditTarget(null);
+    setVenueCreateInitialValues(null);
+    setPendingCreateVenueOpen(false);
   };
 
   return {
@@ -551,6 +603,9 @@ export function useFacilitiesPageController() {
     activeFloorConfig,
     activeFloorImageUrl,
     activeFloorBounds,
+    cellDraft,
+    cellMapSaving,
+    lastMutationFailure,
     activeFloorLabel,
     activeFloorVenues,
     archivedEquipment,
@@ -603,6 +658,8 @@ export function useFacilitiesPageController() {
     handleUploadFloorPlanImage,
     handleUploadVenueImage,
     handleToggleEditMode,
+    updateCellMapDraft,
+    applyCellMapDraft,
     hasUnsavedChanges,
     isCompact,
     isEditMode,

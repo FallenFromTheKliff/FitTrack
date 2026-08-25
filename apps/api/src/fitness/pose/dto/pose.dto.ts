@@ -42,7 +42,13 @@ export type PoseClassificationSource =
   (typeof poseClassificationSources)[number];
 export const poseProcessingModes = ['legacy_frame', 'sequence'] as const;
 export type PoseProcessingMode = (typeof poseProcessingModes)[number];
-export const poseJointNames = ['elbow', 'shoulder', 'hip', 'knee'] as const;
+export const poseJointNames = [
+  'elbow',
+  'shoulder',
+  'hip',
+  'knee',
+  'ankle',
+] as const;
 export type PoseJointName = (typeof poseJointNames)[number];
 export const poseRepModels = [
   'bilateral',
@@ -364,6 +370,30 @@ export class PoseAngleSignalEntryDTO {
     { message: 'right_hip must be a finite number' },
   )
   right_hip?: number | null;
+
+  @ApiPropertyOptional({ example: 112.4, nullable: true })
+  @IsOptional()
+  @IsNumber(
+    { allowInfinity: false, allowNaN: false, maxDecimalPlaces: 6 },
+    { message: 'ankle must be a finite number' },
+  )
+  ankle?: number | null;
+
+  @ApiPropertyOptional({ example: 112.4, nullable: true })
+  @IsOptional()
+  @IsNumber(
+    { allowInfinity: false, allowNaN: false, maxDecimalPlaces: 6 },
+    { message: 'left_ankle must be a finite number' },
+  )
+  left_ankle?: number | null;
+
+  @ApiPropertyOptional({ example: 113.8, nullable: true })
+  @IsOptional()
+  @IsNumber(
+    { allowInfinity: false, allowNaN: false, maxDecimalPlaces: 6 },
+    { message: 'right_ankle must be a finite number' },
+  )
+  right_ankle?: number | null;
 
   @ApiPropertyOptional({ example: 83.7, nullable: true })
   @IsOptional()
@@ -754,7 +784,12 @@ export class PoseMovementContractDTO {
   })
   rep_model?: PoseRepModel;
 
-  @ApiPropertyOptional({ example: 30, minimum: 1, maximum: 3600, nullable: true })
+  @ApiPropertyOptional({
+    example: 30,
+    minimum: 1,
+    maximum: 3600,
+    nullable: true,
+  })
   @IsOptional()
   @IsNumber({ allowInfinity: false, allowNaN: false })
   @Min(1)
@@ -1088,6 +1123,23 @@ export class PoseSessionBootstrapResponseDTO {
   accepted_fps: number;
 }
 
+export class PoseMovementContractIdentityDTO {
+  @ApiProperty({ example: '6c28463b-99af-565d-a581-c66480e7f58b' })
+  exerciseId: string;
+
+  @ApiProperty({ example: 'squat' })
+  familyKey: string;
+
+  @ApiProperty({ example: 3 })
+  revision: number;
+
+  @ApiProperty({ example: 'family' })
+  source: string;
+
+  @ApiProperty({ example: 'inherit' })
+  trackingMode: string;
+}
+
 export class PoseFrameAnalysisResponseDTO {
   @ApiProperty({ example: '33333333-3333-4333-8333-333333333333' })
   pose_session_id: string;
@@ -1160,6 +1212,12 @@ export class PoseFrameAnalysisResponseDTO {
     nullable: true,
   })
   movement_contract: PoseMovementContractDTO | null;
+
+  @ApiPropertyOptional({
+    type: PoseMovementContractIdentityDTO,
+    nullable: true,
+  })
+  movement_contract_identity: PoseMovementContractIdentityDTO | null;
 
   @ApiProperty({ enum: poseSessionQualityStates, example: 'stable' })
   session_quality_state: PoseSessionQualityState;

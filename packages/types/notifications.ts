@@ -1,4 +1,4 @@
-import type { PaginatedResult } from "./membership";
+import type { PaginatedResult } from "./membership.js";
 
 export type NotificationChannel = "email" | "in_app" | "sms";
 

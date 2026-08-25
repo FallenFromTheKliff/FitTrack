@@ -8,6 +8,7 @@ import type Redis from 'ioredis';
 import type { Socket } from 'socket.io';
 
 import { AiPythonClientService } from '../../ai/ai-python-client.service';
+import { ExerciseService } from '../exercise/exercise.service';
 import type {
   AnalyzePoseSequenceDTO,
   DetectPoseEquipmentDTO,
@@ -15,7 +16,7 @@ import type {
 } from './dto/pose.dto';
 import { PoseRepository } from './pose.repository';
 import { PoseService } from './pose.service';
-
+import { buildFallbackPoseMovementContract } from '../../../../../packages/utils/pose';
 describe('PoseService', () => {
   let service: PoseService;
   const originalFetch = global.fetch;
@@ -58,6 +59,10 @@ describe('PoseService', () => {
     emit: jest.fn(),
   };
 
+  const exerciseService = {
+    resolveExerciseContract: jest.fn().mockResolvedValue(null),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -66,6 +71,7 @@ describe('PoseService', () => {
         { provide: JwtService, useValue: jwtService },
         { provide: ConfigService, useValue: config },
         { provide: AiPythonClientService, useValue: aiClient },
+        { provide: ExerciseService, useValue: exerciseService },
         { provide: EventEmitter2, useValue: eventEmitter },
         { provide: 'default_IORedisModuleConnectionToken', useValue: redis },
       ],
@@ -427,6 +433,26 @@ describe('PoseService', () => {
         detected_profile_id: 'profile-1',
       }),
     );
+    const squatFallback = buildFallbackPoseMovementContract('squat');
+    if (!squatFallback) throw new Error('squat contract missing');
+    const authoritativeContract = {
+      ...squatFallback,
+      repThresholds: {
+        down: { angle: 101, tolerance: 7 },
+        up: { angle: 159, tolerance: 8 },
+      },
+    };
+    exerciseService.resolveExerciseContract.mockResolvedValueOnce({
+      tracking_mode: 'inherit',
+      movement_profile: { movementContract: authoritativeContract },
+      movement_contract_identity: {
+        exerciseId: 'exercise-squat',
+        familyKey: 'squat',
+        revision: 7,
+        source: 'family',
+        trackingMode: 'inherit',
+      },
+    });
 
     const result = await service.analyzePoseSessionById(
       'user-1',
@@ -435,6 +461,10 @@ describe('PoseService', () => {
     );
 
     expect(aiClient.analyzePoseSequence).not.toHaveBeenCalled();
+    expect(exerciseService.resolveExerciseContract).toHaveBeenCalledWith({
+      exerciseId: null,
+      label: 'squat',
+    });
     expect(repo.updatePoseSessionAnalysis).toHaveBeenCalledWith(
       expect.objectContaining({
         poseSessionId: 'pose-1',
@@ -442,35 +472,140 @@ describe('PoseService', () => {
         detectedProfileId: 'profile-1',
       }),
     );
-    expect(result).toEqual(
-      expect.objectContaining({
-        pose_session_id: 'pose-1',
-        confidence: 1,
-        exercise_class: 'squat',
-        matched_profile_id: 'profile-1',
-        classification_source: 'preset',
-        needs_confirmation: false,
-        processing_mode: 'sequence',
-        rep_event: false,
-        rep_count_delta: 0,
-        phase: null,
-        movement_contract: expect.objectContaining({
-          exercise: 'squat',
-          dominant_joint: 'knee',
-          rep_model: 'bilateral',
-          required_sides: 'both',
-          primary_joints: ['left_knee', 'right_knee'],
-          secondary_joints: ['left_hip', 'right_hip'],
-          phase_order: ['setup', 'down', 'up'],
-          rep_thresholds: {
-            down: { angle: 88, tolerance: 12 },
-            up: { angle: 166, tolerance: 10 },
-          },
-          secondary_check: 'depth_check',
-          oscillating_joints: ['hip', 'knee'],
-        }),
-      }),
+    const updateAnalysisMock =
+      repo.updatePoseSessionAnalysis as jest.MockedFunction<
+        (input: { analysisSummary: unknown }) => Promise<unknown>
+      >;
+    const persistedAnalysis =
+      updateAnalysisMock.mock.calls[0]?.[0].analysisSummary;
+    expect(persistedAnalysis).toMatchObject({
+      movement_contract: {
+        rep_thresholds: {
+          down: { angle: 101, tolerance: 7 },
+          up: { angle: 159, tolerance: 8 },
+        },
+      },
+      movement_contract_identity: {
+        exerciseId: 'exercise-squat',
+        familyKey: 'squat',
+        revision: 7,
+        source: 'family',
+        trackingMode: 'inherit',
+      },
+    });
+    expect(result).toMatchObject({
+      pose_session_id: 'pose-1',
+      confidence: 1,
+      exercise_class: 'squat',
+      matched_profile_id: 'profile-1',
+      classification_source: 'preset',
+      needs_confirmation: false,
+      processing_mode: 'sequence',
+      rep_event: false,
+      rep_count_delta: 0,
+      phase: null,
+      movement_contract: {
+        exercise: 'squat',
+        dominant_joint: 'knee',
+        rep_model: 'bilateral',
+        required_sides: 'both',
+        primary_joints: ['left_knee', 'right_knee'],
+        phase_order: ['setup', 'down', 'up'],
+        secondary_check: 'hip_depth',
+        oscillating_joints: ['hip', 'knee'],
+        rep_thresholds: {
+          down: { angle: 101, tolerance: 7 },
+          up: { angle: 159, tolerance: 8 },
+        },
+      },
+      movement_contract_identity: {
+        exerciseId: 'exercise-squat',
+        familyKey: 'squat',
+        revision: 7,
+        source: 'family',
+        trackingMode: 'inherit',
+      },
+    });
+    expect(result.movement_contract?.rep_thresholds).not.toEqual({
+      down: { angle: 88, tolerance: 12 },
+      up: { angle: 166, tolerance: 10 },
+    });
+  });
+
+  it('fails closed when a matching preset has no authoritative family resolution', async () => {
+    repo.findPoseSessionByIdOrThrow.mockResolvedValue(makePoseSessionDetail());
+    repo.listBootstrapPoseProfiles.mockResolvedValue([
+      {
+        id: 'profile-1',
+        canonical_name: 'squat',
+        profile_kind: PoseProfileKind.seed,
+        landmark_signature: { left_shoulder: [0.1, 0.2] },
+        angle_signature: {
+          bottom: { knee: [80, 96] },
+          top: { knee: [160, 174] },
+        },
+        orientation_signature: { body_orientation: 'upright' },
+        movement_pattern: {
+          tracked_joint: 'knee',
+          oscillating_landmarks: ['hip', 'knee'],
+        },
+        visibility_pattern: {
+          required_landmarks: [
+            'left_shoulder',
+            'right_shoulder',
+            'left_ankle',
+            'right_ankle',
+          ],
+        },
+        dominant_joint: 'knee',
+        tolerance: new Prisma.Decimal('12'),
+        rep_thresholds: {
+          down: { angle: 88, tolerance: 12 },
+          up: { angle: 166, tolerance: 10 },
+        },
+        rep_rules: { depth_check: 'hip_depth' },
+      },
+    ]);
+    aiClient.analyzePoseSequence.mockResolvedValue({
+      confidence: 0.96,
+      exercise_class: 'squat',
+      matched_profile_id: 'profile-1',
+      movement_contract: {
+        exercise: 'squat',
+        dominant_joint: 'knee',
+        rep_thresholds: {
+          down: { angle: 88, tolerance: 12 },
+          up: { angle: 166, tolerance: 10 },
+        },
+        secondary_check: 'hip_depth',
+        oscillating_joints: ['hip', 'knee'],
+      },
+      classification_source: 'classifier',
+      needs_confirmation: false,
+      candidate_exercises: ['squat'],
+      form_feedback: [],
+      learned_profile: null,
+      subject_locked: true,
+      subject_lock_confidence: 0.9,
+    });
+    repo.updatePoseSessionAnalysis.mockResolvedValue(
+      makePoseSessionDetail({ detected_exercise_name: 'squat' }),
     );
+
+    const result = await service.analyzePoseSessionById(
+      'user-1',
+      'pose-1',
+      makeAnalyzeDto(),
+    );
+
+    expect(exerciseService.resolveExerciseContract).toHaveBeenCalledWith({
+      exerciseId: null,
+      label: 'squat',
+    });
+    expect(aiClient.analyzePoseSequence).toHaveBeenCalled();
+    expect(result.needs_confirmation).toBe(true);
+    expect(result.movement_contract).toBeNull();
+    expect(result.movement_contract_identity).toBeNull();
   });
 
   it('falls back to AI sequence classification when the hinted preset does not match the live pose signals', async () => {
@@ -549,6 +684,9 @@ describe('PoseService', () => {
               shoulder: 95,
               hip: 148,
               knee: 165,
+              ankle: 104,
+              left_ankle: 102,
+              right_ankle: 106,
             },
           ],
           orientation: {
@@ -586,6 +724,19 @@ describe('PoseService', () => {
         exerciseHint: null,
       }),
     );
+    type SequenceCall = [
+      {
+        signals?: {
+          angles?: Array<Record<string, number | null>>;
+        };
+      },
+    ];
+    const sequenceCalls = aiClient.analyzePoseSequence.mock
+      .calls as unknown as SequenceCall[];
+    const forwardedAngles = sequenceCalls[0]?.[0]?.signals?.angles?.[0];
+    expect(forwardedAngles?.ankle).toBe(104);
+    expect(forwardedAngles?.left_ankle).toBe(102);
+    expect(forwardedAngles?.right_ankle).toBe(106);
     expect(result.exercise_class).toBe('push_up');
     expect(result.classification_source).toBe('classifier');
     expect(result.processing_mode).toBe('sequence');
@@ -653,6 +804,21 @@ describe('PoseService', () => {
       }),
     );
 
+    const frameAuthoritativeContract =
+      buildFallbackPoseMovementContract('squat');
+    if (!frameAuthoritativeContract) throw new Error('squat contract missing');
+    exerciseService.resolveExerciseContract.mockResolvedValueOnce({
+      tracking_mode: 'inherit',
+      movement_profile: { movementContract: frameAuthoritativeContract },
+      movement_contract_identity: {
+        exerciseId: 'exercise-squat',
+        familyKey: 'squat',
+        revision: 3,
+        source: 'family',
+        trackingMode: 'inherit',
+      },
+    });
+
     const result = await service.analyzePoseSessionById(
       'user-1',
       'pose-1',
@@ -671,32 +837,25 @@ describe('PoseService', () => {
         detectedProfileId: 'profile-1',
       }),
     );
-    expect(result).toEqual(
-      expect.objectContaining({
-        pose_session_id: 'pose-1',
-        exercise_class: 'squat',
-        matched_profile_id: 'profile-1',
-        processing_mode: 'legacy_frame',
-        rep_event: false,
-        rep_count_delta: 0,
-        phase: null,
-        movement_contract: expect.objectContaining({
-          exercise: 'squat',
-          dominant_joint: 'knee',
-          rep_model: 'bilateral',
-          required_sides: 'both',
-          primary_joints: ['left_knee', 'right_knee'],
-          secondary_joints: ['left_hip', 'right_hip'],
-          phase_order: ['setup', 'down', 'up'],
-          rep_thresholds: {
-            down: { angle: 88, tolerance: 12 },
-            up: { angle: 166, tolerance: 10 },
-          },
-          secondary_check: 'depth_check',
-          oscillating_joints: ['hip', 'knee'],
-        }),
-      }),
-    );
+    expect(result).toMatchObject({
+      pose_session_id: 'pose-1',
+      exercise_class: 'squat',
+      matched_profile_id: 'profile-1',
+      processing_mode: 'legacy_frame',
+      rep_event: false,
+      rep_count_delta: 0,
+      phase: null,
+      movement_contract: {
+        exercise: 'squat',
+        dominant_joint: 'knee',
+        rep_model: 'bilateral',
+        required_sides: 'both',
+        primary_joints: ['left_knee', 'right_knee'],
+        phase_order: ['setup', 'down', 'up'],
+        secondary_check: 'hip_depth',
+        oscillating_joints: ['hip', 'knee'],
+      },
+    });
   });
 
   it('keeps an incomplete learned profile manual-only', async () => {
@@ -842,6 +1001,7 @@ describe('PoseService', () => {
     expect(result.matched_profile_id).toBeNull();
     expect(result.needs_confirmation).toBe(true);
     expect(result.movement_contract).toBeNull();
+    expect(result.movement_contract_identity).toBeNull();
   });
 
   it('returns provider-unavailable equipment metadata when hosted detection is not configured', async () => {
@@ -878,19 +1038,20 @@ describe('PoseService', () => {
     });
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({
-        image: { height: 800, width: 1000 },
-        predictions: [
-          {
-            class: 'dumbbell',
-            confidence: 0.88,
-            height: 160,
-            width: 240,
-            x: 500,
-            y: 400,
-          },
-        ],
-      }),
+      json: () =>
+        Promise.resolve({
+          image: { height: 800, width: 1000 },
+          predictions: [
+            {
+              class: 'dumbbell',
+              confidence: 0.88,
+              height: 160,
+              width: 240,
+              x: 500,
+              y: 400,
+            },
+          ],
+        }),
     }) as typeof global.fetch;
 
     await expect(
@@ -1000,12 +1161,13 @@ describe('PoseService', () => {
     });
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({
-        predictions: [
-          { class: 'curl', confidence: 0.99 },
-          { class: 'dumbbell', confidence: 0.31 },
-        ],
-      }),
+      json: () =>
+        Promise.resolve({
+          predictions: [
+            { class: 'curl', confidence: 0.99 },
+            { class: 'dumbbell', confidence: 0.31 },
+          ],
+        }),
     }) as typeof global.fetch;
 
     await expect(

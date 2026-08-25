@@ -7,7 +7,10 @@ import {
 } from '../ai/ai-python-client.service';
 import type { PaginatedResult } from '../common/base-repository/base-repository';
 import { AnalyticsService } from './analytics.service';
-import type { BusinessAnalyticsGroundingPayload } from './analytics.types';
+import type {
+  BusinessAnalyticsGroundingPayload,
+  BusinessInsightComparison,
+} from './analytics.types';
 import {
   BusinessInsightRunRepository,
   type BusinessInsightRunRecord,
@@ -145,22 +148,31 @@ export class BusinessAnalyticsInsightService {
 
     return {
       summary: this.toStringValue(
-        payload.summary,
+        payload.summary ?? payload.executive_summary,
         'No insight summary recorded.',
+        1200,
       ),
-      highlights: this.toStringArray(payload.highlights),
-      risks: this.toStringArray(payload.risks),
-      opportunities: this.toStringArray(payload.opportunities),
-      anomaly_flags: this.toStringArray(payload.anomaly_flags),
+      highlights: this.toStringArray(payload.highlights, 5, 600),
+      risks: this.toStringArray(payload.risks, 5, 600),
+      opportunities: this.toStringArray(payload.opportunities, 5, 600),
+      anomaly_flags: this.toStringArray(
+        payload.anomaly_flags ?? payload.anomalyFlags,
+        8,
+        400,
+      ),
       recommended_actions: this.toStringArray(
-        payload.recommended_actions ?? payload.recommendedActions,
+        payload.recommended_actions ??
+          payload.recommendedActions ??
+          payload.actions,
+        3,
+        400,
       ),
       model_used: this.toNullableString(payload.model_used),
       token_count: this.toNullableNumber(payload.token_count),
     };
   }
 
-  private toJsonObject(value: Prisma.JsonValue): Record<string, unknown> {
+  private toJsonObject(value: unknown): Record<string, unknown> {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
       return {};
     }
@@ -168,23 +180,47 @@ export class BusinessAnalyticsInsightService {
     return value as Record<string, unknown>;
   }
 
-  private toStringArray(value: unknown): string[] {
-    if (!Array.isArray(value)) {
-      return [];
-    }
-
-    return value
-      .filter((item): item is string | number => {
-        return typeof item === 'string' || typeof item === 'number';
+  private toStringArray(
+    value: unknown,
+    maxItems: number,
+    maxLength: number,
+  ): string[] {
+    const values = Array.isArray(value) ? value : [value];
+    const normalized = values
+      .map((item) => {
+        if (typeof item === 'string' || typeof item === 'number') {
+          return this.normalizeInsightText(String(item), maxLength);
+        }
+        const record = this.toJsonObject(item);
+        const text =
+          record.text ?? record.content ?? record.description ?? record.action;
+        return typeof text === 'string'
+          ? this.normalizeInsightText(text, maxLength)
+          : '';
       })
-      .map((item) => String(item).trim())
       .filter(Boolean);
+
+    return [...new Set(normalized)].slice(0, maxItems);
   }
 
-  private toStringValue(value: unknown, fallback: string): string {
-    return typeof value === 'string' && value.trim().length > 0
-      ? value
-      : fallback;
+  private toStringValue(
+    value: unknown,
+    fallback: string,
+    maxLength: number,
+  ): string {
+    const normalized =
+      typeof value === 'string'
+        ? this.normalizeInsightText(value, maxLength)
+        : '';
+    return normalized || fallback;
+  }
+
+  private normalizeInsightText(value: string, maxLength: number) {
+    return value
+      .replace(/[\u0000-\u001f\u007f]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, maxLength);
   }
 
   private toNullableString(value: unknown): string | null {
@@ -219,118 +255,239 @@ export class BusinessAnalyticsInsightService {
   private buildGroundedFallbackInsight(
     grounding: BusinessAnalyticsGroundingPayload,
   ): BusinessAnalyticsInsightResponse {
-    const totalRevenue = this.toMoneyNumber(grounding.overview.total_revenue);
-    const totalRevenueLabel = this.formatMoney(
-      grounding.overview.total_revenue,
-    );
     const anomalyFlags = this.detectGroundingAnomalies(grounding);
-    const topPlan = grounding.membership.top_plans[0] ?? null;
-    const topCoach = grounding.coaching.coaches[0] ?? null;
-    const topProduct = grounding.inventory?.top_products[0] ?? null;
     const inventory = grounding.inventory ?? null;
-    const peakHour = grounding.attendance.peak_hours[0] ?? null;
+    const { comparisons, derived_signals: signals } = grounding;
+    const concentration = signals.top_revenue_source_concentration;
+    const peak = signals.peak_hour_attendance_concentration;
+    const revenueChange = this.formatComparison(
+      'Revenue',
+      comparisons.total_revenue,
+      true,
+    );
+    const attendanceChange = this.formatComparison(
+      'Check-ins',
+      comparisons.check_ins,
+    );
+    const membershipChange = this.formatComparison(
+      'New members',
+      comparisons.new_members,
+    );
+    const coachingChange = this.formatComparison(
+      'Completed coaching sessions',
+      comparisons.completed_coaching_sessions,
+    );
+    const revenueImplication = concentration
+      ? `${concentration.source_label} supplies ${concentration.percentage.toFixed(1)}% of revenue, so execution in that lane has an outsized effect`
+      : 'no revenue source concentration is established, so the next move should restore completed revenue without assuming a leading lane';
+    const attendanceImplication = peak
+      ? `${peak.percentage.toFixed(1)}% of check-ins land at ${peak.hour_label}, so coverage should match that demand concentration`
+      : 'no reliable peak-hour concentration exists, so staffing changes should remain bounded until demand timing is established';
+    const inventoryEvidenceParts = [
+      signals.equipment_availability_percentage === null
+        ? null
+        : `equipment availability is ${signals.equipment_availability_percentage.toFixed(1)}%`,
+      signals.low_stock_exposure_percentage === null
+        ? null
+        : `low-stock exposure is ${signals.low_stock_exposure_percentage.toFixed(1)}%`,
+      signals.out_of_stock_exposure_percentage === null
+        ? null
+        : `out-of-stock exposure is ${signals.out_of_stock_exposure_percentage.toFixed(1)}%`,
+    ].filter((value): value is string => Boolean(value));
+    const inventoryEvidence = inventoryEvidenceParts.length
+      ? `Inventory exposure shows ${inventoryEvidenceParts.join(', ')}`
+      : 'Inventory availability and stock exposure are unavailable because no reliable equipment or retail denominator exists';
+    const inventoryImplication = inventoryEvidenceParts.length
+      ? 'service continuity and retail conversion depend on resolving the measured availability gaps'
+      : 'the next inventory decision must restore trustworthy denominators before allocation targets are set';
 
-    const highlights = [
-      `Fallback insight: ${grounding.window.period} revenue reached ${totalRevenueLabel}.`,
-      `Attendance recorded ${grounding.overview.total_check_ins} check-ins across ${grounding.membership.active_members} active members.`,
-      ...(topPlan
-        ? [
-            `Top membership plan is ${topPlan.name} with ${topPlan.subscriber_count} subscribers.`,
-          ]
-        : []),
-      ...(inventory
-        ? [
-            `${inventory.low_stock_items} low-stock retail items are live, with ${inventory.equipment_under_maintenance} equipment type(s) under maintenance.`,
-          ]
-        : []),
-    ];
+    const financeAction =
+      comparisons.total_revenue.direction === 'decrease'
+        ? 'Finance · next 3 business days — reconcile the declining revenue lanes and correct confirmed capture gaps. Success: 100% of the absolute revenue change is attributed to a source.'
+        : 'Revenue lead · next 7 days — execute one source-specific conversion offer while protecting revenue mix. Success: total revenue improves in the next same-length window.';
+    const attendanceAction = peak
+      ? `Operations · next 7 days — align front-desk and floor coverage to the ${peak.hour_label} demand peak. Success: peak-hour member wait time stays under 3 minutes.`
+      : 'Operations · next 7 days — assign coverage across operating hours and restore valid check-in capture. Success: every operating hour has assigned coverage and recorded demand.';
+    const membershipAction =
+      'Membership lead · next 7 days — complete a structured onboarding touchpoint for every new member in this window. Success: 100% of the cohort receives the touchpoint.';
+    const coachingAction =
+      'Coaching lead · next 7 days — match coach capacity and follow-on offers to completed-session demand. Success: every completed session receives a documented next-step offer.';
+    const inventoryAction =
+      inventory && inventory.out_of_stock_items > 0
+        ? `Inventory lead · next 48 hours — replenish or substitute the ${inventory.out_of_stock_items} out-of-stock items. Success: out-of-stock exposure reaches 0%.`
+        : signals.equipment_availability_percentage !== null &&
+            signals.equipment_availability_percentage < 100
+          ? 'Facilities lead · next 7 days — return serviceable equipment to the available pool. Success: equipment availability reaches 100%.'
+          : inventoryEvidenceParts.length
+            ? 'Inventory lead · next 7 days — protect current equipment and retail availability through scheduled replenishment. Success: out-of-stock exposure remains at 0%.'
+            : 'Inventory lead · next 3 business days — restore equipment-unit and retail-item denominator capture. Success: availability and stock exposure are calculable.';
+    const overviewAction =
+      'General manager · next 7 days — sequence the revenue, attendance, membership, and coaching owners around the largest measured change. Success: one accountable owner and target are recorded for each declining lane.';
 
-    const risks = anomalyFlags.length
-      ? [...anomalyFlags]
-      : [
-          'External AI insight generation is degraded, so this summary is rule-based.',
+    let primaryEvidence: string;
+    let implication: string;
+    let primaryAction: string;
+    let highlights: string[];
+    let risks: string[];
+    let opportunities: string[];
+    let secondaryActions: string[];
+
+    switch (grounding.window.focus) {
+      case 'revenue':
+        primaryEvidence = revenueChange;
+        implication = revenueImplication;
+        primaryAction = financeAction;
+        highlights = [
+          `${revenueChange}; ${revenueImplication}.`,
+          concentration
+            ? `${concentration.source_label} contributes ${concentration.percentage.toFixed(1)}% of revenue; source-level execution will materially affect the total.`
+            : `${revenueChange}; a missing source concentration means recovery should avoid assuming which lane will lead.`,
         ];
-
-    if (peakHour && peakHour.check_ins > 0) {
-      risks.push(
-        `Traffic concentrates around ${peakHour.hour_label}, which can pressure staffing and equipment.`,
-      );
+        risks = [
+          concentration && concentration.percentage >= 60
+            ? `${concentration.source_label} represents ${concentration.percentage.toFixed(1)}% of revenue; the mix is exposed to disruption in one income stream.`
+            : `${revenueChange}; failure to act on the measured movement would leave operating headroom exposed.`,
+        ];
+        opportunities = [
+          `${revenueChange}; a source-specific conversion action can test whether the measured movement is reversible.`,
+        ];
+        secondaryActions = [];
+        break;
+      case 'attendance':
+        primaryEvidence = attendanceChange;
+        implication = attendanceImplication;
+        primaryAction = attendanceAction;
+        highlights = [
+          `${attendanceChange}; ${attendanceImplication}.`,
+          peak
+            ? `${peak.check_ins} check-ins occurred at ${peak.hour_label}, or ${peak.percentage.toFixed(1)}% of the total; concentrating coverage there targets proven demand.`
+            : `${attendanceChange}; absent peak evidence limits staffing changes to coverage and capture reliability.`,
+        ];
+        risks = [
+          `${attendanceChange}; a mismatch between demand and floor coverage can weaken service quality.`,
+        ];
+        opportunities = [
+          peak
+            ? `${peak.percentage.toFixed(1)}% of attendance lands at ${peak.hour_label}; aligning service and offers there concentrates effort where demand is proven.`
+            : `${attendanceChange}; restoring demand timing can unlock a defensible staffing allocation.`,
+        ];
+        secondaryActions = [];
+        break;
+      case 'membership':
+        primaryEvidence = membershipChange;
+        implication =
+          'the measured cohort changes the immediate onboarding and early-retention workload';
+        primaryAction = membershipAction;
+        highlights = [
+          `${membershipChange}; the cohort size determines how much onboarding capacity is needed now.`,
+        ];
+        risks = [
+          `${membershipChange}; unowned onboarding would put the value of this measured cohort at risk.`,
+        ];
+        opportunities = [
+          `${membershipChange}; a complete first-week touchpoint can convert the measured acquisition into early engagement.`,
+        ];
+        secondaryActions = [];
+        break;
+      case 'coaching':
+        primaryEvidence = coachingChange;
+        implication =
+          'the session movement changes coach-capacity needs and the available follow-on pipeline';
+        primaryAction = coachingAction;
+        highlights = [
+          `${coachingChange}; capacity and next-step offers should follow completed-session demand.`,
+        ];
+        risks = [
+          `${coachingChange}; an unmatched coach roster can create either service pressure or idle capacity.`,
+        ];
+        opportunities = [
+          `${coachingChange}; documented follow-on offers can turn completed sessions into a measurable continuation pipeline.`,
+        ];
+        secondaryActions = [];
+        break;
+      case 'inventory':
+        primaryEvidence = inventoryEvidence;
+        implication = inventoryImplication;
+        primaryAction = inventoryAction;
+        highlights = [`${inventoryEvidence}; ${inventoryImplication}.`];
+        risks = [
+          `${inventoryEvidence}; unresolved availability or denominator gaps can hide service and retail exposure.`,
+        ];
+        opportunities = [
+          `${inventoryEvidence}; targeted replenishment or data repair can make the next allocation decision measurable.`,
+        ];
+        secondaryActions = [];
+        break;
+      default:
+        primaryEvidence = `Cross-domain priority: ${revenueChange}, while ${attendanceChange.toLowerCase()}`;
+        implication =
+          'the operating response must balance financial movement with service demand and cohort workload';
+        primaryAction = overviewAction;
+        highlights = [
+          `${primaryEvidence}; ${implication}.`,
+          `${membershipChange}; onboarding ownership must scale with the measured cohort.`,
+          `${coachingChange}; coach capacity and follow-on work should match completed demand.`,
+        ];
+        risks = [
+          comparisons.total_revenue.direction === 'decrease'
+            ? `${revenueChange}; continued contraction would reduce operating headroom.`
+            : `${attendanceChange}; service capacity must remain aligned with measured demand.`,
+        ];
+        opportunities = [
+          `${membershipChange}; focused onboarding can improve the value captured from the measured cohort.`,
+        ];
+        secondaryActions = [
+          ...(comparisons.total_revenue.direction === 'decrease'
+            ? [financeAction]
+            : []),
+          ...(peak ? [attendanceAction] : []),
+        ];
+        break;
     }
 
-    const opportunities = [
-      ...(topCoach
-        ? [
-            `Replicate ${this.toCoachName(topCoach)}'s session pattern across the coaching roster.`,
-          ]
-        : []),
-      ...(topProduct
-        ? [
-            `Promote ${topProduct.name} during peak hours to lift secondary spend.`,
-          ]
-        : []),
-      ...(inventory && inventory.low_stock_items > 0
-        ? [
-            `Use the live inventory lane to restock ${inventory.low_stock_items} retail item(s) before they suppress on-site sales.`,
-          ]
-        : []),
-      ...(topPlan
-        ? [
-            `Use ${topPlan.name} as the lead offer in upgrade and retention campaigns.`,
-          ]
-        : []),
-    ];
-
-    const recommendedActions = [
-      ...(totalRevenue <= 0
-        ? [
-            'Audit payment capture before trusting revenue conclusions for this window.',
-          ]
-        : []),
-      ...(grounding.overview.total_check_ins <= 0
-        ? [
-            'Inspect access-control and check-in capture because attendance is currently zero.',
-          ]
-        : []),
-      ...(peakHour && peakHour.check_ins > 0
-        ? [
-            `Align staffing and retail prompts around the ${peakHour.hour_label} peak.`,
-          ]
-        : []),
-      ...(topProduct
-        ? [`Bundle ${topProduct.name} with memberships or coaching packages.`]
-        : []),
-      ...(inventory && inventory.equipment_under_maintenance > 0
-        ? [
-            `Resolve ${inventory.equipment_under_maintenance} maintenance queue item(s) before equipment downtime affects attendance.`,
-          ]
-        : []),
-    ];
+    const recommendedActions = this.toUniqueStrings([
+      primaryAction,
+      ...secondaryActions,
+    ]).slice(0, 3);
+    const nextAction = recommendedActions[0].split(' — ')[1];
 
     return {
-      summary:
-        `Fallback insight: revenue is ${totalRevenueLabel}, ` +
-        `attendance is ${grounding.overview.total_check_ins} check-ins, and ` +
-        `active membership is ${grounding.membership.active_members} for the selected window.`,
-      highlights: this.toUniqueStrings(highlights),
+      summary: `${primaryEvidence}. It matters because ${implication}. Next, ${nextAction}`,
+      highlights: this.toUniqueStrings(highlights).slice(0, 5),
       risks: this.toUniqueStrings(risks),
-      opportunities: this.toUniqueStrings(
-        opportunities.length > 0
-          ? opportunities
-          : [
-              'Review the live trends and regenerate once the AI provider stabilizes.',
-            ],
-      ),
+      opportunities: this.toUniqueStrings(opportunities),
       anomaly_flags: anomalyFlags,
-      recommended_actions: this.toUniqueStrings(
-        recommendedActions.length > 0
-          ? recommendedActions
-          : [
-              'Review this grounded fallback insight and retry generation later.',
-            ],
-      ),
+      recommended_actions: this.toUniqueStrings(recommendedActions).slice(0, 3),
       model_used: 'grounded-fallback',
       token_count: null,
     };
+  }
+
+  private formatComparison(
+    label: string,
+    comparison: BusinessInsightComparison<number | string>,
+    money = false,
+  ): string {
+    const current = Number(comparison.current);
+    const previous = Number(comparison.previous);
+    const absolute = Number(comparison.absolute_change);
+    const format = (value: number) =>
+      money
+        ? this.formatMoney(value.toFixed(2))
+        : Math.round(value).toLocaleString('en-PH');
+    if (comparison.direction === 'new_from_zero') {
+      return `${label} established a new baseline at ${format(current)} after a zero prior period`;
+    }
+    if (comparison.direction === 'flat') {
+      return `${label} held at ${format(current)} versus ${format(previous)} in the prior period`;
+    }
+    const verb =
+      comparison.direction === 'increase' ? 'increased' : 'decreased';
+    const percentage =
+      comparison.percentage_change === null
+        ? ''
+        : ` (${Math.abs(comparison.percentage_change).toFixed(1)}%)`;
+    return `${label} ${verb} by ${format(Math.abs(absolute))}${percentage}, from ${format(previous)} to ${format(current)}`;
   }
 
   private detectGroundingAnomalies(
@@ -380,15 +537,6 @@ export class BusinessAnalyticsInsightService {
     }
 
     return anomalies;
-  }
-
-  private toCoachName(
-    coach: BusinessAnalyticsGroundingPayload['coaching']['coaches'][number],
-  ): string {
-    return (
-      [coach.first_name, coach.last_name].filter(Boolean).join(' ') ||
-      'the leading coach'
-    );
   }
 
   private toUniqueStrings(values: string[]): string[] {

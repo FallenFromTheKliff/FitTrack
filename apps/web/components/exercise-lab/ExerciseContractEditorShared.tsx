@@ -25,7 +25,7 @@ export type ExerciseEditorTab =
 export const EDITOR_TABS: { label: string; value: ExerciseEditorTab }[] = [
   { label: "Basics", value: "basics" },
   { label: "Muscles", value: "muscles" },
-  { label: "Movement rig", value: "movement" },
+  { label: "Movement angle preview", value: "movement" },
   { label: "Hand shapes", value: "hands" },
   { label: "Media", value: "media" },
 ];
@@ -55,7 +55,12 @@ export type RigTemplateKey =
   | "dip"
   | "static_hold"
   | "blank";
-export type RigViewTransform = "front" | "side" | "floor" | "mirror" | "rotate90";
+export type RigViewTransform =
+  | "front"
+  | "side"
+  | "floor"
+  | "mirror"
+  | "rotate90";
 export type SpatialRulePreset =
   | "none"
   | "ground_press"
@@ -127,17 +132,20 @@ export const SPATIAL_RULE_PRESET_OPTIONS: {
   value: SpatialRulePreset;
 }[] = [
   {
-    description: "Angle and side rules only; bilateral exercises keep symmetry.",
+    description:
+      "Angle and side rules only; bilateral exercises keep symmetry.",
     label: "None",
     value: "none",
   },
   {
-    description: "Hands anchored, torso line, body travel, and left/right sync.",
+    description:
+      "Hands anchored, torso line, body travel, and left/right sync.",
     label: "Ground press",
     value: "ground_press",
   },
   {
-    description: "Vertical pulling depth with shoulder travel and torso drift limits.",
+    description:
+      "Vertical pulling depth with shoulder travel and torso drift limits.",
     label: "Vertical pull",
     value: "vertical_pull",
   },
@@ -169,17 +177,18 @@ export const TEMPLATE_SPATIAL_PRESETS: Record<
   static_hold: "ground_press",
 };
 
-export const TEMPLATE_DEFAULT_VIEWS: Record<RigTemplateKey, RigViewTransform> = {
-  blank: "front",
-  curl: "front",
-  dip: "side",
-  hinge: "side",
-  press: "front",
-  pull: "front",
-  push: "side",
-  squat: "side",
-  static_hold: "side",
-};
+export const TEMPLATE_DEFAULT_VIEWS: Record<RigTemplateKey, RigViewTransform> =
+  {
+    blank: "front",
+    curl: "front",
+    dip: "side",
+    hinge: "side",
+    press: "front",
+    pull: "front",
+    push: "side",
+    squat: "side",
+    static_hold: "side",
+  };
 
 export const RIG_VIEW_OPTIONS: { label: string; value: RigViewTransform }[] = [
   { label: "Front", value: "front" },
@@ -190,18 +199,34 @@ export const RIG_VIEW_OPTIONS: { label: string; value: RigViewTransform }[] = [
 ];
 
 export const RIG_BONES = [
+  [0, 7],
+  [0, 8],
+  [7, 11],
+  [8, 12],
   [11, 12],
   [11, 13],
   [13, 15],
+  [15, 17],
+  [15, 19],
+  [15, 21],
   [12, 14],
   [14, 16],
+  [16, 18],
+  [16, 20],
+  [16, 22],
   [11, 23],
   [12, 24],
   [23, 24],
   [23, 25],
   [25, 27],
+  [27, 29],
+  [27, 31],
+  [29, 31],
   [24, 26],
   [26, 28],
+  [28, 30],
+  [28, 32],
+  [30, 32],
 ] as const;
 
 export const LANDMARK_LABELS = [
@@ -271,18 +296,25 @@ const FIELD_HELP: Record<string, string> = {
     "Keyframes are the important positions of the exercise: start, hardest/peak position, and return.",
   "allowed open frames":
     "How many recent frames can look like an open hand before the system rejects the grip.",
-  "angle at keyframe":
-    "The joint angle shown for the selected frame, such as elbow angle at the top of a curl.",
+  "derived keyframe angle":
+    "The angle measured from the visible rig. Dragging the active dominant chain immediately syncs its matching mobile tracking target.",
+  "peak / down target":
+    "The contracted or lowered angle consumed by mobile rep counting. Changing it redraws the peak frame immediately.",
+  "start / up target":
+    "The extended or returned angle consumed by mobile rep counting. Changing it redraws the start and return frames immediately.",
   "body line tolerance":
     "How much body alignment can drift during a hold before the pose is considered sloppy.",
-  "down angle": "The joint angle that marks the lowered or stretched part of the rep.",
+  "down angle":
+    "The joint angle that marks the lowered or stretched part of the rep.",
   "down tolerance": "How much wiggle room is allowed around the down angle.",
   "exp %": "How much of this exercise's muscle experience goes to this muscle.",
-  "finger lift": "How far a fingertip must rise from the hand to count as extended.",
+  "finger lift":
+    "How far a fingertip must rise from the hand to count as extended.",
   "finger spread x":
     "How far fingers must separate horizontally to count as the lock gesture.",
   "hold ms": "How long the gesture must stay stable before it counts.",
-  "horn lift delta": "How similar the two raised rock-sign fingers must be in height.",
+  "horn lift delta":
+    "How similar the two raised rock-sign fingers must be in height.",
   "max body x drift": "How much the body can shift sideways during a hold.",
   "min usable frames":
     "Minimum number of clear hand frames needed before grip detection trusts the result.",
@@ -290,13 +322,13 @@ const FIELD_HELP: Record<string, string> = {
     "How open the hand is allowed to look. Lower values make grip detection stricter.",
   "partial rep policy":
     "What to do with incomplete reps: reject them, count half reps, or flag for review.",
-  "point visibility": "How confident the camera must be before using a hand landmark.",
+  "point visibility":
+    "How confident the camera must be before using a hand landmark.",
   "recent frame window":
     "How many recent camera frames are checked together to smooth hand detection.",
   "required sides":
     "Which body side must satisfy the rule: left, right, either, both, or alternating.",
-  role:
-    "Primary muscles do most of the work. Secondary and stabilizer muscles support the movement.",
+  role: "Primary muscles do most of the work. Secondary and stabilizer muscles support the movement.",
   "selected hand node":
     "The hand point you are editing. Tips are fingertips; MCP/PIP/DIP are finger joints.",
   "selected landmark":
@@ -305,7 +337,8 @@ const FIELD_HELP: Record<string, string> = {
     "How the movement uses body sides: both sides together, one side only, or alternating sides.",
   "thumb separation":
     "How far the thumb must separate from the hand for the gesture rule.",
-  "up angle": "The joint angle that marks the lifted or contracted part of the rep.",
+  "up angle":
+    "The joint angle that marks the lifted or contracted part of the rep.",
   "up tolerance": "How much wiggle room is allowed around the up angle.",
 };
 

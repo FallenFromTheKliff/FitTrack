@@ -4,6 +4,9 @@ import type {
   ExerciseHandShapeProfileRecord,
   ExerciseMovementProfileRecord,
   ExerciseMuscleTargetRecord,
+  ExerciseAliasInput,
+  ExerciseMovementFamilySummaryRecord,
+  ExerciseTrackingMode,
   FitnessExerciseCategory,
 } from "@fittrack/api-client";
 import {
@@ -26,10 +29,14 @@ export const EXERCISE_CATEGORY_OPTIONS = [
 export function createExerciseDraft(
   values?: {
     category?: FitnessExerciseCategory;
+    aliases?: ExerciseAliasInput[];
     description?: string | null;
     handShapeProfile?: ExerciseHandShapeProfileRecord | null;
     instructions?: string | null;
     movementProfile?: ExerciseMovementProfileRecord | null;
+    movementProfileOverride?: Partial<ExerciseMovementProfileRecord> | null;
+    movementFamily?: ExerciseMovementFamilySummaryRecord | null;
+    trackingMode?: ExerciseTrackingMode;
     muscleGroup?: string;
     muscleTargets?: ExerciseMuscleTargetRecord[];
     name?: string;
@@ -52,6 +59,7 @@ export function createExerciseDraft(
     muscleGroup,
   );
   return {
+    aliases: values?.aliases ?? [],
     name,
     category: values?.category ?? "strength",
     muscleGroup,
@@ -63,6 +71,9 @@ export function createExerciseDraft(
         rig,
       },
     ) ?? null,
+    movementProfileOverride: values?.movementProfileOverride ?? null,
+    movementFamily: values?.movementFamily ?? null,
+    trackingMode: values?.trackingMode ?? "manual",
     handShapeProfile: normalizeExerciseHandShapeProfile(
       values?.handShapeProfile ?? DEFAULT_EXERCISE_HAND_SHAPE_PROFILE,
     ),

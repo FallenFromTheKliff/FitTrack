@@ -33,6 +33,7 @@ import {
   MuscleDefinitionResponseDTO,
   UpdateMuscleDefinitionDTO,
   UpdateExerciseDTO,
+  UpdateMovementFamilyContractDTO,
 } from './dto/exercise.dto';
 
 function apiEnvelopeSchema(schemaRef: string) {
@@ -257,4 +258,19 @@ export class ExerciseController {
     return this.exerciseService.updateExercise(id, dto);
   }
 
+  @Patch('movement-families/:id/contract')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.admin, UserRole.staff)
+  @ApiBearerAuth('access-token')
+  @ApiBody({ type: UpdateMovementFamilyContractDTO })
+  @ApiOperation({
+    summary:
+      'Atomically update a shared movement-family contract and revision.',
+  })
+  updateMovementFamilyContract(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateMovementFamilyContractDTO,
+  ) {
+    return this.exerciseService.updateMovementFamilyContract(id, dto);
+  }
 }

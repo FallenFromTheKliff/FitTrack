@@ -18,10 +18,10 @@ import type {
   PoseKeypointRecord,
 } from "@fittrack/api-client";
 import {
+  applyGeneratedRigDominantAngle,
   buildFallbackPoseMovementContract,
   createExerciseMovementProfile,
   createGeneratedExerciseRigFromMovementContract,
-  getPoseMovementContractAngle,
   normalizeExerciseMovementProfile,
 } from "@fittrack/utils";
 import { FitSelect } from "@/components/fit";
@@ -110,7 +110,8 @@ function interpolatePoint(
   if (!start) return end;
   if (!end) return start;
   return {
-    visibility: start.visibility + (end.visibility - start.visibility) * progress,
+    visibility:
+      start.visibility + (end.visibility - start.visibility) * progress,
     x: start.x + (end.x - start.x) * progress,
     y: start.y + (end.y - start.y) * progress,
     z: start.z + (end.z - start.z) * progress,
@@ -144,12 +145,23 @@ function getAnimatedKeypoints(
     peakFrame;
   if (!startFrame || !peakFrame || !endFrame) return [];
   if (progress <= 1) {
-    return interpolateKeypoints(startFrame.keypoints, peakFrame.keypoints, progress);
+    return interpolateKeypoints(
+      startFrame.keypoints,
+      peakFrame.keypoints,
+      progress,
+    );
   }
-  return interpolateKeypoints(peakFrame.keypoints, endFrame.keypoints, progress - 1);
+  return interpolateKeypoints(
+    peakFrame.keypoints,
+    endFrame.keypoints,
+    progress - 1,
+  );
 }
 
-const FRAME_LABELS: Record<MovementEditorMode, Record<ExerciseRigKeyframeKind, string>> = {
+const FRAME_LABELS: Record<
+  MovementEditorMode,
+  Record<ExerciseRigKeyframeKind, string>
+> = {
   dynamic_rep: {
     end: "Return",
     peak: "Peak contraction",
@@ -188,7 +200,15 @@ const SIDE_ANGLE_TRIPLES = {
     left: [23, 11, 13],
     right: [24, 12, 14],
   },
+  ankle: {
+    left: [25, 27, 31],
+    right: [26, 28, 32],
+  },
 } as const;
+
+const SECONDARY_LANDMARK_INDEXES = new Set([
+  1, 2, 3, 4, 5, 6, 9, 10, 17, 18, 19, 20, 21, 22, 29, 30,
+]);
 
 function inferMovementMode(
   contract: PoseMovementContractRecord | null | undefined,
@@ -202,7 +222,18 @@ function getFrameLabel(
   current?: string | null,
 ) {
   const label = current?.trim();
-  if (label && !["Start position", "Peak contraction", "Return", "Start", "Setup", "Hold", "Exit"].includes(label)) {
+  if (
+    label &&
+    ![
+      "Start position",
+      "Peak contraction",
+      "Return",
+      "Start",
+      "Setup",
+      "Hold",
+      "Exit",
+    ].includes(label)
+  ) {
     return label;
   }
   return FRAME_LABELS[mode][kind];
@@ -239,9 +270,12 @@ function createManualMovementContract({
     exercise,
     noCountConditions: ["Movement profile is incomplete."],
     oscillatingJoints: [dominantJoint],
-    partialRepPolicy: repModel === "static_hold" ? "review_only" : "count_half_reps",
+    partialRepPolicy:
+      repModel === "static_hold" ? "review_only" : "count_half_reps",
     phaseOrder:
-      repModel === "static_hold" ? ["setup", "hold", "exit"] : ["start", "peak", "return"],
+      repModel === "static_hold"
+        ? ["setup", "hold", "exit"]
+        : ["start", "peak", "return"],
     primaryJoints:
       dominantJoint === "elbow"
         ? ["left_elbow", "right_elbow"]
@@ -249,7 +283,9 @@ function createManualMovementContract({
           ? ["left_knee", "right_knee"]
           : dominantJoint === "hip"
             ? ["left_hip", "right_hip"]
-            : ["left_shoulder", "right_shoulder"],
+            : dominantJoint === "ankle"
+              ? ["left_ankle", "right_ankle"]
+              : ["left_shoulder", "right_shoulder"],
     repModel,
     repThresholds: {
       down: { angle: 110, tolerance: 18 },
@@ -268,7 +304,9 @@ function createManualMovementContract({
 function getTemplateContract(
   template: RigTemplateKey,
 ): PoseMovementContractRecord {
-  const fallback = buildFallbackPoseMovementContract(TEMPLATE_EXERCISE_LABELS[template]);
+  const fallback = buildFallbackPoseMovementContract(
+    TEMPLATE_EXERCISE_LABELS[template],
+  );
   if (fallback) return fallback;
   if (template === "hinge") {
     return createManualMovementContract({
@@ -285,7 +323,9 @@ function getTemplateContract(
 }
 
 function isBilateralLike(contract?: PoseMovementContractRecord | null) {
-  return contract?.repModel === "bilateral" || contract?.requiredSides === "both";
+  return (
+    contract?.repModel === "bilateral" || contract?.requiredSides === "both"
+  );
 }
 
 function getExerciseSpatialText(
@@ -321,7 +361,10 @@ function getSpatialRequirementsForPreset(
     return getMinimalSideSpatialRequirements(contract);
   }
   if (preset === "custom") {
-    return contract?.spatialRequirements ?? getMinimalSideSpatialRequirements(contract);
+    return (
+      contract?.spatialRequirements ??
+      getMinimalSideSpatialRequirements(contract)
+    );
   }
   if (preset === "ground_press") {
     return {
@@ -363,10 +406,7 @@ function getSpatialRequirementsForPreset(
   };
 }
 
-function getSpatialSecondaryCheck(
-  preset: SpatialRulePreset,
-  fallback: string,
-) {
+function getSpatialSecondaryCheck(preset: SpatialRulePreset, fallback: string) {
   if (preset === "none") return "angle_side_rules";
   if (preset === "ground_press") return "spatial_ground_press";
   if (preset === "vertical_pull") return "spatial_vertical_pull";
@@ -415,8 +455,8 @@ function getPreferredViewForSpatialPreset(
 
 function getSpatialPresetLabel(preset: SpatialRulePreset) {
   return (
-    SPATIAL_RULE_PRESET_OPTIONS.find((option) => option.value === preset)?.label ??
-    "Custom"
+    SPATIAL_RULE_PRESET_OPTIONS.find((option) => option.value === preset)
+      ?.label ?? "Custom"
   );
 }
 
@@ -431,10 +471,13 @@ function patchContractForMode(
       phaseOrder: ["setup", "hold", "exit"],
       repModel: "static_hold",
       requiredSides:
-        contract.requiredSides === "alternating" ? "either" : contract.requiredSides ?? "either",
+        contract.requiredSides === "alternating"
+          ? "either"
+          : (contract.requiredSides ?? "either"),
       spatialRequirements: {
         ...contract.spatialRequirements,
-        bodyLineTolerance: contract.spatialRequirements?.bodyLineTolerance ?? 28,
+        bodyLineTolerance:
+          contract.spatialRequirements?.bodyLineTolerance ?? 28,
         bodyXDriftMax: contract.spatialRequirements?.bodyXDriftMax ?? 0.08,
         bodyYTravelMin: contract.spatialRequirements?.bodyYTravelMin ?? 0,
       },
@@ -449,7 +492,10 @@ function patchContractForMode(
     partialRepPolicy: contract.partialRepPolicy ?? "count_half_reps",
     phaseOrder: ["start", "peak", "return"],
     repModel: nextRepModel,
-    requiredSides: nextRepModel === "bilateral" ? "both" : contract.requiredSides ?? "either",
+    requiredSides:
+      nextRepModel === "bilateral"
+        ? "both"
+        : (contract.requiredSides ?? "either"),
     spatialRequirements: {
       ...contract.spatialRequirements,
       leftRightSymmetryTolerance:
@@ -519,7 +565,8 @@ function getAngleFromTriple(
   const b = points[bIndex];
   const c = points[cIndex];
   if (!a || !b || !c) return null;
-  if (a.visibility < 0.1 || b.visibility < 0.1 || c.visibility < 0.1) return null;
+  if (a.visibility < 0.1 || b.visibility < 0.1 || c.visibility < 0.1)
+    return null;
   const ab = { x: a.x - b.x, y: a.y - b.y };
   const cb = { x: c.x - b.x, y: c.y - b.y };
   const dot = ab.x * cb.x + ab.y * cb.y;
@@ -570,7 +617,9 @@ export function MovementProfileEditor({
   const rig = profile?.rig ?? null;
   const keyframes = rig?.keyframes ?? [];
   const generatedContract = useMemo(
-    () => profile?.movementContract ?? buildFallbackPoseMovementContract(exerciseName),
+    () =>
+      profile?.movementContract ??
+      buildFallbackPoseMovementContract(exerciseName),
     [exerciseName, profile?.movementContract],
   );
   const editorRootRef = useRef<HTMLElement | null>(null);
@@ -584,8 +633,9 @@ export function MovementProfileEditor({
   const [activeSetupStep, setActiveSetupStep] = useState(0);
   const [selectedTemplate, setSelectedTemplate] =
     useState<RigTemplateKey | null>(null);
-  const [regenerateConfirmTemplate, setRegenerateConfirmTemplate] =
-    useState<RigTemplateKey | "generated" | null>(null);
+  const [regenerateConfirmTemplate, setRegenerateConfirmTemplate] = useState<
+    RigTemplateKey | "generated" | null
+  >(null);
   const [spatialPresetOverride, setSpatialPresetOverride] =
     useState<SpatialRulePreset | null>(null);
   const [viewTransform, setViewTransform] = useState<RigViewTransform>("front");
@@ -609,8 +659,21 @@ export function MovementProfileEditor({
     keyframes.findIndex((frame) => frame.kind === activeKind),
   );
   const activeFrame = keyframes[activeIndex] ?? null;
-  const [selectedPoint, setSelectedPoint] = useSafePointIndex(activeFrame);
   const contract = profile?.movementContract ?? generatedContract;
+  const defaultLandmarkIndex =
+    contract?.dominantJoint === "knee"
+      ? 25
+      : contract?.dominantJoint === "hip"
+        ? 23
+        : contract?.dominantJoint === "shoulder"
+          ? 11
+          : contract?.dominantJoint === "ankle"
+            ? 27
+            : 13;
+  const [selectedPoint, setSelectedPoint] = useSafePointIndex(
+    activeFrame,
+    defaultLandmarkIndex,
+  );
   const movementMode = inferMovementMode(contract);
   const inferredSpatialPreset = useMemo(
     () => inferSpatialPreset(contract, exerciseName),
@@ -619,12 +682,13 @@ export function MovementProfileEditor({
   const spatialPreset = spatialPresetOverride ?? inferredSpatialPreset;
   const shouldPreferDepthView =
     spatialPreset === "ground_press" || spatialPreset === "squat_hinge";
-  const frontViewDepthWarning = shouldPreferDepthView && viewTransform === "front";
+  const frontViewDepthWarning =
+    shouldPreferDepthView && viewTransform === "front";
   const editableView = viewTransform === "front" || viewTransform === "mirror";
   const sourcePoints =
     previewMotion && keyframes.length >= 2
       ? getAnimatedKeypoints(keyframes, animationProgress)
-      : activeFrame?.keypoints ?? [];
+      : (activeFrame?.keypoints ?? []);
   const displayPoints = sourcePoints.map((point) =>
     point ? transformPointForView(point, viewTransform) : point,
   );
@@ -632,20 +696,32 @@ export function MovementProfileEditor({
     contract,
     activeFrame?.keypoints ?? [],
   );
+  const dominantLandmarkIndexes = new Set<number>(
+    contract
+      ? [
+          ...SIDE_ANGLE_TRIPLES[contract.dominantJoint].left,
+          ...SIDE_ANGLE_TRIPLES[contract.dominantJoint].right,
+        ]
+      : [],
+  );
   const dominantSide =
-    contract?.requiredSides === "right" || contract?.repModel === "unilateral_right"
+    contract?.requiredSides === "right" ||
+    contract?.repModel === "unilateral_right"
       ? "right"
       : "left";
   const dominantAngle =
     dominantSide === "right"
       ? activeAngleSummaries.right
-      : activeAngleSummaries.left ?? activeAngleSummaries.right;
+      : (activeAngleSummaries.left ?? activeAngleSummaries.right);
   const dominantJointIndex =
     dominantSide === "right"
       ? activeAngleSummaries.rightJointIndex
       : activeAngleSummaries.leftJointIndex;
   const dominantJointPoint = activeFrame?.keypoints[dominantJointIndex]
-    ? transformPointForView(activeFrame.keypoints[dominantJointIndex], viewTransform)
+    ? transformPointForView(
+        activeFrame.keypoints[dominantJointIndex],
+        viewTransform,
+      )
     : undefined;
   const dominantJointPosition = getKeypointPosition(dominantJointPoint);
   const symmetryDelta =
@@ -693,7 +769,9 @@ export function MovementProfileEditor({
     const startedAt = Date.now();
     const interval = window.setInterval(() => {
       const elapsed = (Date.now() - startedAt) % 2400;
-      setAnimationProgress(elapsed <= 1200 ? elapsed / 1200 : 2 - elapsed / 1200);
+      setAnimationProgress(
+        elapsed <= 1200 ? elapsed / 1200 : 2 - elapsed / 1200,
+      );
     }, 80);
     return () => window.clearInterval(interval);
   }, [keyframes.length, previewMotion]);
@@ -715,7 +793,9 @@ export function MovementProfileEditor({
   }, [dragPoint]);
 
   const patchProfile = (nextProfile: ExerciseMovementProfileRecord | null) => {
-    onChange(nextProfile ? normalizeExerciseMovementProfile(nextProfile) : null);
+    onChange(
+      nextProfile ? normalizeExerciseMovementProfile(nextProfile) : null,
+    );
   };
 
   const applyGeneratedProfile = (template?: RigTemplateKey) => {
@@ -750,8 +830,9 @@ export function MovementProfileEditor({
           ),
     );
     const generatedRig = createGeneratedExerciseRigFromMovementContract({
-      exerciseLabel:
-        template ? TEMPLATE_EXERCISE_LABELS[template] : exerciseName ?? movementContract.exercise,
+      exerciseLabel: template
+        ? TEMPLATE_EXERCISE_LABELS[template]
+        : (exerciseName ?? movementContract.exercise),
       movementContract,
     });
     patchProfile(
@@ -781,13 +862,15 @@ export function MovementProfileEditor({
     const template =
       regenerateConfirmTemplate === "generated"
         ? undefined
-        : regenerateConfirmTemplate ?? undefined;
+        : (regenerateConfirmTemplate ?? undefined);
     setRegenerateConfirmTemplate(null);
     applyGeneratedProfile(template);
   };
 
   const patchMovementContract = (
-    patch: Partial<NonNullable<ExerciseMovementProfileRecord["movementContract"]>>,
+    patch: Partial<
+      NonNullable<ExerciseMovementProfileRecord["movementContract"]>
+    >,
   ) => {
     const currentContract = contract;
     if (!currentContract) return;
@@ -816,7 +899,9 @@ export function MovementProfileEditor({
     );
   };
 
-  const setRepModel = (repModel: (typeof DYNAMIC_REP_MODEL_OPTIONS)[number]) => {
+  const setRepModel = (
+    repModel: (typeof DYNAMIC_REP_MODEL_OPTIONS)[number],
+  ) => {
     if (!contract) return;
     patchMovementContract(patchContractForRepModel(contract, repModel));
   };
@@ -842,7 +927,11 @@ export function MovementProfileEditor({
     setSpatialPresetOverride(nextPreset);
     if (nextPreset !== "none") {
       setViewTransform(
-        getPreferredViewForSpatialPreset(nextPreset, nextContract, exerciseName),
+        getPreferredViewForSpatialPreset(
+          nextPreset,
+          nextContract,
+          exerciseName,
+        ),
       );
     }
     patchProfile(
@@ -859,7 +948,8 @@ export function MovementProfileEditor({
     patch: Partial<NonNullable<typeof contract>["repThresholds"]["down"]>,
   ) => {
     if (!contract) return;
-    patchMovementContract({
+    const nextContract: PoseMovementContractRecord = {
+      ...contract,
       repThresholds: {
         ...contract.repThresholds,
         [phase]: {
@@ -867,11 +957,65 @@ export function MovementProfileEditor({
           ...patch,
         },
       },
-    });
+    };
+    const targetAngle = nextContract.repThresholds[phase].angle;
+    const targetKinds =
+      phase === "down"
+        ? new Set<ExerciseRigKeyframeKind>(["peak"])
+        : new Set<ExerciseRigKeyframeKind>(["start", "end"]);
+    const nextRig = rig
+      ? {
+          ...rig,
+          angleSummary: {
+            dominantJoint: nextContract.dominantJoint,
+            maxAngle: Math.max(
+              nextContract.repThresholds.down.angle,
+              nextContract.repThresholds.up.angle,
+            ),
+            minAngle: Math.min(
+              nextContract.repThresholds.down.angle,
+              nextContract.repThresholds.up.angle,
+            ),
+            repCount: rig.angleSummary?.repCount ?? 0,
+            travel: Math.abs(
+              nextContract.repThresholds.up.angle -
+                nextContract.repThresholds.down.angle,
+            ),
+          },
+          keyframes: rig.keyframes.map((frame) =>
+            targetKinds.has(frame.kind)
+              ? {
+                  ...frame,
+                  angle: targetAngle,
+                  keypoints: applyGeneratedRigDominantAngle(
+                    frame.keypoints,
+                    nextContract.dominantJoint,
+                    targetAngle,
+                  ),
+                }
+              : frame,
+          ),
+        }
+      : relabelRigFrames(
+          createGeneratedExerciseRigFromMovementContract({
+            exerciseLabel: exerciseName ?? nextContract.exercise,
+            movementContract: nextContract,
+          }),
+          movementMode,
+        );
+    patchProfile(
+      createExerciseMovementProfile({
+        movementContract: nextContract,
+        rig: nextRig,
+        warnings: profile?.warnings ?? [],
+      }),
+    );
   };
 
   const patchSpatialRequirement = (
-    patch: Partial<NonNullable<PoseMovementContractRecord["spatialRequirements"]>>,
+    patch: Partial<
+      NonNullable<PoseMovementContractRecord["spatialRequirements"]>
+    >,
   ) => {
     if (!contract) return;
     patchMovementContract({
@@ -897,20 +1041,90 @@ export function MovementProfileEditor({
     });
   };
 
-  const patchPoint = (pointIndex: number, patch: Partial<PoseKeypointRecord>) => {
-    if (!activeFrame) return;
+  const patchPoint = (
+    pointIndex: number,
+    patch: Partial<PoseKeypointRecord>,
+  ) => {
+    if (!activeFrame || !profile || !rig) return;
     const nextKeypoints = activeFrame.keypoints.map((point, index) =>
       index === pointIndex ? { ...point, ...patch } : point,
     );
-    const nextAngle = contract
-      ? getPoseMovementContractAngle(contract, nextKeypoints)
-      : activeFrame.angle;
-    patchActiveFrame({
-      angle:
-        typeof nextAngle === "number" && Number.isFinite(nextAngle)
-          ? Math.round(nextAngle * 10) / 10
-          : activeFrame.angle,
-      keypoints: nextKeypoints,
+    const triples = contract
+      ? SIDE_ANGLE_TRIPLES[contract.dominantJoint]
+      : SIDE_ANGLE_TRIPLES.elbow;
+    const editedSide = (triples.right as readonly number[]).includes(pointIndex)
+      ? "right"
+      : (triples.left as readonly number[]).includes(pointIndex)
+        ? "left"
+        : null;
+    const measuredAngle = editedSide
+      ? getAngleFromTriple(nextKeypoints, triples[editedSide])
+      : null;
+    const nextAngle =
+      typeof measuredAngle === "number" && Number.isFinite(measuredAngle)
+        ? Math.round(measuredAngle * 10) / 10
+        : activeFrame.angle;
+    const syncPhase = activeFrame.kind === "peak" ? "down" : "up";
+    const nextContract =
+      contract &&
+      movementMode === "dynamic_rep" &&
+      editedSide &&
+      typeof nextAngle === "number"
+        ? {
+            ...contract,
+            repThresholds: {
+              ...contract.repThresholds,
+              [syncPhase]: {
+                ...contract.repThresholds[syncPhase],
+                angle: nextAngle,
+              },
+            },
+          }
+        : contract;
+    patchProfile({
+      ...profile,
+      movementContract: nextContract ?? profile.movementContract,
+      rig: {
+        ...rig,
+        angleSummary:
+          nextContract && rig.angleSummary
+            ? {
+                ...rig.angleSummary,
+                maxAngle: Math.max(
+                  nextContract.repThresholds.down.angle,
+                  nextContract.repThresholds.up.angle,
+                ),
+                minAngle: Math.min(
+                  nextContract.repThresholds.down.angle,
+                  nextContract.repThresholds.up.angle,
+                ),
+                travel: Math.abs(
+                  nextContract.repThresholds.up.angle -
+                    nextContract.repThresholds.down.angle,
+                ),
+              }
+            : rig.angleSummary,
+        keyframes: keyframes.map((frame, index) =>
+          index === activeIndex
+            ? { ...frame, angle: nextAngle, keypoints: nextKeypoints }
+            : editedSide &&
+                nextContract &&
+                typeof nextAngle === "number" &&
+                ((syncPhase === "down" && frame.kind === "peak") ||
+                  (syncPhase === "up" &&
+                    (frame.kind === "start" || frame.kind === "end")))
+              ? {
+                  ...frame,
+                  angle: nextAngle,
+                  keypoints: applyGeneratedRigDominantAngle(
+                    frame.keypoints,
+                    nextContract.dominantJoint,
+                    nextAngle,
+                  ),
+                }
+              : frame,
+        ),
+      },
     });
   };
 
@@ -935,7 +1149,10 @@ export function MovementProfileEditor({
       viewTransform,
     );
     patchPoint(pointIndex, {
-      visibility: Math.max(activeFrame?.keypoints[pointIndex]?.visibility ?? 0.92, 0.72),
+      visibility: Math.max(
+        activeFrame?.keypoints[pointIndex]?.visibility ?? 0.92,
+        0.72,
+      ),
       x: roundToStep(normalized.x),
       y: roundToStep(normalized.y),
     });
@@ -982,577 +1199,684 @@ export function MovementProfileEditor({
 
   return (
     <>
-    <section ref={editorRootRef} style={{ display: "grid", gap: 12 }}>
-      <div
-        style={{
-          alignItems: "flex-start",
-          display: "flex",
-          gap: 12,
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-        }}
-      >
-        <div>
-          <strong style={{ color: colors.text }}>Visual movement editor</strong>
-          <p style={{ color: colors.textMuted, margin: "4px 0 0" }}>
-            Configure one decision at a time. Completed stages stay visible in
-            the setup map without crowding the active workspace.
-          </p>
-        </div>
-        <span style={{ color: colors.textMuted, fontSize: 12, fontWeight: 800 }}>
-          {activeSetupStep + 1} of {TRACKING_SETUP_STEPS.length}
-        </span>
-      </div>
-
-      <div
-        aria-label="Tracking setup progress"
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
-          border: `1px solid ${colors.border}`,
-          borderRadius: 8,
-          overflow: "hidden",
-        }}
-      >
-        {TRACKING_SETUP_STEPS.map((step, index) => {
-          const complete =
-            index === 0
-              ? Boolean(contract)
-              : index === 1
-                ? Boolean(rig)
-                : index === 2
-                  ? keyframes.length >= 2
-                  : index === 3
-                    ? Boolean(contract)
-                    : index === 4
-                      ? Boolean(contract?.spatialRequirements)
-                      : Boolean(rig && contract);
-          const active = index === activeSetupStep;
-          return (
-            <button
-              key={step.label}
-              type="button"
-              aria-current={active ? "step" : undefined}
-              onClick={() => {
-                setActiveSetupStep(index);
-                if (index === 5 && rig) setPreviewMotion(true);
-              }}
-              style={{
-                alignItems: "center",
-                backgroundColor: active ? `${colors.primary}16` : colors.surface,
-                border: 0,
-                borderBottom: active ? `2px solid ${colors.primary}` : "2px solid transparent",
-                borderRight:
-                  index < TRACKING_SETUP_STEPS.length - 1
-                    ? `1px solid ${colors.border}`
-                    : 0,
-                color: active ? colors.text : colors.textMuted,
-                cursor: "pointer",
-                display: "flex",
-                gap: 7,
-                justifyContent: "center",
-                minHeight: 44,
-                padding: "8px 6px",
-              }}
-            >
-              <span
-                style={{
-                  alignItems: "center",
-                  backgroundColor: complete ? "#3ed875" : active ? colors.primary : colors.card,
-                  border: `1px solid ${complete ? "#3ed875" : active ? colors.primary : colors.border}`,
-                  borderRadius: 4,
-                  color: complete || active ? "#111" : colors.textMuted,
-                  display: "inline-flex",
-                  fontSize: 9,
-                  fontWeight: 900,
-                  height: 18,
-                  justifyContent: "center",
-                  width: 18,
-                }}
-              >
-                {complete ? <CheckCircle2 size={11} /> : index + 1}
-              </span>
-              <span style={{ fontSize: 11, fontWeight: 850 }}>{step.shortLabel}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      {activeSetupStep === 0 ? <div style={panelStyle(colors)}>
-        <FieldLabel colors={colors}>1. Movement type</FieldLabel>
+      <section ref={editorRootRef} style={{ display: "grid", gap: 12 }}>
         <div
           style={{
-            display: "grid",
-            gap: 10,
-            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-          }}
-        >
-          {MOVEMENT_MODE_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              onClick={() => setMovementMode(option.value)}
-              style={{
-                ...miniButtonStyle(colors, movementMode === option.value),
-                borderRadius: 16,
-                padding: 14,
-                textAlign: "left",
-              }}
-              type="button"
-            >
-              <span style={{ display: "block", fontSize: 14 }}>{option.label}</span>
-              <span
-                style={{
-                  color: movementMode === option.value ? "#151515" : colors.textMuted,
-                  display: "block",
-                  fontSize: 12,
-                  fontWeight: 700,
-                  marginTop: 4,
-                }}
-              >
-                {option.description}
-              </span>
-            </button>
-          ))}
-        </div>
-      </div> : null}
-
-      {activeSetupStep === 4 && contract ? (
-        <div style={panelStyle(colors)}>
-          <div
-            style={{
-              alignItems: "flex-start",
-              display: "flex",
-              gap: 12,
-              justifyContent: "space-between",
-              flexWrap: "wrap",
-            }}
-          >
-            <div>
-              <FieldLabel colors={colors}>Spatial rules</FieldLabel>
-              <strong style={{ color: colors.text }}>
-                Exercise-level movement validity
-              </strong>
-              <p style={{ color: colors.textMuted, margin: "4px 0 0" }}>
-                Angles decide rep depth. Spatial rules decide whether the body
-                position matches the exercise.
-              </p>
-            </div>
-            <span
-              style={{
-                border: `1px solid ${colors.border}`,
-                borderRadius: 6,
-                color: colors.textMuted,
-                fontSize: 12,
-                fontWeight: 800,
-                padding: "8px 12px",
-              }}
-            >
-              {spatialPreset === "none"
-                ? "No extra spatial gate"
-                : "Editable starter rules"}
-            </span>
-          </div>
-          <div
-            style={{
-              display: "grid",
-              gap: 8,
-              gridTemplateColumns: "repeat(auto-fit, minmax(165px, 1fr))",
-              marginTop: 12,
-            }}
-          >
-            {SPATIAL_RULE_PRESET_OPTIONS.map((option) => (
-              <button
-                key={option.value}
-                onClick={() => setSpatialPreset(option.value)}
-                style={{
-                  ...miniButtonStyle(colors, spatialPreset === option.value),
-                  borderRadius: 16,
-                  padding: 12,
-                  textAlign: "left",
-                }}
-                type="button"
-              >
-                <span style={{ display: "block", fontSize: 13 }}>
-                  {option.label}
-                </span>
-                <span
-                  style={{
-                    color:
-                      spatialPreset === option.value
-                        ? "#151515"
-                        : colors.textMuted,
-                    display: "block",
-                    fontSize: 11,
-                    fontWeight: 700,
-                    lineHeight: 1.35,
-                    marginTop: 4,
-                  }}
-                >
-                  {option.description}
-                </span>
-              </button>
-            ))}
-          </div>
-          {frontViewDepthWarning ? (
-            <p
-              style={{
-                color: colors.primary,
-                fontSize: 12,
-                fontWeight: 850,
-                margin: "10px 0 0",
-              }}
-            >
-              Front view is for symmetry only. Use Side or Floor to tune depth.
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-
-      {activeSetupStep === 1 ? (
-        <div
-          style={{
-            border: `1px solid ${colors.border}`,
-            borderRadius: 8,
-            display: "grid",
+            alignItems: "flex-start",
+            display: "flex",
             gap: 12,
-            padding: 16,
+            justifyContent: "space-between",
+            flexWrap: "wrap",
           }}
         >
           <div>
-            <FieldLabel colors={colors}>2. Movement template</FieldLabel>
             <strong style={{ color: colors.text }}>
-              Start from the closest movement pattern
+              Visual movement editor
             </strong>
             <p style={{ color: colors.textMuted, margin: "4px 0 0" }}>
-              Templates create an editable starter rig. They never replace the
-              exercise-specific angles and safeguards you review next.
+              Configure one decision at a time. Completed stages stay visible in
+              the setup map without crowding the active workspace.
             </p>
           </div>
-          <div
-            style={{
-              display: "grid",
-              gap: 8,
-              gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
-            }}
+          <span
+            style={{ color: colors.textMuted, fontSize: 12, fontWeight: 800 }}
           >
-            {RIG_TEMPLATE_OPTIONS.map((template) => (
-              <button
-                key={template.value}
-                onClick={() => setSelectedTemplate(template.value)}
-                style={{
-                  ...miniButtonStyle(colors, selectedTemplate === template.value),
-                  borderRadius: 6,
-                }}
-                type="button"
-              >
-                {template.label}
-              </button>
-            ))}
-          </div>
-          <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 10 }}>
-            <button
-              disabled={!selectedTemplate && !generatedContract}
-              onClick={() => createGeneratedProfile(selectedTemplate ?? undefined)}
-              style={{
-                ...miniButtonStyle(colors, Boolean(selectedTemplate ?? generatedContract)),
-                borderRadius: 6,
-                opacity: selectedTemplate || generatedContract ? 1 : 0.45,
-              }}
-              type="button"
-            >
-              {rig ? "Regenerate starter rig" : "Generate starter rig"}
-            </button>
-            <span style={{ color: rig ? "#3ed875" : colors.textMuted, fontSize: 12, fontWeight: 800 }}>
-              {rig
-                ? `${keyframes.length} editable keyframes ready`
-                : "Choose a template to unlock angle editing"}
-            </span>
-          </div>
+            {activeSetupStep + 1} of {TRACKING_SETUP_STEPS.length}
+          </span>
         </div>
-      ) : null}
 
-      {activeSetupStep === 2 || activeSetupStep === 5 ? (!rig || !keyframes.length ? (
         <div
+          aria-label="Tracking setup progress"
           style={{
-            border: `1px dashed ${colors.borderStrong}`,
-            borderRadius: 8,
-            color: colors.textMuted,
             display: "grid",
-            gap: 12,
-            padding: 18,
+            gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
+            border: `1px solid ${colors.border}`,
+            borderRadius: 8,
+            overflow: "hidden",
           }}
         >
-          <span>
-            No rig captured yet. Choose a template first; unknown exercises no
-            longer receive a generic curl animation.
-          </span>
-          <div
-            style={{
-              display: "grid",
-              gap: 8,
-              gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
-            }}
-          >
-            {RIG_TEMPLATE_OPTIONS.map((template) => (
+          {TRACKING_SETUP_STEPS.map((step, index) => {
+            const complete =
+              index === 0
+                ? Boolean(contract)
+                : index === 1
+                  ? Boolean(rig)
+                  : index === 2
+                    ? keyframes.length >= 2
+                    : index === 3
+                      ? Boolean(contract)
+                      : index === 4
+                        ? Boolean(contract?.spatialRequirements)
+                        : Boolean(rig && contract);
+            const active = index === activeSetupStep;
+            return (
               <button
-                key={template.value}
-                onClick={() => setSelectedTemplate(template.value)}
-                style={miniButtonStyle(colors, selectedTemplate === template.value)}
+                key={step.label}
                 type="button"
+                aria-current={active ? "step" : undefined}
+                onClick={() => {
+                  setActiveSetupStep(index);
+                  if (index === 5 && rig) setPreviewMotion(true);
+                }}
+                style={{
+                  alignItems: "center",
+                  backgroundColor: active
+                    ? `${colors.primary}16`
+                    : colors.surface,
+                  border: 0,
+                  borderBottom: active
+                    ? `2px solid ${colors.primary}`
+                    : "2px solid transparent",
+                  borderRight:
+                    index < TRACKING_SETUP_STEPS.length - 1
+                      ? `1px solid ${colors.border}`
+                      : 0,
+                  color: active ? colors.text : colors.textMuted,
+                  cursor: "pointer",
+                  display: "flex",
+                  gap: 7,
+                  justifyContent: "center",
+                  minHeight: 44,
+                  padding: "8px 6px",
+                }}
               >
-                {template.label}
-              </button>
-            ))}
-          </div>
-          <button
-            disabled={!selectedTemplate && !generatedContract}
-            onClick={() => createGeneratedProfile(selectedTemplate ?? undefined)}
-            style={{
-              ...miniButtonStyle(colors, Boolean(selectedTemplate ?? generatedContract)),
-              justifySelf: "flex-start",
-              opacity: selectedTemplate || generatedContract ? 1 : 0.45,
-            }}
-            type="button"
-          >
-            {selectedTemplate
-              ? `Generate ${TEMPLATE_EXERCISE_LABELS[selectedTemplate]} rig`
-              : "Generate starter rig"}
-          </button>
-        </div>
-      ) : (
-        <>
-          <div style={panelStyle(colors)}>
-            <FieldLabel colors={colors}>2. Keyframes</FieldLabel>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              {keyframes.map((frame) => (
-                <button
-                  key={frame.kind}
-                  onClick={() => {
-                    setPreviewMotion(false);
-                    setActiveKind(frame.kind);
+                <span
+                  style={{
+                    alignItems: "center",
+                    backgroundColor: complete
+                      ? "#3ed875"
+                      : active
+                        ? colors.primary
+                        : colors.card,
+                    border: `1px solid ${complete ? "#3ed875" : active ? colors.primary : colors.border}`,
+                    borderRadius: 4,
+                    color: complete || active ? "#111" : colors.textMuted,
+                    display: "inline-flex",
+                    fontSize: 9,
+                    fontWeight: 900,
+                    height: 18,
+                    justifyContent: "center",
+                    width: 18,
                   }}
-                  style={miniButtonStyle(colors, activeKind === frame.kind && !previewMotion)}
+                >
+                  {complete ? <CheckCircle2 size={11} /> : index + 1}
+                </span>
+                <span style={{ fontSize: 11, fontWeight: 850 }}>
+                  {step.shortLabel}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {activeSetupStep === 0 ? (
+          <div style={panelStyle(colors)}>
+            <FieldLabel colors={colors}>1. Movement type</FieldLabel>
+            <div
+              style={{
+                display: "grid",
+                gap: 10,
+                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              }}
+            >
+              {MOVEMENT_MODE_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => setMovementMode(option.value)}
+                  style={{
+                    ...miniButtonStyle(colors, movementMode === option.value),
+                    borderRadius: 16,
+                    padding: 14,
+                    textAlign: "left",
+                  }}
                   type="button"
                 >
-                  {frame.label || getFrameLabel(frame.kind, movementMode)}
+                  <span style={{ display: "block", fontSize: 14 }}>
+                    {option.label}
+                  </span>
+                  <span
+                    style={{
+                      color:
+                        movementMode === option.value
+                          ? "#151515"
+                          : colors.textMuted,
+                      display: "block",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      marginTop: 4,
+                    }}
+                  >
+                    {option.description}
+                  </span>
                 </button>
               ))}
-              <button
-                onClick={() => setPreviewMotion((current) => !current)}
-                style={miniButtonStyle(colors, previewMotion)}
-                type="button"
-              >
-                Preview motion
-              </button>
-              <button
-                disabled={!generatedContract && !selectedTemplate}
-                onClick={() => createGeneratedProfile(selectedTemplate ?? undefined)}
+            </div>
+          </div>
+        ) : null}
+
+        {activeSetupStep === 4 && contract ? (
+          <div style={panelStyle(colors)}>
+            <div
+              style={{
+                alignItems: "flex-start",
+                display: "flex",
+                gap: 12,
+                justifyContent: "space-between",
+                flexWrap: "wrap",
+              }}
+            >
+              <div>
+                <FieldLabel colors={colors}>Spatial rules</FieldLabel>
+                <strong style={{ color: colors.text }}>
+                  Exercise-level movement validity
+                </strong>
+                <p style={{ color: colors.textMuted, margin: "4px 0 0" }}>
+                  Angles decide rep depth. Spatial rules decide whether the body
+                  position matches the exercise.
+                </p>
+              </div>
+              <span
                 style={{
-                  ...miniButtonStyle(colors),
-                  opacity: generatedContract || selectedTemplate ? 1 : 0.45,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: 6,
+                  color: colors.textMuted,
+                  fontSize: 12,
+                  fontWeight: 800,
+                  padding: "8px 12px",
                 }}
-                type="button"
               >
-                Reset rig
-              </button>
+                {spatialPreset === "none"
+                  ? "No extra spatial gate"
+                  : "Editable starter rules"}
+              </span>
             </div>
             <div
               style={{
-                display: "flex",
-                flexWrap: "wrap",
+                display: "grid",
                 gap: 8,
-                marginTop: 10,
+                gridTemplateColumns: "repeat(auto-fit, minmax(165px, 1fr))",
+                marginTop: 12,
               }}
             >
-              {RIG_VIEW_OPTIONS.map((option) => (
+              {SPATIAL_RULE_PRESET_OPTIONS.map((option) => (
                 <button
                   key={option.value}
-                  onClick={() => setViewTransform(option.value)}
-                  style={miniButtonStyle(colors, viewTransform === option.value)}
+                  onClick={() => setSpatialPreset(option.value)}
+                  style={{
+                    ...miniButtonStyle(colors, spatialPreset === option.value),
+                    borderRadius: 16,
+                    padding: 12,
+                    textAlign: "left",
+                  }}
                   type="button"
                 >
-                  {option.label}
+                  <span style={{ display: "block", fontSize: 13 }}>
+                    {option.label}
+                  </span>
+                  <span
+                    style={{
+                      color:
+                        spatialPreset === option.value
+                          ? "#151515"
+                          : colors.textMuted,
+                      display: "block",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      lineHeight: 1.35,
+                      marginTop: 4,
+                    }}
+                  >
+                    {option.description}
+                  </span>
                 </button>
               ))}
             </div>
-            {editableView && !previewMotion ? (
-              <span style={{ color: colors.textMuted, fontSize: 12 }}>
-                Drag orange joints directly. Mirror view saves the inverse normalized
-                coordinate; other transforms are preview-only.
-              </span>
-            ) : (
-              <span style={{ color: colors.textMuted, fontSize: 12 }}>
-                Switch to Front or Mirror and turn off Preview motion to drag nodes.
-              </span>
-            )}
             {frontViewDepthWarning ? (
-              <span
+              <p
                 style={{
                   color: colors.primary,
-                  display: "block",
                   fontSize: 12,
                   fontWeight: 850,
-                  marginTop: 6,
+                  margin: "10px 0 0",
                 }}
               >
-                Front view is for symmetry only. Use Side or Floor to tune depth.
-              </span>
+                Front view is for symmetry only. Use Side or Floor to tune
+                depth.
+              </p>
             ) : null}
           </div>
+        ) : null}
 
+        {activeSetupStep === 1 ? (
           <div
             style={{
+              border: `1px solid ${colors.border}`,
+              borderRadius: 8,
               display: "grid",
-              gap: 16,
-              gridTemplateColumns: "minmax(220px, 1fr) minmax(220px, 0.95fr)",
+              gap: 12,
+              padding: 16,
             }}
           >
-            <svg
-              onLostPointerCapture={handleSvgPointerEnd}
-              onPointerCancel={handleSvgPointerEnd}
-              onPointerLeave={handleSvgPointerEnd}
-              onPointerMove={handleSvgPointerMove}
-              onPointerUp={handleSvgPointerEnd}
-              ref={svgRef}
-              role="img"
+            <div>
+              <FieldLabel colors={colors}>2. Movement template</FieldLabel>
+              <strong style={{ color: colors.text }}>
+                Start from the closest movement pattern
+              </strong>
+              <p style={{ color: colors.textMuted, margin: "4px 0 0" }}>
+                Templates create a movement angle preview derived from the
+                authoritative down/up thresholds and safeguards you review next.
+              </p>
+            </div>
+            <div
               style={{
-                background:
-                  "radial-gradient(circle at 50% 20%, rgba(245, 133, 48, 0.18), transparent 42%), rgba(0, 0, 0, 0.2)",
-                border: `1px solid ${colors.border}`,
-                borderRadius: 18,
-                cursor:
-                  dragPoint !== null
-                    ? "grabbing"
-                    : editableView && !previewMotion
-                      ? "default"
-                      : "auto",
-                minHeight: 280,
-                overscrollBehavior: "contain",
-                touchAction: "none",
-                userSelect: "none",
-                width: "100%",
+                display: "grid",
+                gap: 8,
+                gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
               }}
-              viewBox="-10 -10 120 120"
             >
-              {RIG_BONES.map(([from, to]) => {
-                const start = getKeypointPosition(displayPoints[from]);
-                const end = getKeypointPosition(displayPoints[to]);
-                if (!start || !end) return null;
-                return (
-                  <line
-                    key={`${from}-${to}`}
-                    stroke="rgba(255,255,255,0.78)"
-                    strokeLinecap="round"
-                    strokeWidth={1.6}
-                    x1={start.cx}
-                    x2={end.cx}
-                    y1={start.cy}
-                    y2={end.cy}
-                  />
-                );
-              })}
-              {shoulderCenterPosition && hipCenterPosition ? (
-                <line
-                  stroke="#3ed875"
-                  strokeDasharray="3 3"
-                  strokeLinecap="round"
-                  strokeWidth={1.8}
-                  x1={shoulderCenterPosition.cx}
-                  x2={hipCenterPosition.cx}
-                  y1={shoulderCenterPosition.cy}
-                  y2={hipCenterPosition.cy}
+              {RIG_TEMPLATE_OPTIONS.map((template) => (
+                <button
+                  key={template.value}
+                  onClick={() => setSelectedTemplate(template.value)}
+                  style={{
+                    ...miniButtonStyle(
+                      colors,
+                      selectedTemplate === template.value,
+                    ),
+                    borderRadius: 6,
+                  }}
+                  type="button"
                 >
-                  <title>Torso line: spatial rules use this to reject fake push-up posture.</title>
-                </line>
-              ) : null}
-              {[leftWristPosition, rightWristPosition].map((position, index) =>
-                position ? (
-                  <circle
-                    cx={position.cx}
-                    cy={position.cy}
-                    fill="none"
-                    key={`wrist-anchor-${index}`}
-                    r={7}
-                    stroke="#facc15"
-                    strokeDasharray="2 3"
-                    strokeWidth={1.5}
-                  >
-                    <title>Wrist anchor zone: push-ups should keep hands planted.</title>
-                  </circle>
-                ) : null,
-              )}
-              {shoulderCenterPosition && hipCenterPosition ? (
-                <line
-                  markerEnd="url(#travel-arrow)"
-                  stroke="#f97316"
-                  strokeLinecap="round"
-                  strokeWidth={1.6}
-                  x1={shoulderCenterPosition.cx + 6}
-                  x2={shoulderCenterPosition.cx + 6}
-                  y1={shoulderCenterPosition.cy}
-                  y2={hipCenterPosition.cy}
-                >
-                  <title>Shoulder/hip travel: spatial rules require the body to actually move through the rep.</title>
-                </line>
-              ) : null}
-              <defs>
-                <marker
-                  id="travel-arrow"
-                  markerHeight="5"
-                  markerWidth="5"
-                  orient="auto"
-                  refX="4"
-                  refY="2.5"
-                >
-                  <path d="M0,0 L5,2.5 L0,5 Z" fill="#f97316" />
-                </marker>
-              </defs>
-              {dominantJointPosition && typeof dominantAngle === "number" ? (
-                <>
-                  <path
-                    d={describeAngleArc(
-                      dominantJointPosition.cx,
-                      dominantJointPosition.cy,
-                      7,
+                  {template.label}
+                </button>
+              ))}
+            </div>
+            <div
+              style={{
+                alignItems: "center",
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 10,
+              }}
+            >
+              <button
+                disabled={!selectedTemplate && !generatedContract}
+                onClick={() =>
+                  createGeneratedProfile(selectedTemplate ?? undefined)
+                }
+                style={{
+                  ...miniButtonStyle(
+                    colors,
+                    Boolean(selectedTemplate ?? generatedContract),
+                  ),
+                  borderRadius: 6,
+                  opacity: selectedTemplate || generatedContract ? 1 : 0.45,
+                }}
+                type="button"
+              >
+                {rig ? "Regenerate angle preview" : "Generate angle preview"}
+              </button>
+              <span
+                style={{
+                  color: rig ? "#3ed875" : colors.textMuted,
+                  fontSize: 12,
+                  fontWeight: 800,
+                }}
+              >
+                {rig
+                  ? `${keyframes.length} derived preview frames ready`
+                  : "Choose a template to create the movement angle preview"}
+              </span>
+            </div>
+          </div>
+        ) : null}
+
+        {activeSetupStep === 2 || activeSetupStep === 5 ? (
+          !rig || !keyframes.length ? (
+            <div
+              style={{
+                border: `1px dashed ${colors.borderStrong}`,
+                borderRadius: 8,
+                color: colors.textMuted,
+                display: "grid",
+                gap: 12,
+                padding: 18,
+              }}
+            >
+              <span>
+                No rig captured yet. Choose a template first; unknown exercises
+                no longer receive a generic curl animation.
+              </span>
+              <div
+                style={{
+                  display: "grid",
+                  gap: 8,
+                  gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+                }}
+              >
+                {RIG_TEMPLATE_OPTIONS.map((template) => (
+                  <button
+                    key={template.value}
+                    onClick={() => setSelectedTemplate(template.value)}
+                    style={miniButtonStyle(
+                      colors,
+                      selectedTemplate === template.value,
                     )}
-                    fill="none"
-                    stroke="#3ed875"
-                    strokeLinecap="round"
-                    strokeWidth={2.4}
-                  />
-                  <circle
-                    cx={dominantJointPosition.cx}
-                    cy={dominantJointPosition.cy}
-                    fill="none"
-                    r={8.5}
-                    stroke="rgba(62,216,117,0.38)"
-                    strokeWidth={1.4}
-                  />
-                  <text
-                    fill="#59f08b"
-                    fontSize={5}
-                    fontWeight={800}
-                    x={dominantJointPosition.cx + 9}
-                    y={dominantJointPosition.cy - 6}
+                    type="button"
                   >
-                    {dominantAngle} deg
-                  </text>
-                </>
+                    {template.label}
+                  </button>
+                ))}
+              </div>
+              <button
+                disabled={!selectedTemplate && !generatedContract}
+                onClick={() =>
+                  createGeneratedProfile(selectedTemplate ?? undefined)
+                }
+                style={{
+                  ...miniButtonStyle(
+                    colors,
+                    Boolean(selectedTemplate ?? generatedContract),
+                  ),
+                  justifySelf: "flex-start",
+                  opacity: selectedTemplate || generatedContract ? 1 : 0.45,
+                }}
+                type="button"
+              >
+                {selectedTemplate
+                  ? `Generate ${TEMPLATE_EXERCISE_LABELS[selectedTemplate]} rig`
+                  : "Generate starter rig"}
+              </button>
+            </div>
+          ) : (
+            <>
+              <div style={panelStyle(colors)}>
+                <FieldLabel colors={colors}>
+                  {activeSetupStep === 2
+                    ? "3. Angles and keyframes"
+                    : "6. Movement preview"}
+                </FieldLabel>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {keyframes.map((frame) => (
+                    <button
+                      key={frame.kind}
+                      onClick={() => {
+                        setPreviewMotion(false);
+                        setActiveKind(frame.kind);
+                      }}
+                      style={miniButtonStyle(
+                        colors,
+                        activeKind === frame.kind && !previewMotion,
+                      )}
+                      type="button"
+                    >
+                      {frame.label || getFrameLabel(frame.kind, movementMode)}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => setPreviewMotion((current) => !current)}
+                    style={miniButtonStyle(colors, previewMotion)}
+                    type="button"
+                  >
+                    Preview motion
+                  </button>
+                  <button
+                    disabled={!generatedContract && !selectedTemplate}
+                    onClick={() =>
+                      createGeneratedProfile(selectedTemplate ?? undefined)
+                    }
+                    style={{
+                      ...miniButtonStyle(colors),
+                      opacity: generatedContract || selectedTemplate ? 1 : 0.45,
+                    }}
+                    type="button"
+                  >
+                    Reset rig
+                  </button>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: 8,
+                    marginTop: 10,
+                  }}
+                >
+                  {RIG_VIEW_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={() => setViewTransform(option.value)}
+                      style={miniButtonStyle(
+                        colors,
+                        viewTransform === option.value,
+                      )}
+                      type="button"
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                {editableView && !previewMotion ? (
+                  <span style={{ color: colors.textMuted, fontSize: 12 }}>
+                    Drag orange joints directly. Mirror view saves the inverse
+                    normalized coordinate; other transforms are preview-only.
+                  </span>
+                ) : (
+                  <span style={{ color: colors.textMuted, fontSize: 12 }}>
+                    Switch to Front or Mirror and turn off Preview motion to
+                    drag nodes.
+                  </span>
+                )}
+                {frontViewDepthWarning ? (
+                  <span
+                    style={{
+                      color: colors.primary,
+                      display: "block",
+                      fontSize: 12,
+                      fontWeight: 850,
+                      marginTop: 6,
+                    }}
+                  >
+                    Front view is for symmetry only. Use Side or Floor to tune
+                    depth.
+                  </span>
+                ) : null}
+              </div>
+
+              {activeSetupStep === 2 &&
+              contract &&
+              movementMode === "dynamic_rep" ? (
+                <div
+                  aria-label="Mobile tracking target angles"
+                  style={{
+                    ...panelStyle(colors),
+                    display: "grid",
+                    gap: 12,
+                    gridTemplateColumns:
+                      "repeat(auto-fit, minmax(min(100%, 240px), 1fr))",
+                  }}
+                >
+                  <AngleTargetControl
+                    colors={colors}
+                    label="Peak / down target"
+                    onChange={(angle) => patchThreshold("down", { angle })}
+                    value={contract.repThresholds.down.angle}
+                  />
+                  <AngleTargetControl
+                    colors={colors}
+                    label="Start / up target"
+                    onChange={(angle) => patchThreshold("up", { angle })}
+                    value={contract.repThresholds.up.angle}
+                  />
+                  <p
+                    data-down-angle={contract.repThresholds.down.angle}
+                    data-mobile-effective-thresholds="true"
+                    data-up-angle={contract.repThresholds.up.angle}
+                    style={{
+                      color: "#3ed875",
+                      fontSize: 12,
+                      fontWeight: 800,
+                      gridColumn: "1 / -1",
+                      margin: 0,
+                    }}
+                  >
+                    Mobile rep counting now uses{" "}
+                    {contract.repThresholds.down.angle}° at peak/down and{" "}
+                    {contract.repThresholds.up.angle}° at start/up. The matching
+                    full-body frames update immediately.
+                  </p>
+                </div>
               ) : null}
-              {displayPoints.map((point, index) => {
-                const position = getKeypointPosition(point);
-                if (!point || !position) return null;
-                const nodeLabel = `${index}: ${
-                  LANDMARK_LABELS[index] ?? "landmark"
-                } (${Math.round(point.x * 100)}% x, ${Math.round(point.y * 100)}% y)`;
-                return (
-                  <circle
-                    aria-label={nodeLabel}
-                    cx={position.cx}
-                    cy={position.cy}
-                    fill={index === selectedPoint ? colors.primary : "#f58530"}
-                    key={index}
-                    onPointerDown={(event) => {
+
+              <div
+                style={{
+                  display: "grid",
+                  gap: 16,
+                  gridTemplateColumns:
+                    "repeat(auto-fit, minmax(min(100%, 280px), 1fr))",
+                }}
+              >
+                <svg
+                  aria-label="Editable full-body movement rig"
+                  data-rig-visible-landmarks={
+                    displayPoints.filter(
+                      (point) => point && point.visibility >= 0.1,
+                    ).length
+                  }
+                  data-testid="exercise-full-body-rig"
+                  onLostPointerCapture={handleSvgPointerEnd}
+                  onPointerCancel={handleSvgPointerEnd}
+                  onPointerLeave={handleSvgPointerEnd}
+                  onPointerMove={handleSvgPointerMove}
+                  onPointerUp={handleSvgPointerEnd}
+                  ref={svgRef}
+                  role="img"
+                  style={{
+                    background:
+                      "radial-gradient(circle at 50% 20%, rgba(245, 133, 48, 0.18), transparent 42%), rgba(0, 0, 0, 0.2)",
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: 18,
+                    cursor:
+                      dragPoint !== null
+                        ? "grabbing"
+                        : editableView && !previewMotion
+                          ? "default"
+                          : "auto",
+                    minHeight: 280,
+                    overscrollBehavior: "contain",
+                    touchAction: "none",
+                    userSelect: "none",
+                    width: "100%",
+                  }}
+                  viewBox="-10 -10 120 120"
+                >
+                  {RIG_BONES.map(([from, to]) => {
+                    const start = getKeypointPosition(displayPoints[from]);
+                    const end = getKeypointPosition(displayPoints[to]);
+                    if (!start || !end) return null;
+                    const secondaryBone =
+                      SECONDARY_LANDMARK_INDEXES.has(from) ||
+                      SECONDARY_LANDMARK_INDEXES.has(to);
+                    return (
+                      <line
+                        data-rig-bone={`${from}-${to}`}
+                        key={`${from}-${to}`}
+                        stroke={
+                          secondaryBone
+                            ? "rgba(255,255,255,0.34)"
+                            : "rgba(255,255,255,0.68)"
+                        }
+                        strokeLinecap="round"
+                        strokeWidth={secondaryBone ? 0.8 : 1.25}
+                        x1={start.cx}
+                        x2={end.cx}
+                        y1={start.cy}
+                        y2={end.cy}
+                      />
+                    );
+                  })}
+                  {shoulderCenterPosition && hipCenterPosition ? (
+                    <line
+                      stroke="#3ed875"
+                      strokeDasharray="3 3"
+                      strokeLinecap="round"
+                      strokeOpacity={0.55}
+                      strokeWidth={0.9}
+                      x1={shoulderCenterPosition.cx}
+                      x2={hipCenterPosition.cx}
+                      y1={shoulderCenterPosition.cy}
+                      y2={hipCenterPosition.cy}
+                    >
+                      <title>
+                        Torso line: spatial rules use this to reject fake
+                        push-up posture.
+                      </title>
+                    </line>
+                  ) : null}
+                  {spatialPreset === "ground_press"
+                    ? [leftWristPosition, rightWristPosition].map(
+                        (position, index) =>
+                          position ? (
+                            <circle
+                              cx={position.cx}
+                              cy={position.cy}
+                              fill="none"
+                              key={`wrist-anchor-${index}`}
+                              r={5.5}
+                              stroke="#facc15"
+                              strokeDasharray="2 3"
+                              strokeWidth={1}
+                            >
+                              <title>
+                                Wrist anchor zone: push-ups should keep hands
+                                planted.
+                              </title>
+                            </circle>
+                          ) : null,
+                      )
+                    : null}
+                  {dominantJointPosition &&
+                  typeof dominantAngle === "number" ? (
+                    <>
+                      <path
+                        d={describeAngleArc(
+                          dominantJointPosition.cx,
+                          dominantJointPosition.cy,
+                          4.5,
+                          105,
+                        )}
+                        fill="none"
+                        stroke="#3ed875"
+                        strokeLinecap="round"
+                        strokeWidth={1.35}
+                      />
+                      <text
+                        fill="#59f08b"
+                        fontSize={4}
+                        fontWeight={800}
+                        textAnchor={dominantSide === "left" ? "end" : "start"}
+                        x={
+                          dominantJointPosition.cx +
+                          (dominantSide === "left" ? -8 : 8)
+                        }
+                        y={dominantJointPosition.cy - 4}
+                      >
+                        {dominantAngle} deg
+                      </text>
+                    </>
+                  ) : null}
+                  {displayPoints.map((point, index) => {
+                    const position = getKeypointPosition(point);
+                    if (!point || !position) return null;
+                    const nodeLabel = `${index}: ${
+                      LANDMARK_LABELS[index] ?? "landmark"
+                    } (${Math.round(point.x * 100)}% x, ${Math.round(point.y * 100)}% y)`;
+                    const isSelected = index === selectedPoint;
+                    const isDominant = dominantLandmarkIndexes.has(index);
+                    const isSecondary = SECONDARY_LANDMARK_INDEXES.has(index);
+                    const handlePointerDown = (
+                      event: ReactPointerEvent<Element>,
+                    ) => {
                       event.preventDefault();
                       event.stopPropagation();
                       setSelectedPoint(index);
@@ -1566,328 +1890,409 @@ export function MovementProfileEditor({
                         // Synthetic/browser-tool pointer events may not own an active pointer.
                       }
                       updatePointFromPointer(event, index);
-                    }}
-                    r={index === selectedPoint ? 2.6 : 1.8}
-                    stroke={index === selectedPoint ? "#111" : "transparent"}
-                    strokeWidth={0.8}
+                    };
+                    return (
+                      <g
+                        data-dominant-landmark={isDominant ? "true" : undefined}
+                        data-rig-landmark={index}
+                        data-selected-landmark={isSelected ? "true" : undefined}
+                        key={index}
+                      >
+                        {isDominant && !isSelected ? (
+                          <rect
+                            fill="rgba(245,133,48,0.14)"
+                            height={6}
+                            pointerEvents="none"
+                            rx={1.5}
+                            stroke="#facc15"
+                            strokeDasharray="2 1"
+                            strokeWidth={0.8}
+                            transform={`rotate(45 ${position.cx} ${position.cy})`}
+                            width={6}
+                            x={position.cx - 3}
+                            y={position.cy - 3}
+                          />
+                        ) : null}
+                        {isSelected ? (
+                          <circle
+                            cx={position.cx}
+                            cy={position.cy}
+                            fill="none"
+                            pointerEvents="none"
+                            r={4.2}
+                            stroke="#ffffff"
+                            strokeWidth={1.1}
+                          />
+                        ) : null}
+                        <circle
+                          aria-label={nodeLabel}
+                          cx={position.cx}
+                          cy={position.cy}
+                          fill={isSelected ? colors.primary : "#f58530"}
+                          onPointerDown={handlePointerDown}
+                          opacity={isSecondary && !isSelected ? 0.48 : 1}
+                          r={
+                            isSelected
+                              ? 2.8
+                              : isDominant
+                                ? 2.4
+                                : isSecondary
+                                  ? 1.05
+                                  : 1.75
+                          }
+                          stroke={isDominant ? "#111" : "rgba(17,17,17,0.72)"}
+                          strokeWidth={isDominant ? 1.1 : 0.65}
+                          style={{
+                            cursor:
+                              editableView && !previewMotion
+                                ? dragPoint === index
+                                  ? "grabbing"
+                                  : "grab"
+                                : "pointer",
+                          }}
+                        >
+                          <title>{nodeLabel}</title>
+                        </circle>
+                        <circle
+                          aria-hidden="true"
+                          cx={position.cx}
+                          cy={position.cy}
+                          fill="transparent"
+                          onPointerDown={handlePointerDown}
+                          data-effective-hit-target="44px-min"
+                          r={9.5}
+                          style={{
+                            cursor:
+                              editableView && !previewMotion
+                                ? "grab"
+                                : "pointer",
+                          }}
+                        />
+                      </g>
+                    );
+                  })}
+                </svg>
+
+                <div style={{ display: "grid", gap: 12 }}>
+                  <FieldShell colors={colors} label="Keyframe label">
+                    <input
+                      name="exercise-keyframe-label"
+                      onChange={(event) =>
+                        patchActiveFrame({ label: event.target.value })
+                      }
+                      style={inputStyle(colors)}
+                      value={activeFrame?.label ?? ""}
+                    />
+                  </FieldShell>
+                  <FieldShell colors={colors} label="Derived keyframe angle">
+                    <input
+                      name="exercise-keyframe-angle"
+                      aria-readonly="true"
+                      readOnly
+                      style={inputStyle(colors)}
+                      type="number"
+                      value={activeFrame?.angle ?? ""}
+                    />
+                  </FieldShell>
+                  {movementMode === "dynamic_rep" && activeFrame ? (
+                    <div
+                      aria-live="polite"
+                      data-mobile-frame-threshold={
+                        activeFrame.kind === "peak" ? "down" : "up"
+                      }
+                      role="status"
+                      style={{
+                        background: "rgba(62,216,117,0.1)",
+                        border: "1px solid rgba(62,216,117,0.32)",
+                        borderRadius: 10,
+                        color: "#59f08b",
+                        fontSize: 12,
+                        fontWeight: 800,
+                        padding: "10px 12px",
+                      }}
+                    >
+                      {activeFrame.kind === "peak" ? "Peak/down" : "Start/up"}{" "}
+                      mobile target:{" "}
+                      {activeFrame.kind === "peak"
+                        ? contract?.repThresholds.down.angle
+                        : contract?.repThresholds.up.angle}
+                      °. Dragging the highlighted chain syncs this target
+                      immediately.
+                    </div>
+                  ) : null}
+                  {contract?.repModel === "bilateral" &&
+                  symmetryDelta !== null &&
+                  symmetryDelta > symmetryLimit ? (
+                    <div
+                      style={{
+                        background: "rgba(245, 158, 11, 0.12)",
+                        border: "1px solid rgba(245, 158, 11, 0.35)",
+                        borderRadius: 14,
+                        color: "#facc15",
+                        fontSize: 12,
+                        fontWeight: 800,
+                        padding: 12,
+                      }}
+                    >
+                      Symmetry warning: left/right angle delta is{" "}
+                      {symmetryDelta} deg (limit {symmetryLimit} deg).
+                    </div>
+                  ) : null}
+                  <FieldShell colors={colors} label="Selected landmark">
+                    <FitSelect
+                      compact
+                      fullWidth
+                      name="exercise-selected-landmark"
+                      onChange={(event) =>
+                        setSelectedPoint(Number(event.target.value))
+                      }
+                      options={(activeFrame?.keypoints ?? []).map(
+                        (_, index) => ({
+                          label: `${index}: ${LANDMARK_LABELS[index] ?? "landmark"}`,
+                          value: String(index),
+                        }),
+                      )}
+                      value={selectedPoint}
+                    />
+                  </FieldShell>
+                  <div
                     style={{
-                      cursor:
-                        editableView && !previewMotion
-                          ? dragPoint === index
-                            ? "grabbing"
-                            : "grab"
-                          : "pointer",
+                      display: "grid",
+                      gap: 10,
+                      gridTemplateColumns: "1fr 1fr",
                     }}
                   >
-                    <title>{nodeLabel}</title>
-                  </circle>
-                );
-              })}
-            </svg>
+                    <FieldShell colors={colors} label="X">
+                      <input
+                        max={1.2}
+                        min={-0.2}
+                        name="exercise-landmark-x"
+                        onChange={(event) =>
+                          patchActivePoint({
+                            x: roundToStep(
+                              clamp(toNumber(event.target.value, 0), -0.2, 1.2),
+                            ),
+                          })
+                        }
+                        step={0.005}
+                        style={inputStyle(colors)}
+                        type="number"
+                        value={activeFrame?.keypoints[selectedPoint]?.x ?? ""}
+                      />
+                    </FieldShell>
+                    <FieldShell colors={colors} label="Y">
+                      <input
+                        max={1.2}
+                        min={-0.2}
+                        name="exercise-landmark-y"
+                        onChange={(event) =>
+                          patchActivePoint({
+                            y: roundToStep(
+                              clamp(toNumber(event.target.value, 0), -0.2, 1.2),
+                            ),
+                          })
+                        }
+                        step={0.005}
+                        style={inputStyle(colors)}
+                        type="number"
+                        value={activeFrame?.keypoints[selectedPoint]?.y ?? ""}
+                      />
+                    </FieldShell>
+                  </div>
+                </div>
+              </div>
+            </>
+          )
+        ) : null}
 
-            <div style={{ display: "grid", gap: 12 }}>
-              <FieldShell colors={colors} label="Keyframe label">
-                <input
-                  name="exercise-keyframe-label"
-                  onChange={(event) =>
-                    patchActiveFrame({ label: event.target.value })
-                  }
-                  style={inputStyle(colors)}
-                  value={activeFrame?.label ?? ""}
-                />
-              </FieldShell>
-              <FieldShell colors={colors} label="Angle at keyframe">
-                <input
-                  max={180}
-                  min={0}
-                  name="exercise-keyframe-angle"
-                  onChange={(event) =>
-                    patchActiveFrame({
-                      angle: event.target.value.trim()
-                        ? toNumber(event.target.value, activeFrame?.angle ?? 0)
-                        : null,
-                    })
-                  }
-                  step={1}
-                  style={inputStyle(colors)}
-                  type="number"
-                  value={activeFrame?.angle ?? ""}
-                />
-              </FieldShell>
-              {contract?.repModel === "bilateral" &&
-              symmetryDelta !== null &&
-              symmetryDelta > symmetryLimit ? (
-                <div
+        {activeSetupStep === 3 && contract ? (
+          <div style={panelStyle(colors)}>
+            <div
+              style={{
+                alignItems: "center",
+                display: "flex",
+                gap: 12,
+                justifyContent: "space-between",
+                flexWrap: "wrap",
+              }}
+            >
+              <div>
+                <strong style={{ color: colors.text }}>
+                  Rep counting rules
+                </strong>
+                <p style={{ color: colors.textMuted, margin: "4px 0 0" }}>
+                  Tune the actual down/up phase thresholds, tolerances, side
+                  requirements, and partial-rep policy used by the tracker.
+                </p>
+                <p
                   style={{
-                    background: "rgba(245, 158, 11, 0.12)",
-                    border: "1px solid rgba(245, 158, 11, 0.35)",
-                    borderRadius: 14,
-                    color: "#facc15",
+                    color: "#3ed875",
                     fontSize: 12,
                     fontWeight: 800,
-                    padding: 12,
+                    margin: "8px 0 0",
                   }}
                 >
-                  Symmetry warning: left/right angle delta is {symmetryDelta} deg
-                  (limit {symmetryLimit} deg).
-                </div>
-              ) : null}
-              <FieldShell colors={colors} label="Selected landmark">
-                <FitSelect
-                  compact
-                  fullWidth
-                  name="exercise-selected-landmark"
-                  onChange={(event) => setSelectedPoint(Number(event.target.value))}
-                  options={(activeFrame?.keypoints ?? []).map((_, index) => ({
-                    label: `${index}: ${LANDMARK_LABELS[index] ?? "landmark"}`,
-                    value: String(index),
-                  }))}
-                  value={selectedPoint}
-                />
-              </FieldShell>
-              <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
-                <FieldShell colors={colors} label="X">
-                  <input
-                    max={1.2}
-                    min={-0.2}
-                    name="exercise-landmark-x"
-                    onChange={(event) =>
-                      patchActivePoint({
-                        x: roundToStep(
-                          clamp(toNumber(event.target.value, 0), -0.2, 1.2),
-                        ),
-                      })
-                    }
-                    step={0.005}
-                    style={inputStyle(colors)}
-                    type="number"
-                    value={activeFrame?.keypoints[selectedPoint]?.x ?? ""}
-                  />
-                </FieldShell>
-                <FieldShell colors={colors} label="Y">
-                  <input
-                    max={1.2}
-                    min={-0.2}
-                    name="exercise-landmark-y"
-                    onChange={(event) =>
-                      patchActivePoint({
-                        y: roundToStep(
-                          clamp(toNumber(event.target.value, 0), -0.2, 1.2),
-                        ),
-                      })
-                    }
-                    step={0.005}
-                    style={inputStyle(colors)}
-                    type="number"
-                    value={activeFrame?.keypoints[selectedPoint]?.y ?? ""}
-                  />
-                </FieldShell>
+                  Angles decide rep depth. Spatial rules decide whether the body
+                  position matches the exercise.
+                </p>
               </div>
-              {!previewMotion ? (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  <button
-                    disabled={typeof activeFrame?.angle !== "number" || movementMode === "static_hold"}
-                    onClick={() =>
-                      activeFrame?.angle !== null &&
-                      patchThreshold("down", { angle: activeFrame?.angle ?? 0 })
-                    }
-                    style={miniButtonStyle(colors)}
-                    type="button"
-                  >
-                    Use angle as down
-                  </button>
-                  <button
-                    disabled={typeof activeFrame?.angle !== "number" || movementMode === "static_hold"}
-                    onClick={() =>
-                      activeFrame?.angle !== null &&
-                      patchThreshold("up", { angle: activeFrame?.angle ?? 0 })
-                    }
-                    style={miniButtonStyle(colors)}
-                    type="button"
-                  >
-                    Use angle as up
-                  </button>
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </>
-      )) : null}
-
-      {activeSetupStep === 3 && contract ? (
-        <div style={panelStyle(colors)}>
-          <div
-            style={{
-              alignItems: "center",
-              display: "flex",
-              gap: 12,
-              justifyContent: "space-between",
-              flexWrap: "wrap",
-            }}
-          >
-            <div>
-              <strong style={{ color: colors.text }}>Rep counting rules</strong>
-              <p style={{ color: colors.textMuted, margin: "4px 0 0" }}>
-                Tune the actual down/up phase thresholds, tolerances, side
-                requirements, and partial-rep policy used by the tracker.
-              </p>
-              <p
-                style={{
-                  color: "#3ed875",
-                  fontSize: 12,
-                  fontWeight: 800,
-                  margin: "8px 0 0",
-                }}
-              >
-                Angles decide rep depth. Spatial rules decide whether the body
-                position matches the exercise.
-              </p>
-            </div>
-            <button
-              disabled={!generatedContract && !selectedTemplate}
-              onClick={() => createGeneratedProfile(selectedTemplate ?? undefined)}
-              style={miniButtonStyle(colors)}
-              type="button"
-            >
-              Regenerate rig
-            </button>
-          </div>
-
-          <div
-            style={{
-              display: "grid",
-              gap: 12,
-              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-            }}
-          >
-            {movementMode === "dynamic_rep" ? (
-              <>
-                <ThresholdField
-                  colors={colors}
-                  label="Down angle"
-                  max={180}
-                  min={0}
-                  onChange={(angle) => patchThreshold("down", { angle })}
-                  value={contract.repThresholds.down.angle}
-                />
-                <ThresholdField
-                  colors={colors}
-                  label="Down tolerance"
-                  max={90}
-                  min={0}
-                  onChange={(tolerance) => patchThreshold("down", { tolerance })}
-                  value={contract.repThresholds.down.tolerance}
-                />
-                <ThresholdField
-                  colors={colors}
-                  label="Up angle"
-                  max={180}
-                  min={0}
-                  onChange={(angle) => patchThreshold("up", { angle })}
-                  value={contract.repThresholds.up.angle}
-                />
-                <ThresholdField
-                  colors={colors}
-                  label="Up tolerance"
-                  max={90}
-                  min={0}
-                  onChange={(tolerance) => patchThreshold("up", { tolerance })}
-                  value={contract.repThresholds.up.tolerance}
-                />
-              </>
-            ) : (
-              <>
-                <ThresholdField
-                  colors={colors}
-                  label="Body line tolerance"
-                  max={90}
-                  min={0}
-                  onChange={(bodyLineTolerance) =>
-                    patchSpatialRequirement({ bodyLineTolerance })
-                  }
-                  value={contract.spatialRequirements?.bodyLineTolerance ?? 28}
-                />
-                <ThresholdField
-                  colors={colors}
-                  label="Max body X drift"
-                  max={0.4}
-                  min={0}
-                  onChange={(bodyXDriftMax) =>
-                    patchSpatialRequirement({ bodyXDriftMax })
-                  }
-                  step={0.005}
-                  value={contract.spatialRequirements?.bodyXDriftMax ?? 0.08}
-                />
-              </>
-            )}
-            {movementMode === "dynamic_rep" ? (
-              <FieldShell colors={colors} label="Side model">
-                <FitSelect
-                  compact
-                  fullWidth
-                  name="exercise-side-model"
-                  onChange={(event) =>
-                    setRepModel(event.target.value as (typeof DYNAMIC_REP_MODEL_OPTIONS)[number])
-                  }
-                  options={DYNAMIC_REP_MODEL_OPTIONS.map((option) => ({
-                    label: option.replace(/_/g, " "),
-                    value: option,
-                  }))}
-                  value={
-                    DYNAMIC_REP_MODEL_OPTIONS.includes(
-                      contract.repModel as (typeof DYNAMIC_REP_MODEL_OPTIONS)[number],
-                    )
-                      ? contract.repModel
-                      : "bilateral"
-                  }
-                />
-              </FieldShell>
-            ) : null}
-            <FieldShell colors={colors} label="Required sides">
-              <FitSelect
-                compact
-                fullWidth
-                name="exercise-required-sides"
-                onChange={(event) =>
-                  patchMovementContract({
-                    requiredSides: event.target.value as (typeof REQUIRED_SIDE_OPTIONS)[number],
-                  })
+              <button
+                disabled={!generatedContract && !selectedTemplate}
+                onClick={() =>
+                  createGeneratedProfile(selectedTemplate ?? undefined)
                 }
-                options={(movementMode === "static_hold"
-                  ? STATIC_REQUIRED_SIDE_OPTIONS
-                  : REQUIRED_SIDE_OPTIONS
-                ).map((option) => ({
-                  label: option.replace(/_/g, " "),
-                  value: option,
-                }))}
-                value={contract.requiredSides ?? "either"}
-              />
-            </FieldShell>
-            {movementMode === "dynamic_rep" ? (
-              <FieldShell colors={colors} label="Partial rep policy">
+                style={miniButtonStyle(colors)}
+                type="button"
+              >
+                Regenerate rig
+              </button>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gap: 12,
+                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              }}
+            >
+              {movementMode === "dynamic_rep" ? (
+                <>
+                  <ThresholdField
+                    colors={colors}
+                    label="Down angle"
+                    max={180}
+                    min={0}
+                    onChange={(angle) => patchThreshold("down", { angle })}
+                    value={contract.repThresholds.down.angle}
+                  />
+                  <ThresholdField
+                    colors={colors}
+                    label="Down tolerance"
+                    max={90}
+                    min={0}
+                    onChange={(tolerance) =>
+                      patchThreshold("down", { tolerance })
+                    }
+                    value={contract.repThresholds.down.tolerance}
+                  />
+                  <ThresholdField
+                    colors={colors}
+                    label="Up angle"
+                    max={180}
+                    min={0}
+                    onChange={(angle) => patchThreshold("up", { angle })}
+                    value={contract.repThresholds.up.angle}
+                  />
+                  <ThresholdField
+                    colors={colors}
+                    label="Up tolerance"
+                    max={90}
+                    min={0}
+                    onChange={(tolerance) =>
+                      patchThreshold("up", { tolerance })
+                    }
+                    value={contract.repThresholds.up.tolerance}
+                  />
+                </>
+              ) : (
+                <>
+                  <ThresholdField
+                    colors={colors}
+                    label="Body line tolerance"
+                    max={90}
+                    min={0}
+                    onChange={(bodyLineTolerance) =>
+                      patchSpatialRequirement({ bodyLineTolerance })
+                    }
+                    value={
+                      contract.spatialRequirements?.bodyLineTolerance ?? 28
+                    }
+                  />
+                  <ThresholdField
+                    colors={colors}
+                    label="Max body X drift"
+                    max={0.4}
+                    min={0}
+                    onChange={(bodyXDriftMax) =>
+                      patchSpatialRequirement({ bodyXDriftMax })
+                    }
+                    step={0.005}
+                    value={contract.spatialRequirements?.bodyXDriftMax ?? 0.08}
+                  />
+                </>
+              )}
+              {movementMode === "dynamic_rep" ? (
+                <FieldShell colors={colors} label="Side model">
+                  <FitSelect
+                    compact
+                    fullWidth
+                    name="exercise-side-model"
+                    onChange={(event) =>
+                      setRepModel(
+                        event.target
+                          .value as (typeof DYNAMIC_REP_MODEL_OPTIONS)[number],
+                      )
+                    }
+                    options={DYNAMIC_REP_MODEL_OPTIONS.map((option) => ({
+                      label: option.replace(/_/g, " "),
+                      value: option,
+                    }))}
+                    value={
+                      DYNAMIC_REP_MODEL_OPTIONS.includes(
+                        contract.repModel as (typeof DYNAMIC_REP_MODEL_OPTIONS)[number],
+                      )
+                        ? contract.repModel
+                        : "bilateral"
+                    }
+                  />
+                </FieldShell>
+              ) : null}
+              <FieldShell colors={colors} label="Required sides">
                 <FitSelect
                   compact
                   fullWidth
-                  name="exercise-partial-rep-policy"
+                  name="exercise-required-sides"
                   onChange={(event) =>
                     patchMovementContract({
-                      partialRepPolicy: event.target.value as (typeof PARTIAL_REP_POLICY_OPTIONS)[number],
+                      requiredSides: event.target
+                        .value as (typeof REQUIRED_SIDE_OPTIONS)[number],
                     })
                   }
-                  options={PARTIAL_REP_POLICY_OPTIONS.map((option) => ({
+                  options={(movementMode === "static_hold"
+                    ? STATIC_REQUIRED_SIDE_OPTIONS
+                    : REQUIRED_SIDE_OPTIONS
+                  ).map((option) => ({
                     label: option.replace(/_/g, " "),
                     value: option,
                   }))}
-                  value={contract.partialRepPolicy ?? "count_half_reps"}
+                  value={contract.requiredSides ?? "either"}
                 />
               </FieldShell>
-            ) : null}
+              {movementMode === "dynamic_rep" ? (
+                <FieldShell colors={colors} label="Partial rep policy">
+                  <FitSelect
+                    compact
+                    fullWidth
+                    name="exercise-partial-rep-policy"
+                    onChange={(event) =>
+                      patchMovementContract({
+                        partialRepPolicy: event.target
+                          .value as (typeof PARTIAL_REP_POLICY_OPTIONS)[number],
+                      })
+                    }
+                    options={PARTIAL_REP_POLICY_OPTIONS.map((option) => ({
+                      label: option.replace(/_/g, " "),
+                      value: option,
+                    }))}
+                    value={contract.partialRepPolicy ?? "count_half_reps"}
+                  />
+                </FieldShell>
+              ) : null}
+            </div>
           </div>
+        ) : null}
 
-        </div>
-      ) : null}
-
-      {activeSetupStep === 4 && contract ? (
+        {activeSetupStep === 4 && contract ? (
           <details
             style={{
               ...panelStyle(colors),
@@ -1907,7 +2312,9 @@ export function MovementProfileEditor({
               }}
             >
               <span>
-                <strong style={{ color: colors.text }}>Advanced thresholds</strong>
+                <strong style={{ color: colors.text }}>
+                  Advanced thresholds
+                </strong>
                 <span
                   style={{
                     color: colors.textMuted,
@@ -1916,7 +2323,8 @@ export function MovementProfileEditor({
                     marginTop: 3,
                   }}
                 >
-                  Fine-tune spatial checks only when the selected preset needs it.
+                  Fine-tune spatial checks only when the selected preset needs
+                  it.
                 </span>
               </span>
               <span
@@ -1939,159 +2347,174 @@ export function MovementProfileEditor({
                 padding: 16,
               }}
             >
-              <strong style={{ color: colors.text }}>Spatial awareness rules</strong>
+              <strong style={{ color: colors.text }}>
+                Spatial awareness rules
+              </strong>
               <p style={{ color: colors.textMuted, margin: "4px 0 0" }}>
-                Use these to stop curls from counting as push-ups, reject one-arm
-                motion on bilateral exercises, and require real body travel.
+                Use these to stop curls from counting as push-ups, reject
+                one-arm motion on bilateral exercises, and require real body
+                travel.
               </p>
-            {spatialPreset === "none" ? (
-              <p
-                style={{
-                  border: `1px dashed ${colors.border}`,
-                  borderRadius: 14,
-                  color: colors.textMuted,
-                  fontSize: 13,
-                  margin: "12px 0 0",
-                  padding: 14,
-                }}
-              >
-                No extra spatial gate is active. Use this for exercises where
-                joint angles and required side checks are enough, then switch to
-                a preset or Custom if the movement needs body-position proof.
-              </p>
-            ) : (
-              <div
-                style={{
-                  display: "grid",
-                  gap: 12,
-                  gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
-                  marginTop: 12,
-                }}
-              >
-                <ThresholdField
-                  colors={colors}
-                  label="Body line tolerance"
-                  max={90}
-                  min={0}
-                  onChange={(bodyLineTolerance) =>
-                    patchSpatialRequirement({ bodyLineTolerance })
-                  }
-                  value={contract.spatialRequirements?.bodyLineTolerance ?? 28}
-                />
-                <ThresholdField
-                  colors={colors}
-                  label="Body Y travel min"
-                  max={0.4}
-                  min={0}
-                  onChange={(bodyYTravelMin) =>
-                    patchSpatialRequirement({ bodyYTravelMin })
-                  }
-                  step={0.001}
-                  value={contract.spatialRequirements?.bodyYTravelMin ?? 0.012}
-                />
-                <ThresholdField
-                  colors={colors}
-                  label="Shoulder travel min"
-                  max={0.4}
-                  min={0}
-                  onChange={(shoulderYTravelMin) =>
-                    patchSpatialRequirement({ shoulderYTravelMin })
-                  }
-                  step={0.001}
-                  value={contract.spatialRequirements?.shoulderYTravelMin ?? 0.008}
-                />
-                <ThresholdField
-                  colors={colors}
-                  label="Hip travel min"
-                  max={0.4}
-                  min={0}
-                  onChange={(hipYTravelMin) =>
-                    patchSpatialRequirement({ hipYTravelMin })
-                  }
-                  step={0.001}
-                  value={contract.spatialRequirements?.hipYTravelMin ?? 0.01}
-                />
-                <ThresholdField
-                  colors={colors}
-                  label="Shoulder/Hip travel"
-                  max={0.4}
-                  min={0}
-                  onChange={(shoulderHipTravelMin) =>
-                    patchSpatialRequirement({ shoulderHipTravelMin })
-                  }
-                  step={0.001}
-                  value={
-                    contract.spatialRequirements?.shoulderHipTravelMin ?? 0.01
-                  }
-                />
-                <ThresholdField
-                  colors={colors}
-                  label="Wrist anchor drift"
-                  max={0.5}
-                  min={0}
-                  onChange={(wristAnchorDriftMax) =>
-                    patchSpatialRequirement({ wristAnchorDriftMax })
-                  }
-                  step={0.001}
-                  value={contract.spatialRequirements?.wristAnchorDriftMax ?? 0.18}
-                />
-                <ThresholdField
-                  colors={colors}
-                  label="Torso slope min"
-                  max={180}
-                  min={0}
-                  onChange={(torsoSlopeMinDeg) =>
-                    patchSpatialRequirement({ torsoSlopeMinDeg })
-                  }
-                  value={contract.spatialRequirements?.torsoSlopeMinDeg ?? 0}
-                />
-                <ThresholdField
-                  colors={colors}
-                  label="Torso slope max"
-                  max={180}
-                  min={0}
-                  onChange={(torsoSlopeMaxDeg) =>
-                    patchSpatialRequirement({ torsoSlopeMaxDeg })
-                  }
-                  value={contract.spatialRequirements?.torsoSlopeMaxDeg ?? 92}
-                />
-                <ThresholdField
-                  colors={colors}
-                  label="Elbow symmetry"
-                  max={90}
-                  min={0}
-                  onChange={(leftRightSymmetryTolerance) =>
-                    patchSpatialRequirement({ leftRightSymmetryTolerance })
-                  }
-                  value={
-                    contract.spatialRequirements?.leftRightSymmetryTolerance ?? 28
-                  }
-                />
-                <ThresholdField
-                  colors={colors}
-                  label="Phase sync ms"
-                  max={1200}
-                  min={0}
-                  onChange={(phaseSyncToleranceMs) =>
-                    patchSpatialRequirement({ phaseSyncToleranceMs })
-                  }
-                  value={contract.spatialRequirements?.phaseSyncToleranceMs ?? 420}
-                />
-              </div>
-            )}
+              {spatialPreset === "none" ? (
+                <p
+                  style={{
+                    border: `1px dashed ${colors.border}`,
+                    borderRadius: 14,
+                    color: colors.textMuted,
+                    fontSize: 13,
+                    margin: "12px 0 0",
+                    padding: 14,
+                  }}
+                >
+                  No extra spatial gate is active. Use this for exercises where
+                  joint angles and required side checks are enough, then switch
+                  to a preset or Custom if the movement needs body-position
+                  proof.
+                </p>
+              ) : (
+                <div
+                  style={{
+                    display: "grid",
+                    gap: 12,
+                    gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+                    marginTop: 12,
+                  }}
+                >
+                  <ThresholdField
+                    colors={colors}
+                    label="Body line tolerance"
+                    max={90}
+                    min={0}
+                    onChange={(bodyLineTolerance) =>
+                      patchSpatialRequirement({ bodyLineTolerance })
+                    }
+                    value={
+                      contract.spatialRequirements?.bodyLineTolerance ?? 28
+                    }
+                  />
+                  <ThresholdField
+                    colors={colors}
+                    label="Body Y travel min"
+                    max={0.4}
+                    min={0}
+                    onChange={(bodyYTravelMin) =>
+                      patchSpatialRequirement({ bodyYTravelMin })
+                    }
+                    step={0.001}
+                    value={
+                      contract.spatialRequirements?.bodyYTravelMin ?? 0.012
+                    }
+                  />
+                  <ThresholdField
+                    colors={colors}
+                    label="Shoulder travel min"
+                    max={0.4}
+                    min={0}
+                    onChange={(shoulderYTravelMin) =>
+                      patchSpatialRequirement({ shoulderYTravelMin })
+                    }
+                    step={0.001}
+                    value={
+                      contract.spatialRequirements?.shoulderYTravelMin ?? 0.008
+                    }
+                  />
+                  <ThresholdField
+                    colors={colors}
+                    label="Hip travel min"
+                    max={0.4}
+                    min={0}
+                    onChange={(hipYTravelMin) =>
+                      patchSpatialRequirement({ hipYTravelMin })
+                    }
+                    step={0.001}
+                    value={contract.spatialRequirements?.hipYTravelMin ?? 0.01}
+                  />
+                  <ThresholdField
+                    colors={colors}
+                    label="Shoulder/Hip travel"
+                    max={0.4}
+                    min={0}
+                    onChange={(shoulderHipTravelMin) =>
+                      patchSpatialRequirement({ shoulderHipTravelMin })
+                    }
+                    step={0.001}
+                    value={
+                      contract.spatialRequirements?.shoulderHipTravelMin ?? 0.01
+                    }
+                  />
+                  <ThresholdField
+                    colors={colors}
+                    label="Wrist anchor drift"
+                    max={0.5}
+                    min={0}
+                    onChange={(wristAnchorDriftMax) =>
+                      patchSpatialRequirement({ wristAnchorDriftMax })
+                    }
+                    step={0.001}
+                    value={
+                      contract.spatialRequirements?.wristAnchorDriftMax ?? 0.18
+                    }
+                  />
+                  <ThresholdField
+                    colors={colors}
+                    label="Torso slope min"
+                    max={180}
+                    min={0}
+                    onChange={(torsoSlopeMinDeg) =>
+                      patchSpatialRequirement({ torsoSlopeMinDeg })
+                    }
+                    value={contract.spatialRequirements?.torsoSlopeMinDeg ?? 0}
+                  />
+                  <ThresholdField
+                    colors={colors}
+                    label="Torso slope max"
+                    max={180}
+                    min={0}
+                    onChange={(torsoSlopeMaxDeg) =>
+                      patchSpatialRequirement({ torsoSlopeMaxDeg })
+                    }
+                    value={contract.spatialRequirements?.torsoSlopeMaxDeg ?? 92}
+                  />
+                  <ThresholdField
+                    colors={colors}
+                    label="Elbow symmetry"
+                    max={90}
+                    min={0}
+                    onChange={(leftRightSymmetryTolerance) =>
+                      patchSpatialRequirement({ leftRightSymmetryTolerance })
+                    }
+                    value={
+                      contract.spatialRequirements
+                        ?.leftRightSymmetryTolerance ?? 28
+                    }
+                  />
+                  <ThresholdField
+                    colors={colors}
+                    label="Phase sync ms"
+                    max={1200}
+                    min={0}
+                    onChange={(phaseSyncToleranceMs) =>
+                      patchSpatialRequirement({ phaseSyncToleranceMs })
+                    }
+                    value={
+                      contract.spatialRequirements?.phaseSyncToleranceMs ?? 420
+                    }
+                  />
+                </div>
+              )}
             </div>
           </details>
-      ) : null}
-    </section>
-    <ConfirmModal
-      isOpen={regenerateConfirmTemplate !== null}
-      title="Regenerate Rig"
-      message="Regenerate this rig? Manual keyframe edits will be overwritten."
-      confirmLabel="REGENERATE RIG"
-      isDanger
-      onConfirm={handleConfirmRegenerate}
-      onCancel={() => setRegenerateConfirmTemplate(null)}
-    />
+        ) : null}
+      </section>
+      <ConfirmModal
+        isOpen={regenerateConfirmTemplate !== null}
+        title="Regenerate Rig"
+        message="Regenerate this rig? Manual keyframe edits will be overwritten."
+        confirmLabel="REGENERATE RIG"
+        isDanger
+        onConfirm={handleConfirmRegenerate}
+        onCancel={() => setRegenerateConfirmTemplate(null)}
+      />
     </>
   );
 }
@@ -2107,9 +2530,13 @@ function useSafeKeyframeKind(
 }
 
 function useSafePointIndex(
-  frame: NonNullable<ExerciseMovementProfileRecord["rig"]>["keyframes"][number] | null,
+  frame:
+    | NonNullable<ExerciseMovementProfileRecord["rig"]>["keyframes"][number]
+    | null,
+  defaultIndex: number,
 ) {
-  const [selectedPoint, setSelectedPoint] = useState(13);
+  const [selectedPoint, setSelectedPoint] = useState(defaultIndex);
+  useEffect(() => setSelectedPoint(defaultIndex), [defaultIndex]);
   return [
     clamp(selectedPoint, 0, Math.max(0, (frame?.keypoints.length ?? 1) - 1)),
     setSelectedPoint,
@@ -2147,6 +2574,76 @@ export function ThresholdField({
         type="number"
         value={value}
       />
+    </FieldShell>
+  );
+}
+
+function AngleTargetControl({
+  colors,
+  label,
+  onChange,
+  value,
+}: {
+  colors: EditorColors;
+  label: string;
+  onChange: (value: number) => void;
+  value: number;
+}) {
+  const inputName = `exercise-angle-target-${label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")}`;
+  const update = (nextValue: string) =>
+    onChange(Math.round(clamp(toNumber(nextValue, value), 0, 180)));
+
+  return (
+    <FieldShell colors={colors} label={label}>
+      <div
+        style={{
+          alignItems: "center",
+          display: "grid",
+          gap: 10,
+          gridTemplateColumns: "minmax(120px, 1fr) 76px",
+        }}
+      >
+        <input
+          aria-label={`${label} range`}
+          max={180}
+          min={0}
+          name={`${inputName}-range`}
+          onChange={(event) => update(event.target.value)}
+          step={1}
+          style={{ accentColor: colors.primary, minHeight: 44, width: "100%" }}
+          type="range"
+          value={value}
+        />
+        <div style={{ position: "relative" }}>
+          <input
+            aria-label={`${label} degrees`}
+            max={180}
+            min={0}
+            name={`${inputName}-degrees`}
+            onChange={(event) => update(event.target.value)}
+            step={1}
+            style={{ ...inputStyle(colors), paddingRight: 28 }}
+            type="number"
+            value={value}
+          />
+          <span
+            aria-hidden="true"
+            style={{
+              color: colors.textMuted,
+              fontSize: 12,
+              pointerEvents: "none",
+              position: "absolute",
+              right: 10,
+              top: "50%",
+              transform: "translateY(-50%)",
+            }}
+          >
+            °
+          </span>
+        </div>
+      </div>
     </FieldShell>
   );
 }

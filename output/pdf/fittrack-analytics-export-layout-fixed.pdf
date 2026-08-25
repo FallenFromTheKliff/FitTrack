@@ -1,0 +1,1731 @@
+%PDF-1.4
+%FitTrack
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+2 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+3 0 obj
+<< /Length 4983 >>
+stream
+1.000 1.000 1.000 rg
+0.00 0.00 595.28 841.89 re f
+0.918 0.345 0.031 rg
+38.00 799.89 152.00 4.00 re f
+BT
+/F2 11.00 Tf
+0.918 0.345 0.031 rg
+1 0 0 1 38.00 776.89 Tm (FitTrack Analytics) Tj
+ET
+BT
+/F2 26.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 38.00 743.89 Tm (Analytics Export) Tj
+ET
+BT
+/F1 10.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 38.00 725.39 Tm (Generated Apr 23, 2026, 8:00 PM. This report is rendered directly from live analytics data, with) Tj
+ET
+BT
+/F1 10.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 38.00 710.89 Tm (embedded charts and section-specific business analysis included after each section.) Tj
+ET
+0.859 0.878 0.914 rg
+38.00 695.89 519.28 1.00 re f
+BT
+/F2 18.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 38.00 656.89 Tm (Daily Insights) Tj
+ET
+BT
+/F1 10.00 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 38.00 640.89 Tm (Active member access and session movement across the selected attendance window.) Tj
+ET
+0.965 0.973 0.988 rg
+0.859 0.878 0.914 RG
+0.80 w
+38.00 414.89 519.28 210.00 re B
+BT
+/F2 12.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 52.00 600.89 Tm (Active Members and Sessions Over Time) Tj
+ET
+BT
+/F1 9.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 52.00 587.39 Tm (Apr 10, 2026 to Apr 24, 2026  -  daily buckets) Tj
+ET
+0.149 0.482 0.961 rg
+447.28 602.89 8.00 8.00 re f
+BT
+/F1 8.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 461.28 604.39 Tm (Active Members) Tj
+ET
+0.918 0.345 0.031 rg
+447.28 588.39 8.00 8.00 re f
+BT
+/F1 8.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 461.28 589.89 Tm (Sessions) Tj
+ET
+1.000 1.000 1.000 rg
+0.859 0.878 0.914 RG
+0.70 w
+54.00 440.89 487.28 134.00 re B
+0.914 0.925 0.949 RG
+0.45 w
+96.00 464.89 m 531.28 464.89 l S
+BT
+/F1 8.00 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 85.20 460.89 Tm (0) Tj
+ET
+0.914 0.925 0.949 RG
+0.45 w
+96.00 488.89 m 531.28 488.89 l S
+BT
+/F1 8.00 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 85.20 484.89 Tm (1) Tj
+ET
+0.914 0.925 0.949 RG
+0.45 w
+96.00 512.89 m 531.28 512.89 l S
+BT
+/F1 8.00 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 85.20 508.89 Tm (3) Tj
+ET
+0.914 0.925 0.949 RG
+0.45 w
+96.00 536.89 m 531.28 536.89 l S
+BT
+/F1 8.00 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 85.20 532.89 Tm (4) Tj
+ET
+0.914 0.925 0.949 RG
+0.45 w
+96.00 560.89 m 531.28 560.89 l S
+BT
+/F1 8.00 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 85.20 556.89 Tm (5) Tj
+ET
+0.859 0.878 0.914 RG
+0.70 w
+96.00 560.89 m 96.00 464.89 l S
+0.859 0.878 0.914 RG
+0.70 w
+96.00 464.89 m 531.28 464.89 l S
+0.149 0.482 0.961 rg
+0.149 0.482 0.961 RG
+0.20 w
+311.84 501.49 3.60 3.60 re B
+0.918 0.345 0.031 rg
+0.918 0.345 0.031 RG
+0.20 w
+311.84 559.09 3.60 3.60 re B
+BT
+/F1 8.00 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 300.92 448.89 Tm (Apr 23) Tj
+ET
+0.980 0.984 0.992 rg
+0.859 0.878 0.914 RG
+0.80 w
+38.00 350.89 165.09 50.00 re B
+BT
+/F2 8.50 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 50.00 382.39 Tm (ACTIVE MEMBERS) Tj
+ET
+BT
+/F2 18.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 50.00 354.89 Tm (2) Tj
+ET
+0.980 0.984 0.992 rg
+0.859 0.878 0.914 RG
+0.80 w
+215.09 350.89 165.09 50.00 re B
+BT
+/F2 8.50 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 227.09 382.39 Tm (SESSIONS TODAY) Tj
+ET
+BT
+/F2 18.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 227.09 354.89 Tm (5) Tj
+ET
+0.980 0.984 0.992 rg
+0.859 0.878 0.914 RG
+0.80 w
+392.19 350.89 165.09 50.00 re B
+BT
+/F2 8.50 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 404.19 382.39 Tm (RECENT ACTIVITIES) Tj
+ET
+BT
+/F2 18.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 404.19 354.89 Tm (8) Tj
+ET
+0.980 0.984 0.992 rg
+0.859 0.878 0.914 RG
+0.80 w
+38.00 288.89 165.09 50.00 re B
+BT
+/F2 8.50 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 50.00 320.39 Tm (LIVE ALERTS) Tj
+ET
+BT
+/F2 18.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 50.00 292.89 Tm (0) Tj
+ET
+0.980 0.984 0.992 rg
+0.859 0.878 0.914 RG
+0.80 w
+215.09 288.89 165.09 50.00 re B
+BT
+/F2 8.50 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 227.09 320.39 Tm (WINDOW CHECK-INS) Tj
+ET
+BT
+/F2 18.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 227.09 292.89 Tm (42) Tj
+ET
+0.980 0.984 0.992 rg
+0.859 0.878 0.914 RG
+0.80 w
+392.19 288.89 165.09 50.00 re B
+BT
+/F2 8.50 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 404.19 320.39 Tm (REVENUE WINDOW) Tj
+ET
+BT
+/F2 16.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 404.19 294.39 Tm (PHP 1,235,000.00) Tj
+ET
+BT
+/F2 11.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 38.00 263.39 Tm (Data Summary) Tj
+ET
+0.980 0.984 0.992 rg
+0.859 0.878 0.914 RG
+0.80 w
+38.00 230.89 519.28 24.00 re B
+BT
+/F2 8.50 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 46.00 238.39 Tm (METRIC) Tj
+ET
+BT
+/F2 8.50 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 522.93 238.39 Tm (VALUE) Tj
+ET
+1.000 1.000 1.000 rg
+0.859 0.878 0.914 RG
+0.45 w
+38.00 204.89 519.28 26.00 re B
+BT
+/F2 9.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 46.00 214.39 Tm (Active Members) Tj
+ET
+BT
+/F1 9.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 543.58 214.39 Tm (2) Tj
+ET
+0.992 0.994 0.998 rg
+0.859 0.878 0.914 RG
+0.45 w
+38.00 178.89 519.28 26.00 re B
+BT
+/F2 9.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 46.00 188.39 Tm (Sessions Today) Tj
+ET
+BT
+/F1 9.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 543.58 188.39 Tm (5) Tj
+ET
+1.000 1.000 1.000 rg
+0.859 0.878 0.914 RG
+0.45 w
+38.00 152.89 519.28 26.00 re B
+BT
+/F2 9.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 46.00 162.39 Tm (Recent Activities) Tj
+ET
+BT
+/F1 9.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 543.58 162.39 Tm (8) Tj
+ET
+endstream
+endobj
+4 0 obj
+<< /Type /Page /Parent 17 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 3 0 R >>
+endobj
+5 0 obj
+<< /Length 5487 >>
+stream
+1.000 1.000 1.000 rg
+0.00 0.00 595.28 841.89 re f
+BT
+/F2 11.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 38.00 792.39 Tm (Data Summary \(continued\)) Tj
+ET
+0.980 0.984 0.992 rg
+0.859 0.878 0.914 RG
+0.80 w
+38.00 759.89 519.28 24.00 re B
+BT
+/F2 8.50 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 46.00 767.39 Tm (METRIC) Tj
+ET
+BT
+/F2 8.50 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 522.93 767.39 Tm (VALUE) Tj
+ET
+0.992 0.994 0.998 rg
+0.859 0.878 0.914 RG
+0.45 w
+38.00 733.89 519.28 26.00 re B
+BT
+/F2 9.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 46.00 743.39 Tm (Live Alerts) Tj
+ET
+BT
+/F1 9.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 543.58 743.39 Tm (0) Tj
+ET
+1.000 1.000 1.000 rg
+0.859 0.878 0.914 RG
+0.45 w
+38.00 707.89 519.28 26.00 re B
+BT
+/F2 9.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 46.00 717.39 Tm (Attendance Window) Tj
+ET
+BT
+/F1 9.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 421.60 717.39 Tm (10 Apr 2026 to 23 Apr 2026) Tj
+ET
+0.992 0.994 0.998 rg
+0.859 0.878 0.914 RG
+0.45 w
+38.00 681.89 519.28 26.00 re B
+BT
+/F2 9.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 46.00 691.39 Tm (Window Check-ins) Tj
+ET
+BT
+/F1 9.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 537.88 691.39 Tm (42) Tj
+ET
+1.000 1.000 1.000 rg
+0.859 0.878 0.914 RG
+0.45 w
+38.00 655.89 519.28 26.00 re B
+BT
+/F2 9.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 46.00 665.39 Tm (Peak Check-in Window) Tj
+ET
+BT
+/F1 9.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 495.13 665.39 Tm (18:00 \(9\)) Tj
+ET
+0.992 0.994 0.998 rg
+0.859 0.878 0.914 RG
+0.45 w
+38.00 629.89 519.28 26.00 re B
+BT
+/F2 9.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 46.00 639.39 Tm (Revenue Window Total) Tj
+ET
+BT
+/F1 9.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 471.19 639.39 Tm (PHP 1,235,000.00) Tj
+ET
+1.000 1.000 1.000 rg
+0.859 0.878 0.914 RG
+0.45 w
+38.00 603.89 519.28 26.00 re B
+BT
+/F2 9.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 46.00 613.39 Tm (Top Revenue Source) Tj
+ET
+BT
+/F1 9.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 435.47 613.39 Tm (Memberships \(100.0%\)) Tj
+ET
+1.000 0.965 0.929 rg
+0.961 0.816 0.647 RG
+0.80 w
+38.00 495.39 519.28 96.50 re B
+BT
+/F2 9.00 Tf
+0.741 0.271 0.063 rg
+1 0 0 1 50.00 574.89 Tm (AI ANALYSIS) Tj
+ET
+BT
+/F1 10.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 50.00 557.39 Tm (Smart PHP 460,059.00 - cafe...) Tj
+ET
+BT
+/F2 10.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 54.00 537.39 Tm (-) Tj
+ET
+BT
+/F1 10.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 64.00 537.39 Tm (Memberships remain stable.) Tj
+ET
+BT
+/F2 10.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 54.00 515.39 Tm (-) Tj
+ET
+BT
+/F1 10.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 64.00 515.39 Tm (Increase prompts near peak hours.) Tj
+ET
+BT
+/F2 18.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 38.00 459.39 Tm (Performance KPIs) Tj
+ET
+BT
+/F1 10.00 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 38.00 443.39 Tm (Current operational totals for revenue, attendance, bookings, appointments, member growth, and coaching) Tj
+ET
+BT
+/F1 10.00 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 38.00 429.39 Tm (output.) Tj
+ET
+0.965 0.973 0.988 rg
+0.859 0.878 0.914 RG
+0.80 w
+38.00 165.39 519.28 248.00 re B
+BT
+/F2 12.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 52.00 389.39 Tm (KPI Comparison) Tj
+ET
+BT
+/F1 9.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 52.00 375.89 Tm (Normalized grouped bars so revenue and volume metrics can be compared in one view.) Tj
+ET
+1.000 1.000 1.000 rg
+0.859 0.878 0.914 RG
+0.70 w
+54.00 191.39 487.28 172.00 re B
+0.914 0.925 0.949 RG
+0.45 w
+96.00 225.39 m 531.28 225.39 l S
+BT
+/F1 8.00 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 85.20 221.39 Tm (0) Tj
+ET
+0.914 0.925 0.949 RG
+0.45 w
+96.00 255.89 m 531.28 255.89 l S
+BT
+/F1 8.00 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 71.28 251.89 Tm (309k) Tj
+ET
+0.914 0.925 0.949 RG
+0.45 w
+96.00 286.39 m 531.28 286.39 l S
+BT
+/F1 8.00 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 71.28 282.39 Tm (618k) Tj
+ET
+0.914 0.925 0.949 RG
+0.45 w
+96.00 316.89 m 531.28 316.89 l S
+BT
+/F1 8.00 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 71.28 312.89 Tm (926k) Tj
+ET
+0.914 0.925 0.949 RG
+0.45 w
+96.00 347.39 m 531.28 347.39 l S
+BT
+/F1 8.00 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 68.88 343.39 Tm (1.24M) Tj
+ET
+0.859 0.878 0.914 RG
+0.70 w
+96.00 347.39 m 96.00 225.39 l S
+0.859 0.878 0.914 RG
+0.70 w
+96.00 225.39 m 531.28 225.39 l S
+0.918 0.345 0.031 rg
+96.00 225.39 53.61 122.00 re f
+BT
+/F2 8.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 102.07 352.89 Tm (PHP 1.24M) Tj
+ET
+BT
+/F2 8.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 105.89 206.89 Tm (Revenue) Tj
+ET
+0.149 0.482 0.961 rg
+159.61 225.39 53.61 4.00 re f
+BT
+/F2 8.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 183.78 234.89 Tm (9) Tj
+ET
+BT
+/F2 8.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 168.48 206.89 Tm (Bookings) Tj
+ET
+0.165 0.718 0.506 rg
+223.22 225.39 53.61 4.00 re f
+BT
+/F2 8.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 247.39 234.89 Tm (6) Tj
+ET
+BT
+/F2 8.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 221.30 206.89 Tm (Appointments) Tj
+ET
+0.659 0.271 0.933 rg
+286.83 225.39 53.61 4.00 re f
+BT
+/F2 8.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 311.00 234.89 Tm (3) Tj
+ET
+BT
+/F2 8.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 285.50 206.89 Tm (New Members) Tj
+ET
+0.969 0.690 0.122 rg
+350.45 225.39 53.61 4.00 re f
+BT
+/F2 8.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 371.98 234.89 Tm (42) Tj
+ET
+BT
+/F2 8.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 356.94 206.89 Tm (Check-ins) Tj
+ET
+0.204 0.326 0.577 rg
+414.06 225.39 53.61 4.00 re f
+BT
+/F2 8.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 435.59 234.89 Tm (42) Tj
+ET
+BT
+/F2 8.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 426.41 206.89 Tm (Window) Tj
+ET
+BT
+/F2 8.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 420.55 196.89 Tm (Check-ins) Tj
+ET
+0.918 0.345 0.031 rg
+477.67 225.39 53.61 4.00 re f
+BT
+/F2 8.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 501.84 234.89 Tm (7) Tj
+ET
+BT
+/F2 8.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 486.54 206.89 Tm (Coaching) Tj
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 17 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 5 0 R >>
+endobj
+7 0 obj
+<< /Length 5560 >>
+stream
+1.000 1.000 1.000 rg
+0.00 0.00 595.28 841.89 re f
+BT
+/F2 11.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 38.00 792.39 Tm (Data Summary) Tj
+ET
+0.980 0.984 0.992 rg
+0.859 0.878 0.914 RG
+0.80 w
+38.00 759.89 519.28 24.00 re B
+BT
+/F2 8.50 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 46.00 767.39 Tm (METRIC) Tj
+ET
+BT
+/F2 8.50 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 522.93 767.39 Tm (VALUE) Tj
+ET
+1.000 1.000 1.000 rg
+0.859 0.878 0.914 RG
+0.45 w
+38.00 733.89 519.28 26.00 re B
+BT
+/F2 9.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 46.00 743.39 Tm (Total Revenue) Tj
+ET
+BT
+/F1 9.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 471.19 743.39 Tm (PHP 1,235,000.00) Tj
+ET
+0.992 0.994 0.998 rg
+0.859 0.878 0.914 RG
+0.45 w
+38.00 707.89 519.28 26.00 re B
+BT
+/F2 9.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 46.00 717.39 Tm (Total Venue Bookings) Tj
+ET
+BT
+/F1 9.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 543.58 717.39 Tm (9) Tj
+ET
+1.000 1.000 1.000 rg
+0.859 0.878 0.914 RG
+0.45 w
+38.00 681.89 519.28 26.00 re B
+BT
+/F2 9.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 46.00 691.39 Tm (Total Coaching Appointments) Tj
+ET
+BT
+/F1 9.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 543.58 691.39 Tm (6) Tj
+ET
+0.992 0.994 0.998 rg
+0.859 0.878 0.914 RG
+0.45 w
+38.00 655.89 519.28 26.00 re B
+BT
+/F2 9.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 46.00 665.39 Tm (New Members) Tj
+ET
+BT
+/F1 9.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 543.58 665.39 Tm (3) Tj
+ET
+1.000 1.000 1.000 rg
+0.859 0.878 0.914 RG
+0.45 w
+38.00 629.89 519.28 26.00 re B
+BT
+/F2 9.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 46.00 639.39 Tm (Check-ins) Tj
+ET
+BT
+/F1 9.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 537.88 639.39 Tm (42) Tj
+ET
+0.992 0.994 0.998 rg
+0.859 0.878 0.914 RG
+0.45 w
+38.00 603.89 519.28 26.00 re B
+BT
+/F2 9.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 46.00 613.39 Tm (Selected Attendance Window) Tj
+ET
+BT
+/F1 9.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 421.60 613.39 Tm (10 Apr 2026 to 23 Apr 2026) Tj
+ET
+1.000 1.000 1.000 rg
+0.859 0.878 0.914 RG
+0.45 w
+38.00 577.89 519.28 26.00 re B
+BT
+/F2 9.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 46.00 587.39 Tm (Selected Window Check-ins) Tj
+ET
+BT
+/F1 9.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 537.88 587.39 Tm (42) Tj
+ET
+0.992 0.994 0.998 rg
+0.859 0.878 0.914 RG
+0.45 w
+38.00 551.89 519.28 26.00 re B
+BT
+/F2 9.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 46.00 561.39 Tm (Peak Check-in Window) Tj
+ET
+BT
+/F1 9.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 495.13 561.39 Tm (18:00 \(9\)) Tj
+ET
+1.000 1.000 1.000 rg
+0.859 0.878 0.914 RG
+0.45 w
+38.00 525.89 519.28 26.00 re B
+BT
+/F2 9.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 46.00 535.39 Tm (Coaching Sessions) Tj
+ET
+BT
+/F1 9.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 543.58 535.39 Tm (7) Tj
+ET
+1.000 0.965 0.929 rg
+0.961 0.816 0.647 RG
+0.80 w
+38.00 417.39 519.28 96.50 re B
+BT
+/F2 9.00 Tf
+0.741 0.271 0.063 rg
+1 0 0 1 50.00 496.89 Tm (AI ANALYSIS) Tj
+ET
+BT
+/F1 10.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 50.00 479.39 Tm (Revenue is holding steady and evening usage remains strongest.) Tj
+ET
+BT
+/F2 10.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 54.00 459.39 Tm (-) Tj
+ET
+BT
+/F1 10.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 64.00 459.39 Tm (Memberships remain stable.) Tj
+ET
+BT
+/F2 10.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 54.00 437.39 Tm (-) Tj
+ET
+BT
+/F1 10.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 64.00 437.39 Tm (Increase prompts near peak hours.) Tj
+ET
+BT
+/F2 18.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 38.00 381.39 Tm (Revenue) Tj
+ET
+BT
+/F1 10.00 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 38.00 365.39 Tm (Revenue source mix and total revenue movement across the selected export window.) Tj
+ET
+0.965 0.973 0.988 rg
+0.859 0.878 0.914 RG
+0.80 w
+38.00 85.39 202.91 264.00 re B
+0.965 0.973 0.988 rg
+0.859 0.878 0.914 RG
+0.80 w
+252.91 85.39 304.37 264.00 re B
+BT
+/F2 12.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 52.00 325.39 Tm (Revenue Mix) Tj
+ET
+BT
+/F2 12.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 266.91 325.39 Tm (Revenue Trend) Tj
+ET
+0.918 0.345 0.031 rg
+1.000 1.000 1.000 RG
+0.50 w
+116.09 251.30 m 116.09 307.39 l 127.75 306.16 l 138.90 302.54 l 149.06 296.68 l 157.77 288.83 l 164.66 279.35 l 169.43 268.63 l 171.87 257.16 l 171.87 245.44 l 169.43 233.97 l 164.66 223.26 l 157.77 213.77 l 149.06 205.93 l 138.90 200.06 l 127.75 196.44 l 116.09 195.21 l 104.43 196.44 l 93.28 200.06 l 83.12 205.93 l 74.41 213.77 l 67.51 223.26 l 62.75 233.97 l 60.31 245.44 l 60.31 257.16 l 62.75 268.63 l 67.51 279.35 l 74.41 288.83 l 83.12 296.68 l 93.28 302.54 l 104.43 306.16 l 116.09 307.39 l
+b
+0.918 0.345 0.031 rg
+58.00 159.39 8.00 8.00 re f
+BT
+/F1 8.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 72.00 160.89 Tm (Memberships  -  100.0%) Tj
+ET
+1.000 1.000 1.000 rg
+0.859 0.878 0.914 RG
+0.70 w
+266.91 123.39 276.37 188.00 re B
+0.914 0.925 0.949 RG
+0.45 w
+320.91 147.39 m 533.28 147.39 l S
+BT
+/F1 8.00 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 293.31 143.39 Tm (PHP 0) Tj
+ET
+0.914 0.925 0.949 RG
+0.45 w
+320.91 184.39 m 533.28 184.39 l S
+BT
+/F1 8.00 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 279.39 180.39 Tm (PHP 309k) Tj
+ET
+0.914 0.925 0.949 RG
+0.45 w
+320.91 221.39 m 533.28 221.39 l S
+BT
+/F1 8.00 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 279.39 217.39 Tm (PHP 618k) Tj
+ET
+0.914 0.925 0.949 RG
+0.45 w
+320.91 258.39 m 533.28 258.39 l S
+BT
+/F1 8.00 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 279.39 254.39 Tm (PHP 926k) Tj
+ET
+0.914 0.925 0.949 RG
+0.45 w
+320.91 295.39 m 533.28 295.39 l S
+BT
+/F1 8.00 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 276.99 291.39 Tm (PHP 1.24M) Tj
+ET
+0.859 0.878 0.914 RG
+0.70 w
+320.91 295.39 m 320.91 147.39 l S
+0.859 0.878 0.914 RG
+0.70 w
+320.91 147.39 m 533.28 147.39 l S
+0.918 0.345 0.031 RG
+2.10 w
+320.91 184.42 m 533.28 295.39 l
+S
+BT
+/F1 8.00 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 303.39 131.39 Tm (Mar 2026) Tj
+ET
+BT
+/F1 8.00 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 515.76 131.39 Tm (Apr 2026) Tj
+ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 17 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 7 0 R >>
+endobj
+9 0 obj
+<< /Length 4179 >>
+stream
+1.000 1.000 1.000 rg
+0.00 0.00 595.28 841.89 re f
+BT
+/F2 11.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 38.00 792.39 Tm (Data Summary) Tj
+ET
+0.980 0.984 0.992 rg
+0.859 0.878 0.914 RG
+0.80 w
+38.00 759.89 519.28 24.00 re B
+BT
+/F2 8.50 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 46.00 767.39 Tm (METRIC) Tj
+ET
+BT
+/F2 8.50 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 522.93 767.39 Tm (VALUE) Tj
+ET
+1.000 1.000 1.000 rg
+0.859 0.878 0.914 RG
+0.45 w
+38.00 733.89 519.28 26.00 re B
+BT
+/F2 9.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 46.00 743.39 Tm (Total Generated Revenue) Tj
+ET
+BT
+/F1 9.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 471.19 743.39 Tm (PHP 1,235,000.00) Tj
+ET
+0.992 0.994 0.998 rg
+0.859 0.878 0.914 RG
+0.45 w
+38.00 707.89 519.28 26.00 re B
+BT
+/F2 9.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 46.00 717.39 Tm (Memberships \(100.0%\)) Tj
+ET
+BT
+/F1 9.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 471.19 717.39 Tm (PHP 1,235,000.00) Tj
+ET
+1.000 0.965 0.929 rg
+0.961 0.816 0.647 RG
+0.80 w
+38.00 599.39 519.28 96.50 re B
+BT
+/F2 9.00 Tf
+0.741 0.271 0.063 rg
+1 0 0 1 50.00 678.89 Tm (AI ANALYSIS) Tj
+ET
+BT
+/F1 10.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 50.00 661.39 Tm (Revenue is holding steady and evening usage remains strongest.) Tj
+ET
+BT
+/F2 10.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 54.00 641.39 Tm (-) Tj
+ET
+BT
+/F1 10.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 64.00 641.39 Tm (Memberships remain stable.) Tj
+ET
+BT
+/F2 10.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 54.00 619.39 Tm (-) Tj
+ET
+BT
+/F1 10.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 64.00 619.39 Tm (Increase prompts near peak hours.) Tj
+ET
+BT
+/F2 18.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 38.00 563.39 Tm (Inventory Performance) Tj
+ET
+BT
+/F1 10.00 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 38.00 547.39 Tm (Current retail and equipment inventory health with top retail item performance from the selected revenue) Tj
+ET
+BT
+/F1 10.00 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 38.00 533.39 Tm (window.) Tj
+ET
+0.980 0.984 0.992 rg
+0.859 0.878 0.914 RG
+0.80 w
+38.00 467.39 120.82 50.00 re B
+BT
+/F2 8.50 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 50.00 498.89 Tm (RETAIL ITEMS) Tj
+ET
+BT
+/F2 18.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 50.00 471.39 Tm (14) Tj
+ET
+0.980 0.984 0.992 rg
+0.859 0.878 0.914 RG
+0.80 w
+170.82 467.39 120.82 50.00 re B
+BT
+/F2 8.50 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 182.82 498.89 Tm (LOW STOCK) Tj
+ET
+BT
+/F2 18.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 182.82 471.39 Tm (2) Tj
+ET
+0.980 0.984 0.992 rg
+0.859 0.878 0.914 RG
+0.80 w
+303.64 467.39 120.82 50.00 re B
+BT
+/F2 8.50 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 315.64 498.89 Tm (OUT OF STOCK) Tj
+ET
+BT
+/F2 18.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 315.64 471.39 Tm (1) Tj
+ET
+0.980 0.984 0.992 rg
+0.859 0.878 0.914 RG
+0.80 w
+436.46 467.39 120.82 50.00 re B
+BT
+/F2 8.50 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 448.46 498.89 Tm (INVENTORY VALUE) Tj
+ET
+BT
+/F2 12.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 448.46 476.89 Tm (PHP 460,059.00) Tj
+ET
+0.965 0.973 0.988 rg
+0.859 0.878 0.914 RG
+0.80 w
+38.00 205.39 519.28 248.00 re B
+BT
+/F2 12.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 52.00 429.39 Tm (Top Retail Items) Tj
+ET
+BT
+/F1 9.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 52.00 415.89 Tm (Top-selling retail products ranked by the selected export window activity.) Tj
+ET
+1.000 1.000 1.000 rg
+0.859 0.878 0.914 RG
+0.70 w
+54.00 231.39 487.28 172.00 re B
+0.914 0.925 0.949 RG
+0.45 w
+96.00 265.39 m 531.28 265.39 l S
+BT
+/F1 8.00 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 85.20 261.39 Tm (0) Tj
+ET
+0.914 0.925 0.949 RG
+0.45 w
+96.00 295.89 m 531.28 295.89 l S
+BT
+/F1 8.00 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 85.20 291.89 Tm (0) Tj
+ET
+0.914 0.925 0.949 RG
+0.45 w
+96.00 326.39 m 531.28 326.39 l S
+BT
+/F1 8.00 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 85.20 322.39 Tm (0) Tj
+ET
+0.914 0.925 0.949 RG
+0.45 w
+96.00 356.89 m 531.28 356.89 l S
+BT
+/F1 8.00 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 85.20 352.89 Tm (0) Tj
+ET
+0.914 0.925 0.949 RG
+0.45 w
+96.00 387.39 m 531.28 387.39 l S
+BT
+/F1 8.00 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 85.20 383.39 Tm (0) Tj
+ET
+0.859 0.878 0.914 RG
+0.70 w
+96.00 387.39 m 96.00 265.39 l S
+0.859 0.878 0.914 RG
+0.70 w
+96.00 265.39 m 531.28 265.39 l S
+0.918 0.345 0.031 rg
+96.00 265.39 435.28 4.00 re f
+BT
+/F2 8.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 301.57 274.89 Tm (0 sold) Tj
+ET
+BT
+/F2 8.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 286.01 246.89 Tm (No sales data) Tj
+ET
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 17 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 9 0 R >>
+endobj
+11 0 obj
+<< /Length 4127 >>
+stream
+1.000 1.000 1.000 rg
+0.00 0.00 595.28 841.89 re f
+BT
+/F2 11.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 38.00 792.39 Tm (Data Summary) Tj
+ET
+0.980 0.984 0.992 rg
+0.859 0.878 0.914 RG
+0.80 w
+38.00 759.89 519.28 24.00 re B
+BT
+/F2 8.50 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 46.00 767.39 Tm (METRIC) Tj
+ET
+BT
+/F2 8.50 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 522.93 767.39 Tm (VALUE) Tj
+ET
+1.000 1.000 1.000 rg
+0.859 0.878 0.914 RG
+0.45 w
+38.00 733.89 519.28 26.00 re B
+BT
+/F2 9.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 46.00 743.39 Tm (Equipment Types) Tj
+ET
+BT
+/F1 9.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 543.58 743.39 Tm (9) Tj
+ET
+0.992 0.994 0.998 rg
+0.859 0.878 0.914 RG
+0.45 w
+38.00 707.89 519.28 26.00 re B
+BT
+/F2 9.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 46.00 717.39 Tm (Equipment Availability) Tj
+ET
+BT
+/F1 9.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 490.00 717.39 Tm (28 / 32 units) Tj
+ET
+1.000 1.000 1.000 rg
+0.859 0.878 0.914 RG
+0.45 w
+38.00 681.89 519.28 26.00 re B
+BT
+/F2 9.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 46.00 691.39 Tm (Equipment Under Maintenance) Tj
+ET
+BT
+/F1 9.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 543.58 691.39 Tm (2) Tj
+ET
+0.992 0.994 0.998 rg
+0.859 0.878 0.914 RG
+0.45 w
+38.00 655.89 519.28 26.00 re B
+BT
+/F2 9.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 46.00 665.39 Tm (Top Retail Product) Tj
+ET
+BT
+/F1 9.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 385.88 665.39 Tm (No retail sales data for this window) Tj
+ET
+1.000 0.965 0.929 rg
+0.961 0.816 0.647 RG
+0.80 w
+38.00 547.39 519.28 96.50 re B
+BT
+/F2 9.00 Tf
+0.741 0.271 0.063 rg
+1 0 0 1 50.00 626.89 Tm (AI ANALYSIS) Tj
+ET
+BT
+/F1 10.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 50.00 609.39 Tm (Revenue is holding steady and evening usage remains strongest.) Tj
+ET
+BT
+/F2 10.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 54.00 589.39 Tm (-) Tj
+ET
+BT
+/F1 10.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 64.00 589.39 Tm (Memberships remain stable.) Tj
+ET
+BT
+/F2 10.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 54.00 567.39 Tm (-) Tj
+ET
+BT
+/F1 10.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 64.00 567.39 Tm (Increase prompts near peak hours.) Tj
+ET
+BT
+/F2 18.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 38.00 511.39 Tm (Attendance) Tj
+ET
+BT
+/F1 10.00 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 38.00 495.39 Tm (10 Apr 2026 to 23 Apr 2026. Peak buckets: 18:00 \(9\).) Tj
+ET
+0.965 0.973 0.988 rg
+0.859 0.878 0.914 RG
+0.80 w
+38.00 243.39 519.28 236.00 re B
+BT
+/F2 12.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 52.00 455.39 Tm (Attendance Volume) Tj
+ET
+BT
+/F1 9.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 52.00 441.89 Tm (Peak buckets are highlighted to show where staffing pressure concentrates.) Tj
+ET
+1.000 1.000 1.000 rg
+0.859 0.878 0.914 RG
+0.70 w
+54.00 269.39 487.28 160.00 re B
+0.914 0.925 0.949 RG
+0.45 w
+90.00 297.39 m 531.28 297.39 l S
+BT
+/F1 8.00 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 79.20 293.39 Tm (0) Tj
+ET
+0.914 0.925 0.949 RG
+0.45 w
+90.00 326.39 m 531.28 326.39 l S
+BT
+/F1 8.00 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 79.20 322.39 Tm (1) Tj
+ET
+0.914 0.925 0.949 RG
+0.45 w
+90.00 355.39 m 531.28 355.39 l S
+BT
+/F1 8.00 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 79.20 351.39 Tm (3) Tj
+ET
+0.914 0.925 0.949 RG
+0.45 w
+90.00 384.39 m 531.28 384.39 l S
+BT
+/F1 8.00 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 79.20 380.39 Tm (4) Tj
+ET
+0.914 0.925 0.949 RG
+0.45 w
+90.00 413.39 m 531.28 413.39 l S
+BT
+/F1 8.00 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 79.20 409.39 Tm (5) Tj
+ET
+0.859 0.878 0.914 RG
+0.70 w
+90.00 413.39 m 90.00 297.39 l S
+0.859 0.878 0.914 RG
+0.70 w
+90.00 297.39 m 531.28 297.39 l S
+0.918 0.345 0.031 rg
+90.00 297.39 441.28 116.00 re f
+BT
+/F2 8.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 308.00 416.89 Tm (5) Tj
+ET
+BT
+/F1 8.00 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 297.92 281.39 Tm (Apr 23) Tj
+ET
+BT
+/F2 11.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 38.00 217.89 Tm (Attendance Breakdown) Tj
+ET
+0.980 0.984 0.992 rg
+0.859 0.878 0.914 RG
+0.80 w
+38.00 185.39 519.28 24.00 re B
+BT
+/F2 8.50 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 46.00 192.89 Tm (BUCKET) Tj
+ET
+BT
+/F2 8.50 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 502.36 192.89 Tm (CHECK-INS) Tj
+ET
+1.000 1.000 1.000 rg
+0.859 0.878 0.914 RG
+0.45 w
+38.00 159.39 519.28 26.00 re B
+BT
+/F2 9.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 46.00 168.89 Tm (April 23) Tj
+ET
+BT
+/F1 9.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 543.58 168.89 Tm (5) Tj
+ET
+endstream
+endobj
+12 0 obj
+<< /Type /Page /Parent 17 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 11 0 R >>
+endobj
+13 0 obj
+<< /Length 4286 >>
+stream
+1.000 1.000 1.000 rg
+0.00 0.00 595.28 841.89 re f
+1.000 0.965 0.929 rg
+0.961 0.816 0.647 RG
+0.80 w
+38.00 707.39 519.28 96.50 re B
+BT
+/F2 9.00 Tf
+0.741 0.271 0.063 rg
+1 0 0 1 50.00 786.89 Tm (AI ANALYSIS) Tj
+ET
+BT
+/F1 10.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 50.00 769.39 Tm (Revenue is holding steady and evening usage remains strongest.) Tj
+ET
+BT
+/F2 10.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 54.00 749.39 Tm (-) Tj
+ET
+BT
+/F1 10.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 64.00 749.39 Tm (Memberships remain stable.) Tj
+ET
+BT
+/F2 10.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 54.00 727.39 Tm (-) Tj
+ET
+BT
+/F1 10.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 64.00 727.39 Tm (Increase prompts near peak hours.) Tj
+ET
+BT
+/F2 18.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 38.00 671.39 Tm (System Alerts) Tj
+ET
+BT
+/F1 10.00 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 38.00 655.39 Tm (Operational warnings sourced from live stock thresholds and equipment availability.) Tj
+ET
+BT
+/F2 11.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 38.00 627.89 Tm (Warning Lanes) Tj
+ET
+0.980 0.984 0.992 rg
+0.859 0.878 0.914 RG
+0.80 w
+38.00 595.39 519.28 24.00 re B
+BT
+/F2 8.50 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 46.00 602.89 Tm (ALERT) Tj
+ET
+BT
+/F2 8.50 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 170.63 602.89 Tm (ACTION) Tj
+ET
+BT
+/F2 8.50 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 274.48 602.89 Tm (DETAILS) Tj
+ET
+1.000 0.973 0.949 rg
+0.859 0.878 0.914 RG
+0.45 w
+38.00 557.39 519.28 38.00 re B
+BT
+/F2 9.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 46.00 578.89 Tm (No data available for) Tj
+ET
+BT
+/F2 9.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 46.00 566.89 Tm (this section.) Tj
+ET
+BT
+/F1 9.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 170.63 578.89 Tm (-) Tj
+ET
+BT
+/F1 9.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 274.48 578.89 Tm (-) Tj
+ET
+1.000 0.965 0.929 rg
+0.961 0.816 0.647 RG
+0.80 w
+38.00 448.89 519.28 96.50 re B
+BT
+/F2 9.00 Tf
+0.741 0.271 0.063 rg
+1 0 0 1 50.00 528.39 Tm (AI ANALYSIS) Tj
+ET
+BT
+/F1 10.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 50.00 510.89 Tm (Revenue is holding steady and evening usage remains strongest.) Tj
+ET
+BT
+/F2 10.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 54.00 490.89 Tm (-) Tj
+ET
+BT
+/F1 10.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 64.00 490.89 Tm (Memberships remain stable.) Tj
+ET
+BT
+/F2 10.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 54.00 468.89 Tm (-) Tj
+ET
+BT
+/F1 10.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 64.00 468.89 Tm (Increase prompts near peak hours.) Tj
+ET
+BT
+/F2 18.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 38.00 412.89 Tm (Recent Activities) Tj
+ET
+BT
+/F1 10.00 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 38.00 396.89 Tm (Latest member-facing and operational events captured by the live analytics feed.) Tj
+ET
+BT
+/F2 11.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 38.00 369.39 Tm (Activity Timeline) Tj
+ET
+0.980 0.984 0.992 rg
+0.859 0.878 0.914 RG
+0.80 w
+38.00 336.89 519.28 24.00 re B
+BT
+/F2 8.50 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 46.00 344.39 Tm (MEMBER) Tj
+ET
+BT
+/F2 8.50 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 149.86 344.39 Tm (ACTION) Tj
+ET
+BT
+/F2 8.50 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 264.10 344.39 Tm (TIME) Tj
+ET
+BT
+/F2 8.50 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 367.95 344.39 Tm (STATUS) Tj
+ET
+BT
+/F2 8.50 Tf
+0.553 0.592 0.667 rg
+1 0 0 1 440.65 344.39 Tm (DETAILS) Tj
+ET
+1.000 1.000 1.000 rg
+0.859 0.878 0.914 RG
+0.45 w
+38.00 298.89 519.28 38.00 re B
+BT
+/F2 9.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 46.00 320.39 Tm (No data available) Tj
+ET
+BT
+/F2 9.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 46.00 308.39 Tm (for this section.) Tj
+ET
+BT
+/F1 9.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 149.86 320.39 Tm (-) Tj
+ET
+BT
+/F1 9.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 264.10 320.39 Tm (-) Tj
+ET
+BT
+/F1 9.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 367.95 320.39 Tm (-) Tj
+ET
+BT
+/F1 9.50 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 440.65 320.39 Tm (-) Tj
+ET
+1.000 0.965 0.929 rg
+0.961 0.816 0.647 RG
+0.80 w
+38.00 190.39 519.28 96.50 re B
+BT
+/F2 9.00 Tf
+0.741 0.271 0.063 rg
+1 0 0 1 50.00 269.89 Tm (AI ANALYSIS) Tj
+ET
+BT
+/F1 10.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 50.00 252.39 Tm (Revenue is holding steady and evening usage remains strongest.) Tj
+ET
+BT
+/F2 10.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 54.00 232.39 Tm (-) Tj
+ET
+BT
+/F1 10.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 64.00 232.39 Tm (Memberships remain stable.) Tj
+ET
+BT
+/F2 10.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 54.00 210.39 Tm (-) Tj
+ET
+BT
+/F1 10.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 64.00 210.39 Tm (Increase prompts near peak hours.) Tj
+ET
+endstream
+endobj
+14 0 obj
+<< /Type /Page /Parent 17 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 13 0 R >>
+endobj
+15 0 obj
+<< /Length 1513 >>
+stream
+1.000 1.000 1.000 rg
+0.00 0.00 595.28 841.89 re f
+BT
+/F2 18.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 38.00 785.89 Tm (Business Improvement Recommendations) Tj
+ET
+BT
+/F1 10.00 Tf
+0.404 0.447 0.522 rg
+1 0 0 1 38.00 769.89 Tm (Prioritized actions synthesized from the full export window.) Tj
+ET
+0.941 0.969 1.000 rg
+0.741 0.839 0.973 RG
+0.90 w
+38.00 585.39 519.28 168.50 re B
+BT
+/F2 9.50 Tf
+0.094 0.322 0.612 rg
+1 0 0 1 52.00 734.39 Tm (BUSINESS IMPROVEMENT RECOMMENDATIONS) Tj
+ET
+BT
+/F1 11.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 52.00 714.89 Tm (Prioritize the highest-impact actions while keeping operating owners and review dates) Tj
+ET
+BT
+/F1 11.00 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 52.00 699.89 Tm (explicit.) Tj
+ET
+BT
+/F2 10.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 56.00 677.39 Tm (-) Tj
+ET
+BT
+/F1 10.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 66.00 677.39 Tm (Protect the strongest member cohorts with scheduled retention outreach and measurable) Tj
+ET
+BT
+/F1 10.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 66.00 662.89 Tm (follow-up ownership.) Tj
+ET
+BT
+/F2 10.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 56.00 640.39 Tm (-) Tj
+ET
+BT
+/F1 10.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 66.00 640.39 Tm (Assign one owner to each improvement, publish the target date, and review progress against) Tj
+ET
+BT
+/F1 10.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 66.00 625.89 Tm (the selected analytics window.) Tj
+ET
+BT
+/F2 10.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 56.00 607.39 Tm (-) Tj
+ET
+BT
+/F1 10.50 Tf
+0.078 0.106 0.165 rg
+1 0 0 1 66.00 607.39 Tm (FINAL RECOMMENDATION) Tj
+ET
+endstream
+endobj
+16 0 obj
+<< /Type /Page /Parent 17 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 15 0 R >>
+endobj
+17 0 obj
+<< /Type /Pages /Count 7 /Kids [4 0 R 6 0 R 8 0 R 10 0 R 12 0 R 14 0 R 16 0 R] >>
+endobj
+18 0 obj
+<< /Type /Catalog /Pages 17 0 R >>
+endobj
+xref
+0 19
+0000000000 65535 f 
+0000000019 00000 n 
+0000000089 00000 n 
+0000000164 00000 n 
+0000005199 00000 n 
+0000005342 00000 n 
+0000010881 00000 n 
+0000011024 00000 n 
+0000016636 00000 n 
+0000016779 00000 n 
+0000021010 00000 n 
+0000021154 00000 n 
+0000025334 00000 n 
+0000025479 00000 n 
+0000029818 00000 n 
+0000029963 00000 n 
+0000031529 00000 n 
+0000031674 00000 n 
+0000031772 00000 n 
+trailer
+<< /Size 19 /Root 18 0 R >>
+startxref
+31823
+%%EOF

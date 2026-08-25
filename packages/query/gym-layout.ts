@@ -55,6 +55,15 @@ async function invalidateGymLayoutEquipment(queryClient: QueryClient) {
   ]);
 }
 
+export function facilityMapSnapshotQueryOptions(
+  client: Pick<ApiClient, "gymLayout">,
+) {
+  return queryOptions({
+    queryKey: queryKeys.facilityMapSnapshot(),
+    queryFn: () => client.gymLayout.getSnapshot(),
+  });
+}
+
 export function createGymLayoutEquipmentMutationOptions(
   client: Pick<ApiClient, "gymLayout">,
   queryClient: QueryClient,

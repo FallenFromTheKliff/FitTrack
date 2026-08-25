@@ -22,7 +22,7 @@ class CandidateProfileInput(StrictModel):
     orientation_signature: dict[str, object] = Field(default_factory=dict)
     movement_pattern: dict[str, object] = Field(default_factory=dict)
     visibility_pattern: dict[str, object] = Field(default_factory=dict)
-    dominant_joint: Literal["elbow", "shoulder", "hip", "knee"] | None = None
+    dominant_joint: Literal["elbow", "shoulder", "hip", "knee", "ankle"] | None = None
     tolerance: float | None = None
     rep_thresholds: dict[str, object] | None = None
     rep_rules: dict[str, object] | None = None
@@ -59,6 +59,7 @@ class PoseAngleSignalEntry(StrictModel):
     shoulder: float | None = None
     hip: float | None = None
     knee: float | None = None
+    ankle: float | None = None
     left_elbow: float | None = None
     right_elbow: float | None = None
     left_shoulder: float | None = None
@@ -67,6 +68,8 @@ class PoseAngleSignalEntry(StrictModel):
     right_hip: float | None = None
     left_knee: float | None = None
     right_knee: float | None = None
+    left_ankle: float | None = None
+    right_ankle: float | None = None
 
 
 class PoseOrientationVector(StrictModel):
@@ -137,7 +140,7 @@ class PoseSpatialRequirements(StrictModel):
 
 class PoseMovementContract(StrictModel):
     exercise: str = Field(min_length=1)
-    dominant_joint: Literal["elbow", "shoulder", "hip", "knee"]
+    dominant_joint: Literal["elbow", "shoulder", "hip", "knee", "ankle"]
     rep_thresholds: PoseRepThresholdPair
     secondary_check: str = Field(min_length=1)
     oscillating_joints: list[str] = Field(default_factory=list)
@@ -218,7 +221,7 @@ class LearnedProfile(StrictModel):
     orientation_signature: dict[str, object]
     movement_pattern: dict[str, object]
     visibility_pattern: dict[str, object]
-    dominant_joint: Literal["elbow", "shoulder", "hip", "knee"] | None = None
+    dominant_joint: Literal["elbow", "shoulder", "hip", "knee", "ankle"] | None = None
     tolerance: float | None = None
     rep_thresholds: dict[str, object] | None = None
     rep_rules: dict[str, object] | None = None

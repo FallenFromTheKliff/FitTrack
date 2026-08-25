@@ -5,6 +5,7 @@ import { BadRequestException } from '@nestjs/common';
 import { ActivityLevelService } from '../../user/activity-level.service';
 import { ExerciseRepository } from './exercise.repository';
 import { ExerciseService } from './exercise.service';
+import { buildFallbackPoseMovementContract } from '../../../../../packages/utils/pose';
 
 describe('ExerciseService', () => {
   let service: ExerciseService;
@@ -20,6 +21,9 @@ describe('ExerciseService', () => {
     updateMuscleDefinition: jest.fn(),
     createExercise: jest.fn(),
     updateExercise: jest.fn(),
+    ensureAliasesAvailable: jest.fn(),
+    findMovementFamilyById: jest.fn(),
+    updateMovementFamilyContract: jest.fn(),
   };
   const activityLevelService = {
     recalculateForUser: jest.fn(),
@@ -40,6 +44,7 @@ describe('ExerciseService', () => {
   });
 
   const makeExercise = (overrides: Record<string, unknown> = {}) => ({
+    aliases: [],
     id: 'exercise-1',
     name: 'Barbell Back Squat',
     muscle_group: 'legs',
@@ -49,6 +54,13 @@ describe('ExerciseService', () => {
     video_url: 'https://cdn.fittrack.test/videos/squat.mp4',
     image_url: 'https://cdn.fittrack.test/images/squat.png',
     is_active: true,
+    hand_shape_profile: null,
+    movement_family_id: null,
+    movement_family: null,
+    movement_profile: null,
+    movement_profile_override: null,
+    muscle_targets: [],
+    tracking_mode: 'manual',
     created_at: new Date('2026-03-26T02:00:00.000Z'),
     updated_at: new Date('2026-03-26T03:00:00.000Z'),
     ...overrides,
@@ -108,13 +120,17 @@ describe('ExerciseService', () => {
       muscle_group: 'legs',
       category: ExerciseCategory.strength,
       description: 'Compound lower-body movement.',
+      hand_shape_profile: undefined,
       instructions: 'Keep your chest up.',
+      movement_profile: undefined,
+      movement_profile_override: undefined,
       video_url: 'https://cdn.fittrack.test/videos/squat.mp4',
       image_url: 'https://cdn.fittrack.test/images/squat.png',
     });
 
     expect(repo.createExercise).toHaveBeenCalledWith({
       name: 'Barbell Back Squat',
+      tracking_mode: 'manual',
       muscle_group: 'legs',
       muscle_targets: [
         {
@@ -268,10 +284,15 @@ describe('ExerciseService', () => {
       image_url: 'https://cdn.fittrack.test/images/squat-v2.png',
     });
 
-    expect(repo.updateExercise).toHaveBeenCalledWith('exercise-1', {
-      is_active: false,
-      image_url: 'https://cdn.fittrack.test/images/squat-v2.png',
-    });
+    expect(repo.updateExercise).toHaveBeenCalledWith(
+      'exercise-1',
+      {
+        is_active: false,
+        image_url: 'https://cdn.fittrack.test/images/squat-v2.png',
+      },
+      undefined,
+    );
+    expect(repo.updateMovementFamilyContract).not.toHaveBeenCalled();
   });
 
   it('loads a single active exercise by id', async () => {
@@ -303,5 +324,77 @@ describe('ExerciseService', () => {
         category: ExerciseCategory.strength,
       },
     ]);
+  });
+
+  it('increments only the shared family contract and reports inheriting exercises', async () => {
+    const movementContract = buildFallbackPoseMovementContract('squat');
+    if (!movementContract) throw new Error('squat contract missing');
+    repo.updateMovementFamilyContract.mockResolvedValue({
+      id: 'family-squat',
+      key: 'squat',
+      contract_revision: 3,
+      exercises: [
+        { id: 'inherit-1', name: 'Front Squat', tracking_mode: 'inherit' },
+        { id: 'override-1', name: 'Goblet Squat', tracking_mode: 'override' },
+        { id: 'manual-1', name: 'Historical Squat', tracking_mode: 'manual' },
+      ],
+    });
+
+    await expect(
+      service.updateMovementFamilyContract('family-squat', {
+        movement_profile: {
+          movementContract,
+          rig: null,
+          schemaVersion: 'exercise_movement_profile_v1',
+          warnings: [],
+        },
+      }),
+    ).resolves.toEqual({
+      id: 'family-squat',
+      key: 'squat',
+      contract_revision: 3,
+      affected_inheritors: [{ id: 'inherit-1', name: 'Front Squat' }],
+    });
+    expect(repo.updateMovementFamilyContract).toHaveBeenCalledTimes(1);
+    expect(repo.updateExercise).not.toHaveBeenCalled();
+  });
+
+  it('keeps the family revision stable for a semantically identical contract', async () => {
+    const movementContract = buildFallbackPoseMovementContract('squat');
+    if (!movementContract) throw new Error('squat contract missing');
+    const movementProfile = {
+      movementContract,
+      rig: null,
+      schemaVersion: 'exercise_movement_profile_v1',
+      warnings: [],
+    };
+    repo.findMovementFamilyById.mockResolvedValue({
+      id: 'family-squat',
+      key: 'squat',
+      contract_revision: 6,
+      base_movement_profile: {
+        warnings: [],
+        schemaVersion: 'exercise_movement_profile_v1',
+        rig: null,
+        movementContract,
+      },
+      base_hand_shape_profile: null,
+      exercises: [
+        { id: 'inherit-1', name: 'Front Squat', tracking_mode: 'inherit' },
+        { id: 'override-1', name: 'Goblet Squat', tracking_mode: 'override' },
+      ],
+    });
+
+    await expect(
+      service.updateMovementFamilyContract('family-squat', {
+        movement_profile: movementProfile,
+      }),
+    ).resolves.toEqual({
+      id: 'family-squat',
+      key: 'squat',
+      contract_revision: 6,
+      affected_inheritors: [{ id: 'inherit-1', name: 'Front Squat' }],
+    });
+    expect(repo.updateMovementFamilyContract).not.toHaveBeenCalled();
   });
 });

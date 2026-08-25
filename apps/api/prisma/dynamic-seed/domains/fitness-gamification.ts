@@ -2,6 +2,8 @@ import {
   AppointmentStatus,
   BookingStatus,
   ExerciseCategory,
+  ExerciseAliasKind,
+  ExerciseTrackingMode,
   FitnessGoal,
   IntegrityCaseStatus,
   IntegrityRiskLevel,
@@ -58,11 +60,53 @@ import {
   getPoseAutoRepCapability,
   isValidPoseMovementContract,
 } from '../../../../../packages/utils/pose';
+import { normalizeExerciseAlias } from '../../../../../packages/utils/exercise-movement-contract';
 
 export const POSE_PROFILE_EXERCISE_KEYS = CANONICAL_POSE_EXERCISE_KEYS;
 
 export const LEGACY_POSE_PROFILE_EXERCISE_KEYS =
   CANONICAL_LEGACY_POSE_EXERCISE_KEYS;
+
+export function shouldRestoreMovementFamilyDefaults(
+  mode: DynamicSeedContext['config']['mode'],
+  _existingRevision: number | null,
+) {
+  return mode === 'reset';
+}
+
+export function hasCalibratedLegacyMovementContract(value: unknown) {
+  if (!value || Array.isArray(value) || typeof value !== 'object') return false;
+  return (
+    'movementContract' in value ||
+    'movement_contract' in value ||
+    ('repThresholds' in value && 'dominantJoint' in value)
+  );
+}
+
+export function shouldLinkMovementFamilyMember(
+  mode: DynamicSeedContext['config']['mode'],
+  currentFamilyId: string | null,
+  trackingMode: ExerciseTrackingMode = ExerciseTrackingMode.manual,
+  movementProfile: unknown = null,
+) {
+  if (mode === 'reset') return true;
+  if (currentFamilyId !== null) return false;
+  return !(
+    trackingMode === ExerciseTrackingMode.manual &&
+    hasCalibratedLegacyMovementContract(movementProfile)
+  );
+}
+
+export function filterPresentSeedHistoryMembers(
+  memberKeys: readonly string[],
+  userIdsByKey: Readonly<Record<string, string>>,
+  presentUserIds: ReadonlySet<string>,
+) {
+  return memberKeys.flatMap((memberKey) => {
+    const userId = userIdsByKey[memberKey];
+    return userId && presentUserIds.has(userId) ? [{ memberKey, userId }] : [];
+  });
+}
 
 export function getLegacySeedPoseProfileRetirementWhere() {
   return {
@@ -165,14 +209,8 @@ async function seedExerciseBackbone(ctx: DynamicSeedContext) {
         instructions:
           'Warm up, keep control through the full range, and stop if pain changes the movement.',
         is_active: true,
-        movement_profile: {
-          pattern:
-            exercise.category === ExerciseCategory.cardio
-              ? 'cyclic'
-              : exercise.category === ExerciseCategory.flexibility
-                ? 'flow'
-                : 'strength_reps',
-        },
+        // Additive seeding deliberately leaves movement_profile untouched.
+        // Existing installations may still read it for migration compatibility.
         muscle_group: exercise.muscleGroup,
         muscle_targets: [exercise.muscleGroup],
         name: exercise.name,
@@ -203,6 +241,195 @@ async function seedExerciseBackbone(ctx: DynamicSeedContext) {
         video_url: null,
       },
     });
+  }
+
+  const movementFamilies = [
+    {
+      id: '81000000-0000-4000-8000-000000000001',
+      key: 'squat',
+      displayName: 'Squat',
+      canonicalExerciseKey: 'squat',
+      memberKeys: ['squat'],
+      aliases: ['Squat', 'Back Squat', 'Barbell Squat', 'Barbell Back Squat'],
+    },
+    {
+      id: '81000000-0000-4000-8000-000000000002',
+      key: 'bench_press',
+      displayName: 'Bench Press',
+      canonicalExerciseKey: 'barbell-bench',
+      memberKeys: ['barbell-bench', 'bench'],
+      aliases: ['Barbell Bench Press'],
+    },
+    {
+      id: '81000000-0000-4000-8000-000000000003',
+      key: 'bicep_curl',
+      displayName: 'Bicep Curl',
+      canonicalExerciseKey: 'biceps-curl',
+      memberKeys: ['biceps-curl', 'hammer-curl'],
+      aliases: [
+        'Bicep Curl',
+        'Biceps Curl',
+        'Dumbbell Curl',
+        'Dumbbell Bicep Curl',
+        'Dumbbell Biceps Curl',
+        'Curl',
+        'bicep_curl',
+      ],
+    },
+    {
+      id: '81000000-0000-4000-8000-000000000004',
+      key: 'dip',
+      displayName: 'Dip',
+      canonicalExerciseKey: 'dip',
+      memberKeys: ['dip'],
+      aliases: ['Parallel Bar Dip'],
+    },
+    {
+      id: '81000000-0000-4000-8000-000000000005',
+      key: 'plank',
+      displayName: 'Plank',
+      canonicalExerciseKey: 'plank',
+      memberKeys: ['plank'],
+      aliases: ['Forearm Plank'],
+    },
+    {
+      id: '81000000-0000-4000-8000-000000000006',
+      key: 'pull_up',
+      displayName: 'Pull Up',
+      canonicalExerciseKey: 'pull-up',
+      memberKeys: ['pull-up'],
+      aliases: ['Pull Up', 'Pull-Up', 'Pullup', 'pull_up'],
+    },
+    {
+      id: '81000000-0000-4000-8000-000000000007',
+      key: 'push_up',
+      displayName: 'Push Up',
+      canonicalExerciseKey: 'push-up',
+      memberKeys: ['push-up'],
+      aliases: ['Push Up', 'Push-Up', 'Pushup', 'push_up'],
+    },
+    {
+      id: '81000000-0000-4000-8000-000000000008',
+      key: 'shoulder_press',
+      displayName: 'Shoulder Press',
+      canonicalExerciseKey: 'shoulder-press',
+      memberKeys: ['shoulder-press'],
+      aliases: ['Seated Dumbbell Shoulder Press'],
+    },
+  ] as const;
+
+  for (const family of movementFamilies) {
+    const canonicalExerciseId =
+      ctx.state.exerciseIds[family.canonicalExerciseKey];
+    const contract = buildFallbackPoseMovementContract(family.key);
+    if (
+      !canonicalExerciseId ||
+      !contract ||
+      !isValidPoseMovementContract(contract)
+    ) {
+      throw new Error(
+        `Missing reviewed movement family seed for "${family.key}".`,
+      );
+    }
+    const baseMovementProfile = {
+      movementContract: contract,
+      rig: null,
+      schemaVersion: 'exercise_movement_profile_v1',
+      warnings: [],
+    };
+    const existing = await ctx.prisma.exerciseMovementFamily.findUnique({
+      where: { key: family.key },
+      select: { contract_revision: true },
+    });
+    const mayRestoreDefaults = shouldRestoreMovementFamilyDefaults(
+      ctx.config.mode,
+      existing?.contract_revision ?? null,
+    );
+    await ctx.prisma.exerciseMovementFamily.upsert({
+      where: { key: family.key },
+      create: {
+        id: family.id,
+        key: family.key,
+        display_name: family.displayName,
+        canonical_exercise_id: canonicalExerciseId,
+        base_movement_profile: baseMovementProfile,
+        base_hand_shape_profile: Prisma.JsonNull,
+        contract_revision: 1,
+        is_active: true,
+      },
+      update: {
+        display_name: family.displayName,
+        canonical_exercise_id: canonicalExerciseId,
+        is_active: true,
+        ...(mayRestoreDefaults
+          ? {
+              base_movement_profile: baseMovementProfile,
+              ...(ctx.config.mode === 'reset' ? { contract_revision: 1 } : {}),
+            }
+          : {}),
+      },
+    });
+
+    for (const memberKey of family.memberKeys) {
+      const exerciseId = ctx.state.exerciseIds[memberKey];
+      if (!exerciseId) continue;
+      const current = await ctx.prisma.exerciseCatalog.findUnique({
+        where: { id: exerciseId },
+        select: {
+          movement_family_id: true,
+          movement_profile: true,
+          tracking_mode: true,
+        },
+      });
+      if (
+        shouldLinkMovementFamilyMember(
+          ctx.config.mode,
+          current?.movement_family_id ?? null,
+          current?.tracking_mode ?? ExerciseTrackingMode.manual,
+          current?.movement_profile ?? null,
+        )
+      ) {
+        await ctx.prisma.exerciseCatalog.update({
+          where: { id: exerciseId },
+          data: {
+            movement_family_id: family.id,
+            tracking_mode: ExerciseTrackingMode.inherit,
+            movement_profile_override: Prisma.JsonNull,
+          },
+        });
+      }
+    }
+
+    const aliasesByNormalized = new Map<string, string>(
+      family.aliases.map((label): [string, string] => [
+        normalizeExerciseAlias(label),
+        label,
+      ]),
+    );
+    for (const [normalizedLabel, label] of aliasesByNormalized) {
+      const existingAlias = await ctx.prisma.exerciseAlias.findUnique({
+        where: { normalized_label: normalizedLabel },
+      });
+      if (!existingAlias) {
+        await ctx.prisma.exerciseAlias.create({
+          data: {
+            id: seedId(`exercise-alias:${normalizedLabel}`),
+            exercise_id: canonicalExerciseId,
+            kind: ExerciseAliasKind.synonym,
+            label,
+            normalized_label: normalizedLabel,
+          },
+        });
+      } else if (ctx.config.mode === 'reset') {
+        await ctx.prisma.exerciseAlias.update({
+          where: { normalized_label: normalizedLabel },
+          data: {
+            exercise_id: canonicalExerciseId,
+            label,
+          },
+        });
+      }
+    }
   }
 
   const poseProfileExercises = POSE_PROFILE_EXERCISE_KEYS.map((key) => {
@@ -300,9 +527,9 @@ async function seedExerciseBackbone(ctx: DynamicSeedContext) {
     });
   }
 
-  // Bench, deadlift, and row were previously seeded with guessed alternating
-  // schemas. Retire only those deterministic seed rows; user-created profiles
-  // remain untouched and existing sessions keep their foreign-key history.
+  // Keep this audit-preserving retirement hook for future invalid seed profiles.
+  // The current canonical registry owns bench, deadlift, and row with explicit
+  // contracts, so the legacy list is intentionally empty and this is a no-op.
   await ctx.prisma.poseExerciseProfile.updateMany({
     where: getLegacySeedPoseProfileRetirementWhere(),
     data: { is_active: false },
@@ -2420,13 +2647,25 @@ type SeedProgressionGrant = {
 };
 
 export async function reconcileSeedGamification(ctx: DynamicSeedContext) {
-  const historyMemberKeys = [
+  const candidateHistoryMemberKeys = [
     ...ctx.state.activeMemberKeys,
     ...ctx.state.historicalMemberKeys,
   ];
-  const historyUserIds = historyMemberKeys
+  const candidateHistoryUserIds = candidateHistoryMemberKeys
     .map((key) => ctx.state.userIds[key])
     .filter((id): id is string => Boolean(id));
+  if (candidateHistoryUserIds.length === 0) return;
+  const presentHistoryUsers = await ctx.prisma.user.findMany({
+    where: { id: { in: candidateHistoryUserIds } },
+    select: { id: true },
+  });
+  const historyMembers = filterPresentSeedHistoryMembers(
+    candidateHistoryMemberKeys,
+    ctx.state.userIds,
+    new Set(presentHistoryUsers.map(({ id }) => id)),
+  );
+  const historyMemberKeys = historyMembers.map(({ memberKey }) => memberKey);
+  const historyUserIds = historyMembers.map(({ userId }) => userId);
   if (historyUserIds.length === 0) return;
 
   const expectedWorkoutIds = historyMemberKeys.flatMap((memberKey) => {

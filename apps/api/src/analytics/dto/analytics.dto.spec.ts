@@ -1,7 +1,7 @@
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 
-import { AnalyticsQueryDTO } from './analytics.dto';
+import { AnalyticsQueryDTO, ExportAnalyticsPdfDTO } from './analytics.dto';
 
 function extractMessages(
   errors: Awaited<ReturnType<typeof validate>>,
@@ -36,11 +36,30 @@ describe('Analytics DTO validation', () => {
 
   it('rejects unsupported analytics periods', async () => {
     const dto = plainToInstance(AnalyticsQueryDTO, {
-      period: 'hourly',
+      period: 'quarterly',
     });
 
     expect(extractMessages(await validate(dto))).toContain(
-      'period must be one of: daily, weekly, monthly, yearly',
+      'period must be one of: hourly, daily, weekly, monthly, yearly',
+    );
+  });
+
+  it('accepts a valid saved insight id for PDF export', async () => {
+    const dto = plainToInstance(ExportAnalyticsPdfDTO, {
+      insight_run_id: '33333333-3333-4333-8333-333333333333',
+      selected_sections: ['recommendations'],
+    });
+
+    expect(await validate(dto)).toHaveLength(0);
+  });
+
+  it('rejects a malformed saved insight id for PDF export', async () => {
+    const dto = plainToInstance(ExportAnalyticsPdfDTO, {
+      insight_run_id: 'latest-insight',
+    });
+
+    expect(extractMessages(await validate(dto))).toContain(
+      'insight_run_id must be a valid UUID',
     );
   });
 });
