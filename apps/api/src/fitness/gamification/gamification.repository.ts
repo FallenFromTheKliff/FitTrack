@@ -1792,7 +1792,9 @@ export class GamificationRepository extends BaseRepository {
           isHidden: row.is_hidden,
           lastEarnedAt: row.last_earned_at,
           muscleKey: canonicalMuscleKey,
-          rankPosition,
+          // Seasonal standings persist the authoritative global rank. The
+          // search predicate may return one member, but must never renumber it.
+          rankPosition: row.rank_position ?? rankPosition,
           seasonId: season.id,
           seasonTitle: season.title,
           userId: row.user_id,
@@ -1861,6 +1863,53 @@ export class GamificationRepository extends BaseRepository {
       this.prisma.muscleMasteryProgress.count({ where }),
     ]);
 
+    // Search is intentionally applied after the complete ranked set is read.
+    // Otherwise a searched member at #100 would be rendered as #1 because
+    // rank positions were calculated from the filtered array.
+    const rankingRows = nameSearch
+      ? await this.prisma.muscleMasteryProgress.findMany({
+          where: {
+            muscle_group: { equals: canonicalMuscleKey, mode: 'insensitive' },
+            updated_at: { lte: snapshotAt },
+            ...(input.includeHidden
+              ? {}
+              : {
+                  user: {
+                    AND: [
+                      {
+                        ranking_profile: {
+                          is: {
+                            visibility: RankingVisibility.public,
+                            governance_status: {
+                              notIn: [
+                                RankingGovernanceStatus.hidden_by_admin,
+                                RankingGovernanceStatus.disqualified,
+                              ],
+                            },
+                          },
+                        },
+                      } satisfies Prisma.UserWhereInput,
+                    ],
+                  },
+                }),
+          },
+          include: {
+            user: { include: { profile: true, ranking_profile: true } },
+          },
+          orderBy: [{ xp_points: 'desc' }, { user_id: 'asc' }],
+        })
+      : rows;
+    const rankByUserId = new Map<string, number>();
+    let previousRankingXp: number | null = null;
+    let previousRankingPosition = 0;
+    rankingRows.forEach((row, index) => {
+      if (previousRankingXp !== row.xp_points) {
+        previousRankingPosition = index + 1;
+        previousRankingXp = row.xp_points;
+      }
+      rankByUserId.set(row.user_id, previousRankingPosition);
+    });
+
     let previousXpPoints: number | null = null;
     let rankPosition = 0;
     const rankedRows = rows.map((row, index) => {
@@ -1883,7 +1932,7 @@ export class GamificationRepository extends BaseRepository {
           RankingGovernanceStatus.hidden_by_admin,
         lastEarnedAt: row.last_ranked_at,
         muscleKey: canonicalMuscleKey,
-        rankPosition,
+        rankPosition: rankByUserId.get(row.user_id) ?? rankPosition,
         seasonId: null,
         seasonTitle: null,
         userId: row.user_id,

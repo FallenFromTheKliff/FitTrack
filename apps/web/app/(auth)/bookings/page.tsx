@@ -14,7 +14,7 @@ import {
   Send,
   UserRoundCheck,
 } from "lucide-react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   CoachAvailabilityResponse,
   VenueAvailabilityRecord,
@@ -67,6 +67,7 @@ import {
   type CommerceCheckoutAttemptLike,
 } from "@/lib/commerce-checkout";
 import { useMemberOnlyAccess, useMemberOnlyBookingsData } from "@/hooks/member-only/useMemberOnlyData";
+import { getBookingCalendarTone, getUpcomingBookingDateKeys } from "@/lib/bookingCalendar";
 
 type BookingMode = "find" | "bookings";
 type CoachRatingFilter = "all" | "4" | "4.5";
@@ -2491,6 +2492,16 @@ function RequestCoachModal({
       ),
     [scheduleQuery.data?.availability],
   );
+  const coachCalendarTones = useMemo(() => {
+    const tones: Record<string, "available" | "full" | "unavailable"> = {};
+    highlightedCoachDates.forEach((date) => {
+      tones[date] = "available";
+    });
+    if (preferredDate && selectedCoach) {
+      tones[preferredDate] = getBookingCalendarTone(exactAvailabilityQuery.data);
+    }
+    return tones;
+  }, [exactAvailabilityQuery.data, highlightedCoachDates, preferredDate, selectedCoach]);
   const selectedSlot = availableSlots.find((slot) => slot.startTime === preferredTime) ?? null;
   const selectedIntent = BOOKING_INTENT_OPTIONS.find((option) => option.value === bookingIntent) ?? BOOKING_INTENT_OPTIONS[0];
   const selectedCoachRate = Number(selectedCoach?.hourlyRate);
@@ -2931,6 +2942,7 @@ function RequestCoachModal({
         </div>
       </FitModal>
       <CalendarModal
+        dateTones={coachCalendarTones}
         highlightedDates={highlightedCoachDates}
         isOpen={datePickerOpen}
         maxDate={getMaxBookableDateInputValue()}
@@ -3069,6 +3081,25 @@ function MemberReservationModal({
       !!reservationDate,
     staleTime: 15_000,
   });
+  const venueCalendarDateKeys = useMemo(
+    () => getUpcomingBookingDateKeys(getTodayDateInputValue()),
+    [],
+  );
+  const venueCalendarQueries = useQueries({
+    queries: venueCalendarDateKeys.map((dateKey) => ({
+      ...venueAvailabilityQueryOptions<VenueAvailabilityRecord>(
+        webApiClient,
+        selectedVenue?.id,
+        dateKey,
+      ),
+      enabled:
+        isOpen &&
+        datePickerOpen &&
+        !!selectedVenue &&
+        !selectedVenueBlockReason,
+      staleTime: 30_000,
+    })),
+  });
   const liveVenueSlots = useMemo(
     () =>
       (venueAvailabilityQuery.data ?? [])
@@ -3118,6 +3149,28 @@ function MemberReservationModal({
       (left, right) => timeToMinutes(left.value) - timeToMinutes(right.value),
     );
   }, [liveVenueSlots, minimumHours, reservationDate]);
+  const venueCalendarTones = useMemo(
+    () => {
+      if (!selectedVenue || selectedVenueBlockReason) return {};
+      const tones: Record<string, "available" | "full" | "unavailable"> = {};
+      venueCalendarQueries.forEach((query, index) => {
+        const dateKey = venueCalendarDateKeys[index];
+        if (dateKey) tones[dateKey] = getBookingCalendarTone(query.data);
+      });
+      if (reservationDate) {
+        tones[reservationDate] = getBookingCalendarTone(venueAvailabilityQuery.data);
+      }
+      return tones;
+    },
+    [
+      reservationDate,
+      selectedVenue,
+      selectedVenueBlockReason,
+      venueAvailabilityQuery.data,
+      venueCalendarDateKeys,
+      venueCalendarQueries,
+    ],
+  );
   const endSlotOptions = useMemo(() => {
     if (!startTime) return [];
     const startIndex = liveVenueSlots.findIndex(
@@ -3790,6 +3843,7 @@ function MemberReservationModal({
         title="Coach Add-on"
       />
       <CalendarModal
+        dateTones={venueCalendarTones}
         highlightedDates={startSlotOptions.length > 0 ? [reservationDate] : []}
         isOpen={datePickerOpen}
         maxDate={getMaxBookableDateInputValue()}

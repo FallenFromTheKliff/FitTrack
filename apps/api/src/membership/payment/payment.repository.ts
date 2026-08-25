@@ -849,6 +849,60 @@ export class PaymentRepository extends BaseRepository {
           user: { connect: { id: hold.user_id } },
         },
       });
+
+      // Persist the paid coach add-on as an appointment in the same
+      // idempotent payment transition as its venue booking.
+      if (hold.coach_id) {
+        const [amenity, coach] = await Promise.all([
+          tx.amenity.findUnique({
+            where: { id: hold.amenity_id },
+            select: { hourly_rate: true },
+          }),
+          tx.coachProfile.findUnique({
+            where: { id: hold.coach_id },
+            select: { gym_commission_pct: true },
+          }),
+        ]);
+        if (!amenity || !coach) {
+          throw this.invalidCheckoutHold(hold.id, 'venue coach add-on');
+        }
+        const durationHours = new Prisma.Decimal(
+          hold.ends_at.getTime() - hold.scheduled_at.getTime(),
+        ).div(60 * 60 * 1000);
+        const venueAmount = new Prisma.Decimal(amenity.hourly_rate)
+          .mul(durationHours)
+          .toDecimalPlaces(2);
+        const coachAmount = payment.amount.minus(venueAmount).toDecimalPlaces(2);
+        const gymRevenue = coachAmount
+          .mul(new Prisma.Decimal(coach.gym_commission_pct))
+          .div(100)
+          .toDecimalPlaces(2);
+        const coachAppointment = await tx.coachAppointment.create({
+          data: {
+            balance_amount: new Prisma.Decimal(0),
+            balance_paid_at: paidAt,
+            coach: { connect: { id: hold.coach_id } },
+            coach_earnings: coachAmount.minus(gymRevenue).toDecimalPlaces(2),
+            downpayment_amount: new Prisma.Decimal(0),
+            downpayment_paid_at: paidAt,
+            duration_minutes: Math.ceil(
+              (hold.ends_at.getTime() - hold.scheduled_at.getTime()) /
+                (60 * 1000),
+            ),
+            gym_revenue: gymRevenue,
+            is_free_session: false,
+            member_notes: hold.member_notes,
+            scheduled_at: hold.scheduled_at,
+            status: AppointmentStatus.confirmed,
+            total_amount: coachAmount,
+            user: { connect: { id: hold.user_id } },
+          },
+        });
+        await tx.commerceCheckoutHold.update({
+          where: { id: hold.id },
+          data: { appointment_id: coachAppointment.id },
+        });
+      }
       return booking.id;
     }
 
@@ -1143,7 +1197,7 @@ export class PaymentRepository extends BaseRepository {
     });
   }
 
-  findLatestPaymentsForPayableIds(
+  async findLatestPaymentsForPayableIds(
     payableType: PayableType,
     payableIds: string[],
   ): Promise<Payment[]> {
@@ -1151,15 +1205,46 @@ export class PaymentRepository extends BaseRepository {
       return Promise.resolve([]);
     }
 
-    return this.prisma.payment.findMany({
-      where: {
-        payable_type: payableType,
-        payable_id: { in: payableIds },
-        status: {
-          not: PaymentStatus.failed,
-        },
-      },
+    const where: Prisma.PaymentWhereInput =
+      payableType === PayableType.coaching
+        ? {
+            OR: [
+              { payable_type: payableType, payable_id: { in: payableIds } },
+              {
+                payable_type: PayableType.commerce_checkout_hold,
+                commerce_checkout_hold: {
+                  is: { appointment_id: { in: payableIds } },
+                },
+              },
+            ],
+            status: { not: PaymentStatus.failed },
+          }
+        : {
+            payable_type: payableType,
+            payable_id: { in: payableIds },
+            status: { not: PaymentStatus.failed },
+          };
+    const payments = await this.prisma.payment.findMany({
+      where,
+      ...(payableType === PayableType.coaching
+        ? {
+            include: {
+              commerce_checkout_hold: { select: { appointment_id: true } },
+            },
+          }
+        : {}),
       orderBy: [{ created_at: 'desc' }],
+    });
+    if (payableType !== PayableType.coaching) return payments;
+    return payments.map((payment) => {
+      const hold = (
+        payment as Payment & {
+          commerce_checkout_hold?: { appointment_id: string | null } | null;
+        }
+      ).commerce_checkout_hold;
+      return hold?.appointment_id
+        ? { ...payment, payable_id: hold.appointment_id }
+        : payment;
     });
   }
 

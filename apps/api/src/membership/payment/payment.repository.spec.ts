@@ -1,8 +1,10 @@
 import { HttpException } from '@nestjs/common';
 import {
+  AppointmentStatus,
   CommerceCheckoutHoldKind,
   CommerceCheckoutHoldStatus,
   PaymentProvider,
+  PayableType,
   PaymentStatus,
   Prisma,
 } from '@prisma/client';
@@ -59,6 +61,7 @@ describe('PaymentRepository', () => {
 
   const commerceCheckoutHold = {
     findUnique: jest.fn(),
+    update: jest.fn(),
     updateMany: jest.fn(),
   };
 
@@ -86,6 +89,36 @@ describe('PaymentRepository', () => {
     ).resolves.toEqual({ id: 'payment-1' });
     expect(payment.findUnique).toHaveBeenCalledWith(
       expect.objectContaining({ where: { idempotency_key: 'attempt-1' } }),
+    );
+  });
+
+  it('enriches venue coach add-on payments through the appointment contract', async () => {
+    const paymentRecord = {
+      commerce_checkout_hold: { appointment_id: 'appointment-venue-coach-1' },
+      id: 'payment-venue-coach-1',
+      payable_id: 'hold-venue-coach-1',
+      payable_type: PayableType.commerce_checkout_hold,
+      status: PaymentStatus.completed,
+    };
+    payment.findMany.mockResolvedValue([paymentRecord]);
+
+    await expect(
+      repo.findLatestPaymentsForPayableIds(PayableType.coaching, [
+        'appointment-venue-coach-1',
+      ]),
+    ).resolves.toEqual([
+      { ...paymentRecord, payable_id: 'appointment-venue-coach-1' },
+    ]);
+    expect(payment.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          OR: expect.arrayContaining([
+            expect.objectContaining({
+              payable_type: PayableType.commerce_checkout_hold,
+            }),
+          ]),
+        }),
+      }),
     );
   });
 
@@ -459,6 +492,7 @@ describe('PaymentRepository', () => {
       amenity: {
         findUnique: jest.fn().mockResolvedValue({
           capacity: 2,
+          hourly_rate: new Prisma.Decimal('400'),
           is_reservable: true,
         }),
       },
@@ -467,7 +501,10 @@ describe('PaymentRepository', () => {
         findMany: jest.fn().mockResolvedValue([]),
         create: jest.fn().mockResolvedValue({ id: 'booking-venue-coach-1' }),
       },
-      coachAppointment: { findMany: jest.fn().mockResolvedValue([]) },
+      coachAppointment: {
+        create: jest.fn().mockResolvedValue({ id: 'appointment-venue-coach-1' }),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
       coachProfile: {
         findUnique: jest.fn().mockResolvedValue({
           availability_slots: Array.from({ length: 7 }, (_, day_of_week) => ({
@@ -476,6 +513,7 @@ describe('PaymentRepository', () => {
             start_time: new Date('1970-01-01T00:00:00.000Z'),
           })),
           is_available_for_booking: true,
+          gym_commission_pct: new Prisma.Decimal('20'),
         }),
       },
       commerceCheckoutHold: {
@@ -514,6 +552,19 @@ describe('PaymentRepository', () => {
     ).toMatchObject({
       coach: { connect: { id: 'coach-venue-1' } },
       user: { connect: { id: 'member-1' } },
+    });
+    expect(tx.coachAppointment.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        coach: { connect: { id: 'coach-venue-1' } },
+        duration_minutes: 60,
+        status: AppointmentStatus.confirmed,
+        total_amount: new Prisma.Decimal('400'),
+        user: { connect: { id: 'member-1' } },
+      }),
+    });
+    expect(tx.commerceCheckoutHold.update).toHaveBeenCalledWith({
+      where: { id: 'hold-venue-coach-1' },
+      data: { appointment_id: 'appointment-venue-coach-1' },
     });
     expect(tx.$executeRaw).toHaveBeenNthCalledWith(
       1,

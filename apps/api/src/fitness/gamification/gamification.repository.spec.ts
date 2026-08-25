@@ -351,6 +351,7 @@ describe('GamificationRepository', () => {
                 closed_at: null,
                 ends_at: {
                   gt: new Date('2026-01-10T00:00:00.000Z'),
+                  lte: expect.any(Date),
                 },
               },
               {
@@ -704,7 +705,7 @@ describe('GamificationRepository', () => {
 
     expect(result.data[0]).toMatchObject({
       displayName: 'Nels DeLa Cruz',
-      rankPosition: 1,
+      rankPosition: 9,
       seasonId: 'season-closed',
     });
     expect(seasonalMuscleStanding.findMany.mock.calls[0][0].where).toEqual(
@@ -749,6 +750,39 @@ describe('GamificationRepository', () => {
         orderBy: [{ xp_points: 'desc' }, { user_id: 'asc' }],
       }),
     );
+  });
+
+  it('preserves lifetime muscle rank when a member search narrows the result', async () => {
+    const makeRow = (userId: string, xpPoints: number, firstName: string) => ({
+      user_id: userId,
+      user: {
+        profile: { first_name: firstName, last_name: 'Member' },
+        ranking_profile: null,
+      },
+      muscle_group: 'chest',
+      xp_points: xpPoints,
+      last_ranked_at: null,
+    });
+    const fullRows = [
+      makeRow('user-1', 300, 'Top'),
+      makeRow('user-2', 200, 'Second'),
+      makeRow('user-3', 100, 'Maria'),
+    ];
+    prisma.$transaction.mockResolvedValue([[fullRows[2]], 1]);
+    muscleMasteryProgress.findMany.mockResolvedValue(fullRows);
+
+    const result = await repo.listMuscleLeaderboard({
+      muscleKey: 'chest',
+      scope: 'lifetime',
+      search: 'Maria Member',
+    });
+
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0]).toMatchObject({
+      displayName: 'Maria Member',
+      rankPosition: 3,
+    });
+    expect(muscleMasteryProgress.findMany).toHaveBeenCalledTimes(2);
   });
 
   it('returns an empty season muscle result when there is no season history', async () => {

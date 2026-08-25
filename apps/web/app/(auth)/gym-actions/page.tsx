@@ -36,6 +36,7 @@ import {
 } from "@/components/fit";
 import type { FitTableColumn } from "@/components/fit/FitTable";
 import FloatingHelpButton from "@/components/help/FloatingHelpButton";
+import { matchesGymActionSearch } from "@/lib/gymActionSearch";
 
 export const dynamic = "force-dynamic";
 
@@ -125,12 +126,6 @@ function bookingMemberName(booking: VenueBookingRecord) {
     booking.user?.email ||
     "Venue booking"
   );
-}
-
-function matchesSearch(values: Array<string | number | null | undefined>, search: string) {
-  const query = search.trim().toLowerCase();
-  if (!query) return true;
-  return values.some((value) => String(value ?? "").toLowerCase().includes(query));
 }
 
 function matchesDateRange(value: string | null | undefined, range: DateRangeFilter) {
@@ -268,7 +263,7 @@ export default function GymActionsPage() {
       (transactionKind === "all" || row.kind === transactionKind) &&
       (transactionStatus === "all" || row.status === transactionStatus) &&
       matchesDateRange(row.createdAt, transactionDateRange) &&
-      matchesSearch(
+      matchesGymActionSearch(
         [row.actor, row.amount, row.description, row.status, row.title],
         transactionSearch,
       ),
@@ -289,7 +284,7 @@ export default function GymActionsPage() {
       (auditKind === "all" || log.entity === auditKind) &&
       (auditStatus === "all" || log.actor?.status === auditStatus) &&
       matchesDateRange(log.created_at, auditDateRange) &&
-      matchesSearch(
+      matchesGymActionSearch(
         [
           log.action,
           log.entity,
@@ -370,7 +365,7 @@ export default function GymActionsPage() {
     (activity) =>
       (recentStatus === "all" || activity.status === recentStatus) &&
       matchesDateRange(activity.occurredAt, recentDateRange) &&
-      matchesSearch(
+      matchesGymActionSearch(
         [
           activity.actorName,
           activity.description,

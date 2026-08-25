@@ -14,7 +14,13 @@ import FitModal from "@/components/modals/FitModal";
 type Props = {
   dateTones?: Record<
     string,
-    "available" | "complete" | "conflict" | "limited" | "missing"
+    | "available"
+    | "complete"
+    | "conflict"
+    | "full"
+    | "limited"
+    | "missing"
+    | "unavailable"
   >;
   highlightedDates?: string[];
   isOpen: boolean;
@@ -227,11 +233,13 @@ export default function CalendarModal({
                 const toneColor =
                   dateTone === "available" || dateTone === "complete"
                     ? colors.success
-                    : dateTone === "conflict" || dateTone === "missing"
+                    : dateTone === "conflict" || dateTone === "full" || dateTone === "missing"
                       ? "#ef4444"
-                      : dateTone === "limited"
+                    : dateTone === "limited"
                         ? "#f59e0b"
-                        : null;
+                        : dateTone === "unavailable"
+                          ? colors.textMuted
+                          : null;
                 const canShowHighlight =
                   isHighlighted && !isSelected && !isDisabled && cell.ymd >= todayYmd;
                 return (

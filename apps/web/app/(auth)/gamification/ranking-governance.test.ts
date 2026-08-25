@@ -61,3 +61,32 @@ test("competition ties and refetched EXP ranks remain server canonical", async (
   assert.equal(getCanonicalSeasonStandingRank(beforeRefetch), 18);
   assert.equal(getCanonicalSeasonStandingRank(afterExpRefetch), 17);
 });
+
+test("season filter options expose one Current Season choice plus historical seasons", async () => {
+  const { getSeasonFilterOptions, resolveSeasonSelection } = await import(modulePath);
+  const options = getSeasonFilterOptions([
+    { id: "active", status: "active", title: "Current" },
+    { id: "closed", status: "closed", title: "Spring" },
+    { id: "archived", status: "archived", title: "Archived" },
+  ], true);
+
+  assert.equal(
+    options.filter((option: { label: string }) => option.label === "Current Season").length,
+    1,
+  );
+  assert.deepEqual(
+    options.map((option: { value: string }) => option.value),
+    ["", "closed", "archived"],
+  );
+  assert.equal(resolveSeasonSelection("", [
+    { id: "active", status: "active" },
+    { id: "closed", status: "closed" },
+  ]), "active");
+  assert.equal(resolveSeasonSelection("", [
+    { id: "closed", status: "closed" },
+    { id: "archived", status: "archived" },
+  ]), "closed");
+  assert.equal(resolveSeasonSelection("closed", [
+    { id: "active", status: "active" },
+  ]), "closed");
+});

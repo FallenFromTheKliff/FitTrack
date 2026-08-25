@@ -146,9 +146,14 @@ export default function PaidSessionSchedule({ appointments, canReschedule = fals
   }, [availability, selectedDate, selectedDuration]);
   const isSubmitting = appointmentMutation.isPending || recurringMutation.isPending;
   const dateTones = useMemo(() => {
-    const tones: Record<string, "available" | "complete" | "conflict" | "limited"> = {};
-    paidSessions.forEach((session) => { tones[gymDate(session.scheduledAt)] = session.status === "completed" ? "complete" : "conflict"; });
-    if (selectedDate && !availabilityLoading) tones[selectedDate] = slots.length > 1 ? "available" : slots.length === 1 ? "limited" : "conflict";
+    const tones: Record<string, "available" | "full" | "unavailable"> = {};
+    paidSessions.forEach((session) => {
+      tones[gymDate(session.scheduledAt)] =
+        session.status === "completed" ? "unavailable" : "full";
+    });
+    if (selectedDate && !availabilityLoading) {
+      tones[selectedDate] = slots.length > 0 ? "available" : "unavailable";
+    }
     return tones;
   }, [availabilityLoading, paidSessions, selectedDate, slots.length]);
 

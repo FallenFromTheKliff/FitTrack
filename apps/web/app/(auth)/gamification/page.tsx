@@ -95,7 +95,11 @@ import {
   type AchievementReviewStatus,
 } from "@/data/progress/milestones";
 import styles from "./gamification.module.css";
-import { getCanonicalSeasonStandingRank } from "./ranking-governance";
+import {
+  getCanonicalSeasonStandingRank,
+  getSeasonFilterOptions,
+  resolveSeasonSelection,
+} from "./ranking-governance";
 
 export const dynamic = "force-dynamic";
 const legacyGovernanceQueueEnabled = false;
@@ -683,7 +687,6 @@ function AdminGamificationPage() {
   const [selectedStandingMuscle, setSelectedStandingMuscle] = useState("");
   const [seasonStandingSearch, setSeasonStandingSearch] = useState("");
   const [seasonFilterId, setSeasonFilterId] = useState("");
-  const [seasonMuscleFilter, setSeasonMuscleFilter] = useState("");
   const [seasonVisibilityFilter, setSeasonVisibilityFilter] =
     useState<FitnessRankingVisibility | "">("");
   const [seasonGovernanceFilter, setSeasonGovernanceFilter] =
@@ -741,7 +744,14 @@ function AdminGamificationPage() {
         : manualExpMuscleDefinitions[0].key,
     );
   }, [manualExpMuscleDefinitions]);
+  const seasonsQuery = useQuery(
+    adminGamificationSeasonsQueryOptions(webApiClient),
+  );
   const normalizedSeasonFilterId = normalizeSeasonSelection(seasonFilterId);
+  const effectiveSeasonFilterId = resolveSeasonSelection(
+    normalizedSeasonFilterId,
+    seasonsQuery.data ?? [],
+  );
   const seasonFilterParams = useMemo<AdminGamificationSeasonStandingListParams>(
     () => ({
       includeArchived: seasonIncludeArchived,
@@ -749,11 +759,8 @@ function AdminGamificationPage() {
       page: seasonStandingPage,
       ...(seasonStandingCursor ? { cursor: seasonStandingCursor } : {}),
       ...(seasonStandingSnapshot ? { snapshot: seasonStandingSnapshot } : {}),
-      ...(normalizedSeasonFilterId
-        ? { seasonId: normalizedSeasonFilterId }
-        : {}),
-      ...(seasonMuscleFilter.trim()
-        ? { muscleKey: seasonMuscleFilter.trim() }
+      ...(effectiveSeasonFilterId
+        ? { seasonId: effectiveSeasonFilterId }
         : {}),
       ...(seasonStandingSearch.trim()
         ? { search: seasonStandingSearch.trim() }
@@ -768,17 +775,13 @@ function AdminGamificationPage() {
     [
       seasonGovernanceFilter,
       seasonIncludeArchived,
-      seasonMuscleFilter,
       seasonStandingPage,
       seasonStandingCursor,
       seasonStandingSnapshot,
       seasonStandingSearch,
       seasonVisibilityFilter,
-      normalizedSeasonFilterId,
+      effectiveSeasonFilterId,
     ],
-  );
-  const seasonsQuery = useQuery(
-    adminGamificationSeasonsQueryOptions(webApiClient),
   );
   const seasonStandingsQuery = useQuery({
     ...adminGamificationSeasonStandingsQueryOptions(
@@ -796,8 +799,8 @@ function AdminGamificationPage() {
         scope: muscleStandingScope,
         ...(muscleStandingCursor ? { cursor: muscleStandingCursor } : {}),
         ...(muscleStandingSnapshot ? { snapshot: muscleStandingSnapshot } : {}),
-        ...(muscleStandingScope === "season" && normalizedSeasonFilterId
-          ? { seasonId: normalizedSeasonFilterId }
+        ...(muscleStandingScope === "season" && effectiveSeasonFilterId
+          ? { seasonId: effectiveSeasonFilterId }
           : {}),
         ...(seasonStandingSearch.trim()
           ? { search: seasonStandingSearch.trim() }
@@ -808,7 +811,7 @@ function AdminGamificationPage() {
         muscleStandingCursor,
         muscleStandingSnapshot,
         muscleStandingScope,
-        normalizedSeasonFilterId,
+        effectiveSeasonFilterId,
         seasonStandingSearch,
         selectedStandingMuscle,
       ],
@@ -951,7 +954,6 @@ function AdminGamificationPage() {
   }, [
     seasonGovernanceFilter,
     seasonIncludeArchived,
-    seasonMuscleFilter,
     seasonStandingSearch,
     seasonVisibilityFilter,
     normalizedSeasonFilterId,
@@ -1544,10 +1546,8 @@ function AdminGamificationPage() {
                 includeArchived={seasonIncludeArchived}
                 leaderboardMode={leaderboardMode}
                 loadError={seasonStandingsQuery.error ?? seasonsQuery.error}
-                muscleFilter={seasonMuscleFilter}
                 onIncludeArchivedChange={setSeasonIncludeArchived}
                 onLeaderboardModeChange={setLeaderboardMode}
-                onMuscleFilterChange={setSeasonMuscleFilter}
                 onNextCursor={advanceSeasonStandingCursor}
                 onPageChange={changeSeasonStandingPage}
                 onSearchChange={setSeasonStandingSearch}
@@ -2580,12 +2580,10 @@ function SeasonPerformanceTable({
   leaderboardMode,
   loadError,
   moderationPending,
-  muscleFilter,
   onGovernanceChange,
   onIncludeArchivedChange,
   onLeaderboardModeChange,
   onModerate,
-  onMuscleFilterChange,
   onOpenManualExp,
   onOpenSeasonManager,
   onNextCursor,
@@ -2608,7 +2606,6 @@ function SeasonPerformanceTable({
   leaderboardMode: "overall" | "muscle";
   loadError: unknown;
   moderationPending: boolean;
-  muscleFilter: string;
   onGovernanceChange: (value: FitnessRankingGovernanceStatus | "") => void;
   onIncludeArchivedChange: (value: boolean) => void;
   onLeaderboardModeChange: (value: "overall" | "muscle") => void;
@@ -2620,7 +2617,6 @@ function SeasonPerformanceTable({
     >,
     rationale: string,
   ) => void;
-  onMuscleFilterChange: (value: string) => void;
   onOpenManualExp: () => void;
   onOpenSeasonManager: () => void;
   onNextCursor: (cursor: string, snapshot?: string | null) => void;
@@ -2668,25 +2664,7 @@ function SeasonPerformanceTable({
     seasons.length > 0 && !hasSeasonHistory && !hasActiveSeason
       ? "No season history yet. Create and start a season to populate standings."
       : "No season standings match the current filters.";
-  const seasonOptions = [
-    {
-      label: defaultSeason
-        ? `${defaultSeason.title} (${defaultSeason.status === "closed" ? "Previous" : "Current"})`
-        : "No season history",
-      value: "",
-    },
-    ...seasons
-      .filter(
-        (season) =>
-          season.status === "active" ||
-          season.status === "closed" ||
-          (includeArchived && season.status === "archived"),
-      )
-      .map((season) => ({
-        label: `${season.title} (${labelize(season.status)})`,
-        value: season.id,
-      })),
-  ];
+  const seasonOptions = getSeasonFilterOptions(seasons, includeArchived);
   const tableColumns: FitTableColumn<AdminGamificationSeasonStandingRecord>[] = [
     {
       key: "rank",
@@ -3049,7 +3027,7 @@ function SeasonPerformanceTable({
             <summary style={{ borderColor: colors.border, color: colors.textSecondary }}>
               Advanced filters
               <span>
-                {[muscleFilter, selectedVisibility, selectedGovernance]
+                {[selectedVisibility, selectedGovernance]
                   .filter(Boolean)
                   .length + (includeArchived ? 1 : 0)}
               </span>
@@ -3062,13 +3040,6 @@ function SeasonPerformanceTable({
                 boxShadow: "0 18px 48px rgba(0, 0, 0, 0.24)",
               }}
             >
-              <FitSearch
-                ariaLabel="Filter by muscle or EXP area"
-                compact
-                placeholder="Muscle or EXP area"
-                value={muscleFilter}
-                onChangeText={onMuscleFilterChange}
-              />
               <FitDropdown
                 fullWidth
                 value={selectedVisibility}
@@ -3308,20 +3279,9 @@ function MusclePerformanceTable({
     seasons.find((season) => season.status === "active") ??
     seasons.find((season) => season.status === "closed") ??
     null;
-  const seasonOptions = [
-    {
-      label: defaultSeason
-        ? `${defaultSeason.title} (${defaultSeason.status === "closed" ? "Previous" : "Current"})`
-        : "No season history",
-      value: "",
-    },
-    ...seasons
-      .filter((season) => season.status === "active" || season.status === "closed")
-      .map((season) => ({
-        label: `${season.title} (${labelize(season.status)})`,
-        value: season.id,
-      })),
-  ];
+  const seasonOptions = getSeasonFilterOptions(seasons, true).filter(
+    (option) => option.value === "" || seasons.some((season) => season.id === option.value && season.status === "closed"),
+  );
   const selectedSeason =
     seasons.find((season) => season.id === selectedSeasonId) ??
     (rows[0]?.seasonId
