@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -34,14 +34,6 @@ class GymSpecialScheduleItem(StrictModel):
     pricing_note: str | None = None
 
 
-class GymPromotionItem(StrictModel):
-    title: str = Field(min_length=1)
-    description: str = Field(min_length=1)
-    promo_code: str | None = None
-    starts_at: datetime
-    ends_at: datetime
-    pricing_note: str | None = None
-
 
 class GymFaqItem(StrictModel):
     category: str = Field(min_length=1)
@@ -71,7 +63,6 @@ class GymUserContext(StrictModel):
 class GymChatGroundingPayload(StrictModel):
     operating_hours: list[GymOperatingHoursItem]
     special_schedules: list[GymSpecialScheduleItem]
-    promotions: list[GymPromotionItem]
     faqs: list[GymFaqItem]
     membership_plans: list[GymMembershipPlanItem]
     session_history: list[GymSessionHistoryItem]

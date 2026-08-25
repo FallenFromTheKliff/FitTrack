@@ -2416,22 +2416,6 @@ model GymSpecialSchedule {
   @@map("gym_special_schedules")
 }
 
-model GymPromotion {
-  id           String   @id @default(uuid()) @db.Uuid
-  title        String   @db.VarChar(255)
-  description  String
-  promo_code   String?  @db.VarChar(100)
-  starts_at    DateTime @db.Timestamptz(6)
-  ends_at      DateTime @db.Timestamptz(6)
-  pricing_note String?
-  is_active    Boolean  @default(true)
-  created_at   DateTime @default(now()) @db.Timestamptz(6)
-  updated_at   DateTime @updatedAt @db.Timestamptz(6)
-
-  @@index([starts_at, ends_at, is_active])
-  @@map("gym_promotions")
-}
-
 model GymFaqEntry {
   id         String         @id @default(uuid()) @db.Uuid
   category   GymFaqCategory
@@ -2451,7 +2435,6 @@ enum GymFaqCategory {
   general
   hours
   rates
-  promo
   membership
   amenities
   coaching

@@ -51,7 +51,7 @@ export class SendGymChatMessageDTO {
   session_id?: string;
 
   @ApiProperty({
-    example: 'What membership plans and promos are active right now?',
+    example: 'What membership plans are available right now?',
   })
   @TrimString()
   @IsNotEmpty({ message: 'message is required' })
@@ -73,7 +73,7 @@ export class GymChatSessionResponseDTO {
 
   @ApiPropertyOptional({
     type: String,
-    example: 'Membership plans and promos',
+    example: 'Membership plan discussion',
     nullable: true,
   })
   title: string | null;
@@ -126,22 +126,19 @@ export class GymChatReplyResponseDTO {
   session_id: string;
 
   @ApiProperty({
-    example: 'Current promotion: Summer Starter Pack (SUMMER26).',
+    example: 'Membership option: Monthly Flex at PHP 1999 for 30 days.',
   })
   reply: string;
 
   @ApiProperty({
     type: [String],
-    example: ['promotions', 'membership_plans'],
+    example: ['membership_plans'],
   })
   sources: string[];
 
   @ApiProperty({
     type: [String],
-    example: [
-      'Ask whether the current promotion applies to new members.',
-      'Ask which membership plan fits your visit frequency.',
-    ],
+    example: ['Ask which membership plan fits your visit frequency.'],
   })
   follow_up_suggestions: string[];
 

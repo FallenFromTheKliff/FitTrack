@@ -6,7 +6,7 @@ _Always include `../00-global-contracts.md` and `00-python-microservice-contract
 # S16 - AI Chatbot
 
 ## Overview
-Gym-only chatbot with grounded answers, chat history, and follow-ups. This domain is separate from legacy `S11` and handles only gym-relevant questions such as operating hours, holiday schedules, rates, promos, membership plans, coaching, amenities, training basics, and nutrition basics.
+Gym-only chatbot with grounded answers, chat history, and follow-ups. This domain is separate from legacy `S11` and handles only gym-relevant questions such as operating hours, holiday schedules, rates, membership plans, coaching, amenities, training basics, and nutrition basics.
 
 Nest owns chat sessions, message history, FAQ and schedule data, and grounding assembly. Python receives grounded context and returns the assistant reply. Out-of-scope questions are refused explicitly. The Python chatbot uses OpenRouter as the default external model gateway through an OpenAI-compatible adapter.
 
@@ -106,22 +106,6 @@ model GymSpecialSchedule {
   @@map("gym_special_schedules")
 }
 
-model GymPromotion {
-  id           String   @id @default(uuid()) @db.Uuid
-  title        String   @db.VarChar(255)
-  description  String
-  promo_code   String?  @db.VarChar(100)
-  starts_at    DateTime @db.Timestamptz(6)
-  ends_at      DateTime @db.Timestamptz(6)
-  pricing_note String?
-  is_active    Boolean  @default(true)
-  created_at   DateTime @default(now()) @db.Timestamptz(6)
-  updated_at   DateTime @updatedAt @db.Timestamptz(6)
-
-  @@index([starts_at, ends_at, is_active])
-  @@map("gym_promotions")
-}
-
 model GymFaqEntry {
   id         String         @id @default(uuid()) @db.Uuid
   category   GymFaqCategory
@@ -141,7 +125,6 @@ enum GymFaqCategory {
   general
   hours
   rates
-  promo
   membership
   amenities
   coaching
@@ -181,15 +164,6 @@ class CreateGymSpecialScheduleDTO {
   pricing_note?: string      // @IsOptional() @IsString()
 }
 
-class CreateGymPromotionDTO {
-  title: string              // @IsString() @IsNotEmpty()
-  description: string        // @IsString() @IsNotEmpty()
-  promo_code?: string        // @IsOptional() @IsString()
-  starts_at: string          // @IsISO8601()
-  ends_at: string            // @IsISO8601()
-  pricing_note?: string      // @IsOptional() @IsString()
-}
-
 class CreateGymFaqEntryDTO {
   category: GymFaqCategory   // @IsEnum(GymFaqCategory)
   question: string           // @IsString() @IsNotEmpty()
@@ -211,8 +185,6 @@ class CreateGymFaqEntryDTO {
 | PUT | /v1/gym-chat/knowledge/hours | Admin | UpsertGymOperatingHoursDTO[] | Replace weekly operating hours |
 | GET | /v1/gym-chat/knowledge/special-schedules | Admin | PaginationDTO | Holiday and special schedules |
 | POST | /v1/gym-chat/knowledge/special-schedules | Admin | CreateGymSpecialScheduleDTO | Add special schedule |
-| GET | /v1/gym-chat/knowledge/promotions | Admin | PaginationDTO | Promotions list |
-| POST | /v1/gym-chat/knowledge/promotions | Admin | CreateGymPromotionDTO | Add promotion |
 | GET | /v1/gym-chat/knowledge/faqs | Admin | PaginationDTO | FAQ list |
 | POST | /v1/gym-chat/knowledge/faqs | Admin | CreateGymFaqEntryDTO | Add FAQ entry |
 
@@ -234,14 +206,6 @@ interface GymChatGroundingPayload {
     closes_at?: string
     is_closed: boolean
     reason: string
-    pricing_note?: string
-  }>
-  promotions: Array<{
-    title: string
-    description: string
-    promo_code?: string
-    starts_at: string
-    ends_at: string
     pricing_note?: string
   }>
   faqs: Array<{
@@ -309,7 +273,7 @@ POST /chat/gym
 |---|-------|--------|--------|
 | 1 | User | POST `/v1/gym-chat/messages` | Send message with optional session ID |
 | 2 | GymChatService | Resolve or create `gym_chat_sessions` | Load recent chat history |
-| 3 | GymChatService | Load grounding data | Hours, schedules, promos, FAQs, and membership plans |
+| 3 | GymChatService | Load grounding data | Hours, schedules, FAQs, and membership plans |
 | 4 | GymChatService | POST `/chat/gym` | Send message, history, and grounding payload to Python |
 | 5 | Python | If prompt is not gym-related: refuse | Returns `out_of_scope=true` with brief refusal |
 | 6 | Python | If prompt is gym-related: answer from grounded payload | Use OpenRouter to phrase and connect facts from grounding |
@@ -320,7 +284,7 @@ POST /chat/gym
 
 | # | Actor | Action | Detail |
 |---|-------|--------|--------|
-| 1 | Admin | Create or update hours, schedules, promos, or FAQs | Via knowledge endpoints |
+| 1 | Admin | Create or update hours, schedules, or FAQs | Via knowledge endpoints |
 | 2 | GymKnowledgeService | Validate payload | Ensure date and time ranges are valid |
 | 3 | GymKnowledgeService | INSERT or UPDATE backend tables | Python is not called here |
 | 4 | Future chats | Consume latest grounded data | No redeploy required |
@@ -338,7 +302,6 @@ buildGroundingPayload(userId: string, sessionId: string): Promise<GymChatGroundi
 // Nest GymKnowledgeService
 replaceOperatingHours(dto: UpsertGymOperatingHoursDTO[]): Promise<GymOperatingHour[]>
 createSpecialSchedule(dto: CreateGymSpecialScheduleDTO): Promise<GymSpecialSchedule>
-createPromotion(dto: CreateGymPromotionDTO): Promise<GymPromotion>
 createFaqEntry(dto: CreateGymFaqEntryDTO): Promise<GymFaqEntry>
 
 // Python GymChatService

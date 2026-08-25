@@ -2,8 +2,6 @@ import {
   Body,
   Controller,
   Get,
-  Param,
-  ParseUUIDPipe,
   Patch,
   ParseArrayPipe,
   Post,
@@ -27,12 +25,10 @@ import { JwtAuthGuard, RolesGuard } from '../common/guards';
 import { PaginationDTO } from '../user/dto/user-dto';
 import {
   CreateGymFaqEntryDTO,
-  CreateGymPromotionDTO,
   CreateGymSpecialScheduleDTO,
   GymFaqEntryResponseDTO,
   GymProfileResponseDTO,
   GymOperatingHourResponseDTO,
-  GymPromotionResponseDTO,
   GymSpecialScheduleResponseDTO,
   UpdateGymProfileDTO,
   UpsertGymOperatingHoursDTO,
@@ -91,7 +87,6 @@ function paginatedEnvelopeSchema(schemaRef: string) {
 @ApiExtraModels(
   GymOperatingHourResponseDTO,
   GymSpecialScheduleResponseDTO,
-  GymPromotionResponseDTO,
   GymFaqEntryResponseDTO,
   GymProfileResponseDTO,
 )
@@ -191,43 +186,6 @@ export class GymKnowledgeController {
   })
   createSpecialSchedule(@Body() dto: CreateGymSpecialScheduleDTO) {
     return this.gymKnowledgeService.createSpecialSchedule(dto);
-  }
-
-  @Get('promotions')
-  @Roles(UserRole.admin, UserRole.staff)
-  @ApiOperation({ summary: 'List active gym promotions. Admin/Staff only.' })
-  @ApiResponse({
-    status: 200,
-    description: 'Promotions returned.',
-    schema: paginatedEnvelopeSchema(getSchemaPath(GymPromotionResponseDTO)),
-  })
-  getPromotions(@Query() dto: PaginationDTO) {
-    return this.gymKnowledgeService.getPromotions(dto);
-  }
-
-  @Post('promotions')
-  @Roles(UserRole.admin, UserRole.staff)
-  @ApiOperation({ summary: 'Create a gym promotion. Admin/Staff only.' })
-  @ApiResponse({
-    status: 201,
-    description: 'Promotion created.',
-    schema: apiEnvelopeSchema(getSchemaPath(GymPromotionResponseDTO)),
-  })
-  createPromotion(@Body() dto: CreateGymPromotionDTO) {
-    return this.gymKnowledgeService.createPromotion(dto);
-  }
-
-  @Patch('promotions/:id/deactivate')
-  @Roles(UserRole.admin, UserRole.staff)
-  @ApiOperation({ summary: 'Deactivate a gym promotion. Admin/Staff only.' })
-  @ApiResponse({
-    status: 200,
-    description: 'Promotion deactivated.',
-    schema: apiEnvelopeSchema(getSchemaPath(GymPromotionResponseDTO)),
-  })
-  @ApiResponse({ status: 404, description: 'Promotion not found.' })
-  deactivatePromotion(@Param('id', ParseUUIDPipe) id: string) {
-    return this.gymKnowledgeService.deactivatePromotion(id);
   }
 
   @Get('faqs')

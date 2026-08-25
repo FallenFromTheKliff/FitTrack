@@ -49,7 +49,7 @@ function getPageKey(pathname: string, role: Role | null | undefined): PageKey {
   if (pathname.startsWith("/mastery")) return "member-mastery";
   if (pathname.startsWith("/workout")) return "member-workout";
   if (pathname.startsWith("/dashboard")) return "dashboard";
-  if (pathname.startsWith("/memberships-promos")) return "memberships-promos";
+  if (pathname.startsWith("/memberships")) return "memberships";
   if (pathname.startsWith("/accounts")) return "accounts";
   if (pathname.startsWith("/schedule")) return "schedule";
   if (pathname.startsWith("/milestones")) return "milestones";

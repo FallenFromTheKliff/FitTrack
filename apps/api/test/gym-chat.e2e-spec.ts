@@ -135,10 +135,10 @@ describe('GymChatController (e2e)', () => {
   it('supports the member gym chat session HTTP surface', async () => {
     gymChatService.sendMessage.mockResolvedValue({
       session_id: '17171717-1717-4717-8717-171717171717',
-      reply: 'Current promotion: Summer Starter Pack (SUMMER26).',
-      sources: ['promotions'],
+      reply: 'Membership option: Monthly Flex at PHP 1999 for 30 days.',
+      sources: ['membership_plans'],
       follow_up_suggestions: [
-        'Ask whether the current promotion applies to new members.',
+        'Ask which membership plan fits your visit frequency.',
       ],
       out_of_scope: false,
     });
@@ -176,20 +176,20 @@ describe('GymChatController (e2e)', () => {
       .post('/v1/gym-chat/messages')
       .set('Authorization', 'Bearer member')
       .send({
-        message: 'What promotions are active right now?',
+        message: 'What membership plans do you offer?',
       })
       .expect(200);
 
     expect(gymChatService.sendMessage).toHaveBeenCalledWith(USERS.member.sub, {
-      message: 'What promotions are active right now?',
+      message: 'What membership plans do you offer?',
     });
     expect(sendResponse.body).toEqual({
       data: {
         session_id: '17171717-1717-4717-8717-171717171717',
-        reply: 'Current promotion: Summer Starter Pack (SUMMER26).',
-        sources: ['promotions'],
+        reply: 'Membership option: Monthly Flex at PHP 1999 for 30 days.',
+        sources: ['membership_plans'],
         follow_up_suggestions: [
-          'Ask whether the current promotion applies to new members.',
+          'Ask which membership plan fits your visit frequency.',
         ],
         out_of_scope: false,
       },
@@ -262,7 +262,7 @@ describe('GymChatController (e2e)', () => {
   it('rejects unauthenticated callers before hitting the gym-chat service', async () => {
     const response = await request(getHttpServer(app))
       .post('/v1/gym-chat/messages')
-      .send({ message: 'What promotions are active right now?' })
+      .send({ message: 'What membership plans do you offer?' })
       .expect(401);
 
     expect(response.body).toEqual({

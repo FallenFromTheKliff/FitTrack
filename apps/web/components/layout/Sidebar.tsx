@@ -116,10 +116,10 @@ const MANAGEMENT_NAV_SECTIONS: NavSection[] = [
         pageKey: "exercise-lab",
       },
       {
-        href: "/memberships-promos",
+        href: "/memberships",
         label: "Memberships",
         icon: BadgePercent,
-        pageKey: "memberships-promos",
+        pageKey: "memberships",
       },
     ],
   },

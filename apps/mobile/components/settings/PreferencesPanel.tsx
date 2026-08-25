@@ -217,7 +217,7 @@ export function NotificationsPanel({ onClose }: { onClose: () => void }) {
         <View style={s.toggleRow}>
           <View style={s.toggleInfo}>
             <FitText style={s.toggleLabel}>Email Alerts</FitText>
-            <FitText style={s.toggleHint}>Weekly summaries and promotional offers</FitText>
+            <FitText style={s.toggleHint}>Weekly summaries and gym updates</FitText>
           </View>
           <FitSquareToggle
             value={emailEnabled}

@@ -88,15 +88,6 @@ export type GymChatSpecialScheduleInput = {
   pricing_note?: string | null;
 };
 
-export type GymChatPromotionInput = {
-  title: string;
-  description: string;
-  promo_code?: string | null;
-  starts_at: string;
-  ends_at: string;
-  pricing_note?: string | null;
-};
-
 export type GymChatFaqInput = {
   category: string;
   question: string;
@@ -125,7 +116,6 @@ export type GymChatUserContextInput = {
 export type GymChatGroundingInput = {
   operating_hours: GymChatOperatingHoursInput[];
   special_schedules: GymChatSpecialScheduleInput[];
-  promotions: GymChatPromotionInput[];
   faqs: GymChatFaqInput[];
   membership_plans: GymChatMembershipPlanInput[];
   session_history: GymChatSessionHistoryInput[];
@@ -726,7 +716,6 @@ export class AiPythonClientService {
     return {
       operating_hours: grounding.operating_hours,
       special_schedules: grounding.special_schedules,
-      promotions: grounding.promotions,
       faqs: grounding.faqs,
       membership_plans: grounding.membership_plans,
       session_history: grounding.session_history.slice(-12),

@@ -204,10 +204,6 @@ const gymLayoutKeys = {
 
 const gymKnowledgeKeys = {
   profile: () => ["gym-knowledge", "profile"] as const,
-  promotions: (params?: { limit?: number; page?: number }) =>
-    params
-      ? (["gym-knowledge", "promotions", params] as const)
-      : (["gym-knowledge", "promotions"] as const),
 };
 
 const recurringCoachingPlanKeys = {
@@ -687,5 +683,4 @@ export const queryKeys = {
   gymLayoutArchivedEquipment: gymLayoutKeys.archivedEquipment,
   gymLayoutFloorPlanMedia: gymLayoutKeys.floorPlanMedia,
   gymKnowledgeProfile: gymKnowledgeKeys.profile,
-  gymKnowledgePromotions: gymKnowledgeKeys.promotions,
 };

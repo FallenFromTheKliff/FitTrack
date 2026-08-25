@@ -258,16 +258,6 @@ describe('AiPythonClientService (integration)', () => {
             pricing_note: 'Holiday passes remain valid.',
           },
         ],
-        promotions: [
-          {
-            title: 'Summer Starter Pack',
-            description: 'Get two weeks free on annual plans.',
-            promo_code: 'SUMMER26',
-            starts_at: '2026-05-01T00:00:00.000Z',
-            ends_at: '2026-05-31T23:59:59.000Z',
-            pricing_note: 'Applies to new signups.',
-          },
-        ],
         faqs: [
           {
             category: 'membership',

@@ -87,7 +87,7 @@ ADMIN:
   /exercise-lab
   /gamification
   /gym-actions
-  /memberships-promos
+  /memberships
   /facilities
   /inventory
   /ai
@@ -99,7 +99,7 @@ STAFF:
   /schedule
   /exercise-lab
   /gym-actions
-  /memberships-promos
+  /memberships
   /inventory
   /settings
   /profile
@@ -369,9 +369,9 @@ This route is part of the management sidebar for `ADMIN` and `STAFF`.
 ## Memberships
 
 ```text
-/memberships-promos:
-  render MembershipsPromosDashboard
-  manage membership and promotion-facing admin surfaces
+/memberships:
+  render MembershipsDashboard
+  manage membership plans, activation pricing, and member access
 ```
 
 This route is available to `ADMIN` and `STAFF`.

@@ -463,11 +463,11 @@ describe('AiPythonClientService', () => {
     fetchMock.mockResolvedValue(
       new Response(
         JSON.stringify({
-          reply: 'Current promotion: Summer Starter Pack (SUMMER26).',
+          reply: 'Membership option: Monthly Flex at PHP 1999 for 30 days.',
           out_of_scope: false,
-          sources: ['promotions'],
+          sources: ['membership_plans'],
           follow_up_suggestions: [
-            'Ask whether the current promotion applies to new members.',
+            'Ask which membership plan fits your visit frequency.',
           ],
           token_count: 21,
           model_used: 'fittrack-llama',
@@ -480,11 +480,10 @@ describe('AiPythonClientService', () => {
     const service = new AiPythonClientService(config as ConfigService);
     const result = await service.chatGym({
       sessionId: 'session-1',
-      message: 'What promotions are active right now?',
+      message: 'What membership plans do you offer?',
       grounding: {
         operating_hours: [],
         special_schedules: [],
-        promotions: [],
         faqs: [],
         membership_plans: [],
         session_history: [],
@@ -518,18 +517,18 @@ describe('AiPythonClientService', () => {
     expect(init?.method).toBe('POST');
     expect(body).toMatchObject({
       session_id: 'session-1',
-      message: 'What promotions are active right now?',
+      message: 'What membership plans do you offer?',
       policy: {
         gym_only: true,
         refuse_out_of_scope: true,
       },
     });
     expect(result).toEqual({
-      reply: 'Current promotion: Summer Starter Pack (SUMMER26).',
+      reply: 'Membership option: Monthly Flex at PHP 1999 for 30 days.',
       out_of_scope: false,
-      sources: ['promotions'],
+      sources: ['membership_plans'],
       follow_up_suggestions: [
-        'Ask whether the current promotion applies to new members.',
+        'Ask which membership plan fits your visit frequency.',
       ],
       token_count: 21,
       model_used: 'fittrack-llama',
@@ -553,7 +552,7 @@ describe('AiPythonClientService', () => {
         JSON.stringify({
           reply: '',
           out_of_scope: false,
-          sources: ['promotions'],
+          sources: ['membership_plans'],
           follow_up_suggestions: [],
         }),
         { status: 200 },
@@ -566,11 +565,10 @@ describe('AiPythonClientService', () => {
     await expect(
       service.chatGym({
         sessionId: 'session-1',
-        message: 'What promotions are active right now?',
+        message: 'What membership plans do you offer?',
         grounding: {
           operating_hours: [],
           special_schedules: [],
-          promotions: [],
           faqs: [],
           membership_plans: [],
           session_history: [],

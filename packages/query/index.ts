@@ -215,10 +215,7 @@ export {
   updateMembershipPlanMutationOptions,
 } from "./membership";
 export {
-  createGymPromotionMutationOptions,
-  deactivateGymPromotionMutationOptions,
   gymProfileQueryOptions,
-  gymPromotionsQueryOptions,
   updateGymProfileMutationOptions,
 } from "./gym-knowledge";
 export {

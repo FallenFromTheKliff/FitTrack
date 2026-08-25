@@ -91,7 +91,6 @@ export const MODEL_DELEGATES = [
   'gymChatInteractionLog',
   'gymOperatingHour',
   'gymSpecialSchedule',
-  'gymPromotion',
   'gymFaqEntry',
   'businessInsightRun',
 ] as const;

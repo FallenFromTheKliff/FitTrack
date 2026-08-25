@@ -3,7 +3,6 @@ import {
   GymFaqEntry,
   GymFaqCategory,
   GymOperatingHour,
-  GymPromotion,
   GymSpecialSchedule,
   Prisma,
 } from '@prisma/client';
@@ -16,14 +15,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PaginationDTO } from '../user/dto/user-dto';
 import {
   CreateGymFaqEntryDTO,
-  CreateGymPromotionDTO,
   CreateGymSpecialScheduleDTO,
   UpsertGymOperatingHoursDTO,
 } from './dto/gym-knowledge.dto';
 
 export type GymOperatingHourRecord = GymOperatingHour;
 export type GymSpecialScheduleRecord = GymSpecialSchedule;
-export type GymPromotionRecord = GymPromotion;
 export type GymFaqEntryRecord = GymFaqEntry;
 
 @Injectable()
@@ -127,43 +124,6 @@ export class GymKnowledgeRepository extends BaseRepository {
         reason: dto.reason,
         pricing_note: dto.pricing_note ?? null,
       },
-    );
-  }
-
-  listPromotions(
-    dto: PaginationDTO,
-  ): Promise<PaginatedResult<GymPromotionRecord>> {
-    return this.paginate<GymPromotionRecord>(
-      this.prisma.gymPromotion,
-      {
-        where: { is_active: true },
-        orderBy: [
-          { starts_at: 'asc' },
-          { ends_at: 'asc' },
-          { created_at: 'desc' },
-        ],
-      },
-      dto,
-    );
-  }
-
-  createPromotion(dto: CreateGymPromotionDTO): Promise<GymPromotionRecord> {
-    return this.create<GymPromotionRecord>(this.prisma.gymPromotion, {
-      title: dto.title,
-      description: dto.description,
-      promo_code: dto.promo_code ?? null,
-      starts_at: new Date(dto.starts_at),
-      ends_at: new Date(dto.ends_at),
-      pricing_note: dto.pricing_note ?? null,
-    });
-  }
-
-  deactivatePromotion(id: string): Promise<GymPromotionRecord> {
-    return this.updateOneOrThrow<GymPromotionRecord>(
-      this.prisma.gymPromotion,
-      { id },
-      { is_active: false },
-      'GymPromotion',
     );
   }
 

@@ -18,11 +18,11 @@
 - Public shell: `app/(land)/layout.tsx`.
 - Public routes: `app/(land)/(home)`, `app/(land)/login`, `app/(land)/locked`.
 - Authenticated portal shell: `app/(auth)/layout.tsx`.
-- Authenticated portal routes: `accounts`, `ai`, `analytics`, `bookings`, `dashboard`, `exercise-lab`, `facilities`, `gamification`, `gym-actions`, `inventory`, `mastery`, `memberships-promos`, `nutrition`, `profile`, `schedule`, `settings`, `workout`.
+- Authenticated portal routes: `accounts`, `ai`, `analytics`, `bookings`, `dashboard`, `exercise-lab`, `facilities`, `gamification`, `gym-actions`, `inventory`, `mastery`, `memberships`, `nutrition`, `profile`, `schedule`, `settings`, `workout`.
 - Support routes: `app/(land)/dev/auth-bridge`, `app/(land)/payments/success`, `app/(land)/payments/cancel`.
 - Dev command: `pnpm dev:web` or repo stack scripts.
 - API entry: `apps/web/lib/api-client.ts`.
-- Navigation labels should preserve current FitTrack naming, including `Accounts`, `Gym Actions`, and `Gym Memberships` for memberships/promotions surfaces.
+- Navigation labels should preserve current FitTrack naming, including `Accounts`, `Gym Actions`, and `Gym Memberships` for the memberships surface..
 
 ## Shared Packages
 
@@ -69,7 +69,6 @@
 - `apps/web/components/fit/` contains app-local HTML Fit primitives.
 - `apps/web/components/map/` owns facilities and floor plan UI.
 - `apps/web/components/schedule/` owns gym operations overlays and schedule UI.
-- `apps/web/components/memberships-promos/` owns memberships and promotions UI.
 - `apps/web/hooks/analytics/`, `hooks/ai/`, and `hooks/dashboard/` hold route controllers.
 
 ## Mobile Data And Feature Areas

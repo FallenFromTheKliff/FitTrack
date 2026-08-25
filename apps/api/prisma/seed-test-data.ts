@@ -4277,7 +4277,6 @@ async function ensureFeatureCoverageFixtures(
   await prisma.equipmentWriteOff.deleteMany({});
   await prisma.gymEquipment.deleteMany({});
   await prisma.gymFaqEntry.deleteMany({});
-  await prisma.gymPromotion.deleteMany({});
   await prisma.gymSpecialSchedule.deleteMany({});
   await prisma.gymOperatingHour.deleteMany({});
   await prisma.facilityFloorPlanMedia.deleteMany({});
@@ -4937,7 +4936,7 @@ async function ensureFeatureCoverageFixtures(
       id: gymChatSessionId,
       is_active: true,
       last_activity_at: analyticsAt({ daysAgo: 0, hour: 10 }),
-      title: 'Gym hours and promos',
+      title: 'Gym hours and membership plans',
       user_id: memberPremiumId,
     },
   });
@@ -4945,16 +4944,16 @@ async function ensureFeatureCoverageFixtures(
     data: [
       {
         id: seedId('gym-chat-message:member-premium:user'),
-        content: 'What time does the gym close and are there promos?',
+        content: 'What time does the gym close and what membership plans are available?',
         role: GymChatRole.user,
         session_id: gymChatSessionId,
       },
       {
         id: seedId('gym-chat-message:member-premium:assistant'),
         content:
-          'Weekday closing is 10 PM. The seeded student starter promo is active this month.',
+          'Weekday closing is 10 PM. Ask about membership plans at the front desk.',
         grounded_sources: {
-          sources: ['gym_operating_hours', 'gym_promotions'],
+          sources: ['gym_operating_hours', 'membership_plans'],
         } as Prisma.InputJsonValue,
         role: GymChatRole.assistant,
         session_id: gymChatSessionId,
@@ -4965,15 +4964,15 @@ async function ensureFeatureCoverageFixtures(
     data: {
       id: seedId('gym-chat-interaction:member-premium:hours'),
       grounding_payload: {
-        tables: ['gym_operating_hours', 'gym_promotions', 'gym_faq_entries'],
+        tables: ['gym_operating_hours', 'membership_plans', 'gym_faq_entries'],
       } as Prisma.InputJsonValue,
       latency_ms: 540,
       model_used: 'seed-grounded-chat',
       request_payload: {
-        query: 'hours and promos',
+        query: 'hours and membership plans',
       } as Prisma.InputJsonValue,
       response_payload: {
-        answer: 'Weekday closing is 10 PM and starter promo is active.',
+        answer: 'Weekday closing is 10 PM and membership plans are available.',
       } as Prisma.InputJsonValue,
       session_id: gymChatSessionId,
       token_count: 180,
@@ -5012,20 +5011,6 @@ async function ensureFeatureCoverageFixtures(
       pricing_note: 'Member guest passes are half price during the event.',
       reason: 'Founder Day shortened hours',
       starts_on: nutritionDate(-14),
-    },
-  });
-
-  await prisma.gymPromotion.create({
-    data: {
-      id: seedId('gym-promotion:student-starter'),
-      description:
-        'Starter package for students with discounted first-month access and free onboarding.',
-      ends_at: analyticsAt({ daysAgo: -21, hour: 23 }),
-      is_active: true,
-      pricing_note: 'Save PHP 250 on Starter Monthly.',
-      promo_code: 'STUDENTSTART',
-      starts_at: analyticsAt({ daysAgo: 6, hour: 0 }),
-      title: 'Student Starter Promo',
     },
   });
 
@@ -5303,7 +5288,6 @@ async function buildCounts() {
     gymEquipment,
     gymFaqEntries,
     gymOperatingHours,
-    gymPromotions,
     gymSpecialSchedules,
     integrityCases,
     integrityEvents,
@@ -5355,7 +5339,6 @@ async function buildCounts() {
     prisma.gymEquipment.count(),
     prisma.gymFaqEntry.count(),
     prisma.gymOperatingHour.count(),
-    prisma.gymPromotion.count(),
     prisma.gymSpecialSchedule.count(),
     prisma.integrityCase.count(),
     prisma.integrityEvent.count(),
@@ -5401,7 +5384,6 @@ async function buildCounts() {
       faqEntries: gymFaqEntries,
       floorPlans: facilityFloorPlans,
       operatingHours: gymOperatingHours,
-      promotions: gymPromotions,
       specialSchedules: gymSpecialSchedules,
     },
     fitness: {

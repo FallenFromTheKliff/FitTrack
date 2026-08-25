@@ -61,14 +61,6 @@ describe('AiPythonClientService gym provider boundary', () => {
         reason: 'Holiday schedule',
       },
     ];
-    const promotions = [
-      {
-        title: 'Starter promotion',
-        description: 'Current public membership offer.',
-        starts_at: '2026-08-01T00:00:00.000Z',
-        ends_at: '2026-08-31T23:59:59.000Z',
-      },
-    ];
     const faqs = [
       {
         category: 'general',
@@ -100,7 +92,6 @@ describe('AiPythonClientService gym provider boundary', () => {
       grounding: {
         operating_hours: operatingHours,
         special_schedules: specialSchedules,
-        promotions,
         faqs,
         membership_plans: membershipPlans,
         session_history: sessionHistory,
@@ -132,7 +123,6 @@ describe('AiPythonClientService gym provider boundary', () => {
     expect(body.grounding).toEqual({
       operating_hours: operatingHours,
       special_schedules: specialSchedules,
-      promotions,
       faqs,
       membership_plans: membershipPlans,
       session_history: sessionHistory.slice(-12),

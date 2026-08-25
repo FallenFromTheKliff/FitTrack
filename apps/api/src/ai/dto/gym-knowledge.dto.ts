@@ -100,48 +100,6 @@ export class CreateGymSpecialScheduleDTO {
   pricing_note?: string;
 }
 
-export class CreateGymPromotionDTO {
-  @ApiProperty({ example: 'Summer Starter Pack' })
-  @TrimString()
-  @IsString({ message: 'title must be a string' })
-  @IsNotEmpty({ message: 'title is required' })
-  @MaxLength(255, { message: 'title must not exceed 255 characters' })
-  title: string;
-
-  @ApiProperty({ example: 'Get two weeks free on annual plans.' })
-  @TrimString()
-  @IsString({ message: 'description must be a string' })
-  @IsNotEmpty({ message: 'description is required' })
-  description: string;
-
-  @ApiPropertyOptional({ example: 'SUMMER26', nullable: true })
-  @IsOptional()
-  @TrimString()
-  @IsString({ message: 'promo_code must be a string' })
-  @MaxLength(100, { message: 'promo_code must not exceed 100 characters' })
-  promo_code?: string;
-
-  @ApiProperty({ example: '2026-05-01T00:00:00.000Z' })
-  @IsISO8601({}, { message: 'starts_at must be a valid ISO 8601 date string' })
-  starts_at: string;
-
-  @ApiProperty({ example: '2026-05-31T23:59:59.000Z' })
-  @IsISO8601({}, { message: 'ends_at must be a valid ISO 8601 date string' })
-  @IsOnOrAfter('starts_at', 'starts_at', {
-    message: 'ends_at must be on or after starts_at',
-  })
-  ends_at: string;
-
-  @ApiPropertyOptional({
-    example: 'Applies only to new signups.',
-    nullable: true,
-  })
-  @IsOptional()
-  @TrimString()
-  @IsString({ message: 'pricing_note must be a string' })
-  pricing_note?: string;
-}
-
 export class CreateGymFaqEntryDTO {
   @ApiProperty({ enum: GymFaqCategory, example: GymFaqCategory.membership })
   @IsEnum(GymFaqCategory, {
@@ -292,46 +250,6 @@ export class GymSpecialScheduleResponseDTO {
     type: String,
     nullable: true,
     example: 'Holiday class passes remain valid.',
-  })
-  pricing_note: string | null;
-
-  @ApiProperty({ example: true })
-  is_active: boolean;
-
-  @ApiProperty({ example: '2026-03-29T09:00:00.000Z' })
-  created_at: string;
-
-  @ApiProperty({ example: '2026-03-29T10:00:00.000Z' })
-  updated_at: string;
-}
-
-export class GymPromotionResponseDTO {
-  @ApiProperty({ example: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' })
-  id: string;
-
-  @ApiProperty({ example: 'Summer Starter Pack' })
-  title: string;
-
-  @ApiProperty({ example: 'Get two weeks free on annual plans.' })
-  description: string;
-
-  @ApiPropertyOptional({
-    type: String,
-    nullable: true,
-    example: 'SUMMER26',
-  })
-  promo_code: string | null;
-
-  @ApiProperty({ example: '2026-05-01T00:00:00.000Z' })
-  starts_at: string;
-
-  @ApiProperty({ example: '2026-05-31T23:59:59.000Z' })
-  ends_at: string;
-
-  @ApiPropertyOptional({
-    type: String,
-    nullable: true,
-    example: 'Applies only to new signups.',
   })
   pricing_note: string | null;
 

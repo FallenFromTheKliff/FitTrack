@@ -25,8 +25,6 @@ type GymKnowledgeServiceMethods =
   | 'replaceOperatingHours'
   | 'getSpecialSchedules'
   | 'createSpecialSchedule'
-  | 'getPromotions'
-  | 'createPromotion'
   | 'getFaqEntries'
   | 'createFaqEntry';
 
@@ -69,8 +67,6 @@ function createGymKnowledgeServiceMock(): GymKnowledgeServiceMock {
     replaceOperatingHours: jest.fn(),
     getSpecialSchedules: jest.fn(),
     createSpecialSchedule: jest.fn(),
-    getPromotions: jest.fn(),
-    createPromotion: jest.fn(),
     getFaqEntries: jest.fn(),
     createFaqEntry: jest.fn(),
   };
@@ -233,37 +229,7 @@ describe('GymKnowledgeController (e2e)', () => {
       is_active: true,
       created_at: '2026-03-29T09:00:00.000Z',
       updated_at: '2026-03-29T10:00:00.000Z',
-    });
-    gymKnowledgeService.getPromotions.mockResolvedValue({
-      data: [
-        {
-          id: 'promo-1',
-          title: 'Summer Starter Pack',
-          description: 'Get two weeks free on annual plans.',
-          promo_code: 'SUMMER26',
-          starts_at: '2026-05-01T00:00:00.000Z',
-          ends_at: '2026-05-31T23:59:59.000Z',
-          pricing_note: 'Applies only to new signups.',
-          is_active: true,
-          created_at: '2026-03-29T09:00:00.000Z',
-          updated_at: '2026-03-29T10:00:00.000Z',
-        },
-      ],
-      meta: { page: 1, limit: 20, total: 1, total_pages: 1 },
-    });
-    gymKnowledgeService.createPromotion.mockResolvedValue({
-      id: 'promo-1',
-      title: 'Summer Starter Pack',
-      description: 'Get two weeks free on annual plans.',
-      promo_code: 'SUMMER26',
-      starts_at: '2026-05-01T00:00:00.000Z',
-      ends_at: '2026-05-31T23:59:59.000Z',
-      pricing_note: 'Applies only to new signups.',
-      is_active: true,
-      created_at: '2026-03-29T09:00:00.000Z',
-      updated_at: '2026-03-29T10:00:00.000Z',
-    });
-    gymKnowledgeService.getFaqEntries.mockResolvedValue({
+    });        gymKnowledgeService.getFaqEntries.mockResolvedValue({
       data: [
         {
           id: 'faq-1',
@@ -393,42 +359,6 @@ describe('GymKnowledgeController (e2e)', () => {
       is_closed: false,
       reason: 'Christmas schedule',
       pricing_note: 'Holiday class passes remain valid.',
-    });
-
-    const promotionsResponse = await request(getHttpServer(app))
-      .get('/v1/gym-chat/knowledge/promotions?page=1&limit=20')
-      .set('Authorization', 'Bearer admin')
-      .expect(200);
-
-    expect(gymKnowledgeService.getPromotions).toHaveBeenCalledWith({
-      page: 1,
-      limit: 20,
-    });
-    expect(promotionsResponse.body).toMatchObject({
-      data: [{ id: 'promo-1', title: 'Summer Starter Pack' }],
-      meta: { total: 1 },
-    });
-
-    await request(getHttpServer(app))
-      .post('/v1/gym-chat/knowledge/promotions')
-      .set('Authorization', 'Bearer admin')
-      .send({
-        title: 'Summer Starter Pack',
-        description: 'Get two weeks free on annual plans.',
-        promo_code: 'SUMMER26',
-        starts_at: '2026-05-01T00:00:00.000Z',
-        ends_at: '2026-05-31T23:59:59.000Z',
-        pricing_note: 'Applies only to new signups.',
-      })
-      .expect(201);
-
-    expect(gymKnowledgeService.createPromotion).toHaveBeenCalledWith({
-      title: 'Summer Starter Pack',
-      description: 'Get two weeks free on annual plans.',
-      promo_code: 'SUMMER26',
-      starts_at: '2026-05-01T00:00:00.000Z',
-      ends_at: '2026-05-31T23:59:59.000Z',
-      pricing_note: 'Applies only to new signups.',
     });
 
     const faqResponse = await request(getHttpServer(app))

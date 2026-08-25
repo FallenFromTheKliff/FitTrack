@@ -89,7 +89,7 @@ apps/web/app/
     gym-actions/
     inventory/
     mastery/
-    memberships-promos/
+    memberships/
     nutrition/
     profile/
     schedule/
@@ -111,7 +111,7 @@ apps/web/app/
 
 - `components/fit`: web Fit primitives such as `FitButton`, `FitCard`, `FitChartContainer`, `FitFilter`, `FitInputField`, `FitPagination`, `FitPill`, `FitSearch`, `FitSection`, `FitTable`, `FitText`
 - `components/layout`: admin shell layout pieces
-- `components/analytics`, `components/exercise-lab`, `components/gamification-admin`, `components/gym-actions`, `components/inventory`, `components/map`, `components/memberships-promos`, `components/schedule`
+- `components/analytics`, `components/exercise-lab`, `components/gamification-admin`, `components/gym-actions`, `components/inventory`, `components/map`, `components/schedule`
 - `hooks/analytics`, `hooks/ai`, `hooks/dashboard`, `hooks/animations`
 - `contexts`: `AuthContext`, `ThemeContext`, `MemberContext`, `ScheduleContext`, `AnalyticsSectionFilterContext`
 - `lib/api-client.ts`, `lib/queryClient.tsx`, `lib/portal-access.ts`
@@ -126,7 +126,7 @@ The frontend already has shared API/query coverage for many domains:
 - analytics snapshots, revenue, attendance, insights, PDF export
 - AI chat sessions/messages and training plan generation
 - inventory products, equipment, sales, restock/write-off
-- memberships, membership payments, gym promotions
+- memberships, membership payments
 - gym layout equipment and floor plan media
 - notifications and preferences
 - exercise lab, pose sessions, muscles, rankings, milestones, plans

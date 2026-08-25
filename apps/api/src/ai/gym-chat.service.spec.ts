@@ -56,7 +56,6 @@ describe('GymChatService', () => {
   const gymKnowledgeRepository = {
     listOperatingHours: jest.fn(),
     listSpecialSchedules: jest.fn(),
-    listPromotions: jest.fn(),
     listFaqEntries: jest.fn(),
   };
 
@@ -262,27 +261,6 @@ describe('GymChatService', () => {
       ],
       meta: { page: 1, limit: 100, total: 2, total_pages: 1 },
     });
-    gymKnowledgeRepository.listPromotions.mockResolvedValue({
-      data: [
-        {
-          title: 'Expired promotion',
-          description: 'No longer active.',
-          promo_code: 'OLD',
-          starts_at: new Date('2020-01-01T00:00:00.000Z'),
-          ends_at: new Date('2020-02-01T00:00:00.000Z'),
-          pricing_note: null,
-        },
-        {
-          title: 'Summer Starter Pack',
-          description: 'Two weeks free.',
-          promo_code: 'SUMMER26',
-          starts_at: new Date('2020-01-01T00:00:00.000Z'),
-          ends_at: new Date('2099-12-31T23:59:59.000Z'),
-          pricing_note: 'New members only.',
-        },
-      ],
-      meta: { page: 1, limit: 100, total: 2, total_pages: 1 },
-    });
     gymKnowledgeRepository.listFaqEntries.mockResolvedValue({
       data: [
         {
@@ -323,17 +301,11 @@ describe('GymChatService', () => {
     });
     subscriptionService.hasSubscriptionAccess.mockResolvedValue(true);
     aiClient.chatGym.mockResolvedValue({
-      reply: 'Current promotion: Summer Starter Pack (SUMMER26).',
+      reply: 'Membership option: Monthly Flex at PHP 1999 for 30 days.',
       out_of_scope: false,
-      sources: [
-        'gym_identity',
-        'promotions',
-        'membership_plans',
-        'promotions',
-        'database_record_id',
-      ],
+      sources: ['gym_identity', 'membership_plans', 'database_record_id'],
       follow_up_suggestions: [
-        'Ask whether the current promotion applies to new members.',
+        'Ask which membership plan fits your visit frequency.',
       ],
       model_used: 'fittrack-llama',
       token_count: 91,
@@ -350,14 +322,14 @@ describe('GymChatService', () => {
 
     await expect(
       service.sendMessage('user-1', {
-        message: 'What promotions are active right now?',
+        message: 'What membership plans do you offer?',
       }),
     ).resolves.toEqual({
       session_id: 'session-1',
-      reply: 'Current promotion: Summer Starter Pack (SUMMER26).',
-      sources: ['gym_profile', 'promotions', 'membership_plans'],
+      reply: 'Membership option: Monthly Flex at PHP 1999 for 30 days.',
+      sources: ['gym_profile', 'membership_plans'],
       follow_up_suggestions: [
-        'Ask whether the current promotion applies to new members.',
+        'Ask which membership plan fits your visit frequency.',
       ],
       out_of_scope: false,
     });
@@ -371,13 +343,10 @@ describe('GymChatService', () => {
     const [[chatRequest]] = aiClient.chatGym.mock.calls as [[GymChatInput]];
 
     expect(chatRequest.sessionId).toBe('session-1');
-    expect(chatRequest.message).toBe('What promotions are active right now?');
+    expect(chatRequest.message).toBe('What membership plans do you offer?');
     expect(chatRequest.grounding.operating_hours).toHaveLength(1);
     expect(chatRequest.grounding.special_schedules).toEqual([
       expect.objectContaining({ reason: 'Holiday schedule' }),
-    ]);
-    expect(chatRequest.grounding.promotions).toEqual([
-      expect.objectContaining({ title: 'Summer Starter Pack' }),
     ]);
     expect(chatRequest.grounding.membership_plans).toEqual([
       expect.objectContaining({
@@ -421,19 +390,19 @@ describe('GymChatService', () => {
     expect(gymChatMessageRepository.createMessage).toHaveBeenNthCalledWith(1, {
       sessionId: 'session-1',
       role: GymChatRole.user,
-      content: 'What promotions are active right now?',
+      content: 'What membership plans do you offer?',
     });
     expect(gymChatMessageRepository.createMessage).toHaveBeenNthCalledWith(2, {
       sessionId: 'session-1',
       role: GymChatRole.assistant,
-      content: 'Current promotion: Summer Starter Pack (SUMMER26).',
-      groundedSources: ['gym_profile', 'promotions', 'membership_plans'],
+      content: 'Membership option: Monthly Flex at PHP 1999 for 30 days.',
+      groundedSources: ['gym_profile', 'membership_plans'],
       outOfScope: false,
     });
     expect(gymChatSessionRepository.updateSessionById).toHaveBeenCalledWith(
       'session-1',
       expect.objectContaining({
-        title: 'What promotions are active right now?',
+        title: 'What membership plans do you offer?',
       }),
     );
     const [[interactionLogInput]] = gymChatInteractionLogRepository
@@ -445,9 +414,9 @@ describe('GymChatService', () => {
     expect(interactionLogInput.modelUsed).toBe('fittrack-llama');
     expect(interactionLogInput.tokenCount).toBe(91);
     expect(interactionLogInput.responsePayload).toMatchObject({
-      sources: ['gym_profile', 'promotions', 'membership_plans'],
+      sources: ['gym_profile', 'membership_plans'],
       follow_up_suggestions: [
-        'Ask whether the current promotion applies to new members.',
+        'Ask which membership plan fits your visit frequency.',
       ],
     });
   });
@@ -467,10 +436,6 @@ describe('GymChatService', () => {
     });
     gymKnowledgeRepository.listOperatingHours.mockResolvedValue([]);
     gymKnowledgeRepository.listSpecialSchedules.mockResolvedValue({
-      data: [],
-      meta: { page: 1, limit: 100, total: 0, total_pages: 0 },
-    });
-    gymKnowledgeRepository.listPromotions.mockResolvedValue({
       data: [],
       meta: { page: 1, limit: 100, total: 0, total_pages: 0 },
     });
@@ -497,7 +462,7 @@ describe('GymChatService', () => {
       sources: [],
       follow_up_suggestions: [
         'Ask about gym hours or holiday schedules.',
-        'Ask about membership plans or current promotions.',
+        'Ask about membership plans or FAQs.',
       ],
       model_used: null,
       token_count: null,
@@ -523,7 +488,7 @@ describe('GymChatService', () => {
       sources: [],
       follow_up_suggestions: [
         'Ask about gym hours or holiday schedules.',
-        'Ask about membership plans or current promotions.',
+        'Ask about membership plans or FAQs.',
       ],
       out_of_scope: true,
     });
@@ -550,7 +515,7 @@ describe('GymChatService', () => {
       out_of_scope: true,
       follow_up_suggestions: [
         'Ask about gym hours or holiday schedules.',
-        'Ask about membership plans or current promotions.',
+        'Ask about membership plans or FAQs.',
       ],
     });
   });
@@ -578,10 +543,6 @@ describe('GymChatService', () => {
     });
     gymKnowledgeRepository.listOperatingHours.mockResolvedValue([]);
     gymKnowledgeRepository.listSpecialSchedules.mockResolvedValue({
-      data: [],
-      meta: { page: 1, limit: 100, total: 0, total_pages: 0 },
-    });
-    gymKnowledgeRepository.listPromotions.mockResolvedValue({
       data: [],
       meta: { page: 1, limit: 100, total: 0, total_pages: 0 },
     });
@@ -672,10 +633,6 @@ describe('GymChatService', () => {
     });
     gymKnowledgeRepository.listOperatingHours.mockResolvedValue([]);
     gymKnowledgeRepository.listSpecialSchedules.mockResolvedValue({
-      data: [],
-      meta: { page: 1, limit: 100, total: 0, total_pages: 0 },
-    });
-    gymKnowledgeRepository.listPromotions.mockResolvedValue({
       data: [],
       meta: { page: 1, limit: 100, total: 0, total_pages: 0 },
     });

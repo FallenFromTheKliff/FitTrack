@@ -5,12 +5,10 @@ import { PaginatedResult } from '../common/base-repository/base-repository';
 import { PaginationDTO } from '../user/dto/user-dto';
 import {
   CreateGymFaqEntryDTO,
-  CreateGymPromotionDTO,
   CreateGymSpecialScheduleDTO,
   GymFaqEntryResponseDTO,
   GymProfileResponseDTO,
   GymOperatingHourResponseDTO,
-  GymPromotionResponseDTO,
   GymSpecialScheduleResponseDTO,
   UpdateGymProfileDTO,
   UpsertGymOperatingHoursDTO,
@@ -19,7 +17,6 @@ import {
   GymFaqEntryRecord,
   GymKnowledgeRepository,
   GymOperatingHourRecord,
-  GymPromotionRecord,
   GymSpecialScheduleRecord,
 } from './gym-knowledge.repository';
 
@@ -137,28 +134,6 @@ export class GymKnowledgeService {
     return this.toSpecialScheduleResponse(record);
   }
 
-  async getPromotions(
-    dto: PaginationDTO,
-  ): Promise<PaginatedResult<GymPromotionResponseDTO>> {
-    const result = await this.gymKnowledgeRepository.listPromotions(dto);
-    return {
-      data: result.data.map((record) => this.toPromotionResponse(record)),
-      meta: result.meta,
-    };
-  }
-
-  async createPromotion(
-    dto: CreateGymPromotionDTO,
-  ): Promise<GymPromotionResponseDTO> {
-    const record = await this.gymKnowledgeRepository.createPromotion(dto);
-    return this.toPromotionResponse(record);
-  }
-
-  async deactivatePromotion(id: string): Promise<GymPromotionResponseDTO> {
-    const record = await this.gymKnowledgeRepository.deactivatePromotion(id);
-    return this.toPromotionResponse(record);
-  }
-
   async getFaqEntries(
     dto: PaginationDTO,
   ): Promise<PaginatedResult<GymFaqEntryResponseDTO>> {
@@ -203,23 +178,6 @@ export class GymKnowledgeService {
       closes_at: this.formatNullableTime(record.closes_at),
       is_closed: record.is_closed,
       reason: record.reason,
-      pricing_note: record.pricing_note,
-      is_active: record.is_active,
-      created_at: record.created_at.toISOString(),
-      updated_at: record.updated_at.toISOString(),
-    };
-  }
-
-  private toPromotionResponse(
-    record: GymPromotionRecord,
-  ): GymPromotionResponseDTO {
-    return {
-      id: record.id,
-      title: record.title,
-      description: record.description,
-      promo_code: record.promo_code,
-      starts_at: record.starts_at.toISOString(),
-      ends_at: record.ends_at.toISOString(),
       pricing_note: record.pricing_note,
       is_active: record.is_active,
       created_at: record.created_at.toISOString(),

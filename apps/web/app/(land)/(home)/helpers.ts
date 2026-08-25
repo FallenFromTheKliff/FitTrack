@@ -161,7 +161,7 @@ export const HOME_SECTION_PREVIEWS: HomePreview[] = [
     stat: "Passes + coaching",
     target: "services",
     title: "Services",
-    copy: "Compare day passes, membership loads, coach sessions, room bookings, and gym offers before choosing.",
+    copy: "Compare day passes, membership loads, coach sessions, room bookings, and gym services before choosing.",
   },
   {
     icon: Dumbbell,
@@ -218,11 +218,6 @@ export const SERVICE_FEATURES: PublicFeature[] = [
     title: "Ask the gym",
     copy: "Get simple answers about memberships, workouts, coaches, and bookings.",
   },
-  {
-    icon: CheckCircle2,
-    title: "Promos and offers",
-    copy: "Starter memberships, coaching bundles, and seasonal gym promos stay easy to understand.",
-  },
 ];
 
 export const SERVICE_PLANS: ServicePlan[] = [
@@ -246,13 +241,6 @@ export const SERVICE_PLANS: ServicePlan[] = [
     price: "By amenity and time",
     copy: "Reserve the area that fits the workout instead of guessing when you arrive.",
     points: ["Basketball court", "Boxing ring", "Yoga room", "Recovery corner"],
-  },
-  {
-    label: "Offers",
-    title: "Gym promotions",
-    price: "Seasonal bundles",
-    copy: "Starter memberships, coaching bundles, and event-ready offers are easy to understand before checkout.",
-    points: ["Starter monthly membership", "Coach bundle previews", "Promo details", "Desk-assisted checkout"],
   },
 ];
 
@@ -344,7 +332,7 @@ export const ABOUT_STEPS = [
   {
     label: "5",
     title: "Keep coming back",
-    copy: "The same simple rhythm can grow with new workouts, new offers, and a wider gym community.",
+    copy: "The same simple rhythm can grow with new workouts, new services, and a wider gym community.",
   },
 ];
 

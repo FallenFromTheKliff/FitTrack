@@ -874,47 +874,6 @@ async function seedGymLayoutAndKnowledge(ctx: DynamicSeedContext) {
     });
   }
 
-  const promotions = [
-    {
-      id: seedId('promotion:premium-coaching-demo'),
-      description: 'Premium coaching member promo for the current campaign.',
-      ends_at: daysFrom(ctx.config.anchorDate, 21, 23, 59),
-      is_active: true,
-      pricing_note: 'Free assessment on first recurring plan.',
-      promo_code: 'PREMIUMQA',
-      starts_at: daysFrom(ctx.config.anchorDate, -2, 0),
-      title: 'Premium Coaching Demo',
-    },
-    {
-      id: seedId('promotion:amenity-bundle'),
-      description:
-        'Boxing ring and studio reservation promo for the upcoming campaign.',
-      ends_at: daysFrom(ctx.config.anchorDate, 10, 23, 59),
-      is_active: true,
-      pricing_note: '10% off two-hour amenity blocks.',
-      promo_code: 'BOOKFIT',
-      starts_at: daysFrom(ctx.config.anchorDate, 3, 0),
-      title: 'Amenity Bundle',
-    },
-    {
-      id: seedId('promotion:expired-starter'),
-      description: 'Expired starter offer retained for historical analytics.',
-      ends_at: daysFrom(ctx.config.anchorDate, -10, 23, 59),
-      is_active: false,
-      pricing_note: 'Historical campaign only.',
-      promo_code: 'STARTERHISTORY',
-      starts_at: daysFrom(ctx.config.anchorDate, -30, 0),
-      title: 'Starter History',
-    },
-  ];
-  for (const promotion of promotions) {
-    await ctx.prisma.gymPromotion.upsert({
-      where: { id: promotion.id },
-      update: promotion,
-      create: promotion,
-    });
-  }
-
   for (const [category, question, answer] of FAQS) {
     const index = FAQS.findIndex((candidate) => candidate[1] === question);
     const resolvedAnswer =

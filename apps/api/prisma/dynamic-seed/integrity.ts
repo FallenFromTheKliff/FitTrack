@@ -1321,7 +1321,6 @@ async function runBusinessEcosystemIntegrity(
     gymSessions,
     gymMessages,
     specialSchedules,
-    promotions,
     insightRuns,
   ] = await Promise.all([
     ctx.prisma.retailProduct.findMany({
@@ -1444,18 +1443,6 @@ async function runBusinessEcosystemIntegrity(
         },
       },
       select: { ends_on: true, id: true, is_active: true, starts_on: true },
-    }),
-    ctx.prisma.gymPromotion.findMany({
-      where: {
-        id: {
-          in: [
-            seedId('promotion:premium-coaching-demo'),
-            seedId('promotion:amenity-bundle'),
-            seedId('promotion:expired-starter'),
-          ],
-        },
-      },
-      select: { ends_at: true, id: true, is_active: true, starts_at: true },
     }),
     ctx.prisma.businessInsightRun.findMany({
       where: {
@@ -1800,18 +1787,6 @@ async function runBusinessEcosystemIntegrity(
       schedule.is_active === schedule.ends_on >= anchorDay,
       'business-ecosystem',
       `special schedule ${schedule.id} active state follows its dates`,
-    );
-  }
-  for (const promotion of promotions) {
-    check(
-      promotion.starts_at <= promotion.ends_at,
-      'business-ecosystem',
-      `promotion ${promotion.id} has a valid date interval`,
-    );
-    check(
-      promotion.is_active === promotion.ends_at >= anchor,
-      'business-ecosystem',
-      `promotion ${promotion.id} active state follows its dates`,
     );
   }
   for (const insight of insightRuns) {

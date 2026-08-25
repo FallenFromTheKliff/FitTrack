@@ -37,16 +37,6 @@ def _build_grounding_payload() -> dict[str, object]:
                 "pricing_note": "Holiday passes remain valid.",
             }
         ],
-        "promotions": [
-            {
-                "title": "Summer Starter Pack",
-                "description": "Get two weeks free on annual plans.",
-                "promo_code": "SUMMER26",
-                "starts_at": "2026-05-01T00:00:00.000Z",
-                "ends_at": "2026-05-31T23:59:59.000Z",
-                "pricing_note": "Applies to new signups.",
-            }
-        ],
         "faqs": [
             {
                 "category": "membership",
@@ -238,13 +228,6 @@ def test_gym_chat_route_calls_openrouter_with_structured_public_grounding(
     }
     assert provider_input["operating_hours"] == grounding["operating_hours"]
     assert provider_input["special_schedules"] == grounding["special_schedules"]
-    assert provider_input["promotions"] == [
-        {
-            **grounding["promotions"][0],
-            "starts_at": "2026-05-01T00:00:00Z",
-            "ends_at": "2026-05-31T23:59:59Z",
-        }
-    ]
     assert provider_input["membership_plans"] == grounding["membership_plans"]
     assert provider_input["faqs"] == grounding["faqs"]
     assert provider_input["recent_turns"] == grounding["session_history"][-12:]

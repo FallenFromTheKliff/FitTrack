@@ -59,7 +59,6 @@ const MEMBERSHIP_PAYMENT_IDS = {
   rileyPendingCard: '5918190f-e2bf-4914-bf4e-28c6eb0c5001',
 } as const;
 
-const MEMBERSHIP_PROMOTION_ID = '6e1a0dc6-9368-43ce-a6c7-d9711bbf6000';
 const CASEY_SUBSCRIPTION_ID = '7e40ac5e-7307-414c-af31-a70c2d4b7000';
 const MEMBERSHIP_CATALOG_SETTINGS_ID =
   '94f956b6-98ad-447b-b22a-aa111d7c4000';
@@ -383,31 +382,6 @@ async function seedMembershipCatalog(userIds: {
       create: plan,
     });
   }
-
-  await prisma.gymPromotion.upsert({
-    where: { id: MEMBERSHIP_PROMOTION_ID },
-    update: {
-      description:
-        'Starter Monthly signups this month include a waived onboarding orientation fee.',
-      ends_at: new Date('2026-06-15T15:59:59.000Z'),
-      is_active: true,
-      pricing_note: 'Orientation fee waived for new signups.',
-      promo_code: 'STARTSMART',
-      starts_at: new Date('2026-05-01T00:00:00.000Z'),
-      title: 'Starter Smart May Promo',
-    },
-    create: {
-      id: MEMBERSHIP_PROMOTION_ID,
-      description:
-        'Starter Monthly signups this month include a waived onboarding orientation fee.',
-      ends_at: new Date('2026-06-15T15:59:59.000Z'),
-      is_active: true,
-      pricing_note: 'Orientation fee waived for new signups.',
-      promo_code: 'STARTSMART',
-      starts_at: new Date('2026-05-01T00:00:00.000Z'),
-      title: 'Starter Smart May Promo',
-    },
-  });
 
   await prisma.payment.upsert({
     where: { id: MEMBERSHIP_PAYMENT_IDS.caseyActiveSubscription },

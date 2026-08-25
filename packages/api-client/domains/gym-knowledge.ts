@@ -1,10 +1,5 @@
 import type { ApiTransport } from "../transport/createAxiosTransport";
-import { unwrapPaginatedResponse, unwrapResponse } from "../request";
-
-export type GymKnowledgePaginationParams = {
-  limit?: number;
-  page?: number;
-};
+import { unwrapResponse } from "../request";
 
 export type GymProfileApiResponse = {
   closing_time: string;
@@ -33,28 +28,6 @@ export type UpdateGymProfileInput = {
   phone: string;
 };
 
-export type GymPromotionRecord = {
-  created_at: string;
-  description: string;
-  ends_at: string;
-  id: string;
-  is_active: boolean;
-  pricing_note: string | null;
-  promo_code: string | null;
-  starts_at: string;
-  title: string;
-  updated_at: string;
-};
-
-export type CreateGymPromotionInput = {
-  description: string;
-  endsAt: string;
-  pricingNote?: string;
-  promoCode?: string;
-  startsAt: string;
-  title: string;
-};
-
 function normalizeGymProfileResponse(
   profile: GymProfileApiResponse,
 ): GymProfileRecord {
@@ -79,17 +52,6 @@ function toGymProfileUpdateRequest(payload: UpdateGymProfileInput) {
   };
 }
 
-function toPromotionCreateRequest(payload: CreateGymPromotionInput) {
-  return {
-    description: payload.description,
-    ends_at: payload.endsAt,
-    ...(payload.pricingNote ? { pricing_note: payload.pricingNote } : {}),
-    ...(payload.promoCode ? { promo_code: payload.promoCode } : {}),
-    starts_at: payload.startsAt,
-    title: payload.title,
-  };
-}
-
 export function createGymKnowledgeApi(transport: ApiTransport) {
   return {
     getProfile() {
@@ -106,30 +68,6 @@ export function createGymKnowledgeApi(transport: ApiTransport) {
         ),
         "Unable to update gym profile.",
       ).then(normalizeGymProfileResponse);
-    },
-    listPromotions(params?: GymKnowledgePaginationParams) {
-      return unwrapPaginatedResponse<GymPromotionRecord>(
-        transport.get("/gym-chat/knowledge/promotions", { params }),
-        "Unable to load gym promotions.",
-      );
-    },
-    createPromotion(payload: CreateGymPromotionInput) {
-      return unwrapResponse<GymPromotionRecord>(
-        transport.post(
-          "/gym-chat/knowledge/promotions",
-          toPromotionCreateRequest(payload),
-        ),
-        "Unable to create gym promotion.",
-      );
-    },
-    deactivatePromotion(promotionId: string) {
-      return unwrapResponse<GymPromotionRecord>(
-        transport.patch(
-          `/gym-chat/knowledge/promotions/${promotionId}/deactivate`,
-          {},
-        ),
-        "Unable to deactivate gym promotion.",
-      );
     },
   };
 }

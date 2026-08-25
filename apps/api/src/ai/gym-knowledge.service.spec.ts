@@ -13,8 +13,6 @@ describe('GymKnowledgeService', () => {
     replaceOperatingHours: jest.fn(),
     listSpecialSchedules: jest.fn(),
     createSpecialSchedule: jest.fn(),
-    listPromotions: jest.fn(),
-    createPromotion: jest.fn(),
     listFaqEntries: jest.fn(),
     createFaqEntry: jest.fn(),
     upsertFaqEntries: jest.fn(),
@@ -264,43 +262,6 @@ describe('GymKnowledgeService', () => {
         },
       ],
       meta: { page: 1, limit: 20, total: 1, total_pages: 1 },
-    });
-  });
-
-  it('maps promotion creation responses directly from repository records', async () => {
-    gymKnowledgeRepository.createPromotion.mockResolvedValue({
-      id: 'promo-1',
-      title: 'Summer Starter Pack',
-      description: 'Get two weeks free on annual plans.',
-      promo_code: 'SUMMER26',
-      starts_at: new Date('2026-05-01T00:00:00.000Z'),
-      ends_at: new Date('2026-05-31T23:59:59.000Z'),
-      pricing_note: 'Applies only to new signups.',
-      is_active: true,
-      created_at: new Date('2026-03-29T09:00:00.000Z'),
-      updated_at: new Date('2026-03-29T10:00:00.000Z'),
-    });
-
-    await expect(
-      service.createPromotion({
-        title: 'Summer Starter Pack',
-        description: 'Get two weeks free on annual plans.',
-        promo_code: 'SUMMER26',
-        starts_at: '2026-05-01T00:00:00.000Z',
-        ends_at: '2026-05-31T23:59:59.000Z',
-        pricing_note: 'Applies only to new signups.',
-      }),
-    ).resolves.toEqual({
-      id: 'promo-1',
-      title: 'Summer Starter Pack',
-      description: 'Get two weeks free on annual plans.',
-      promo_code: 'SUMMER26',
-      starts_at: '2026-05-01T00:00:00.000Z',
-      ends_at: '2026-05-31T23:59:59.000Z',
-      pricing_note: 'Applies only to new signups.',
-      is_active: true,
-      created_at: '2026-03-29T09:00:00.000Z',
-      updated_at: '2026-03-29T10:00:00.000Z',
     });
   });
 

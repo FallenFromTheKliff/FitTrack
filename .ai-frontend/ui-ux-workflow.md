@@ -44,7 +44,7 @@ These rules migrate the general UI/UX instructions from the Notion page `FitTrac
 - Each admin page renders its own page header as the top row of the content area, with title/subtitle behavior kept consistent with the current shell.
 - Web content should adapt for both desktop browsers and mobile browser widths.
 - Sidebar navigation may collapse into hamburger or grouped navigation at constrained widths when that matches the existing shell.
-- Preserve established web navigation labels. Current admin labels include `Accounts`, `Gym Actions`, and `Gym Memberships` for memberships/promotions surfaces.
+- Preserve established web navigation labels. Current admin labels include `Accounts`, `Gym Actions`, and `Gym Memberships` for the memberships surface.
 - Role-based access is part of the product model; preserve admin, staff, coach, member, and non-member behavior where it already exists.
 - Sub-pages or page-local detail views that are not sidebar destinations should provide a clear back path near the top of the view.
 

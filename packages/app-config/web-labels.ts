@@ -7,7 +7,7 @@ export type PageKey =
   | "gamification"
   | "milestones"
   | "gym-actions"
-  | "memberships-promos"
+  | "memberships"
   | "facilities"
   | "inventory"
   | "analytics"
@@ -36,7 +36,7 @@ export const PAGE_NAMES: Record<PageKey, string> = {
   gamification: "Ranking Governance",
   milestones: "Milestones",
   "gym-actions": "Gym Actions",
-  "memberships-promos": "Memberships",
+  memberships: "Memberships",
   facilities: "Facilities",
   inventory: "Inventory Management",
   analytics: "Data Analytics",
@@ -66,7 +66,7 @@ export const PAGE_SUBTITLES: Record<PageKey, string> = {
   gamification: "Review standings and ranking integrity.",
   milestones: "Govern milestone rules.",
   "gym-actions": "Review operational activity and transaction history.",
-  "memberships-promos": "Manage plans and promos.",
+  memberships: "Manage membership plans and access.",
   facilities: "Keep zones ready.",
   inventory: "Track gym stock.",
   analytics: "",

@@ -2829,29 +2829,6 @@ async function ensureAiNotificationsAndGymContent() {
     },
   });
 
-  await prisma.gymPromotion.upsert({
-    where: { id: id('promotion:summer') },
-    update: {
-      title: 'Summer Starter Pack',
-      description: 'One-time member-card discount with first monthly plan.',
-      promo_code: 'SUMMERFIT',
-      starts_at: nowPlusDays(-7),
-      ends_at: nowPlusDays(21),
-      pricing_note: 'Save PHP 100 on first month.',
-      is_active: true,
-    },
-    create: {
-      id: id('promotion:summer'),
-      title: 'Summer Starter Pack',
-      description: 'One-time member-card discount with first monthly plan.',
-      promo_code: 'SUMMERFIT',
-      starts_at: nowPlusDays(-7),
-      ends_at: nowPlusDays(21),
-      pricing_note: 'Save PHP 100 on first month.',
-      is_active: true,
-    },
-  });
-
   await prisma.gymFaqEntry.upsert({
     where: { id: id('faq:bookings') },
     update: {
@@ -4271,7 +4248,6 @@ async function buildCounts() {
     gymChatInteractionLogs: await prisma.gymChatInteractionLog.count(),
     gymOperatingHours: await prisma.gymOperatingHour.count(),
     gymSpecialSchedules: await prisma.gymSpecialSchedule.count(),
-    gymPromotions: await prisma.gymPromotion.count(),
     gymFaqEntries: await prisma.gymFaqEntry.count(),
     businessInsightRuns: await prisma.businessInsightRun.count(),
     accountDeletionRequests: await prisma.accountDeletionRequest.count(),

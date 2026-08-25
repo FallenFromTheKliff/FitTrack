@@ -11,11 +11,6 @@ describe('GymKnowledgeRepository', () => {
     count: jest.fn(),
     create: jest.fn(),
   };
-  const gymPromotion = {
-    findMany: jest.fn(),
-    count: jest.fn(),
-    create: jest.fn(),
-  };
   const gymFaqEntry = {
     findMany: jest.fn(),
     count: jest.fn(),
@@ -31,7 +26,6 @@ describe('GymKnowledgeRepository', () => {
   const prisma = {
     gymOperatingHour,
     gymSpecialSchedule,
-    gymPromotion,
     gymFaqEntry,
     $transaction: jest.fn(),
   };

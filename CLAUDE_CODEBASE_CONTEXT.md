@@ -68,7 +68,7 @@ Current QA batch status:
 - User activity level recalculates from completed sessions, exercise review submissions, and attendance check-ins in the last 30 days. Manual edits remain possible but are overwritten by the next recalculation.
 - Floating help buttons exist on the requested web pages and equivalent mobile screens through reusable web/mobile `FloatingHelpButton` components.
 - Gamification and Exercise Lab milestone review queues now load DB-backed records from `/v1/fitness/milestone-reviews`; the old `ACHIEVEMENT_REVIEW_SEED` is no longer used by those consumers.
-- The memberships/promos page now includes a membership operations dashboard backed by `/v1/membership/operations-dashboard`.
+- The memberships page includes a membership operations dashboard backed by `/v1/membership/operations-dashboard`.
 - Member appointment details now receive the coach summary from the member appointment API, matching the admin Schedule data source.
 - Completed mobile coaching appointment details now expose the post-session report plus the member's submitted coach review, and the detail actions include a custom modal for one review per completed session.
 - Member web Workout access is blocked through portal access and removed from member web navigation.
@@ -93,7 +93,7 @@ Current QA batch status:
 - Accounts now lets both admin and staff load and approve/reject pending cash membership-card or subscription payment reviews from the selected member's action panel, using the existing backend payment verification flow.
 - Long feedback inbox lists on web are scroll-contained inside their cards so admin/staff feedback review does not stretch the page indefinitely.
 - The public landing route now tolerates stale browser auth tokens during bootstrap: public pages clear bad tokens without redirect loops or startup runtime overlays, while protected routes still fall back to `/login` on auth failure.
-- The minimal local seed now includes a live membership catalog on top of the 7 named accounts: two active membership plans, one active Casey subscription/payment, one pending Riley membership-card cash verification payment, one membership promo, and a shared membership catalog settings row.
+- The minimal local seed now includes a live membership catalog on top of the 7 named accounts: two active membership plans, one active Casey subscription/payment, one pending Riley membership-card cash verification payment, and a shared membership catalog settings row.
 - Membership catalog settings now include a shared `membership_card_price` source of truth in the database. The admin/staff memberships page can edit it, and the mobile member Profile purchase flow reads that value instead of a hardcoded PHP 400 string.
 - Coach role gaps, member portal login separation, server-side account tier filters, venue rate validation, custom modal replacements, booking min dates, privacy gate, delayed reminders, PHP analytics cleanup, and analytics fallback styling remain part of the already-fixed baseline.
 
@@ -386,7 +386,7 @@ Major Prisma domains and models:
 - nutrition: `TdeeProfile`, `MacroTarget`, `NutritionLog`, `ProgressMetric`
 - inventory/sales/equipment: `RetailProduct`, `SaleTransaction`, `SaleTransactionItem`, `GymEquipmentItem`, `EquipmentWriteOff`, `GymEquipment`
 - AI/chat: `AiChatSession`, `AiChatMessage`, `AiInteractionLog`, `GymChatSession`, `GymChatMessage`, `GymChatInteractionLog`
-- operations: `Notification`, `AuditLog`, `GymOperatingHour`, `GymSpecialSchedule`, `GymPromotion`, `GymFaqEntry`, `BusinessInsightRun`
+- operations: `Notification`, `AuditLog`, `GymOperatingHour`, `GymSpecialSchedule`, `GymFaqEntry`, `BusinessInsightRun`
 
 Recent schema details from the QA fix batch:
 
@@ -472,7 +472,7 @@ Current web routes from source:
 /(land)/dev/auth-bridge
 /(auth)/dashboard
 /(auth)/accounts
-/(auth)/memberships-promos
+/(auth)/memberships
 /(auth)/schedule
 /(auth)/facilities
 /(auth)/inventory

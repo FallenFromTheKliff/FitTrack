@@ -13,8 +13,6 @@ describe('GymKnowledgeController', () => {
     replaceOperatingHours: jest.fn(),
     getSpecialSchedules: jest.fn(),
     createSpecialSchedule: jest.fn(),
-    getPromotions: jest.fn(),
-    createPromotion: jest.fn(),
     getFaqEntries: jest.fn(),
     createFaqEntry: jest.fn(),
   };
@@ -133,25 +131,13 @@ describe('GymKnowledgeController', () => {
     });
   });
 
-  it('delegates promotions and faq operations through the service', async () => {
-    gymKnowledgeService.getPromotions.mockResolvedValue({
-      data: [],
-      meta: { page: 1, limit: 20, total: 0, total_pages: 0 },
-    });
-    gymKnowledgeService.createPromotion.mockResolvedValue({ id: 'promo-1' });
+  it('delegates faq operations through the service', async () => {
     gymKnowledgeService.getFaqEntries.mockResolvedValue({
       data: [],
       meta: { page: 1, limit: 20, total: 0, total_pages: 0 },
     });
     gymKnowledgeService.createFaqEntry.mockResolvedValue({ id: 'faq-1' });
 
-    await controller.getPromotions({ page: 1, limit: 20 });
-    await controller.createPromotion({
-      title: 'Summer Starter Pack',
-      description: 'Get two weeks free on annual plans.',
-      starts_at: '2026-05-01T00:00:00.000Z',
-      ends_at: '2026-05-31T23:59:59.000Z',
-    });
     await controller.getFaqEntries({ page: 3, limit: 5 });
     await controller.createFaqEntry({
       category: GymFaqCategory.membership,
@@ -159,16 +145,6 @@ describe('GymKnowledgeController', () => {
       answer: 'Yes, day passes are available.',
     });
 
-    expect(gymKnowledgeService.getPromotions).toHaveBeenCalledWith({
-      page: 1,
-      limit: 20,
-    });
-    expect(gymKnowledgeService.createPromotion).toHaveBeenCalledWith({
-      title: 'Summer Starter Pack',
-      description: 'Get two weeks free on annual plans.',
-      starts_at: '2026-05-01T00:00:00.000Z',
-      ends_at: '2026-05-31T23:59:59.000Z',
-    });
     expect(gymKnowledgeService.getFaqEntries).toHaveBeenCalledWith({
       page: 3,
       limit: 5,

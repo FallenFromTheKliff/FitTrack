@@ -266,7 +266,6 @@ export class GymChatService {
     const [
       operatingHours,
       specialSchedules,
-      promotions,
       faqEntries,
       plans,
       sessionHistory,
@@ -278,10 +277,7 @@ export class GymChatService {
         page: 1,
         limit: GROUNDING_PAGE_SIZE,
       }),
-      this.gymKnowledgeRepository.listPromotions({
-        page: 1,
-        limit: GROUNDING_PAGE_SIZE,
-      }),
+
       this.gymKnowledgeRepository.listFaqEntries({
         page: 1,
         limit: GROUNDING_PAGE_SIZE,
@@ -319,20 +315,6 @@ export class GymChatService {
           closes_at: entry.closes_at ? this.formatTime(entry.closes_at) : null,
           is_closed: entry.is_closed,
           reason: entry.reason,
-          pricing_note: entry.pricing_note,
-        })),
-      promotions: promotions.data
-        .filter(
-          (entry) =>
-            entry.starts_at.getTime() <= Date.now() &&
-            entry.ends_at.getTime() >= Date.now(),
-        )
-        .map((entry) => ({
-          title: entry.title,
-          description: entry.description,
-          promo_code: entry.promo_code,
-          starts_at: entry.starts_at.toISOString(),
-          ends_at: entry.ends_at.toISOString(),
           pricing_note: entry.pricing_note,
         })),
       faqs: [
@@ -520,7 +502,6 @@ export class GymChatService {
       'gym_profile',
       'operating_hours',
       'membership_plans',
-      'promotions',
       'special_schedules',
       'faq',
       'conversation_history',

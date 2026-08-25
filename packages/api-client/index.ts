@@ -208,10 +208,7 @@ export type {
 } from "./domains/fitness";
 export type { UploadedFileRecord } from "./domains/files";
 export type {
-  CreateGymPromotionInput,
-  GymKnowledgePaginationParams,
   GymProfileRecord,
-  GymPromotionRecord,
   UpdateGymProfileInput,
 } from "./domains/gym-knowledge";
 export type {
