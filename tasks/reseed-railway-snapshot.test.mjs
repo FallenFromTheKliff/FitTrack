@@ -51,6 +51,34 @@ test("snapshot reset requires the explicit Railway confirmation", () => {
   );
 });
 
+test("preflight-only is parsed but still requires the exact reset confirmation", () => {
+  const options = parseSnapshotOptions(["--preflight-only"]);
+
+  assert.equal(options.preflightOnly, true);
+  assert.throws(
+    () => validateSnapshotOptions(options),
+    /RESET_RAILWAY_DATABASE/,
+  );
+});
+
+test("preflight-only and restore-only cannot be combined", () => {
+  const dumpPath = "C:\\Temp\\fittrack-restore.sql";
+  const options = parseSnapshotOptions([
+    `--confirm=${RAILWAY_RESET_CONFIRMATION}`,
+    "--preflight-only",
+    "--restore-only",
+    `--dump-path=${dumpPath}`,
+  ]);
+
+  assert.equal(options.preflightOnly, true);
+  assert.equal(options.restoreOnly, true);
+  assert.equal(options.dumpPath, dumpPath);
+  assert.throws(
+    () => validateSnapshotOptions(options),
+    /--preflight-only.*--restore-only/,
+  );
+});
+
 test("local seed environment cannot inherit Railway database variables", () => {
   const original = process.env.DATABASE_PUBLIC_URL;
   process.env.DATABASE_PUBLIC_URL = "postgresql://public.example/db";
@@ -157,6 +185,97 @@ test("remote restore preserves migrations and combines clear plus data in one tr
   assert.match(combined, /COPY public\.users/);
   assert.equal(combined.includes("BEGIN;"), false);
   assert.equal(combined.includes("COMMIT;"), false);
+});
+
+test("atomic restore defers only the cyclic foreign keys around snapshot data", () => {
+  const combined = buildAtomicRestoreScript(
+    "BEGIN;\nSELECT pg_catalog.set_config('search_path', '', false);\nCOPY public.users (id) FROM stdin;\n1\n\\.\nCOMMIT;\n",
+  );
+  const normalized = combined.replace(/\s+/g, " ");
+  const constraints = [
+    {
+      table: "public.exercise_catalog",
+      name: "exercise_catalog_movement_family_id_fkey",
+    },
+    {
+      table: "public.exercise_movement_families",
+      name: "exercise_movement_families_canonical_exercise_id_fkey",
+    },
+    {
+      table: "public.refresh_tokens",
+      name: "refresh_tokens_rotated_from_fkey",
+    },
+  ];
+
+  const deferredMarker = "SET CONSTRAINTS ALL DEFERRED;";
+  const truncateMarker = "TRUNCATE TABLE";
+  const copyMarker = "COPY public.users";
+  const immediateMarker = "SET CONSTRAINTS ALL IMMEDIATE;";
+  const emptySearchPathMarker =
+    "SELECT pg_catalog.set_config('search_path', '', false);";
+  const explicitSearchPathMarker =
+    "SELECT pg_catalog.set_config('search_path', 'pg_catalog, public', false);";
+  const disableTriggerMarker =
+    "ALTER TABLE public.coach_profiles DISABLE TRIGGER coach_profiles_specialization_sync;";
+  const enableTriggerMarker =
+    "ALTER TABLE public.coach_profiles ENABLE TRIGGER coach_profiles_specialization_sync;";
+  const deferredIndex = normalized.indexOf(deferredMarker);
+  const truncateIndex = normalized.indexOf(truncateMarker);
+  const copyIndex = normalized.indexOf(copyMarker);
+  const immediateIndex = normalized.indexOf(immediateMarker);
+  const explicitSearchPathIndex = normalized.indexOf(explicitSearchPathMarker);
+  const disableTriggerIndex = normalized.indexOf(disableTriggerMarker);
+  const enableTriggerIndex = normalized.indexOf(enableTriggerMarker);
+
+  assert.equal(normalized.includes(emptySearchPathMarker), false);
+  assert.notEqual(explicitSearchPathIndex, -1);
+  assert.ok(explicitSearchPathIndex < copyIndex);
+  assert.equal(
+    normalized.split(disableTriggerMarker).length - 1,
+    1,
+  );
+  assert.equal(normalized.split(enableTriggerMarker).length - 1, 1);
+  assert.notEqual(disableTriggerIndex, -1);
+  assert.notEqual(enableTriggerIndex, -1);
+  assert.ok(disableTriggerIndex < truncateIndex);
+  assert.ok(disableTriggerIndex < copyIndex);
+  assert.ok(copyIndex < enableTriggerIndex);
+  assert.ok(immediateIndex < enableTriggerIndex);
+  assert.doesNotMatch(normalized, /DISABLE TRIGGER ALL/i);
+  assert.doesNotMatch(normalized, /session_replication_role/i);
+  assert.notEqual(deferredIndex, -1);
+  assert.notEqual(truncateIndex, -1);
+  assert.notEqual(copyIndex, -1);
+  assert.notEqual(immediateIndex, -1);
+  assert.ok(deferredIndex < truncateIndex);
+  assert.ok(deferredIndex < copyIndex);
+  assert.ok(copyIndex < immediateIndex);
+
+  const restoreConstraintIndices = [];
+  for (const { table, name } of constraints) {
+    const deferredStatement =
+      `ALTER TABLE ${table} ALTER CONSTRAINT ${name} DEFERRABLE INITIALLY DEFERRED;`;
+    const restoreStatement =
+      `ALTER TABLE ${table} ALTER CONSTRAINT ${name} NOT DEFERRABLE;`;
+    const deferredConstraintIndex = normalized.indexOf(deferredStatement);
+    const restoreConstraintIndex = normalized.indexOf(restoreStatement);
+
+    assert.notEqual(deferredConstraintIndex, -1, deferredStatement);
+    assert.ok(deferredConstraintIndex < copyIndex);
+    assert.notEqual(restoreConstraintIndex, -1, restoreStatement);
+    assert.ok(immediateIndex < restoreConstraintIndex);
+    restoreConstraintIndices.push(restoreConstraintIndex);
+  }
+  assert.ok(enableTriggerIndex < Math.min(...restoreConstraintIndices));
+
+  assert.equal(
+    (normalized.match(/DEFERRABLE INITIALLY DEFERRED/g) ?? []).length,
+    constraints.length,
+  );
+  assert.equal(
+    (normalized.match(/NOT DEFERRABLE/g) ?? []).length,
+    constraints.length,
+  );
 });
 
 test("database safety guards reject non-local seed and private restore targets", () => {

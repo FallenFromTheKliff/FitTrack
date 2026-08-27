@@ -246,10 +246,7 @@ export class UpdateAmenityDTO {
   capacity?: number;
 
   @ApiPropertyOptional({ example: 800 })
-  @ValidateIf(
-    (dto: { is_reservable?: boolean }, value: unknown) =>
-      dto.is_reservable === true || value !== undefined,
-  )
+  @ValidateIf((_dto: unknown, value: unknown) => value !== undefined)
   @Type(() => Number)
   @IsNumber({}, { message: 'hourly_rate must be a number' })
   @Min(0, { message: 'hourly_rate must be at least 0' })

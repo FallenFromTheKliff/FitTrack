@@ -36,6 +36,7 @@ export type ConfirmationState =
       affectedNames: string[];
       family: ExerciseMovementFamilySummaryRecord;
       movementProfile: ExerciseMovementProfileRecord;
+      saveExerciseAfter?: boolean;
     }
   | null;
 export type ExerciseDraft = {
@@ -122,6 +123,20 @@ export function filterEmptyExerciseDraft(
     ...(draft.imageUrl?.trim() ? { imageUrl: draft.imageUrl.trim() } : {}),
     ...(draft.videoUrl?.trim() ? { videoUrl: draft.videoUrl.trim() } : {}),
   };
+}
+
+export function shouldPersistCanonicalFamilyProfile(input: {
+  draft: ExerciseDraft;
+  exerciseId: string;
+  initialMovementProfile: ExerciseMovementProfileRecord | null;
+}) {
+  return Boolean(
+    input.draft.trackingMode === "inherit" &&
+      input.draft.movementFamily?.canonicalExerciseId === input.exerciseId &&
+      input.draft.movementProfile &&
+      JSON.stringify(input.draft.movementProfile) !==
+        JSON.stringify(input.initialMovementProfile),
+  );
 }
 
 export function normalizeExerciseName(value: string) {

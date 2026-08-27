@@ -50,15 +50,6 @@ function rectanglesOverlap(
   );
 }
 
-function fullPlanningGrid() {
-  return Array.from({ length: ROWS }, (_, row) =>
-    Array.from({ length: COLS }, (_, column) => ({
-      column: column + 1,
-      row: row + 1,
-    })),
-  ).flat();
-}
-
 export function findDeterministicVenuePlacement(args: {
   floorId: FacilityFloorId;
   gridHeight: number;
@@ -69,9 +60,6 @@ export function findDeterministicVenuePlacement(args: {
   pathCells?: readonly FacilityGridCell[];
   venues?: readonly VenueRecord[];
 }) {
-  const footprint = new Set(
-    (args.footprintCells ?? fullPlanningGrid()).map(cellKey),
-  );
   const paths = new Set(
     [
       ...(args.pathCells ?? []),
@@ -107,7 +95,7 @@ export function findDeterministicVenuePlacement(args: {
       } satisfies VenuePlacementCandidate;
       const cells = expandRectangleToCells(candidate);
       if (
-        cells.every((cell) => footprint.has(cellKey(cell)) && !paths.has(cellKey(cell))) &&
+        cells.every((cell) => !paths.has(cellKey(cell))) &&
         !occupied.some((existing) => rectanglesOverlap(candidate, existing))
       ) {
         return {
@@ -134,9 +122,6 @@ export function validateVenuePlacement(args: {
   venues?: readonly VenueRecord[];
   excludeVenueId?: VenueRecord["id"];
 }) {
-  const footprint = new Set(
-    (args.footprintCells ?? fullPlanningGrid()).map(cellKey),
-  );
   const paths = new Set(
     [
       ...(args.pathCells ?? []),
@@ -153,9 +138,6 @@ export function validateVenuePlacement(args: {
   } satisfies VenuePlacementCandidate;
   const cells = expandRectangleToCells(candidate);
 
-  if (!cells.every((cell) => footprint.has(cellKey(cell)))) {
-    return "This placement is outside the published building footprint. Paint the building cell first or choose another position.";
-  }
   if (cells.some((cell) => paths.has(cellKey(cell)))) {
     return "This placement overlaps a published navigation cell. Choose a clear building cell.";
   }

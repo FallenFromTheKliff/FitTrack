@@ -268,7 +268,7 @@ describe('GymLayoutService', () => {
     expect(repo.upsertFloorPlanMedia).not.toHaveBeenCalled();
   });
 
-  it('rejects a footprint edit that excludes a mapped region', async () => {
+  it('allows an incremental footprint save while existing regions are outside it', async () => {
     repo.listSnapshotRegions.mockResolvedValue([
       {
         floor_id: 'floor-1',
@@ -278,12 +278,33 @@ describe('GymLayoutService', () => {
         grid_height: 1,
       },
     ]);
+    repo.upsertFloorPlanMedia.mockResolvedValue({
+      floor_id: 'floor-1',
+      image_url: null,
+      grid_width: 14,
+      grid_height: 10,
+      footprint_cells: [{ column: 1, row: 10 }],
+      path_cells: [],
+      entry_cells: [],
+      exit_cells: [],
+      created_at: new Date(),
+      updated_at: new Date(),
+    });
+
     await expect(
       service.updateFloorPlanMedia('floor-1', {
-        footprint_cells: [{ column: 1, row: 1 }],
+        footprint_cells: [{ column: 1, row: 10 }],
+        path_cells: [],
+        entry_cells: [],
+        exit_cells: [],
       }),
-    ).rejects.toThrow('Bad Request Exception');
-    expect(repo.upsertFloorPlanMedia).not.toHaveBeenCalled();
+    ).resolves.toEqual(expect.objectContaining({ floor_id: 'floor-1' }));
+    expect(repo.upsertFloorPlanMedia).toHaveBeenCalledWith(
+      'floor-1',
+      expect.objectContaining({
+        footprintCells: [{ column: 1, row: 10 }],
+      }),
+    );
   });
 
   it('rejects a path cell inside a mapped region', async () => {
@@ -304,16 +325,58 @@ describe('GymLayoutService', () => {
     expect(repo.upsertFloorPlanMedia).not.toHaveBeenCalled();
   });
 
-  it('rejects a footprint edit that excludes mapped equipment', async () => {
-    repo.listActiveEquipment.mockResolvedValue([
-      { floor_id: 'floor-1', grid_column: 2, grid_row: 1 },
+  it('allows equipment placement while persisted footprint cells are empty', async () => {
+    repo.listFloorPlanMedia.mockResolvedValue([
+      {
+        floor_id: 'floor-1',
+        image_url: null,
+        grid_width: 14,
+        grid_height: 10,
+        footprint_cells: [],
+        path_cells: [],
+        entry_cells: [],
+        exit_cells: [],
+        created_at: new Date(),
+        updated_at: new Date(),
+      },
     ]);
-    await expect(
-      service.updateFloorPlanMedia('floor-1', {
-        footprint_cells: [{ column: 1, row: 1 }],
-      }),
-    ).rejects.toThrow('Bad Request Exception');
-    expect(repo.upsertFloorPlanMedia).not.toHaveBeenCalled();
+    repo.findActiveVenueByIdOrThrow.mockResolvedValue({
+      floor_id: 'floor-1',
+      grid_column: 1,
+      grid_row: 1,
+      grid_width: 14,
+      grid_height: 10,
+    });
+    repo.createEquipment.mockResolvedValue({
+      id: 'equipment-empty-footprint',
+      floor_id: 'floor-1',
+      grid_column: 2,
+      grid_row: 1,
+      name: 'Repairable Node',
+      type: 'strength',
+      position_x: 10.71,
+      position_y: 5,
+      status: EquipmentStatus.available,
+      icon_key: null,
+      is_active: true,
+      created_at: new Date(),
+      updated_at: new Date(),
+    });
+
+    await service.createEquipment({
+      floor_id: 'floor-1',
+      grid_column: 2,
+      grid_row: 1,
+      name: 'Repairable Node',
+      type: 'strength',
+      inventory_item_id: '22222222-2222-4222-8222-222222222222',
+      venue_id: '33333333-3333-4333-8333-333333333333',
+    });
+
+    expect(repo.createEquipment).toHaveBeenCalledWith(
+      expect.objectContaining({ grid_column: 2, grid_row: 1 }),
+    );
+    expect(repo.listFloorPlanMedia).not.toHaveBeenCalled();
   });
 
   it('hydrates the Redis status cache when the realtime snapshot is cold', async () => {

@@ -64,6 +64,8 @@ type WorkoutTrackingSectionProps = {
   isTrackingReady: boolean;
   lowConfidenceLandmarks: string[];
   movementContract: PoseMovementContractRecord | null;
+  poseStatusText: string;
+  repPathUnblocked: boolean;
   onInitCamera: () => void | Promise<void>;
   onNativeEquipmentSnapshot: (snapshot: NativeEquipmentSnapshot) => void | Promise<void>;
   onPause: () => void;
@@ -115,6 +117,8 @@ export function WorkoutTrackingSection({
   isTrackingReady,
   lowConfidenceLandmarks,
   movementContract,
+  poseStatusText,
+  repPathUnblocked,
   onInitCamera,
   onNativeEquipmentSnapshot,
   onNativePoseFrame,
@@ -151,6 +155,8 @@ export function WorkoutTrackingSection({
       !canStartTarget;
   const plannedActionDisabled =
     countdownValue !== null || isCameraSwitching || isFrozen;
+  const repPathGreen =
+    subjectLocked && repPathUnblocked && currentPhase !== "primed";
   const cameraFacingLabel = cameraFacing === "front" ? "Front" : "Back";
   const cameraToggleDisabled =
     isRecording ||
@@ -276,6 +282,7 @@ export function WorkoutTrackingSection({
               keypoints={transformedKeypoints ?? null}
               lowConfidenceLandmarks={lowConfidenceLandmarks}
               movementContract={movementContract}
+              repPathUnblocked={repPathGreen}
             />
             {equipmentDetectionStatusText ? (
               <>
@@ -644,7 +651,7 @@ export function WorkoutTrackingSection({
                 style={{
                   alignItems: "center",
                   backgroundColor: "rgba(0,0,0,0.62)",
-                  borderColor: subjectLocked ? colors.success : colors.border,
+                  borderColor: repPathGreen ? colors.success : colors.warning,
                   borderRadius: 18,
                   borderWidth: 1,
                   padding: 10,
@@ -652,13 +659,17 @@ export function WorkoutTrackingSection({
               >
                 <FitText
                   style={{
-                    color: subjectLocked ? colors.success : "#FFFFFF",
+                    color: repPathGreen ? colors.success : colors.warning,
                     fontSize: 12,
                     fontWeight: "900",
                     letterSpacing: 0.8,
                   }}
                 >
-                  {subjectLocked ? "BODY TRACKED" : "GET IN FRAME"}
+                  {subjectLocked
+                    ? currentPhase === "primed"
+                      ? "ARMING REP"
+                      : "BODY TRACKED"
+                    : "GET IN FRAME"}
                 </FitText>
                 <FitText
                   style={{
@@ -668,11 +679,24 @@ export function WorkoutTrackingSection({
                     textAlign: "center",
                   }}
                 >
-                  {subjectLocked
+                {subjectLocked
                     ? "Automatic subject lock is active. Reps pause if your body leaves the frame."
                     : "Stand fully in frame so FitTrack can acquire your body automatically."}
                 </FitText>
               </View>
+              {poseStatusText ? (
+                <FitText
+                  accessibilityLiveRegion="polite"
+                  style={{
+                    color: repPathGreen ? colors.success : colors.warning,
+                    fontSize: 11,
+                    fontWeight: "700",
+                    textAlign: "center",
+                  }}
+                >
+                  {poseStatusText}
+                </FitText>
+              ) : null}
               <View style={{ flexDirection: "row", gap: 10, width: "100%" }}>
                 <FitButton
                   icon={hasStartedSet ? (isRecording ? Pause : Play) : Circle}

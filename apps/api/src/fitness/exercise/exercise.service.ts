@@ -10,8 +10,8 @@ import type { ExerciseMovementProfileRecord } from '../../../../../packages/type
 import {
   normalizeExerciseAlias,
   resolveEffectiveMovementProfile,
-  validatePoseMovementContract,
-} from '../../../../../packages/utils';
+} from '../../../../../packages/utils/exercise-movement-contract';
+import { validatePoseMovementContract } from '../../../../../packages/utils/pose';
 
 import { ActivityLevelService } from '../../user/activity-level.service';
 import { PaginatedResult } from '../../common/base-repository/base-repository';
@@ -199,6 +199,9 @@ export class ExerciseService {
       await this.repo.createMuscleDefinition({
         aliases: normalizeMuscleDefinitionAliases(dto.aliases),
         body_region: normalizeMuscleKey(dto.body_region) || dto.body_region,
+        icon_asset_key: dto.icon_asset_key ?? null,
+        icon_key: dto.icon_key ?? null,
+        icon_kind: dto.icon_kind ?? null,
         is_system: false,
         key,
         name: dto.name.trim(),
@@ -223,6 +226,11 @@ export class ExerciseService {
         ...(dto.aliases !== undefined
           ? { aliases: normalizeMuscleDefinitionAliases(dto.aliases) }
           : {}),
+        ...(dto.icon_asset_key !== undefined
+          ? { icon_asset_key: dto.icon_asset_key }
+          : {}),
+        ...(dto.icon_key !== undefined ? { icon_key: dto.icon_key } : {}),
+        ...(dto.icon_kind !== undefined ? { icon_kind: dto.icon_kind } : {}),
         ...(dto.sort_order !== undefined ? { sort_order: dto.sort_order } : {}),
         ...(dto.is_active !== undefined ? { is_active: dto.is_active } : {}),
       }),
@@ -492,6 +500,9 @@ export class ExerciseService {
       body_region: definition.body_region,
       created_at: definition.created_at.toISOString(),
       id: definition.id,
+      icon_asset_key: definition.icon_asset_key,
+      icon_key: definition.icon_key,
+      icon_kind: definition.icon_kind,
       is_active: definition.is_active,
       is_system: definition.is_system,
       key: definition.key,

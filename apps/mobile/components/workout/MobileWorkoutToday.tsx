@@ -21,7 +21,10 @@ import {
   logWorkoutSetMutationOptions,
   startWorkoutSessionMutationOptions,
 } from "@fittrack/query";
-import { isCoachManagedTrainingPlan } from "@fittrack/app-core";
+import {
+  isCoachManagedTrainingPlan,
+  resolveWorkoutPlanSelection,
+} from "@fittrack/app-core";
 import type { TrainingPlanSummaryRecord } from "@fittrack/types";
 import { getPoseAutoRepCapabilityForLabel } from "@fittrack/utils";
 
@@ -95,13 +98,10 @@ export function MobileWorkoutToday({
   });
   const plans = plansQuery.data?.data ?? [];
   const sessions = sessionsQuery.data?.data ?? [];
-  const activeSession =
-    sessions.find((session) => session.status === "in_progress") ?? null;
-  const effectivePlan =
-    plans.find((plan) => plan.id === activeSession?.planId) ??
-    plans.find((plan) => plan.isActive) ??
-    plans[0] ??
-    null;
+  const { activeSession, effectivePlan } = resolveWorkoutPlanSelection(
+    plans,
+    sessions,
+  );
   const completedTodaySession = effectivePlan
     ? (sessions.find(
         (session) =>

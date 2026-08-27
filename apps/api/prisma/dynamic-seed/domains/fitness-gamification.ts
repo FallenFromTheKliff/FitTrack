@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import {
   AppointmentStatus,
   BookingStatus,
@@ -60,7 +61,11 @@ import {
   getPoseAutoRepCapability,
   isValidPoseMovementContract,
 } from '../../../../../packages/utils/pose';
-import { normalizeExerciseAlias } from '../../../../../packages/utils/exercise-movement-contract';
+import {
+  normalizeExerciseAlias,
+  REVIEWED_AUTO_REP_FAMILIES,
+} from '../../../../../packages/utils/exercise-movement-contract';
+import { normalizeExerciseMovementProfile } from '../../../../../packages/utils/exercise-editor';
 
 export const POSE_PROFILE_EXERCISE_KEYS = CANONICAL_POSE_EXERCISE_KEYS;
 
@@ -72,6 +77,90 @@ export function shouldRestoreMovementFamilyDefaults(
   _existingRevision: number | null,
 ) {
   return mode === 'reset';
+}
+
+export function shouldRepairReviewedMovementFamilyDefault(
+  familyKey: string,
+  value: unknown,
+) {
+  if (!REVIEWED_AUTO_REP_FAMILIES.some((key) => key === familyKey)) return false;
+  if (value == null) return true;
+  const current = normalizeExerciseMovementProfile(value);
+  const canonicalContract = buildFallbackPoseMovementContract(familyKey);
+  if (
+    !current ||
+    current.rig !== null ||
+    current.warnings.length > 0 ||
+    !canonicalContract
+  ) {
+    return false;
+  }
+  const retiredThresholds: Record<
+    string,
+    Array<{
+      down: { angle: number; tolerance: number };
+      up: { angle: number; tolerance: number };
+    }>
+  > = {
+    bench_press: [{
+      down: { angle: 100, tolerance: 12 },
+      up: { angle: 155, tolerance: 12 },
+    }],
+    bicep_curl: [
+      {
+        down: { angle: 145, tolerance: 10 },
+        up: { angle: 95, tolerance: 10 },
+      },
+      {
+        down: { angle: 155, tolerance: 12 },
+        up: { angle: 90, tolerance: 15 },
+      },
+    ],
+    dip: [{
+      down: { angle: 112, tolerance: 12 },
+      up: { angle: 150, tolerance: 12 },
+    }],
+    pull_up: [
+      {
+        down: { angle: 145, tolerance: 10 },
+        up: { angle: 100, tolerance: 10 },
+      },
+      {
+        down: { angle: 155, tolerance: 12 },
+        up: { angle: 90, tolerance: 15 },
+      },
+    ],
+    push_up: [{
+      down: { angle: 120, tolerance: 15 },
+      up: { angle: 157, tolerance: 12 },
+    }],
+    seated_cable_row: [{
+      down: { angle: 140, tolerance: 10 },
+      up: { angle: 95, tolerance: 10 },
+    }],
+    shoulder_press: [
+      {
+        down: { angle: 105, tolerance: 12 },
+        up: { angle: 150, tolerance: 12 },
+      },
+      {
+        down: { angle: 90, tolerance: 15 },
+        up: { angle: 150, tolerance: 12 },
+      },
+    ],
+    squat: [{
+      down: { angle: 105, tolerance: 12 },
+      up: { angle: 155, tolerance: 12 },
+    }],
+  };
+  const retired = retiredThresholds[familyKey];
+  if (!retired) return false;
+  return retired.some((repThresholds) =>
+    isDeepStrictEqual(current.movementContract, {
+      ...canonicalContract,
+      repThresholds,
+    }),
+  );
 }
 
 export function hasCalibratedLegacyMovementContract(value: unknown) {
@@ -316,6 +405,19 @@ async function seedExerciseBackbone(ctx: DynamicSeedContext) {
       memberKeys: ['shoulder-press'],
       aliases: ['Seated Dumbbell Shoulder Press'],
     },
+    {
+      id: '81000000-0000-4000-8000-000000000009',
+      key: 'seated_cable_row',
+      displayName: 'Seated Cable Row',
+      canonicalExerciseKey: 'row',
+      memberKeys: ['row'],
+      aliases: [
+        'Seated Cable Row',
+        'Cable Row',
+        'Seated Row',
+        'seated_cable_row',
+      ],
+    },
   ] as const;
 
   for (const family of movementFamilies) {
@@ -339,12 +441,18 @@ async function seedExerciseBackbone(ctx: DynamicSeedContext) {
     };
     const existing = await ctx.prisma.exerciseMovementFamily.findUnique({
       where: { key: family.key },
-      select: { contract_revision: true },
+      select: { base_movement_profile: true, contract_revision: true },
     });
     const mayRestoreDefaults = shouldRestoreMovementFamilyDefaults(
       ctx.config.mode,
       existing?.contract_revision ?? null,
     );
+    const mayRepairReviewedDefault =
+      ctx.config.mode === 'additive' &&
+      shouldRepairReviewedMovementFamilyDefault(
+        family.key,
+        existing?.base_movement_profile ?? null,
+      );
     await ctx.prisma.exerciseMovementFamily.upsert({
       where: { key: family.key },
       create: {
@@ -361,10 +469,14 @@ async function seedExerciseBackbone(ctx: DynamicSeedContext) {
         display_name: family.displayName,
         canonical_exercise_id: canonicalExerciseId,
         is_active: true,
-        ...(mayRestoreDefaults
+        ...(mayRestoreDefaults || mayRepairReviewedDefault
           ? {
               base_movement_profile: baseMovementProfile,
-              ...(ctx.config.mode === 'reset' ? { contract_revision: 1 } : {}),
+              ...(ctx.config.mode === 'reset'
+                ? { contract_revision: 1 }
+                : mayRepairReviewedDefault
+                  ? { contract_revision: { increment: 1 } }
+                  : {}),
             }
           : {}),
       },

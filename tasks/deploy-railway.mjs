@@ -16,6 +16,8 @@ const DEFAULT_LINK_SERVICE = "api";
 const DEPLOYMENT_LIST_LIMIT = 100;
 const DEPLOYMENT_STATUS_MAX_ATTEMPTS = 30;
 const DEPLOYMENT_STATUS_INTERVAL_MS = 30_000;
+const DEPLOYMENT_UPLOAD_MAX_ATTEMPTS = 3;
+const DEPLOYMENT_UPLOAD_RETRY_INTERVAL_MS = 10_000;
 const DEPLOYMENT_LOG_LINE_LIMIT = 100;
 const CAPTURED_COMMAND_MAX_BUFFER_BYTES = 20 * 1024 * 1024;
 const PENDING_DEPLOYMENT_STATUSES = new Set([
@@ -27,6 +29,8 @@ const PENDING_DEPLOYMENT_STATUSES = new Set([
 ]);
 const DEPLOYMENT_ID_VALUE_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const TRANSIENT_SNAPSHOT_CONFIG_ERROR =
+  "Failed to snapshot repository. Please try again in a few minutes.";
 
 const argv = process.argv.slice(2).filter((arg) => arg !== "--");
 
@@ -268,6 +272,31 @@ export function classifyDeploymentStatus(status) {
     return "pending";
   }
   return "unknown";
+}
+
+export function isTransientSnapshotFailure(deployment) {
+  const configErrors = deployment?.meta?.configErrors;
+  if (typeof configErrors === "string") {
+    return configErrors === TRANSIENT_SNAPSHOT_CONFIG_ERROR;
+  }
+
+  return (
+    Array.isArray(configErrors) &&
+    configErrors.length === 1 &&
+    configErrors[0] === TRANSIENT_SNAPSHOT_CONFIG_ERROR
+  );
+}
+
+export function shouldRetryTransientSnapshotFailure({
+  deployment,
+  uploadAttempt,
+  maxUploadAttempts = DEPLOYMENT_UPLOAD_MAX_ATTEMPTS,
+}) {
+  return (
+    classifyDeploymentStatus(deployment?.status) === "failure" &&
+    isTransientSnapshotFailure(deployment) &&
+    uploadAttempt < maxUploadAttempts
+  );
 }
 
 function fail(message) {
@@ -668,6 +697,7 @@ function waitForDeploymentSuccess({
   environment,
   deploymentId,
   initialDeployments,
+  uploadAttempt,
 }) {
   let lastStatus;
 
@@ -713,6 +743,21 @@ function waitForDeploymentSuccess({
     }
 
     if (outcome === "failure") {
+      if (
+        shouldRetryTransientSnapshotFailure({
+          deployment,
+          uploadAttempt,
+        })
+      ) {
+        fetchDeploymentLogs({ service, environment, deploymentId });
+        console.error(
+          `[railway-deploy] ${service} deployment ${deploymentId} hit Railway's ` +
+            `transient repository snapshot failure on upload attempt ` +
+            `${uploadAttempt}/${DEPLOYMENT_UPLOAD_MAX_ATTEMPTS}; retrying upload.`,
+        );
+        return "retry";
+      }
+
       failWithDeploymentEvidence({
         service,
         environment,
@@ -760,77 +805,95 @@ async function deployService({
   deploymentSource,
   deployMessage,
 }) {
-  const priorLookup = queryDeployments(service, environment);
-  const upResult = run(
-    "railway",
-    [
-      "up",
-      deploymentSource,
-      "--path-as-root",
-      "--service",
-      service,
-      "--environment",
-      environment,
-      "--detach",
-      "--json",
-      "--message",
-      deployMessage,
-    ],
-    {
-      allowFailure: true,
-      captureOutput: true,
-      echoCapturedOutput: false,
-    },
-  );
+  for (
+    let uploadAttempt = 1;
+    uploadAttempt <= DEPLOYMENT_UPLOAD_MAX_ATTEMPTS;
+    uploadAttempt += 1
+  ) {
+    const attemptMessage =
+      uploadAttempt === 1
+        ? deployMessage
+        : `${deployMessage} (snapshot retry ${uploadAttempt}/${DEPLOYMENT_UPLOAD_MAX_ATTEMPTS})`;
+    const priorLookup = queryDeployments(service, environment);
+    const upResult = run(
+      "railway",
+      [
+        "up",
+        deploymentSource,
+        "--path-as-root",
+        "--service",
+        service,
+        "--environment",
+        environment,
+        "--detach",
+        "--json",
+        "--message",
+        attemptMessage,
+      ],
+      {
+        allowFailure: true,
+        captureOutput: true,
+        echoCapturedOutput: false,
+      },
+    );
 
-  const output = `${upResult.stdout}\n${upResult.stderr}`;
-  const currentLookup = queryDeployments(service, environment);
-  const currentDeployments = currentLookup.deployments ?? [];
-  const deploymentId = identifyUploadedDeployment({
-    output,
-    priorDeployments: priorLookup.deployments,
-    currentDeployments,
-    deployMessage,
-  });
-
-  if (!deploymentId) {
-    const lookupDetail = currentLookup.error ? ` ${currentLookup.error}.` : "";
-    failWithDeploymentEvidence({
-      service,
-      environment,
-      message:
-        `Could not identify the exact uploaded ${service} deployment after ` +
-        `detached upload (exit code ${upResult.status}).${lookupDetail}`,
-      uploadResult: upResult,
+    const output = `${upResult.stdout}\n${upResult.stderr}`;
+    const currentLookup = queryDeployments(service, environment);
+    const currentDeployments = currentLookup.deployments ?? [];
+    const deploymentId = identifyUploadedDeployment({
+      output,
+      priorDeployments: priorLookup.deployments,
+      currentDeployments,
+      deployMessage: attemptMessage,
     });
-  }
 
-  if (upResult.status !== 0) {
-    printCapturedOutput(
-      `${service} detached upload returned exit code ${upResult.status}; ` +
-        `identified deployment ${deploymentId}`,
-      upResult,
-    );
-  }
+    if (!deploymentId) {
+      const lookupDetail = currentLookup.error
+        ? ` ${currentLookup.error}.`
+        : "";
+      failWithDeploymentEvidence({
+        service,
+        environment,
+        message:
+          `Could not identify the exact uploaded ${service} deployment after ` +
+          `detached upload (exit code ${upResult.status}).${lookupDetail}`,
+        uploadResult: upResult,
+      });
+    }
 
-  if (currentLookup.error) {
-    console.error(
-      `[railway-deploy] ${service} deployment list was unavailable after upload; ` +
-        `polling exact deployment ${deploymentId}.`,
-    );
-  } else {
-    console.log(
-      `[railway-deploy] Identified ${service} deployment ${deploymentId}; ` +
-        "polling until SUCCESS.",
-    );
-  }
+    if (upResult.status !== 0) {
+      printCapturedOutput(
+        `${service} detached upload returned exit code ${upResult.status}; ` +
+          `identified deployment ${deploymentId}`,
+        upResult,
+      );
+    }
 
-  waitForDeploymentSuccess({
-    service,
-    environment,
-    deploymentId,
-    initialDeployments: currentLookup.deployments,
-  });
+    if (currentLookup.error) {
+      console.error(
+        `[railway-deploy] ${service} deployment list was unavailable after upload; ` +
+          `polling exact deployment ${deploymentId}.`,
+      );
+    } else {
+      console.log(
+        `[railway-deploy] Identified ${service} deployment ${deploymentId}; ` +
+          "polling until SUCCESS.",
+      );
+    }
+
+    const outcome = waitForDeploymentSuccess({
+      service,
+      environment,
+      deploymentId,
+      initialDeployments: currentLookup.deployments,
+      uploadAttempt,
+    });
+    if (outcome !== "retry") {
+      return;
+    }
+
+    sleep(DEPLOYMENT_UPLOAD_RETRY_INTERVAL_MS);
+  }
 }
 
 function authenticate({ browserless, reauth }) {

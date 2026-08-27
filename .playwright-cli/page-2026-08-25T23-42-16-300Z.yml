@@ -1,0 +1,62 @@
+- generic [ref=f1e10]:
+  - generic [ref=f1e11]:
+    - generic [ref=f1e12] [cursor=pointer]
+    - generic [ref=f1e14]:
+      - generic [ref=f1e15]: Workout
+      - generic [ref=f1e16]: Time to crush it!
+    - generic [ref=f1e17]:
+      - button "Open page help" [ref=f1e18] [cursor=pointer]
+      - button "1 unread notification" [ref=f1e22] [cursor=pointer]:
+        - generic [ref=f1e26]: "1"
+  - generic [ref=f1e159]:
+    - generic [ref=f1e160]:
+      - generic [ref=f1e161]:
+        - generic [ref=f1e162]: Today's workout
+        - generic [ref=f1e163]: Your plan owns the workout. Camera tracking only counts the current set.
+      - button "Manage workout plans" [ref=f1e164] [cursor=pointer]:
+        - generic [ref=f1e165]: Plans
+    - generic [ref=f1e168]:
+      - generic [ref=f1e169]:
+        - generic [ref=f1e170]:
+          - generic [ref=f1e171]: Upper Push + Finish
+          - generic [ref=f1e172]: Strength Foundations Split · Personal plan
+        - generic [ref=f1e173]: 0/8 SETS
+      - generic "0 of 8 sets complete" [ref=f1e174]
+    - generic [ref=f1e175]:
+      - generic [ref=f1e176]:
+        - generic [ref=f1e177]: "1"
+        - generic [ref=f1e179]:
+          - generic [ref=f1e180]: Barbell Bench Press
+          - generic [ref=f1e181]: Set 1 of 4 · 10 reps · 22.5 kg
+      - button "View progression suggestion" [ref=f1e183] [cursor=pointer]
+      - generic [ref=f1e188]:
+        - button "Complete Barbell Bench Press set 1" [ref=f1e189] [cursor=pointer]:
+          - generic [ref=f1e190]: Set 1
+          - generic [ref=f1e191]: Mark complete
+        - button "Complete Barbell Bench Press set 2" [disabled]:
+          - generic [ref=f1e193]: Set 2
+          - generic [ref=f1e194]: Upcoming
+        - button "Complete Barbell Bench Press set 3" [disabled]:
+          - generic [ref=f1e196]: Set 3
+          - generic [ref=f1e197]: Upcoming
+        - button "Complete Barbell Bench Press set 4" [disabled]:
+          - generic [ref=f1e199]: Set 4
+          - generic [ref=f1e200]: Upcoming
+      - button "Track This Set With Camera" [ref=f1e203] [cursor=pointer]
+    - generic [ref=f1e208]:
+      - generic [ref=f1e209]: WORKOUT QUEUE
+      - generic [ref=f1e214]: 3 exercises · 8 total sets
+      - generic [ref=f1e215]:
+        - generic [ref=f1e216]: Barbell Bench Press
+        - generic [ref=f1e217]: 4 × 10
+        - generic [ref=f1e218]: Current · Set 1 · 22.5 kg
+      - generic [ref=f1e219]:
+        - generic [ref=f1e220]: Dumbbell Biceps Curl
+        - generic [ref=f1e221]: 3 × 12
+        - generic [ref=f1e222]: Queued · 2 · 8 kg
+      - generic [ref=f1e223]:
+        - generic [ref=f1e224]: Treadmill Run
+        - generic [ref=f1e225]: 1 × timed
+        - generic [ref=f1e226]: Queued · 3 · Bodyweight
+    - button "Open workout session history" [ref=f1e228] [cursor=pointer]:
+      - generic [ref=f1e233]: Session history

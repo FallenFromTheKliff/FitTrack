@@ -62,6 +62,24 @@ export function shouldApplyCanonicalAmenityUpdate(
   return mode === "reset" && persistedId === desiredId;
 }
 
+export function shouldRepairCanonicalAmenityReservability(
+  mode: FacilitySeedMode,
+  canonicalIsReservable: boolean,
+  storedIsReservable: boolean | null | undefined,
+  storedHourlyRate: number | string | { toString(): string } | null | undefined,
+) {
+  if (
+    mode !== "additive" ||
+    canonicalIsReservable ||
+    storedIsReservable !== true
+  ) {
+    return false;
+  }
+  if (storedHourlyRate == null) return true;
+  const normalizedRate = Number(storedHourlyRate);
+  return Number.isFinite(normalizedRate) && normalizedRate <= 0;
+}
+
 const EQUIPMENT_LAYOUT_FIELDS = [
   "floor_id",
   "grid_column",
@@ -89,11 +107,15 @@ function isPublishedCellSet(value: unknown): value is readonly unknown[] {
   return Array.isArray(value);
 }
 
+function isPublishedFootprint(value: unknown): value is readonly unknown[] {
+  return isPublishedCellSet(value) && value.length > 0;
+}
+
 export function buildAdditiveFloorMapUpdate(
   existing: ExistingFloorMapMetadata,
   seed: FacilityMapSeed,
 ) {
-  const retainsPublishedFootprint = isPublishedCellSet(
+  const retainsPublishedFootprint = isPublishedFootprint(
     existing.footprint_cells,
   );
   const navigationFallback = retainsPublishedFootprint
@@ -102,7 +124,7 @@ export function buildAdditiveFloorMapUpdate(
   return {
     grid_width: 14,
     grid_height: 10,
-    ...(isPublishedCellSet(existing.footprint_cells)
+    ...(isPublishedFootprint(existing.footprint_cells)
       ? {}
       : { footprint_cells: seed.footprint }),
     ...(isPublishedCellSet(existing.path_cells)

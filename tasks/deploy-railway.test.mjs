@@ -5,7 +5,9 @@ import {
   DEFAULT_SEED_USERS,
   classifyDeploymentStatus,
   identifyUploadedDeployment,
+  isTransientSnapshotFailure,
   parseDeploymentList,
+  shouldRetryTransientSnapshotFailure,
 } from './deploy-railway.mjs';
 
 test('selects exactly one uploaded deployment outside the prior list', () => {
@@ -123,4 +125,57 @@ test('normalizes deployment list JSON and preserves failure classifications', ()
 
 test('defaults reset deployments to 180 seed users', () => {
   assert.equal(DEFAULT_SEED_USERS, 180);
+});
+
+test('retries only the exact transient Railway snapshot failure within the upload bound', () => {
+  const transientFailure = {
+    status: 'FAILED',
+    meta: {
+      configErrors: [
+        'Failed to snapshot repository. Please try again in a few minutes.',
+      ],
+    },
+  };
+
+  assert.equal(isTransientSnapshotFailure(transientFailure), true);
+  assert.equal(
+    shouldRetryTransientSnapshotFailure({
+      deployment: transientFailure,
+      uploadAttempt: 1,
+      maxUploadAttempts: 3,
+    }),
+    true,
+  );
+  assert.equal(
+    shouldRetryTransientSnapshotFailure({
+      deployment: transientFailure,
+      uploadAttempt: 3,
+      maxUploadAttempts: 3,
+    }),
+    false,
+  );
+});
+
+test('does not retry other failures or snapshot errors with extra config errors', () => {
+  const exactError =
+    'Failed to snapshot repository. Please try again in a few minutes.';
+
+  for (const deployment of [
+    { status: 'CRASHED', meta: { configErrors: ['Build failed.'] } },
+    { status: 'SUCCESS', meta: { configErrors: [exactError] } },
+    {
+      status: 'FAILED',
+      meta: { configErrors: [exactError, 'Another configuration error.'] },
+    },
+    { status: 'FAILED', meta: { configErrors: `${exactError} ` } },
+  ]) {
+    assert.equal(
+      shouldRetryTransientSnapshotFailure({
+        deployment,
+        uploadAttempt: 1,
+        maxUploadAttempts: 3,
+      }),
+      false,
+    );
+  }
 });

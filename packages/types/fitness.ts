@@ -482,6 +482,7 @@ export type ExerciseMovementFamilyKey =
   | "plank"
   | "pull_up"
   | "push_up"
+  | "seated_cable_row"
   | "shoulder_press";
 
 export type EffectiveMovementContractSource =

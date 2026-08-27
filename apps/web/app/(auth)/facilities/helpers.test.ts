@@ -42,7 +42,7 @@ const placement = findDeterministicVenuePlacement({
   pathCells,
   venues: [occupied],
 });
-assert(placement?.gridColumn === 3 && placement.gridRow === 2,
+assert(placement?.gridColumn === 4 && placement.gridRow === 1,
   "default placement skips regions and navigation cells deterministically");
 
 const defaults = buildVenueInitialValues(null, {
@@ -51,7 +51,7 @@ const defaults = buildVenueInitialValues(null, {
   pathCells,
   venues: [occupied],
 });
-assert(defaults.gridColumn === "3" && defaults.gridRow === "2",
+assert(defaults.gridColumn === "4" && defaults.gridRow === "1",
   "new venue defaults use the first valid placement");
 
 assert(
@@ -66,6 +66,20 @@ assert(
     venues: [occupied],
   })?.includes("navigation") ?? false,
   "manual navigation overlap reports an actionable reason",
+);
+
+assert(
+  validateVenuePlacement({
+    floorId: "floor-1",
+    gridColumn: 12,
+    gridRow: 8,
+    gridWidth: 2,
+    gridHeight: 2,
+    footprintCells: [],
+    pathCells: [],
+    venues: [occupied],
+  }) === null,
+  "empty or incremental footprints do not block an otherwise safe venue move",
 );
 
 assert(
@@ -87,6 +101,6 @@ const readySnapshot = buildVenueCreateOpenSnapshot({
   venues: [occupied],
 });
 assert(
-  readySnapshot?.gridColumn === "3" && readySnapshot.gridRow === "2",
+  readySnapshot?.gridColumn === "4" && readySnapshot.gridRow === "1",
   "create-open snapshot recomputes a valid placement after async map data arrives",
 );

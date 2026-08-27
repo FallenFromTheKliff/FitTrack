@@ -78,6 +78,7 @@ import {
   getErrorMessage,
   isValidOptionalHttpUrl,
   normalizeExerciseName,
+  shouldPersistCanonicalFamilyProfile,
   toTitleCase,
   type ConfirmationState,
   type ExerciseDraft,
@@ -247,6 +248,60 @@ function createEmptyMuscleDefinitionDraft(): MuscleDefinitionEditorDraft {
   };
 }
 
+export type MuscleDefinitionField =
+  | "bodyRegion"
+  | "icon"
+  | "key"
+  | "name"
+  | "sortOrder";
+
+export type MuscleDefinitionValidationErrors = Partial<
+  Record<MuscleDefinitionField, string>
+>;
+
+export function getMuscleDefinitionValidationErrors(
+  draft: MuscleDefinitionEditorDraft,
+  hasPendingIcon: boolean,
+): MuscleDefinitionValidationErrors {
+  const errors: MuscleDefinitionValidationErrors = {};
+  const name = draft.name.trim();
+  const bodyRegion = draft.bodyRegion.trim();
+  const key = draft.key.trim();
+
+  if (!name) errors.name = "Muscle name is required.";
+  else if (name.length < 2)
+    errors.name = "Muscle name must be at least 2 characters.";
+  else if (name.length > 120)
+    errors.name = "Muscle name must not exceed 120 characters.";
+
+  if (!bodyRegion) errors.bodyRegion = "Body region is required.";
+  else if (bodyRegion.length < 2)
+    errors.bodyRegion = "Body region must be at least 2 characters.";
+  else if (bodyRegion.length > 80)
+    errors.bodyRegion = "Body region must not exceed 80 characters.";
+
+  if (key.length > 100)
+    errors.key = "Key must not exceed 100 characters.";
+
+  if (
+    !Number.isFinite(draft.sortOrder) ||
+    !Number.isInteger(draft.sortOrder) ||
+    draft.sortOrder < 0
+  ) {
+    errors.sortOrder = "Sort order must be a whole number of 0 or greater.";
+  }
+
+  if (
+    draft.iconKind === "custom" &&
+    !hasPendingIcon &&
+    !draft.iconAssetKey?.trim()
+  ) {
+    errors.icon = "Upload a managed PNG, JPEG, or WebP image before saving.";
+  }
+
+  return errors;
+}
+
 function useExerciseLabPageState() {
   const { colors, settings } = useTheme();
   const pathname = usePathname();
@@ -272,6 +327,11 @@ function useExerciseLabPageState() {
   const [muscleIconUploadError, setMuscleIconUploadError] = useState<
     string | null
   >(null);
+  const [muscleFormError, setMuscleFormError] = useState<string | null>(null);
+  const [muscleSubmitAttempted, setMuscleSubmitAttempted] = useState(false);
+  const [muscleTouchedFields, setMuscleTouchedFields] = useState<
+    Partial<Record<MuscleDefinitionField, boolean>>
+  >({});
   const [editingMuscleId, setEditingMuscleId] = useState<string | null>(null);
   const [muscleEditorOpen, setMuscleEditorOpen] = useState(false);
   const [musclePage, setMusclePage] = useState(1);
@@ -300,6 +360,14 @@ function useExerciseLabPageState() {
       textMuted: colors.textSecondary,
     }),
     [colors],
+  );
+  const muscleValidationErrors = useMemo(
+    () =>
+      getMuscleDefinitionValidationErrors(
+        muscleDraft,
+        Boolean(pendingMuscleIconFile),
+      ),
+    [muscleDraft, pendingMuscleIconFile],
   );
 
   useEffect(() => {
@@ -558,7 +626,13 @@ function useExerciseLabPageState() {
     }
   };
 
+  const markMuscleFieldTouched = (field: MuscleDefinitionField) => {
+    setMuscleTouchedFields((current) => ({ ...current, [field]: true }));
+    setMuscleFormError(null);
+  };
+
   const handleMuscleIconFileChange = (file: File) => {
+    markMuscleFieldTouched("icon");
     if (!isAllowedMuscleIconFile(file)) {
       setMuscleIconUploadError(MUSCLE_ICON_UPLOAD_ERROR);
       return false;
@@ -575,6 +649,7 @@ function useExerciseLabPageState() {
   };
 
   const selectMuscleLibraryIcon = (value: string) => {
+    markMuscleFieldTouched("icon");
     setPendingMuscleIconFile(null);
     setMuscleIconUploadError(null);
     setMuscleDraft((current) => ({
@@ -594,6 +669,9 @@ function useExerciseLabPageState() {
     setEditingMuscleId(definition?.id ?? null);
     setPendingMuscleIconFile(null);
     setMuscleIconUploadError(null);
+    setMuscleFormError(null);
+    setMuscleSubmitAttempted(false);
+    setMuscleTouchedFields({});
     setMuscleDraft({
       aliases: definition?.aliases.join(", ") ?? "",
       bodyRegion: definition?.bodyRegion ?? "",
@@ -646,15 +724,17 @@ function useExerciseLabPageState() {
   });
 
   const handleSaveMuscleDefinition = async () => {
-    if (muscleDraft.name.trim().length < 2) {
-      showMessage("Muscle name must be at least 2 characters.");
-      return;
-    }
-    if (muscleDraft.bodyRegion.trim().length < 2) {
-      showMessage("Body region must be at least 2 characters.");
+    setMuscleSubmitAttempted(true);
+    const validationErrors = getMuscleDefinitionValidationErrors(
+      muscleDraft,
+      Boolean(pendingMuscleIconFile),
+    );
+    if (Object.keys(validationErrors).length > 0) {
+      setMuscleFormError("Correct the highlighted fields before saving.");
       return;
     }
 
+    setMuscleFormError(null);
     setMuscleIconUploadError(null);
 
     let iconAssetKey = muscleDraft.iconAssetKey;
@@ -682,7 +762,7 @@ function useExerciseLabPageState() {
             "Unable to upload the muscle icon.",
           );
           setMuscleIconUploadError(message);
-          showMessage(message);
+          setMuscleFormError(message);
           return;
         }
       }
@@ -691,7 +771,7 @@ function useExerciseLabPageState() {
         const message =
           "Upload a managed PNG, JPEG, or WebP image before saving.";
         setMuscleIconUploadError(message);
-        showMessage(message);
+        setMuscleFormError(message);
         return;
       }
     } else {
@@ -718,7 +798,9 @@ function useExerciseLabPageState() {
       resetMuscleDraft();
       setMuscleEditorOpen(false);
     } catch (error) {
-      showMessage(getErrorMessage(error, "Unable to save muscle definition."));
+      setMuscleFormError(
+        getErrorMessage(error, "Unable to save muscle definition."),
+      );
     }
   };
 
@@ -772,6 +854,30 @@ function useExerciseLabPageState() {
 
     try {
       if (sheetState?.mode === "edit") {
+        const persistSharedProfile = shouldPersistCanonicalFamilyProfile({
+          draft,
+          exerciseId: sheetState.exercise.id,
+          initialMovementProfile:
+            initialDraftRef.current?.movementProfile ?? null,
+        });
+        if (
+          persistSharedProfile &&
+          draft.movementFamily &&
+          draft.movementProfile
+        ) {
+          const affectedNames = draft.movementFamily.inheritingExerciseIds.map(
+            (id) =>
+              libraryItems.find((exercise) => exercise.id === id)?.name ?? id,
+          );
+          setConfirmationState({
+            affectedNames,
+            family: draft.movementFamily,
+            mode: "shared-family",
+            movementProfile: draft.movementProfile,
+            saveExerciseAfter: true,
+          });
+          return;
+        }
         await updateExerciseMutation.mutateAsync({
           exerciseId: sheetState.exercise.id,
           payload: filterEmptyExerciseDraft(draft),
@@ -828,12 +934,26 @@ function useExerciseLabPageState() {
             }
           : null,
       }));
-      showMessage(
-        `${state.family.displayName} shared tracking updated to revision ${result.contract_revision}.`,
-      );
-      setConfirmationState(null);
+      if (state.saveExerciseAfter && sheetState?.mode === "edit") {
+        await updateExerciseMutation.mutateAsync({
+          exerciseId: sheetState.exercise.id,
+          payload: filterEmptyExerciseDraft(draft),
+        });
+        showMessage(
+          `${draft.name.trim()} was updated with mobile tracking revision ${result.contract_revision}.`,
+        );
+        setConfirmationState(null);
+        closeSheetAfterSave();
+      } else {
+        showMessage(
+          `${state.family.displayName} shared tracking updated to revision ${result.contract_revision}.`,
+        );
+        setConfirmationState(null);
+      }
     } catch (error) {
-      showMessage(getErrorMessage(error, "Unable to update shared tracking."));
+      showMessage(
+        getErrorMessage(error, "Unable to finish saving exercise tracking."),
+      );
     } finally {
       sharedFamilySubmitRef.current = false;
     }
@@ -1223,6 +1343,7 @@ function useExerciseLabPageState() {
     muscleDefinitions,
     muscleDefinitionsQuery,
     muscleDraft,
+    muscleFormError,
     muscleIconUploadError,
     muscleEditorOpen,
     musclePage,
@@ -1230,6 +1351,10 @@ function useExerciseLabPageState() {
     muscleTableActions,
     muscleTableColumns,
     muscleTotalPages,
+    muscleSubmitAttempted,
+    muscleTouchedFields,
+    muscleValidationErrors,
+    markMuscleFieldTouched,
     openMuscleEditor,
     pendingMuscleIconFile,
     resetMuscleDraft,

@@ -1,6 +1,10 @@
 import { Transform, type TransformFnParams } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ExerciseCategory, ExerciseTrackingMode } from '@prisma/client';
+import {
+  ExerciseCategory,
+  ExerciseTrackingMode,
+  ProgressionIconKind,
+} from '@prisma/client';
 import {
   IsBoolean,
   IsEnum,
@@ -452,6 +456,22 @@ export class MuscleDefinitionResponseDTO {
   @ApiProperty({ example: ['bis'], type: [String] })
   aliases: string[];
 
+  @ApiProperty({
+    enum: ProgressionIconKind,
+    example: ProgressionIconKind.library,
+    nullable: true,
+  })
+  icon_kind: ProgressionIconKind | null;
+
+  @ApiProperty({ example: 'dumbbell', nullable: true })
+  icon_key: string | null;
+
+  @ApiProperty({
+    example: 'uploads/muscles/custom-icon.png',
+    nullable: true,
+  })
+  icon_asset_key: string | null;
+
   @ApiProperty({ example: 40 })
   sort_order: number;
 
@@ -508,6 +528,34 @@ export class CreateMuscleDefinitionDTO {
   @MaxLength(80, { message: 'body_region must not exceed 80 characters' })
   body_region: string;
 
+  @ApiPropertyOptional({
+    enum: ProgressionIconKind,
+    example: ProgressionIconKind.library,
+    nullable: true,
+  })
+  @IsOptional()
+  @IsEnum(ProgressionIconKind, {
+    message: 'icon_kind must be a valid progression icon kind',
+  })
+  icon_kind?: ProgressionIconKind | null;
+
+  @ApiPropertyOptional({ example: 'dumbbell', nullable: true })
+  @IsOptional()
+  @IsString({ message: 'icon_key must be a string' })
+  @MaxLength(100, { message: 'icon_key must not exceed 100 characters' })
+  icon_key?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'uploads/muscles/custom-icon.png',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsString({ message: 'icon_asset_key must be a string' })
+  @MaxLength(500, {
+    message: 'icon_asset_key must not exceed 500 characters',
+  })
+  icon_asset_key?: string | null;
+
   @ApiPropertyOptional({ example: ['bis'], type: [String] })
   @IsOptional()
   @IsArray({ message: 'aliases must be an array' })
@@ -535,6 +583,34 @@ export class UpdateMuscleDefinitionDTO {
   @IsString({ message: 'body_region must be a string' })
   @MaxLength(80, { message: 'body_region must not exceed 80 characters' })
   body_region?: string;
+
+  @ApiPropertyOptional({
+    enum: ProgressionIconKind,
+    example: ProgressionIconKind.library,
+    nullable: true,
+  })
+  @IsOptional()
+  @IsEnum(ProgressionIconKind, {
+    message: 'icon_kind must be a valid progression icon kind',
+  })
+  icon_kind?: ProgressionIconKind | null;
+
+  @ApiPropertyOptional({ example: 'dumbbell', nullable: true })
+  @IsOptional()
+  @IsString({ message: 'icon_key must be a string' })
+  @MaxLength(100, { message: 'icon_key must not exceed 100 characters' })
+  icon_key?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'uploads/muscles/custom-icon.png',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsString({ message: 'icon_asset_key must be a string' })
+  @MaxLength(500, {
+    message: 'icon_asset_key must not exceed 500 characters',
+  })
+  icon_asset_key?: string | null;
 
   @ApiPropertyOptional({ example: ['bis'], type: [String] })
   @IsOptional()

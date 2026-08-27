@@ -22,6 +22,11 @@ Do not use FitTrack guidance outside this repository. Do not access credentials,
 
 - Do not use parallel execution or a faster service tier unless the user explicitly requests it.
 - The main agent/Sol owns scope, acceptance criteria, orchestration, and the final report.
+- Before dispatching Luna, Sol must define the implementation contract: observed failure and evidence, likely root cause, dependency/source-of-truth path, exact files or symbols to inspect or own, the smallest coherent solution, preserved invariants, and executable acceptance checks.
+- Sol remains the reasoning and decision lane throughout the task. Evaluate worker evidence and decide repairs directly; do not forward worker suggestions blindly, delegate architecture discovery by default, or ask Luna/Terra to broaden scope.
+- Luna is the bounded implementation lane. Execute Sol's file ownership and acceptance contract, add the specified tests, and report only contradictory evidence, an authority/safety blocker, or final results. Do not independently redesign, rescope, or replace the chosen architecture unless repository evidence disproves the contract.
+- Terra is the independent verification lane. Verify Sol's acceptance contract and the completed diff, report evidence and grouped defects, and do not redefine product behavior or implementation scope.
+- If new evidence invalidates the plan, the worker stops at the contradiction and returns it to Sol; Sol revises the dependency map, file list, solution, and acceptance criteria before implementation resumes.
 - One Luna Max worker implements the complete scoped batch sequentially at standard speed.
 - One Terra Max worker independently QA-checks the completed batch at standard speed; Terra does not implement in parallel.
 - Send Terra's grouped findings back to the original Luna for one repair pass, then recheck only failed criteria.

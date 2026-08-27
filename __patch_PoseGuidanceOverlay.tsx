@@ -16,6 +16,7 @@ type PoseGuidanceOverlayProps = {
   keypoints: PoseKeypointRecord[] | null;
   lowConfidenceLandmarks: string[];
   movementContract: PoseMovementContractRecord | null;
+  repPathUnblocked: boolean;
 };
 
 const SKELETON_CONNECTIONS: Array<[number, number]> = [
@@ -153,6 +154,7 @@ export function PoseGuidanceOverlay({
   keypoints,
   lowConfidenceLandmarks,
   movementContract,
+  repPathUnblocked,
 }: PoseGuidanceOverlayProps) {
   const hasLiveKeypoints = keypoints?.length === 33;
   const drawableKeypoints = hasLiveKeypoints ? keypoints : GUIDE_KEYPOINTS;
@@ -167,11 +169,13 @@ export function PoseGuidanceOverlay({
       : null;
   const phaseText = !hasLiveKeypoints
     ? "GUIDE"
-    : currentPhase === "down"
+    : currentPhase === "primed"
+      ? "ARM"
+      : currentPhase === "down"
       ? "DOWN"
       : currentPhase === "up"
         ? "UP"
-        : "ARM";
+        : "READY";
   const guidanceText = !hasLiveKeypoints
     ? "Align full body in frame"
     : guidanceLabel
@@ -179,6 +183,10 @@ export function PoseGuidanceOverlay({
       : movementContract
         ? `${movementContract.exercise.replace(/_/g, " ")}`
         : "Detecting movement";
+  const repPathColor =
+    repPathUnblocked && ["down", "up", "hold"].includes(currentPhase)
+      ? colors.success
+      : colors.warning;
 
   return (
     <View
@@ -262,7 +270,7 @@ export function PoseGuidanceOverlay({
                     cx={points.b.x}
                     cy={points.b.y}
                     r={0.022}
-                    stroke={({ success: currentPhase === "primed" ? colors.warning : colors.success }).success}
+                    stroke={repPathColor}
                     strokeWidth={0.006}
                     fill="rgba(0,0,0,0.0)"
                   />
@@ -272,7 +280,7 @@ export function PoseGuidanceOverlay({
         {angleArc ? (
           <Path
             d={angleArc.path}
-            stroke={({ success: currentPhase === "primed" ? colors.warning : colors.success }).success}
+            stroke={repPathColor}
             strokeWidth={0.01}
             fill="none"
             strokeLinecap="round"
@@ -347,7 +355,7 @@ export function PoseGuidanceOverlay({
             <SvgText
               x={0.59}
               y={0.085}
-              fill={({ success: currentPhase === "primed" ? colors.warning : colors.success }).success}
+              fill={repPathColor}
               fontSize={0.034}
               fontWeight="700"
             >

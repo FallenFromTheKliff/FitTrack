@@ -27,6 +27,21 @@ const REMOTE_HOSTNAME_PATTERN = /^[a-z0-9-]+\.proxy\.rlwy\.net$/i;
 export const DEFAULT_LOCAL_CONTAINER_DATABASE_URL =
   "postgresql://postgres:postgres@localhost:5432/fittrackdb";
 
+const ATOMIC_RESTORE_CONSTRAINTS = [
+  {
+    table: "public.exercise_catalog",
+    name: "exercise_catalog_movement_family_id_fkey",
+  },
+  {
+    table: "public.exercise_movement_families",
+    name: "exercise_movement_families_canonical_exercise_id_fkey",
+  },
+  {
+    table: "public.refresh_tokens",
+    name: "refresh_tokens_rotated_from_fkey",
+  },
+];
+
 function runtimeDockerCommand() {
   return process.platform === "win32" ? "docker.exe" : "docker";
 }
@@ -94,6 +109,7 @@ export function parseSnapshotOptions(args = process.argv.slice(2)) {
     environment,
     help: hasFlag(args, "help", "h"),
     localDatabaseUrl,
+    preflightOnly: hasFlag(args, "preflight-only"),
     restoreOnly: hasFlag(args, "restore-only"),
     users,
   };
@@ -102,6 +118,12 @@ export function parseSnapshotOptions(args = process.argv.slice(2)) {
 export function validateSnapshotOptions(options) {
   if (options.help) {
     return;
+  }
+
+  if (options.preflightOnly && options.restoreOnly) {
+    throw new Error(
+      "--preflight-only and --restore-only cannot be used together.",
+    );
   }
 
   if (options.confirm !== RAILWAY_RESET_CONFIRMATION) {
@@ -426,6 +448,7 @@ Options:
   --local-container-database-url:<url>
                                    In-container Postgres URL (default: localhost:5432)
   --local-postgres-container:<id>  Existing PostgreSQL 16 Docker container
+  --preflight-only                 Run the local restore preflight without Railway
   --restore-only --dump-path:<p>   Internal public-proxy SQL restore script
   --confirm:${RAILWAY_RESET_CONFIRMATION}
 `);
@@ -505,11 +528,34 @@ function normalizeDataSql(dataSql) {
       break;
     }
   }
-  return lines.join("\n").trim();
+  return lines
+    .join("\n")
+    .trim()
+    .replaceAll(
+      "SELECT pg_catalog.set_config('search_path', '', false);",
+      "SELECT pg_catalog.set_config('search_path', 'pg_catalog, public', false);",
+    );
+}
+
+function buildAtomicRestoreConstraintSql(modifier) {
+  return ATOMIC_RESTORE_CONSTRAINTS.map(
+    ({ table, name }) =>
+      `ALTER TABLE ${table} ALTER CONSTRAINT ${name} ${modifier};`,
+  ).join("\n");
 }
 
 export function buildAtomicRestoreScript(dataSql) {
-  return `${buildTruncateSql().trim()}\n${normalizeDataSql(dataSql)}\n`;
+  return [
+    buildAtomicRestoreConstraintSql("DEFERRABLE INITIALLY DEFERRED"),
+    "SET CONSTRAINTS ALL DEFERRED;",
+    "ALTER TABLE public.coach_profiles DISABLE TRIGGER coach_profiles_specialization_sync;",
+    buildTruncateSql().trim(),
+    normalizeDataSql(dataSql),
+    "SET CONSTRAINTS ALL IMMEDIATE;",
+    "ALTER TABLE public.coach_profiles ENABLE TRIGGER coach_profiles_specialization_sync;",
+    buildAtomicRestoreConstraintSql("NOT DEFERRABLE"),
+    "",
+  ].join("\n");
 }
 
 function createPlainDataSql({ container, dumpPath, dataSqlPath }) {
@@ -538,7 +584,12 @@ function createAtomicRestoreScriptFile({ dataSqlPath, restoreScriptPath }) {
   writeFileSync(restoreScriptPath, buildAtomicRestoreScript(dataSql), "utf8");
 }
 
-function restoreSnapshot({ container, databaseUrl, restoreScriptPath }) {
+function restoreSnapshot({
+  container,
+  databaseUrl,
+  restoreScriptPath,
+  label = "restore Railway snapshot atomically through public proxy",
+}) {
   const restore = buildAtomicRestoreCommand({
     container,
     databaseUrl,
@@ -550,7 +601,7 @@ function restoreSnapshot({ container, databaseUrl, restoreScriptPath }) {
       args: restore.args,
       command: restore.command,
       inputFd,
-      label: "restore Railway snapshot atomically through public proxy",
+      label,
     });
   } finally {
     closeSync(inputFd);
@@ -599,6 +650,18 @@ function runLocalSnapshot(options) {
     });
     assertSnapshotFile(dataSqlPath);
     createAtomicRestoreScriptFile({ dataSqlPath, restoreScriptPath });
+    restoreSnapshot({
+      container: options.container,
+      databaseUrl: options.containerDatabaseUrl,
+      restoreScriptPath,
+      label: "preflight restore atomic snapshot into local PostgreSQL 16",
+    });
+    if (options.preflightOnly) {
+      console.log(
+        "[seed-snapshot] preflight-only mode: Railway restore skipped",
+      );
+      return;
+    }
 
     const remote = buildRemoteRestoreCommand({
       dumpPath: restoreScriptPath,

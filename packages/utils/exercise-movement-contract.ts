@@ -15,6 +15,7 @@ export const REVIEWED_AUTO_REP_FAMILIES = [
   "plank",
   "pull_up",
   "push_up",
+  "seated_cable_row",
   "shoulder_press",
 ] as const satisfies readonly ExerciseMovementFamilyKey[];
 

@@ -23,6 +23,7 @@ import {
   MUSCLE_ICON_ACCEPT,
   MUSCLE_ICON_OPTIONS,
   MuscleDefinitionIcon,
+  type MuscleDefinitionField,
   useExerciseLabPage,
 } from "./ExerciseLabPageContext";
 
@@ -35,16 +36,21 @@ export function ExerciseLabMuscleSurface() {
     handleSaveMuscleDefinition,
     handleMuscleIconFileChange,
     isCompact,
+    markMuscleFieldTouched,
     muscleDefinitions,
     muscleDefinitionsQuery,
     muscleDraft,
+    muscleFormError,
     muscleIconUploadError,
     muscleEditorOpen,
     musclePage,
     muscleSearch,
+    muscleSubmitAttempted,
     muscleTableActions,
     muscleTableColumns,
     muscleTotalPages,
+    muscleTouchedFields,
+    muscleValidationErrors,
     openMuscleEditor,
     pendingMuscleIconFile,
     selectMuscleLibraryIcon,
@@ -94,6 +100,10 @@ export function ExerciseLabMuscleSurface() {
     padding: "10px 12px",
     width: "100%",
   };
+  const visibleFieldError = (field: MuscleDefinitionField) =>
+    muscleSubmitAttempted || muscleTouchedFields[field]
+      ? muscleValidationErrors[field]
+      : undefined;
 
   return (
     <>
@@ -230,6 +240,22 @@ export function ExerciseLabMuscleSurface() {
         }
       >
         <div style={{ display: "grid", gap: 12 }}>
+          {muscleFormError ? (
+            <div
+              role="alert"
+              style={{
+                backgroundColor: `${colors.danger}12`,
+                border: `1px solid ${colors.danger}55`,
+                borderRadius: 8,
+                color: colors.danger,
+                fontSize: 12.5,
+                fontWeight: 750,
+                padding: "9px 11px",
+              }}
+            >
+              {muscleFormError}
+            </div>
+          ) : null}
           <div
             style={{
               display: "grid",
@@ -239,61 +265,85 @@ export function ExerciseLabMuscleSurface() {
                 : "repeat(2, minmax(0, 1fr))",
             }}
           >
-            <ExerciseLabField label="Display name" hint="The name shown throughout FitTrack.">
+            <ExerciseLabField
+              error={visibleFieldError("name")}
+              label="Display name"
+              hint="The name shown throughout FitTrack."
+            >
               <FitTextInput
+                aria-invalid={Boolean(visibleFieldError("name"))}
                 name="muscle-definition-name"
                 placeholder="Muscle name, e.g. Biceps"
                 value={muscleDraft.name}
-                onChange={(event) =>
+                onChange={(event) => {
+                  markMuscleFieldTouched("name");
                   setMuscleDraft((current) => ({
                     ...current,
                     name: event.target.value,
-                  }))
-                }
+                  }));
+                }}
                 style={fieldStyle}
               />
             </ExerciseLabField>
-            <ExerciseLabField label="Key" hint="Immutable after creation to preserve history.">
+            <ExerciseLabField
+              error={visibleFieldError("key")}
+              label="Key"
+              hint="Immutable after creation to preserve history."
+            >
               <FitTextInput
+                aria-invalid={Boolean(visibleFieldError("key"))}
                 disabled={Boolean(editingMuscleId)}
                 name="muscle-definition-key"
                 placeholder="Auto-generated if blank"
                 value={muscleDraft.key}
-                onChange={(event) =>
+                onChange={(event) => {
+                  markMuscleFieldTouched("key");
                   setMuscleDraft((current) => ({
                     ...current,
                     key: event.target.value,
-                  }))
-                }
+                  }));
+                }}
                 style={{ ...fieldStyle, opacity: editingMuscleId ? 0.55 : 1 }}
               />
             </ExerciseLabField>
-            <ExerciseLabField label="Body region" hint="Used by filters and movement grouping.">
+            <ExerciseLabField
+              error={visibleFieldError("bodyRegion")}
+              label="Body region"
+              hint="Used by filters and movement grouping."
+            >
               <FitTextInput
+                aria-invalid={Boolean(visibleFieldError("bodyRegion"))}
                 name="muscle-definition-region"
                 placeholder="e.g. Upper Body"
                 value={muscleDraft.bodyRegion}
-                onChange={(event) =>
+                onChange={(event) => {
+                  markMuscleFieldTouched("bodyRegion");
                   setMuscleDraft((current) => ({
                     ...current,
                     bodyRegion: event.target.value,
-                  }))
-                }
+                  }));
+                }}
                 style={fieldStyle}
               />
             </ExerciseLabField>
-            <ExerciseLabField label="Sort order" hint="Lower numbers appear first.">
+            <ExerciseLabField
+              error={visibleFieldError("sortOrder")}
+              label="Sort order"
+              hint="Lower numbers appear first."
+            >
               <FitTextInput
+                aria-invalid={Boolean(visibleFieldError("sortOrder"))}
                 name="muscle-definition-sort-order"
                 placeholder="Sort order"
                 type="number"
                 value={String(muscleDraft.sortOrder)}
-                onChange={(event) =>
+                onChange={(event) => {
+                  markMuscleFieldTouched("sortOrder");
                   setMuscleDraft((current) => ({
                     ...current,
                     sortOrder: Number(event.target.value),
-                  }))
-                }
+                  }));
+                }}
                 style={fieldStyle}
               />
             </ExerciseLabField>
@@ -336,6 +386,7 @@ export function ExerciseLabMuscleSurface() {
               />
             </ExerciseLabField>
             <ExerciseLabField
+              error={muscleIconUploadError ?? visibleFieldError("icon")}
               label="Managed icon"
               hint="PNG, JPEG, or WebP only. SVG is rejected."
             >
@@ -370,6 +421,9 @@ export function ExerciseLabMuscleSurface() {
                 </span>
                 <input
                   accept={MUSCLE_ICON_ACCEPT}
+                  aria-invalid={Boolean(
+                    muscleIconUploadError ?? visibleFieldError("icon"),
+                  )}
                   id="muscle-definition-icon-upload"
                   onChange={(event) => {
                     const file = event.target.files?.[0] ?? null;
@@ -422,9 +476,9 @@ export function ExerciseLabMuscleSurface() {
               </FitText>
             </div>
           </div>
-          {muscleIconUploadError || iconPreviewError ? (
+          {iconPreviewError ? (
             <FitText style={{ color: colors.danger, fontSize: 12, fontWeight: 750 }}>
-              {muscleIconUploadError ?? iconPreviewError}
+              {iconPreviewError}
             </FitText>
           ) : null}
           <FitText as="p" style={{ color: colors.textSecondary, fontSize: 12.5 }}>

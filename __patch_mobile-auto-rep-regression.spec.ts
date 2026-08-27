@@ -102,6 +102,24 @@ function runRepSequence(
   );
 }
 
+function runRepSequenceWithEvidence(
+  contract: NonNullable<ReturnType<typeof buildFallbackPoseMovementContract>>,
+  angles: number[],
+  evidence: ReturnType<typeof makeRepEvidence>,
+) {
+  return angles.reduce(
+    (state, angle, index) =>
+      stepPoseRepEngine(
+        state,
+        contract,
+        angle,
+        index * 1000,
+        evidence,
+      ).nextState,
+    createPoseRepEngineState(),
+  );
+}
+
 function makeFrame(capturedAtMs: number, visibility: number) {
   return {
     capturedAtMs,
@@ -142,7 +160,10 @@ function makeHoldEvidence(visibility = 1) {
   };
 }
 
-function makeUprightBenchEvidence(exerciseDeclared = false) {
+function makeRepEvidence(
+  bodyOrientation: 'horizontal' | 'upright',
+  exerciseDeclared = false,
+) {
   const evidence = makeHoldEvidence();
   return {
     ...evidence,
@@ -151,47 +172,11 @@ function makeUprightBenchEvidence(exerciseDeclared = false) {
       ...evidence.signals,
       orientation: {
         ...evidence.signals.orientation,
-        bodyOrientation: 'upright' as const,
-        torsoSlopeDeg: 75,
+        bodyOrientation,
       },
     },
   };
 }
-
-describe('planned exercise orientation regression', () => {
-  it('keeps auto-detection strict but counts a declared bench rep at the 90-degree gate', () => {
-    const bench = buildFallbackPoseMovementContract('bench_press');
-    if (!bench) throw new Error('bench press fallback contract missing');
-    const angles = [155, 155, 90, 90];
-
-    const unplanned = angles.reduce(
-      (state, angle, index) =>
-        stepPoseRepEngine(
-          state,
-          bench,
-          angle,
-          index * 1000,
-          makeUprightBenchEvidence(),
-        ).nextState,
-      createPoseRepEngineState(),
-    );
-    const planned = angles.reduce(
-      (state, angle, index) =>
-        stepPoseRepEngine(
-          state,
-          bench,
-          angle,
-          index * 1000,
-          makeUprightBenchEvidence(true),
-        ).nextState,
-      createPoseRepEngineState(),
-    );
-
-    expect(unplanned.repCount).toBe(0);
-    expect(unplanned.phase).toBe('primed');
-    expect(planned.repCount).toBe(1);
-  });
-});
 
 describe('mobile auto-rep regression primitives', () => {
   it('awards a squat immediately after the stable 90-degree contraction gate is reached', () => {
@@ -202,6 +187,26 @@ describe('mobile auto-rep regression primitives', () => {
 
     expect(state.repCount).toBe(1);
     expect(state.lastRepCompletedAtMs).toBe(3000);
+  });
+
+  it('keeps upright bench evidence strict unless the exercise is declared by the camera target', () => {
+    const bench = buildFallbackPoseMovementContract('bench_press');
+    if (!bench) throw new Error('bench press fallback contract missing');
+    const sequence = [155, 155, 90, 90];
+
+    const unplannedState = runRepSequenceWithEvidence(
+      bench,
+      sequence,
+      makeRepEvidence('upright'),
+    );
+    const plannedState = runRepSequenceWithEvidence(
+      bench,
+      sequence,
+      makeRepEvidence('upright', true),
+    );
+
+    expect(unplannedState.repCount).toBe(0);
+    expect(plannedState.repCount).toBe(1);
   });
 
   it.each(REP_EXERCISE_CASES)(

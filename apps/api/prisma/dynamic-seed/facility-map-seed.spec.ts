@@ -9,6 +9,7 @@ import {
   buildFacilityFloorMapSeedUpdate,
   FACILITY_FLOOR_MAP_SEEDS,
   shouldApplyCanonicalAmenityUpdate,
+  shouldRepairCanonicalAmenityReservability,
 } from '../../../../packages/utils/facility-map-seed';
 import { getAmenityBookingBlockReason } from '../../src/bookings/amenity/amenity-reservability';
 import { GYM_EQUIPMENT } from './domains/ai-gym-analytics';
@@ -127,6 +128,54 @@ void test('additive canonical facility seed preserves calibrated amenity and equ
   );
 });
 
+void test('canonical non-reservable venues repair only the retired zero-rate seed state', () => {
+  const reception = CANONICAL_AMENITIES.find(
+    (amenity) => amenity.key === 'reception',
+  );
+  const generalFloor = CANONICAL_AMENITIES.find(
+    (amenity) => amenity.key === 'general-floor',
+  );
+  assert.equal(reception?.isReservable, false);
+  assert.equal(generalFloor?.isReservable, false);
+
+  assert.equal(
+    shouldRepairCanonicalAmenityReservability(
+      'additive',
+      false,
+      true,
+      0,
+    ),
+    true,
+  );
+  assert.equal(
+    shouldRepairCanonicalAmenityReservability(
+      'additive',
+      false,
+      true,
+      null,
+    ),
+    true,
+  );
+  assert.equal(
+    shouldRepairCanonicalAmenityReservability(
+      'additive',
+      false,
+      true,
+      250,
+    ),
+    false,
+  );
+  assert.equal(
+    shouldRepairCanonicalAmenityReservability(
+      'reset',
+      false,
+      true,
+      0,
+    ),
+    false,
+  );
+});
+
 void test('reset floor seed restores canonical map cells while additive preserves them', () => {
   const seed = FACILITY_FLOOR_MAP_SEEDS['floor-1'];
   const existing = {
@@ -170,6 +219,23 @@ void test('legacy null or absent metadata receives canonical defaults', () => {
   assert.deepEqual(absentUpdate.path_cells, seed.paths);
   assert.deepEqual(absentUpdate.entry_cells, seed.entries);
   assert.deepEqual(absentUpdate.exit_cells, seed.exits);
+});
+
+void test('empty floor metadata is repaired as an uninitialized seed row', () => {
+  const seed = FACILITY_FLOOR_MAP_SEEDS['floor-1'];
+  const update = buildAdditiveFloorMapUpdate(
+    {
+      footprint_cells: [],
+      path_cells: [],
+      entry_cells: [],
+      exit_cells: [],
+    },
+    seed,
+  );
+  assert.deepEqual(update.footprint_cells, seed.footprint);
+  assert(!('path_cells' in update));
+  assert(!('entry_cells' in update));
+  assert(!('exit_cells' in update));
 });
 
 void test('retained custom footprints never receive canonical navigation fallback', () => {

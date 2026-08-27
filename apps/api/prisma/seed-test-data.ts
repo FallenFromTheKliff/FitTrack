@@ -76,6 +76,7 @@ import {
   writeTestDataManifest,
 } from './test-data/manifest';
 import { seedId as dynamicSeedId } from './dynamic-seed/ids';
+import { shouldRepairReviewedMovementFamilyDefault } from './dynamic-seed/domains/fitness-gamification';
 import {
   FACILITY_FLOOR_MAP_SEEDS,
 } from '../../../packages/utils/facility-map-seed';
@@ -3585,6 +3586,16 @@ async function ensureReviewedMovementFamilies(
       schemaVersion: 'exercise_movement_profile_v1',
       warnings: [],
     } as Prisma.InputJsonValue;
+    const existingFamily = await prisma.exerciseMovementFamily.findUnique({
+      where: { key: familyKey },
+      select: { base_movement_profile: true },
+    });
+    const repairReviewedDefault =
+      mode === 'additive' &&
+      shouldRepairReviewedMovementFamilyDefault(
+        familyKey,
+        existingFamily?.base_movement_profile ?? null,
+      );
     await prisma.exerciseMovementFamily.upsert({
       where: { key: familyKey },
       create: {
@@ -3609,6 +3620,12 @@ async function ensureReviewedMovementFamilies(
           : {
               canonical_exercise_id: exercise.id,
               is_active: true,
+              ...(repairReviewedDefault
+                ? {
+                    base_movement_profile: baseMovementProfile,
+                    contract_revision: { increment: 1 },
+                  }
+                : {}),
             },
     });
 

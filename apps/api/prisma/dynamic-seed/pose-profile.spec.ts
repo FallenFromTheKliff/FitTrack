@@ -8,6 +8,7 @@ import {
   LEGACY_POSE_PROFILE_EXERCISE_KEYS,
   POSE_PROFILE_EXERCISE_KEYS,
   shouldLinkMovementFamilyMember,
+  shouldRepairReviewedMovementFamilyDefault,
   shouldRestoreMovementFamilyDefaults,
 } from './domains/fitness-gamification';
 import { seedId } from './ids';
@@ -77,6 +78,140 @@ void test('additive movement-family seed preserves calibrated revisions and exis
   assert.equal(shouldLinkMovementFamilyMember('reset', 'admin-family'), true);
 });
 
+void test('bench press defaults use a normal 90-degree bottom and repair only the retired seed default', () => {
+  const bench = buildFallbackPoseMovementContract('bench_press');
+  assert.ok(bench);
+  assert.deepEqual(bench.repThresholds, {
+    down: { angle: 90, tolerance: 15 },
+    up: { angle: 155, tolerance: 12 },
+  });
+
+  const legacySeedProfile = {
+    movementContract: {
+      ...bench,
+      repThresholds: {
+        ...bench.repThresholds,
+        down: { angle: 100, tolerance: 12 },
+      },
+    },
+    rig: null,
+    schemaVersion: 'exercise_movement_profile_v1',
+    warnings: [],
+  };
+  assert.equal(
+    shouldRepairReviewedMovementFamilyDefault(
+      'bench_press',
+      legacySeedProfile,
+    ),
+    true,
+  );
+  assert.equal(
+    shouldRepairReviewedMovementFamilyDefault('bench_press', {
+      ...legacySeedProfile,
+      movementContract: {
+        ...bench,
+        repThresholds: {
+          down: { angle: 92, tolerance: 9 },
+          up: { angle: 158, tolerance: 9 },
+        },
+      },
+    }),
+    false,
+  );
+  assert.equal(
+    shouldRepairReviewedMovementFamilyDefault('bench_press', {
+      ...legacySeedProfile,
+      rig: { keyframes: [] },
+    }),
+    false,
+  );
+});
+
+void test('all reviewed movement families use intentional completion/reset gates and safely repair retired defaults', () => {
+  const expectedThresholds = {
+    bench_press: {
+      down: { angle: 90, tolerance: 15 },
+      up: { angle: 155, tolerance: 12 },
+    },
+    bicep_curl: {
+      down: { angle: 90, tolerance: 15 },
+      up: { angle: 155, tolerance: 12 },
+    },
+    dip: {
+      down: { angle: 90, tolerance: 15 },
+      up: { angle: 155, tolerance: 12 },
+    },
+    plank: {
+      down: { angle: 165, tolerance: 8 },
+      up: { angle: 178, tolerance: 8 },
+    },
+    pull_up: {
+      down: { angle: 90, tolerance: 15 },
+      up: { angle: 155, tolerance: 12 },
+    },
+    push_up: {
+      down: { angle: 90, tolerance: 15 },
+      up: { angle: 155, tolerance: 12 },
+    },
+    seated_cable_row: {
+      down: { angle: 90, tolerance: 15 },
+      up: { angle: 155, tolerance: 12 },
+    },
+    shoulder_press: {
+      down: { angle: 90, tolerance: 15 },
+      up: { angle: 155, tolerance: 12 },
+    },
+    squat: {
+      down: { angle: 90, tolerance: 15 },
+      up: { angle: 155, tolerance: 12 },
+    },
+  } as const;
+  const retiredThresholds = {
+    bench_press: [{ down: { angle: 100, tolerance: 12 }, up: { angle: 155, tolerance: 12 } }],
+    bicep_curl: [
+      { down: { angle: 145, tolerance: 10 }, up: { angle: 95, tolerance: 10 } },
+      { down: { angle: 155, tolerance: 12 }, up: { angle: 90, tolerance: 15 } },
+    ],
+    dip: [{ down: { angle: 112, tolerance: 12 }, up: { angle: 150, tolerance: 12 } }],
+    pull_up: [
+      { down: { angle: 145, tolerance: 10 }, up: { angle: 100, tolerance: 10 } },
+      { down: { angle: 155, tolerance: 12 }, up: { angle: 90, tolerance: 15 } },
+    ],
+    push_up: [{ down: { angle: 120, tolerance: 15 }, up: { angle: 157, tolerance: 12 } }],
+    seated_cable_row: [{ down: { angle: 140, tolerance: 10 }, up: { angle: 95, tolerance: 10 } }],
+    shoulder_press: [
+      { down: { angle: 105, tolerance: 12 }, up: { angle: 150, tolerance: 12 } },
+      { down: { angle: 90, tolerance: 15 }, up: { angle: 150, tolerance: 12 } },
+    ],
+    squat: [{ down: { angle: 105, tolerance: 12 }, up: { angle: 155, tolerance: 12 } }],
+  } as const;
+
+  for (const [familyKey, thresholds] of Object.entries(expectedThresholds)) {
+    const contract = buildFallbackPoseMovementContract(familyKey);
+    assert.ok(contract);
+    assert.deepEqual(contract.repThresholds, thresholds);
+    assert.equal(
+      shouldRepairReviewedMovementFamilyDefault(familyKey, null),
+      true,
+      `${familyKey} null profile should be repaired`,
+    );
+    const retired = retiredThresholds[familyKey as keyof typeof retiredThresholds];
+    if (!retired) continue;
+    for (const repThresholds of retired) {
+      assert.equal(
+        shouldRepairReviewedMovementFamilyDefault(familyKey, {
+          movementContract: { ...contract, repThresholds },
+          rig: null,
+          schemaVersion: 'exercise_movement_profile_v1',
+          warnings: [],
+        }),
+        true,
+        `${familyKey} retired seed profile should be repaired`,
+      );
+    }
+  }
+});
+
 void test('gamification reconciliation excludes state users removed during reset', () => {
   assert.deepEqual(
     filterPresentSeedHistoryMembers(
@@ -103,6 +238,7 @@ void test('canonical pose registry has one explicit compatible contract per exer
       'pull-up',
       'push-up',
       'shoulder-press',
+      'row',
     ],
   );
   assert.deepEqual(
@@ -118,6 +254,7 @@ void test('canonical pose registry has one explicit compatible contract per exer
     'pull-up',
     'push-up',
     'shoulder-press',
+    'row',
   ]);
   assert.deepEqual(new Set(CANONICAL_POSE_EXERCISE_KEYS), reviewedKeys);
   assert.deepEqual(

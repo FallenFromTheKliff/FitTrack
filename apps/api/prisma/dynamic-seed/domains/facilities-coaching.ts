@@ -27,6 +27,7 @@ import {
   buildFacilityFloorMapSeedUpdate,
   FACILITY_FLOOR_MAP_SEEDS,
   shouldApplyCanonicalAmenityUpdate,
+  shouldRepairCanonicalAmenityReservability,
 } from '../../../../../packages/utils/facility-map-seed';
 import {
   activityDateFor,
@@ -83,6 +84,50 @@ const COACH_AVAILABILITY_PATTERNS: ReadonlyArray<{
 
 const GYM_TIMEZONE_OFFSET_MINUTES = 8 * 60;
 const DAY_MS = 24 * 60 * 60 * 1_000;
+
+type AmenityBookingCandidate = {
+  capacity: number;
+  hourlyRate: Prisma.Decimal | number | string;
+  isActive: boolean;
+  isMapped: boolean;
+  isReservable: boolean | null;
+  requiresSubscription: boolean;
+  status: EquipmentStatus | null;
+};
+
+type MemberBookingAccess = {
+  coachingProfile?: string | null;
+  memberPersona?: string | null;
+};
+
+/** Select production-bookable amenities, with subscription rules only for future rows. */
+export function selectAmenityBookingCandidates<
+  T extends AmenityBookingCandidate,
+>(
+  amenities: readonly T[],
+  historicalBooking: boolean,
+  account?: MemberBookingAccess,
+): T[] {
+  const bookableAmenities = amenities.filter((amenity) => {
+    const hourlyRate = Number(amenity.hourlyRate);
+    return (
+      amenity.capacity > 0 &&
+      amenity.isActive &&
+      amenity.isMapped &&
+      amenity.isReservable === true &&
+      Number.isFinite(hourlyRate) &&
+      hourlyRate > 0 &&
+      (amenity.status === null || amenity.status === EquipmentStatus.available)
+    );
+  });
+  if (historicalBooking) return bookableAmenities;
+  return bookableAmenities.filter(
+    (amenity) =>
+      !amenity.requiresSubscription ||
+      account?.memberPersona === 'premium' ||
+      account?.coachingProfile === 'recurring_active',
+  );
+}
 
 function addDays(value: Date, days: number) {
   return new Date(value.getTime() + days * DAY_MS);
@@ -166,12 +211,12 @@ async function seedAmenities(ctx: DynamicSeedContext) {
     const desiredId = seedId(`amenity:${amenity.key}`);
     const existingById = await ctx.prisma.amenity.findUnique({
       where: { id: desiredId },
-      select: { id: true },
+      select: { hourly_rate: true, id: true, is_reservable: true },
     });
     const existingByName = await ctx.prisma.amenity.findFirst({
       where: { name: amenity.name },
       orderBy: { created_at: 'asc' },
-      select: { id: true },
+      select: { hourly_rate: true, id: true, is_reservable: true },
     });
     const resolvedId = resolveCanonicalReferenceId(
       desiredId,
@@ -211,41 +256,53 @@ async function seedAmenities(ctx: DynamicSeedContext) {
                     ? EquipmentStatus.maintenance
                     : EquipmentStatus.available,
               },
-              select: { id: true },
+              select: { hourly_rate: true, id: true, is_reservable: true },
             });
 
+    const canonicalIsReservable =
+      'isReservable' in amenity ? amenity.isReservable : true;
+    const repairsRetiredReservability =
+      persisted.id === desiredId &&
+      shouldRepairCanonicalAmenityReservability(
+        ctx.config.mode,
+        canonicalIsReservable,
+        persisted.is_reservable,
+        persisted.hourly_rate,
+      );
     if (
       shouldApplyCanonicalAmenityUpdate(
         ctx.config.mode,
         persisted.id,
         desiredId,
-      )
+      ) ||
+      repairsRetiredReservability
     ) {
       await ctx.prisma.amenity.update({
         where: { id: desiredId },
-        data: {
-          capacity: amenity.capacity,
-          description: amenity.description,
-          display_order: amenity.displayOrder,
-          floor_id: amenity.floorId,
-          grid_column: gridColumn,
-          grid_height: gridHeight,
-          grid_row: gridRow,
-          grid_width: gridWidth,
-          hourly_rate: new Prisma.Decimal(amenity.hourlyRate),
-          icon_key: amenity.iconKey,
-          is_active: true,
-          is_reservable:
-            'isReservable' in amenity ? amenity.isReservable : true,
-          minimum_hours: amenity.minimumHours,
-          name: amenity.name,
-          requires_subscription: amenity.requiresSubscription,
-          type: amenity.type,
-          status:
-            'status' in amenity && amenity.status === 'maintenance'
-              ? EquipmentStatus.maintenance
-              : EquipmentStatus.available,
-        },
+        data: repairsRetiredReservability
+          ? { is_reservable: false }
+          : {
+              capacity: amenity.capacity,
+              description: amenity.description,
+              display_order: amenity.displayOrder,
+              floor_id: amenity.floorId,
+              grid_column: gridColumn,
+              grid_height: gridHeight,
+              grid_row: gridRow,
+              grid_width: gridWidth,
+              hourly_rate: new Prisma.Decimal(amenity.hourlyRate),
+              icon_key: amenity.iconKey,
+              is_active: true,
+              is_reservable: canonicalIsReservable,
+              minimum_hours: amenity.minimumHours,
+              name: amenity.name,
+              requires_subscription: amenity.requiresSubscription,
+              type: amenity.type,
+              status:
+                'status' in amenity && amenity.status === 'maintenance'
+                  ? EquipmentStatus.maintenance
+                  : EquipmentStatus.available,
+            },
       });
     }
     ctx.state.amenityIds[amenity.key] = persisted.id;
@@ -1544,18 +1601,6 @@ async function seedAmenityBookings(ctx: DynamicSeedContext) {
     return minutesOfDay(startsAt) >= opens && minutesOfDay(endsAt) <= closes;
   };
 
-  const bookableAmenities = amenities.filter(
-    (amenity) =>
-      amenity.capacity > 0 &&
-      amenity.isActive &&
-      amenity.isMapped &&
-      amenity.isReservable === true &&
-      (amenity.status === null || amenity.status === EquipmentStatus.available),
-  );
-  // A preserved admin row can retain a canonical name while being intentionally
-  // non-bookable (for example, capacity 0). Historical seed rows must not use
-  // such a row either: a booking still needs a real production resource.
-  const eligibleAmenities = amenities.filter((amenity) => amenity.capacity > 0);
   const memberKeys = [
     ...ctx.state.activeMemberKeys,
     ...ctx.state.historicalMemberKeys,
@@ -1593,14 +1638,11 @@ async function seedAmenityBookings(ctx: DynamicSeedContext) {
         (accessWindow.historicalOnly ||
           forceHistorical ||
           bookingIndex < Math.max(1, Math.floor(bookingCount * 0.55)));
-      const candidates = historicalBooking
-        ? eligibleAmenities
-        : bookableAmenities.filter(
-            (amenity) =>
-              !amenity.requiresSubscription ||
-              account?.memberPersona === 'premium' ||
-              account?.coachingProfile === 'recurring_active',
-          );
+      const candidates = selectAmenityBookingCandidates(
+        amenities,
+        historicalBooking,
+        account,
+      );
       if (candidates.length === 0) continue;
       const amenity = candidates[rowIndex % candidates.length];
       const memberId = ctx.state.userIds[memberKey];

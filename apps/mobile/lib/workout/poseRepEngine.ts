@@ -34,6 +34,8 @@ export type PoseRepEngineState = {
 };
 
 export type PoseRepEngineEvidence = {
+  /** A planned camera target declares the exercise; screen-space orientation can be inferred incorrectly. */
+  exerciseDeclared?: boolean;
   equipmentContext?: PoseEquipmentContext | null;
   equipmentSource?: PoseEquipmentSource | null;
   handShapeProfile?: ExerciseHandShapeProfileRecord | null;
@@ -328,18 +330,22 @@ function getRepEngineThresholds(contract: PoseMovementContractRecord) {
 }
 
 function getRepAngleLimits(contract: PoseMovementContractRecord) {
+  // The persisted/editor contract is semantic, not numeric: `up` is the
+  // start/return pose and `down` is peak contraction or movement depth.
+  // Derive numeric direction from those phases so a saved 90-degree down
+  // target is the actual rep trigger instead of the re-extended pose.
   const progressDirection =
-    contract.repThresholds.up.angle >= contract.repThresholds.down.angle
+    contract.repThresholds.down.angle >= contract.repThresholds.up.angle
       ? ("increase" as const)
       : ("decrease" as const);
   const startLimit =
     progressDirection === "increase"
-      ? contract.repThresholds.down.angle + contract.repThresholds.down.tolerance
-      : contract.repThresholds.down.angle - contract.repThresholds.down.tolerance;
+      ? contract.repThresholds.up.angle + contract.repThresholds.up.tolerance
+      : contract.repThresholds.up.angle - contract.repThresholds.up.tolerance;
   const peakLimit =
     progressDirection === "increase"
-      ? contract.repThresholds.up.angle - contract.repThresholds.up.tolerance
-      : contract.repThresholds.up.angle + contract.repThresholds.up.tolerance;
+      ? contract.repThresholds.down.angle - contract.repThresholds.down.tolerance
+      : contract.repThresholds.down.angle + contract.repThresholds.down.tolerance;
   return { peakLimit, progressDirection, startLimit };
 }
 
@@ -404,12 +410,32 @@ function resetCycleAfterRejectedRep(
 function countsRepOnPeakArrival(contract: PoseMovementContractRecord) {
   const canonicalExercise = toCanonicalPoseExerciseLabel(contract.exercise);
   return (
+    canonicalExercise === "bench_press" ||
     canonicalExercise === "squat" ||
     canonicalExercise === "push_up" ||
     canonicalExercise === "bicep_curl" ||
     canonicalExercise === "dip" ||
-    canonicalExercise === "pull_up"
+    canonicalExercise === "pull_up" ||
+    canonicalExercise === "seated_cable_row" ||
+    canonicalExercise === "shoulder_press"
   );
+}
+
+function isStaticHoldAngleWithinContract(
+  contract: PoseMovementContractRecord,
+  currentAngle: number,
+) {
+  const down = contract.repThresholds.down;
+  const up = contract.repThresholds.up;
+  const lowerBound = Math.min(
+    down.angle - down.tolerance,
+    up.angle - up.tolerance,
+  );
+  const upperBound = Math.max(
+    down.angle + down.tolerance,
+    up.angle + up.tolerance,
+  );
+  return currentAngle >= lowerBound && currentAngle <= upperBound;
 }
 
 function getPoseRepNoCountReason(
@@ -442,6 +468,7 @@ function getPoseRepNoCountReason(
     contract.bodyOrientation &&
     contract.bodyOrientation !== "any" &&
     contract.bodyOrientation !== "floor" &&
+    !evidence.exerciseDeclared &&
     evidence.signals.orientation.bodyOrientation !== contract.bodyOrientation &&
     !(
       contract.bodyOrientation === "horizontal" &&
@@ -507,8 +534,9 @@ function getPoseRepNoCountReason(
         spatial?.torsoSlopeMaxDeg ?? PUSH_UP_MAX_TORSO_SLOPE_DEG;
       const minTorsoSlope = spatial?.torsoSlopeMinDeg ?? 0;
       if (
-        orientation.torsoSlopeDeg > maxTorsoSlope ||
-        orientation.torsoSlopeDeg < minTorsoSlope
+        !evidence.exerciseDeclared &&
+        (orientation.torsoSlopeDeg > maxTorsoSlope ||
+          orientation.torsoSlopeDeg < minTorsoSlope)
       ) {
         return "push_up_body_not_horizontal";
       }
@@ -703,6 +731,8 @@ export function stepPoseStaticHold(
   const noCountReason =
     currentAngle === null || !Number.isFinite(currentAngle)
       ? "unavailable_primary_angle"
+      : !isStaticHoldAngleWithinContract(activeContract, currentAngle)
+        ? "static_hold_angle_out_of_range"
       : getPoseRepNoCountReason(activeContract, evidence);
   const previousValidAt = state.holdLastValidAtMs;
   const invalidDuration =

@@ -4,6 +4,7 @@ export * from "./fitness/recurring-coaching";
 export * from "./fitness/recurring-plan-selection";
 export * from "./fitness/training-plan-week";
 export * from "./fitness/workout-day-semantics";
+export * from "./fitness/workout-plan-selection";
 export * from "./auth/auth-session";
 export * from "./auth/createAuthController";
 export * from "./members/createMemberController";

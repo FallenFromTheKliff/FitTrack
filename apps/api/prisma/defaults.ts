@@ -23,6 +23,7 @@ import {
   CANONICAL_MUSCLE_DEFINITIONS,
   resolveCanonicalReferenceId,
 } from '../../../packages/utils/fitness-catalog';
+import { shouldRepairCanonicalAmenityReservability } from '../../../packages/utils/facility-map-seed';
 
 const DEFAULT_AMENITIES = CANONICAL_AMENITIES.map((amenity) => {
   const [grid_column, grid_row, grid_width, grid_height] = amenity.grid;
@@ -39,7 +40,7 @@ const DEFAULT_AMENITIES = CANONICAL_AMENITIES.map((amenity) => {
     hourly_rate: new Prisma.Decimal(amenity.hourlyRate),
     icon_key: amenity.iconKey,
     is_active: true,
-    is_reservable: true,
+    is_reservable: 'isReservable' in amenity ? amenity.isReservable : true,
     minimum_hours: amenity.minimumHours,
     name: amenity.name,
     requires_subscription: amenity.requiresSubscription,
@@ -197,12 +198,22 @@ async function ensureDefaultAmenities(prisma: PrismaClient) {
   for (const amenity of DEFAULT_AMENITIES) {
     const existingById = await prisma.amenity.findUnique({
       where: { id: amenity.id },
-      select: { id: true, is_active: true },
+      select: {
+        hourly_rate: true,
+        id: true,
+        is_active: true,
+        is_reservable: true,
+      },
     });
     const existingByName = await prisma.amenity.findFirst({
       where: { name: amenity.name },
       orderBy: { created_at: 'asc' },
-      select: { id: true, is_active: true },
+      select: {
+        hourly_rate: true,
+        id: true,
+        is_active: true,
+        is_reservable: true,
+      },
     });
     const resolvedId = resolveCanonicalReferenceId(
       amenity.id,
@@ -227,11 +238,28 @@ async function ensureDefaultAmenities(prisma: PrismaClient) {
       continue;
     }
 
+    const repairsRetiredReservability =
+      shouldRepairCanonicalAmenityReservability(
+        'additive',
+        amenity.is_reservable,
+        existingAmenity.is_reservable,
+        existingAmenity.hourly_rate,
+      );
+    const amenityUpdate = {
+      ...amenity,
+      hourly_rate: repairsRetiredReservability
+        ? amenity.hourly_rate
+        : existingAmenity.hourly_rate,
+      is_reservable: repairsRetiredReservability
+        ? amenity.is_reservable
+        : existingAmenity.is_reservable,
+    };
+
     if (!existingAmenity.is_active) {
       await prisma.amenity.update({
         where: { id: existingAmenity.id },
         data: {
-          ...amenity,
+          ...amenityUpdate,
           is_active: true,
         },
       });
@@ -241,7 +269,7 @@ async function ensureDefaultAmenities(prisma: PrismaClient) {
 
     await prisma.amenity.update({
       where: { id: existingAmenity.id },
-      data: amenity,
+      data: amenityUpdate,
     });
     existingCount += 1;
   }

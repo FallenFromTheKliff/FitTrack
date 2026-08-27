@@ -39,7 +39,10 @@ describe('AmenityService', () => {
     });
     repo.getFloorMap.mockResolvedValue({
       footprint_cells: Array.from({ length: 10 }, (_, row) =>
-        Array.from({ length: 14 }, (_, column) => ({ column: column + 1, row: row + 1 })),
+        Array.from({ length: 14 }, (_, column) => ({
+          column: column + 1,
+          row: row + 1,
+        })),
       ).flat(),
       path_cells: [],
     });
@@ -139,74 +142,175 @@ describe('AmenityService', () => {
 
   it('moves a venue and its equipment by the same grid delta atomically', async () => {
     repo.findAmenityByIdOrThrow.mockResolvedValue({
-      id: 'amenity-1', hourly_rate: 100, is_reservable: true, is_mapped: true,
-      floor_id: 'floor-1', grid_column: 2, grid_row: 2, grid_width: 3, grid_height: 3,
+      id: 'amenity-1',
+      hourly_rate: 100,
+      is_reservable: true,
+      is_mapped: true,
+      floor_id: 'floor-1',
+      grid_column: 2,
+      grid_row: 2,
+      grid_width: 3,
+      grid_height: 3,
     });
-    repo.listEquipmentForVenue.mockResolvedValue([{ id: 'equipment-1', grid_column: 3, grid_row: 3 }]);
+    repo.listEquipmentForVenue.mockResolvedValue([
+      { id: 'equipment-1', grid_column: 3, grid_row: 3 },
+    ]);
     repo.moveAmenityAndEquipment.mockResolvedValue({ id: 'amenity-1' });
     await service.updateAmenity('amenity-1', { grid_column: 4, grid_row: 3 });
     expect(repo.moveAmenityAndEquipment).toHaveBeenCalledWith(
-      'amenity-1', { grid_column: 4, grid_row: 3 },
+      'amenity-1',
+      { grid_column: 4, grid_row: 3 },
       [{ id: 'equipment-1', gridColumn: 5, gridRow: 4 }],
     );
   });
 
+  it('moves a legacy reservable venue whose unchanged zero rate is echoed', async () => {
+    const existing = {
+      id: 'amenity-1',
+      hourly_rate: 0,
+      is_reservable: true,
+      is_mapped: true,
+      floor_id: 'floor-1',
+      grid_column: 1,
+      grid_row: 1,
+      grid_width: 3,
+      grid_height: 2,
+    };
+    repo.findAmenityByIdOrThrow.mockResolvedValue(existing);
+    repo.moveAmenityAndEquipment.mockResolvedValue(existing);
+
+    await expect(
+      service.updateAmenity('amenity-1', {
+        is_reservable: true,
+        grid_row: 3,
+      }),
+    ).resolves.toEqual(existing);
+    expect(repo.moveAmenityAndEquipment).toHaveBeenCalledWith(
+      'amenity-1',
+      { is_reservable: true, grid_row: 3 },
+      [],
+    );
+  });
+
+  it('still rejects enabling reservations without a positive hourly rate', async () => {
+    repo.findAmenityByIdOrThrow.mockResolvedValue({
+      hourly_rate: 0,
+      is_reservable: false,
+    });
+
+    await expect(
+      service.updateAmenity('amenity-1', { is_reservable: true }),
+    ).rejects.toThrow(
+      'Reservable venues require an hourly_rate greater than 0',
+    );
+    expect(repo.updateAmenity).not.toHaveBeenCalled();
+  });
+
   it('rejects overlapping mapped venue geometry before mutation', async () => {
     repo.findAmenityByIdOrThrow.mockResolvedValue({
-      id: 'amenity-1', hourly_rate: 100, is_reservable: true, is_mapped: true,
-      floor_id: 'floor-1', grid_column: 2, grid_row: 2, grid_width: 2, grid_height: 2,
+      id: 'amenity-1',
+      hourly_rate: 100,
+      is_reservable: true,
+      is_mapped: true,
+      floor_id: 'floor-1',
+      grid_column: 2,
+      grid_row: 2,
+      grid_width: 2,
+      grid_height: 2,
     });
-    repo.listMappedAmenitiesForFloor.mockResolvedValue([{
-      grid_column: 4, grid_row: 2, grid_width: 2, grid_height: 2,
-    }]);
-    await expect(service.updateAmenity('amenity-1', { grid_column: 4 }))
-      .rejects.toThrow('Bad Request Exception');
+    repo.listMappedAmenitiesForFloor.mockResolvedValue([
+      {
+        grid_column: 4,
+        grid_row: 2,
+        grid_width: 2,
+        grid_height: 2,
+      },
+    ]);
+    await expect(
+      service.updateAmenity('amenity-1', { grid_column: 4 }),
+    ).rejects.toThrow('Bad Request Exception');
     expect(repo.moveAmenityAndEquipment).not.toHaveBeenCalled();
   });
 
-  it('rejects venue geometry outside the fixed grid or published footprint', async () => {
-    repo.findAmenityByIdOrThrow.mockResolvedValue({
-      id: 'amenity-1', hourly_rate: 100, is_reservable: true, is_mapped: true,
-      floor_id: 'floor-1', grid_column: 2, grid_row: 2, grid_width: 2, grid_height: 2,
-    });
-    await expect(service.updateAmenity('amenity-1', { grid_column: 14 }))
-      .rejects.toThrow('Bad Request Exception');
+  it('rejects geometry outside the grid but allows moves on an empty footprint', async () => {
+    const existing = {
+      id: 'amenity-1',
+      hourly_rate: 100,
+      is_reservable: true,
+      is_mapped: true,
+      floor_id: 'floor-1',
+      grid_column: 2,
+      grid_row: 2,
+      grid_width: 2,
+      grid_height: 2,
+    };
+    repo.findAmenityByIdOrThrow.mockResolvedValue(existing);
+    await expect(
+      service.updateAmenity('amenity-1', { grid_column: 14 }),
+    ).rejects.toThrow('Bad Request Exception');
 
     repo.getFloorMap.mockResolvedValue({
-      footprint_cells: [{ column: 1, row: 1 }],
+      footprint_cells: [],
       path_cells: [],
     });
-    await expect(service.updateAmenity('amenity-1', { grid_column: 1, grid_row: 1 }))
-      .rejects.toThrow('Bad Request Exception');
-    expect(repo.moveAmenityAndEquipment).not.toHaveBeenCalled();
+    repo.moveAmenityAndEquipment.mockResolvedValue(existing);
+
+    await expect(
+      service.updateAmenity('amenity-1', { grid_column: 1, grid_row: 1 }),
+    ).resolves.toEqual(existing);
+    expect(repo.moveAmenityAndEquipment).toHaveBeenCalledWith(
+      'amenity-1',
+      expect.objectContaining({ grid_column: 1, grid_row: 1 }),
+      [],
+    );
   });
 
   it('accepts a valid enlarge and rejects a shrink that excludes equipment', async () => {
     repo.findAmenityByIdOrThrow.mockResolvedValue({
-      id: 'amenity-1', hourly_rate: 100, is_reservable: true, is_mapped: true,
-      floor_id: 'floor-1', grid_column: 2, grid_row: 2, grid_width: 3, grid_height: 3,
+      id: 'amenity-1',
+      hourly_rate: 100,
+      is_reservable: true,
+      is_mapped: true,
+      floor_id: 'floor-1',
+      grid_column: 2,
+      grid_row: 2,
+      grid_width: 3,
+      grid_height: 3,
     });
-    repo.listEquipmentForVenue.mockResolvedValue([{ id: 'equipment-1', grid_column: 4, grid_row: 4 }]);
+    repo.listEquipmentForVenue.mockResolvedValue([
+      { id: 'equipment-1', grid_column: 4, grid_row: 4 },
+    ]);
     repo.moveAmenityAndEquipment.mockResolvedValue({ id: 'amenity-1' });
     await service.updateAmenity('amenity-1', { grid_width: 4, grid_height: 4 });
     expect(repo.moveAmenityAndEquipment).toHaveBeenCalledTimes(1);
 
     repo.moveAmenityAndEquipment.mockClear();
-    await expect(service.updateAmenity('amenity-1', { grid_width: 2 }))
-      .rejects.toThrow('Bad Request Exception');
+    await expect(
+      service.updateAmenity('amenity-1', { grid_width: 2 }),
+    ).rejects.toThrow('Bad Request Exception');
     expect(repo.moveAmenityAndEquipment).not.toHaveBeenCalled();
   });
 
   it('accepts a shrink when all contained equipment remains inside', async () => {
     repo.findAmenityByIdOrThrow.mockResolvedValue({
-      id: 'amenity-1', hourly_rate: 100, is_reservable: true, is_mapped: true,
-      floor_id: 'floor-1', grid_column: 2, grid_row: 2, grid_width: 4, grid_height: 4,
+      id: 'amenity-1',
+      hourly_rate: 100,
+      is_reservable: true,
+      is_mapped: true,
+      floor_id: 'floor-1',
+      grid_column: 2,
+      grid_row: 2,
+      grid_width: 4,
+      grid_height: 4,
     });
-    repo.listEquipmentForVenue.mockResolvedValue([{ id: 'equipment-1', grid_column: 3, grid_row: 3 }]);
+    repo.listEquipmentForVenue.mockResolvedValue([
+      { id: 'equipment-1', grid_column: 3, grid_row: 3 },
+    ]);
     repo.moveAmenityAndEquipment.mockResolvedValue({ id: 'amenity-1' });
     await service.updateAmenity('amenity-1', { grid_width: 2, grid_height: 2 });
     expect(repo.moveAmenityAndEquipment).toHaveBeenCalledWith(
-      'amenity-1', { grid_width: 2, grid_height: 2 },
+      'amenity-1',
+      { grid_width: 2, grid_height: 2 },
       [{ id: 'equipment-1', gridColumn: 3, gridRow: 3 }],
     );
   });

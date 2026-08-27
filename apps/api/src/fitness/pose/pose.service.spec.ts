@@ -325,6 +325,7 @@ describe('PoseService', () => {
         'pull_up',
         'push_up',
         'shoulder_press',
+        'seated_cable_row',
       ],
       candidateProfiles: [],
     });

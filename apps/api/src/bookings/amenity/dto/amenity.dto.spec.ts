@@ -55,6 +55,27 @@ describe('Amenity DTO validation', () => {
     expect(await validate(dto)).toHaveLength(0);
   });
 
+  it('allows a legacy reservable venue layout update without an echoed rate', async () => {
+    const dto = plainToInstance(UpdateAmenityDTO, {
+      is_reservable: true,
+      grid_row: 3,
+    });
+
+    expect(await validate(dto)).toHaveLength(0);
+  });
+
+  it('still requires a positive hourly rate when creating a reservable venue', async () => {
+    const dto = plainToInstance(CreateAmenityDTO, {
+      name: 'Paid Court',
+      type: 'basketball_court',
+      is_reservable: true,
+    });
+
+    expect(extractMessages(await validate(dto))).toContain(
+      'hourly_rate is required and must be greater than 0 when is_reservable is true',
+    );
+  });
+
   it('rejects invalid floor ids', async () => {
     const dto = plainToInstance(CreateAmenityDTO, {
       name: 'Studio Beta',

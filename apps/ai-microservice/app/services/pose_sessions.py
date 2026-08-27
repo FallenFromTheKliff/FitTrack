@@ -37,7 +37,47 @@ KNOWN_EXERCISES = (
     "dip",
     "shoulder_press",
     "plank",
+    "seated_cable_row",
 )
+
+POSE_REP_THRESHOLD_DEFAULTS: dict[str, dict[str, dict[str, float]]] = {
+    "bench_press": {
+        "down": {"angle": 90.0, "tolerance": 15.0},
+        "up": {"angle": 155.0, "tolerance": 12.0},
+    },
+    "bicep_curl": {
+        "down": {"angle": 90.0, "tolerance": 15.0},
+        "up": {"angle": 155.0, "tolerance": 12.0},
+    },
+    "dip": {
+        "down": {"angle": 90.0, "tolerance": 15.0},
+        "up": {"angle": 155.0, "tolerance": 12.0},
+    },
+    "plank": {
+        "down": {"angle": 165.0, "tolerance": 8.0},
+        "up": {"angle": 178.0, "tolerance": 8.0},
+    },
+    "pull_up": {
+        "down": {"angle": 90.0, "tolerance": 15.0},
+        "up": {"angle": 155.0, "tolerance": 12.0},
+    },
+    "push_up": {
+        "down": {"angle": 90.0, "tolerance": 15.0},
+        "up": {"angle": 155.0, "tolerance": 12.0},
+    },
+    "seated_cable_row": {
+        "down": {"angle": 90.0, "tolerance": 15.0},
+        "up": {"angle": 155.0, "tolerance": 12.0},
+    },
+    "shoulder_press": {
+        "down": {"angle": 90.0, "tolerance": 15.0},
+        "up": {"angle": 155.0, "tolerance": 12.0},
+    },
+    "squat": {
+        "down": {"angle": 90.0, "tolerance": 15.0},
+        "up": {"angle": 155.0, "tolerance": 12.0},
+    },
+}
 
 MATPLOTLIB_CACHE_DIR = Path(__file__).resolve().parents[2] / ".matplotlib-cache"
 
@@ -227,6 +267,30 @@ MOVEMENT_CONTRACT_DEFAULTS: dict[str, dict[str, object]] = {
             "left_leg_occluded",
             "right_leg_occluded",
             "depth_unavailable",
+        ],
+    },
+    "seated_cable_row": {
+        "rep_model": "bilateral",
+        "required_sides": "both",
+        "primary_joints": ["left_elbow", "right_elbow"],
+        "secondary_joints": ["left_shoulder", "right_shoulder", "hip"],
+        "phase_order": ["setup", "pull", "return"],
+        "spatial_requirements": {
+            "body_line_tolerance": 40.0,
+            "body_x_drift_max": 0.1,
+            "body_y_travel_min": 0.0,
+            "left_right_symmetry_tolerance": 35.0,
+            "phase_sync_tolerance_ms": 550,
+        },
+        "no_count_conditions": [
+            "one_arm_only",
+            "phase_desync",
+            "torso_swing_over_tolerance",
+        ],
+        "degraded_conditions": [
+            "left_arm_occluded",
+            "right_arm_occluded",
+            "torso_swing_detected",
         ],
     },
 }
@@ -691,16 +755,20 @@ class PoseSessionService:
         normalized_hint = self._normalize_name(exercise_hint)
         matched_profile = self._match_profile(state, normalized_hint)
         if matched_profile:
+            canonical_name = (
+                self._normalize_name(matched_profile.canonical_name)
+                or matched_profile.canonical_name
+            )
             return {
                 "confidence": 0.96,
-                "exercise_class": matched_profile.canonical_name,
+                "exercise_class": canonical_name,
                 "matched_profile_id": matched_profile.id,
                 "movement_contract": self._build_contract_from_profile(matched_profile),
                 "classification_source": "preset",
                 "needs_confirmation": False,
-                "candidate_exercises": [matched_profile.canonical_name],
+                "candidate_exercises": [canonical_name],
                 "form_feedback": self._build_feedback(
-                    matched_profile.canonical_name,
+                    canonical_name,
                     payload,
                     subject_locked=True,
                 ),
@@ -798,6 +866,7 @@ class PoseSessionService:
             scores["dip"] += 0.18
             scores["pull_up"] += 0.14
             scores["shoulder_press"] += 0.18
+            scores["seated_cable_row"] += 0.18
             scores["push_up"] -= 0.1
             scores["bench_press"] -= 0.06
 
@@ -808,11 +877,13 @@ class PoseSessionService:
             scores["pull_up"] += 0.16
             scores["bench_press"] += 0.14
             scores["bicep_curl"] += 0.12
+            scores["seated_cable_row"] += 0.16
         if bilateral_elbow_range >= 20:
             scores["push_up"] += 0.1
             scores["pull_up"] += 0.08
             scores["bench_press"] += 0.08
             scores["dip"] += 0.09
+            scores["seated_cable_row"] += 0.1
         if angle_ranges["shoulder"] >= 20:
             scores["shoulder_press"] += 0.2
             scores["pull_up"] += 0.08
@@ -822,6 +893,7 @@ class PoseSessionService:
         if stable_hips:
             scores["bicep_curl"] += 0.08
             scores["bench_press"] += 0.05
+            scores["seated_cable_row"] += 0.1
         if not stable_hips and hip_range >= 0.05:
             scores["push_up"] += 0.06
             scores["squat"] += 0.08
@@ -833,6 +905,7 @@ class PoseSessionService:
             scores["bicep_curl"] += 0.08
             scores["bench_press"] += 0.06
             scores["dip"] += 0.06
+            scores["seated_cable_row"] += 0.08
         if stable_hips and one_sided_elbow_motion and angle_ranges["elbow"] >= 20:
             scores["bicep_curl"] += 0.12
         if (
@@ -862,10 +935,12 @@ class PoseSessionService:
         if wrist_visibility >= 0.6:
             scores["push_up"] += 0.05
             scores["shoulder_press"] += 0.05
+            scores["seated_cable_row"] += 0.04
         if min(left_arm_visibility, right_arm_visibility) >= 0.55:
             scores["push_up"] += 0.04
             scores["bench_press"] += 0.04
             scores["shoulder_press"] += 0.04
+            scores["seated_cable_row"] += 0.04
         if one_sided_elbow_motion:
             scores["push_up"] -= 0.14
             scores["bench_press"] -= 0.1
@@ -1056,6 +1131,7 @@ class PoseSessionService:
         if profile is None:
             return None
 
+        canonical_name = self._normalize_name(profile.canonical_name) or profile.canonical_name
         tolerance = (
             float(profile.tolerance)
             if profile.tolerance is not None
@@ -1083,7 +1159,7 @@ class PoseSessionService:
         )
         return self._enrich_contract(
             PoseMovementContract(
-                exercise=profile.canonical_name,
+                exercise=canonical_name,
                 dominant_joint=dominant_joint,
                 rep_thresholds=rep_thresholds,
                 secondary_check=secondary_check,
@@ -1098,6 +1174,7 @@ class PoseSessionService:
         payload: PoseAnalyzeRequest,
     ) -> PoseMovementContract:
         assert payload.signals is not None
+        exercise_name = self._normalize_name(exercise_name) or exercise_name
         dominant_joint = {
             "squat": "knee",
             "push_up": "elbow",
@@ -1107,59 +1184,21 @@ class PoseSessionService:
             "dip": "elbow",
             "shoulder_press": "shoulder",
             "plank": "hip",
+            "seated_cable_row": "elbow",
         }.get(exercise_name, "knee")
         angle_ranges = self._angle_ranges(payload)
         average_angles = self._average_angles(payload)
         dominant_average = average_angles.get(dominant_joint, 120.0)
         dominant_range = angle_ranges.get(dominant_joint, 30.0)
-        preset_thresholds = {
-            "bench_press": {
-                "down_angle": 78.0,
-                "tolerance": 12.0,
-                "up_angle": 166.0,
-            },
-            "bicep_curl": {
-                "down_angle": 136.0,
-                "tolerance": 32.0,
-                "up_angle": 96.0,
-            },
-            "dip": {
-                "down_angle": 88.0,
-                "tolerance": 12.0,
-                "up_angle": 154.0,
-            },
-            "plank": {
-                "down_angle": 165.0,
-                "tolerance": 8.0,
-                "up_angle": 178.0,
-            },
-            "push_up": {
-                "down_angle": 150.0,
-                "tolerance": 12.0,
-                "up_angle": 154.0,
-            },
-            "pull_up": {
-                "down_angle": 138.0,
-                "tolerance": 28.0,
-                "up_angle": 105.0,
-            },
-            "shoulder_press": {
-                "down_angle": 74.0,
-                "tolerance": 12.0,
-                "up_angle": 164.0,
-            },
-            "squat": {
-                "down_angle": 92.0,
-                "tolerance": 12.0,
-                "up_angle": 168.0,
-            },
-        }.get(exercise_name)
+        preset_thresholds = POSE_REP_THRESHOLD_DEFAULTS.get(exercise_name)
         if preset_thresholds is not None:
-            down_angle = preset_thresholds["down_angle"]
-            up_angle = preset_thresholds["up_angle"]
-            tolerance = preset_thresholds["tolerance"]
+            down_angle = preset_thresholds["down"]["angle"]
+            down_tolerance = preset_thresholds["down"]["tolerance"]
+            up_angle = preset_thresholds["up"]["angle"]
+            up_tolerance = preset_thresholds["up"]["tolerance"]
         else:
-            tolerance = max(self.fallback_tolerance, round(dominant_range / 3, 3))
+            down_tolerance = max(self.fallback_tolerance, round(dominant_range / 3, 3))
+            up_tolerance = down_tolerance
             down_angle = max(45.0, round(dominant_average - dominant_range / 2, 3))
             up_angle = min(175.0, round(dominant_average + dominant_range / 2 + 12.0, 3))
         secondary_check = {
@@ -1171,6 +1210,7 @@ class PoseSessionService:
             "dip": "vertical_body_travel",
             "shoulder_press": "lockout_control",
             "plank": "core_alignment",
+            "seated_cable_row": "seated_row_brace",
         }.get(exercise_name, "range_of_motion")
         oscillating_joints = (
             payload.signals.temporal.oscillating_joints or [dominant_joint]
@@ -1180,8 +1220,14 @@ class PoseSessionService:
                 exercise=exercise_name,
                 dominant_joint=dominant_joint,
                 rep_thresholds=PoseRepThresholdPair(
-                    down=PoseRepThreshold(angle=down_angle, tolerance=tolerance),
-                    up=PoseRepThreshold(angle=up_angle, tolerance=tolerance),
+                    down=PoseRepThreshold(
+                        angle=down_angle,
+                        tolerance=down_tolerance,
+                    ),
+                    up=PoseRepThreshold(
+                        angle=up_angle,
+                        tolerance=up_tolerance,
+                    ),
                 ),
                 secondary_check=secondary_check,
                 oscillating_joints=self._normalize_joint_list(oscillating_joints)
@@ -1193,85 +1239,71 @@ class PoseSessionService:
         self,
         exercise_name: str,
     ) -> PoseMovementContract:
+        exercise_name = self._normalize_name(exercise_name) or exercise_name
         defaults = {
             "bench_press": {
                 "dominant_joint": "elbow",
-                "down_angle": 78.0,
-                "up_angle": 166.0,
-                "tolerance": 12.0,
                 "secondary_check": "bar_path",
                 "oscillating_joints": ["elbow", "shoulder"],
             },
             "bicep_curl": {
                 "dominant_joint": "elbow",
-                "down_angle": 136.0,
-                "up_angle": 96.0,
-                "tolerance": 32.0,
                 "secondary_check": "hip_stability",
                 "oscillating_joints": ["elbow"],
             },
             "dip": {
                 "dominant_joint": "elbow",
-                "down_angle": 88.0,
-                "up_angle": 154.0,
-                "tolerance": 12.0,
                 "secondary_check": "vertical_body_travel",
                 "oscillating_joints": ["elbow", "shoulder"],
             },
             "plank": {
                 "dominant_joint": "hip",
-                "down_angle": 165.0,
-                "up_angle": 178.0,
-                "tolerance": 8.0,
                 "secondary_check": "core_alignment",
                 "oscillating_joints": ["hip", "shoulder"],
             },
             "push_up": {
                 "dominant_joint": "elbow",
-                "down_angle": 150.0,
-                "up_angle": 154.0,
-                "tolerance": 12.0,
                 "secondary_check": "body_line",
                 "oscillating_joints": ["elbow", "shoulder"],
             },
             "pull_up": {
                 "dominant_joint": "elbow",
-                "down_angle": 138.0,
-                "up_angle": 105.0,
-                "tolerance": 28.0,
                 "secondary_check": "vertical_pull",
                 "oscillating_joints": ["elbow", "shoulder"],
             },
             "shoulder_press": {
                 "dominant_joint": "shoulder",
-                "down_angle": 74.0,
-                "up_angle": 164.0,
-                "tolerance": 12.0,
                 "secondary_check": "lockout_control",
                 "oscillating_joints": ["shoulder", "elbow"],
             },
             "squat": {
                 "dominant_joint": "knee",
-                "down_angle": 92.0,
-                "up_angle": 168.0,
-                "tolerance": 12.0,
                 "secondary_check": "hip_depth",
                 "oscillating_joints": ["hip", "knee"],
             },
+            "seated_cable_row": {
+                "dominant_joint": "elbow",
+                "secondary_check": "seated_row_brace",
+                "oscillating_joints": ["elbow", "shoulder"],
+            },
         }
         selected = defaults.get(exercise_name, defaults["squat"])
+        thresholds = POSE_REP_THRESHOLD_DEFAULTS.get(
+            exercise_name,
+            POSE_REP_THRESHOLD_DEFAULTS["squat"],
+        )
         return self._enrich_contract(
             PoseMovementContract(
                 exercise=exercise_name,
                 dominant_joint=selected["dominant_joint"],
                 rep_thresholds=PoseRepThresholdPair(
                     down=PoseRepThreshold(
-                        angle=selected["down_angle"],
-                        tolerance=selected["tolerance"],
+                        angle=thresholds["down"]["angle"],
+                        tolerance=thresholds["down"]["tolerance"],
                     ),
                     up=PoseRepThreshold(
-                        angle=selected["up_angle"],
-                        tolerance=selected["tolerance"],
+                        angle=thresholds["up"]["angle"],
+                        tolerance=thresholds["up"]["tolerance"],
                     ),
                 ),
                 secondary_check=selected["secondary_check"],
@@ -1583,6 +1615,11 @@ class PoseSessionService:
         normalized = "_".join(value.strip().lower().replace("-", " ").split())
         if not normalized:
             return None
+        row_tokens = set(normalized.split("_"))
+        if normalized in {"row", "cable_row", "seated_row", "seated_cable_row"} or (
+            "row" in row_tokens and {"cable", "seated"}.intersection(row_tokens)
+        ):
+            return "seated_cable_row"
         if "squat" in normalized:
             return "squat"
         if "bench" in normalized:
@@ -1602,6 +1639,7 @@ class PoseSessionService:
         return normalized
 
     def _exercise_feedback_tip(self, exercise_name: str | None) -> str | None:
+        exercise_name = self._normalize_name(exercise_name)
         if exercise_name == "squat":
             return "Drive through your heels and keep the chest tall."
         if exercise_name == "push_up":
@@ -1618,6 +1656,8 @@ class PoseSessionService:
             return "Brace the core and finish with a stable lockout."
         if exercise_name == "plank":
             return "Maintain a straight line from shoulders to ankles."
+        if exercise_name == "seated_cable_row":
+            return "Keep the torso steady and pull the handles toward your ribs."
         return None
 
     def _compute_frame_signature(self, frame_b64: str) -> tuple[float, list[int]]:
@@ -1715,6 +1755,7 @@ class PoseSessionService:
         frame_signature: float,
         frame_change_score: float,
     ) -> float:
+        exercise_name = self._normalize_name(exercise_name) or exercise_name
         anchor = {
             "bench_press": 0.42,
             "bicep_curl": 0.53,
@@ -1724,6 +1765,7 @@ class PoseSessionService:
             "pull_up": 0.44,
             "shoulder_press": 0.59,
             "squat": 0.48,
+            "seated_cable_row": 0.55,
         }.get(exercise_name, 0.5)
         motion_preference = {
             "bench_press": 0.026,
@@ -1734,6 +1776,7 @@ class PoseSessionService:
             "pull_up": 0.026,
             "shoulder_press": 0.024,
             "squat": 0.028,
+            "seated_cable_row": 0.024,
         }.get(exercise_name, 0.02)
         anchor_score = max(0.0, 1 - abs(frame_signature - anchor) * 3.2)
         motion_score = max(0.0, 1 - abs(frame_change_score - motion_preference) * 16)
@@ -1747,6 +1790,7 @@ class PoseSessionService:
         exercise_name: str | None,
         frame_sample_count: int,
     ) -> tuple[str, bool, int]:
+        exercise_name = self._normalize_name(exercise_name)
         history = [*state.legacy_signature_history, frame_signature][-6:]
         state.legacy_signature_history = history
         previous_phase = state.legacy_phase
@@ -1770,6 +1814,7 @@ class PoseSessionService:
             "bench_press": 0.018,
             "push_up": 0.018,
             "squat": 0.02,
+            "seated_cable_row": 0.018,
         }.get(exercise_name or "", 0.016)
         motion_active = frame_change_score >= movement_floor or signature_range >= movement_floor
         if previous_signature is None:

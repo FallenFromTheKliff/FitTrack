@@ -232,7 +232,12 @@ export class AmenityService {
     const existing = await this.repo.findAmenityByIdOrThrow(id);
     const nextReservable = dto.is_reservable ?? existing.is_reservable ?? false;
     const nextHourlyRate = dto.hourly_rate ?? existing.hourly_rate;
-    assertReservableHourlyRate(nextReservable, nextHourlyRate);
+    const reservabilityChanged =
+      dto.is_reservable !== undefined &&
+      dto.is_reservable !== (existing.is_reservable ?? false);
+    if (reservabilityChanged || dto.hourly_rate !== undefined) {
+      assertReservableHourlyRate(nextReservable, nextHourlyRate);
+    }
 
     const data = this.toUpdateInput(dto);
     const layoutRequested =
@@ -299,6 +304,17 @@ export class AmenityService {
       gridWidth: layout.gridWidth,
       gridHeight: layout.gridHeight,
     };
+    const fullGridFootprint = Array.from({ length: 10 }, (_, row) =>
+      Array.from({ length: 14 }, (_, column) => ({
+        column: column + 1,
+        row: row + 1,
+      })),
+    ).flat();
+    assertRectangleInFootprint(
+      rectangle,
+      fullGridFootprint,
+      'Mapped regions must remain inside the fixed 14 x 10 grid.',
+    );
     const [floorMap, others, equipment] = await Promise.all([
       this.repo.getFloorMap(layout.floorId),
       this.repo.listMappedAmenitiesForFloor(
@@ -311,8 +327,6 @@ export class AmenityService {
             Awaited<ReturnType<AmenityRepository['listEquipmentForVenue']>>
           >([]),
     ]);
-    const footprint = normalizeFacilityCells(floorMap?.footprint_cells);
-    assertRectangleInFootprint(rectangle, footprint);
     assertNoRegionOverlap(
       rectangle,
       others.flatMap((region) =>
@@ -352,7 +366,6 @@ export class AmenityService {
         : rectangle.gridColumn - existing.grid_column;
     const rowDelta =
       existing?.grid_row == null ? 0 : rectangle.gridRow - existing.grid_row;
-    const footprintKeys = new Set(footprint.map(facilityCellKey));
     const moves = equipment.map((item) => ({
       id: item.id,
       gridColumn: (item.grid_column ?? 1) + columnDelta,
@@ -363,11 +376,7 @@ export class AmenityService {
     );
     if (
       uniqueCells.size !== moves.length ||
-      moves.some(
-        (move) =>
-          !occupied.has(`${move.gridColumn}:${move.gridRow}`) ||
-          !footprintKeys.has(`${move.gridColumn}:${move.gridRow}`),
-      )
+      moves.some((move) => !occupied.has(`${move.gridColumn}:${move.gridRow}`))
     ) {
       throw new BadRequestException({
         type: 'INVALID_VENUE_CONTAINMENT',

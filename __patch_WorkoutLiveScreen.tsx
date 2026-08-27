@@ -233,6 +233,8 @@ export function WorkoutLiveScreen() {
                 currentKeypoints={controller.currentKeypoints}
                 currentLoadLabel={controller.workoutLoadInputSavedLabel}
                 currentPhase={controller.currentPhase}
+                poseStatusText={controller.poseStatusText}
+                repPathUnblocked={controller.repPathUnblocked}
                 equipmentDetected={controller.equipmentDetected}
                 equipmentDetectionBoxes={controller.equipmentDetectionBoxes}
                 equipmentDetectionStatusText={controller.equipmentDetectionStatusText}

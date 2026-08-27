@@ -147,9 +147,23 @@
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
-      "^.+\\.(t|j)s$": "ts-jest"
+      "^.+\\.(t|j)s$": [
+        "ts-jest",
+        {
+          "tsconfig": {
+            "module": "CommonJS",
+            "moduleResolution": "Node",
+            "resolvePackageJsonExports": false,
+            "rootDir": "../.."
+          }
+        }
+      ]
     },
     "moduleNameMapper": {
+      "^@fittrack/types$": "<rootDir>/../../../packages/types/index.ts",
+      "^@fittrack/types/(.*)$": "<rootDir>/../../../packages/types/$1",
+      "^@fittrack/utils$": "<rootDir>/../../../packages/utils/index.ts",
+      "^@fittrack/utils/(.*)$": "<rootDir>/../../../packages/utils/$1",
       "^prisma/(.*)$": "<rootDir>/prisma/$1"
     },
     "collectCoverageFrom": [

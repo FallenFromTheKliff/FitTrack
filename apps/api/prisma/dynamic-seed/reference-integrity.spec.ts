@@ -49,7 +49,7 @@ void test('additive operating hours preserve existing rows while reset may resto
 });
 
 void test('pose aliases are exact and reject unsupported containing labels', () => {
-  assert.equal(CANONICAL_POSE_CAPABILITIES.length, 8);
+  assert.equal(CANONICAL_POSE_CAPABILITIES.length, 9);
   const supportedLabels = CANONICAL_POSE_CAPABILITIES.flatMap(
     (capability) => capability.aliases,
   );

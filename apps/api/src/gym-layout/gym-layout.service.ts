@@ -310,10 +310,7 @@ export class GymLayoutService {
           detail: `${label} cells must remain inside the building footprint.`,
         });
     }
-    const [regions, equipment] = await Promise.all([
-      this.repo.listSnapshotRegions(),
-      this.repo.listActiveEquipment(),
-    ]);
+    const regions = await this.repo.listSnapshotRegions();
     const floorRegions = regions.flatMap((region) => {
       if (
         region.floor_id !== floorId ||
@@ -333,7 +330,11 @@ export class GymLayoutService {
       ];
     });
     for (const region of floorRegions)
-      assertRectangleInFootprint(region, footprint);
+      assertRectangleInFootprint(
+        region,
+        fullFootprint,
+        'Mapped regions must remain inside the fixed 14 x 10 grid.',
+      );
     const regionKeys = new Set(
       floorRegions.flatMap((region) =>
         expandFacilityRectangle(region).map(facilityCellKey),
@@ -347,21 +348,6 @@ export class GymLayoutService {
         detail:
           'Path cells cannot pass through mapped venue or support regions.',
       });
-    if (
-      equipment.some(
-        (item) =>
-          item.floor_id === floorId &&
-          !footprintKeys.has(`${item.grid_column ?? 1}:${item.grid_row ?? 1}`),
-      )
-    ) {
-      throw new BadRequestException({
-        type: 'INVALID_FACILITY_LAYOUT',
-        title: 'Equipment Outside Building',
-        status: 400,
-        detail:
-          'The footprint update would leave mapped equipment outside the building.',
-      });
-    }
     const media = await this.repo.upsertFloorPlanMedia(floorId, {
       ...(dto.image_url !== undefined ? { imageUrl: dto.image_url } : {}),
       footprintCells: footprint,
@@ -532,29 +518,7 @@ export class GymLayoutService {
     gridRow: number,
     excludingId?: string,
   ) {
-    const [media, equipment] = await Promise.all([
-      this.repo.listFloorPlanMedia(),
-      this.repo.listActiveEquipment(),
-    ]);
-    const floorMedia = media.find((item) => item.floor_id === floorId);
-    const footprint = floorMedia
-      ? normalizeFacilityCells(floorMedia.footprint_cells)
-      : Array.from({ length: GYM_LAYOUT_GRID_ROWS }, (_, row) =>
-          Array.from({ length: GYM_LAYOUT_GRID_COLUMNS }, (_, column) => ({
-            column: column + 1,
-            row: row + 1,
-          })),
-        ).flat();
-    if (
-      !new Set(footprint.map(facilityCellKey)).has(`${gridColumn}:${gridRow}`)
-    ) {
-      throw new BadRequestException({
-        type: 'INVALID_FACILITY_LAYOUT',
-        title: 'Equipment Outside Building',
-        status: 400,
-        detail: 'Equipment must occupy a footprint cell.',
-      });
-    }
+    const equipment = await this.repo.listActiveEquipment();
     if (
       equipment.some(
         (item) =>

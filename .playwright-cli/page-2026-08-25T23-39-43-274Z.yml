@@ -1,0 +1,37 @@
+- generic [ref=f1e10]:
+  - generic [ref=f1e11]:
+    - generic [ref=f1e12] [cursor=pointer]
+    - generic [ref=f1e14]:
+      - generic [ref=f1e15]: Workout
+      - generic [ref=f1e16]: Time to crush it!
+    - generic [ref=f1e17]:
+      - button "Open page help" [ref=f1e18] [cursor=pointer]
+      - button "1 unread notification" [ref=f1e22] [cursor=pointer]:
+        - generic [ref=f1e26]: "1"
+  - generic [ref=f1e37]:
+    - generic [ref=f1e114]:
+      - generic [ref=f1e115]:
+        - generic [ref=f1e116]: CAMERA TARGET
+        - generic [ref=f1e117]: Barbell Bench Press
+        - generic [ref=f1e118]: Set 1 of 4 · 10 reps · 22.5 kg
+      - button "Return to manual workout entry" [ref=f1e120] [cursor=pointer]:
+        - generic [ref=f1e121]: Manual
+    - generic [ref=f1e122]:
+      - generic [ref=f1e123]: Real-time exercise tracking
+      - generic [ref=f1e125]:
+        - generic [ref=f1e126]:
+          - button "Allow Camera Access" [active] [ref=f1e127] [cursor=pointer]
+          - generic [ref=f1e132]: Camera tracking is optional. You can return to manual logging at any time.
+        - generic [ref=f1e133]:
+          - generic [ref=f1e134]: 00:00
+          - generic [ref=f1e137]: 0 kcal
+        - generic "Camera ready for Barbell Bench Press, set 1 of 4, 0 of 10 reps" [ref=f1e144]:
+          - generic [ref=f1e145]: Barbell Bench Press
+          - generic [ref=f1e146]: Set 1/4 · 0/10 reps · 22.5 kg · primed
+          - generic [ref=f1e148]:
+            - generic [ref=f1e149]: 0 / 10
+            - generic [ref=f1e150]: 10 TO GO
+          - generic [ref=f1e152]: READY · reposition, then start
+        - generic [ref=f1e154]:
+          - generic [ref=f1e155]: "0"
+          - generic [ref=f1e156]: reps

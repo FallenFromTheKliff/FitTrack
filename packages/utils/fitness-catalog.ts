@@ -860,6 +860,7 @@ const REVIEWED_AUTO_REP_CONTRACTS = new Set([
   "plank",
   "pull_up",
   "push_up",
+  "seated_cable_row",
   "shoulder_press",
 ]);
 
@@ -876,6 +877,7 @@ export const CANONICAL_POSE_EXERCISE_KEYS = [
   "pull-up",
   "push-up",
   "shoulder-press",
+  "row",
 ] as const;
 
 export const CANONICAL_LEGACY_POSE_EXERCISE_KEYS: readonly string[] = [];

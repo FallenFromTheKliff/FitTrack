@@ -7,8 +7,20 @@ from fastapi.testclient import TestClient
 
 from app.api.routes import equipment_detection_service, pose_session_service
 from app.main import app
-from app.models.pose import PoseAngleSignalEntry, PoseKeypoint, PoseMovementContract
-from app.services.pose_sessions import PoseSessionService
+from app.models.pose import (
+    PoseAngleSignalEntry,
+    PoseAnalyzeRequest,
+    PoseDerivedSignals,
+    PoseHipSignal,
+    PoseKeypoint,
+    PoseMovementContract,
+    PoseOrientationSignal,
+    PoseOrientationVector,
+    PoseSequenceFrame,
+    PoseTemporalSignal,
+    PoseVisibilitySignal,
+)
+from app.services.pose_sessions import KNOWN_EXERCISES, PoseSessionService, PoseSessionState
 
 
 @pytest.fixture(autouse=True)
@@ -20,6 +32,57 @@ def reset_sessions() -> None:
 @pytest.fixture()
 def client() -> TestClient:
     return TestClient(app)
+
+
+def _build_sequence_payload() -> PoseAnalyzeRequest:
+    angle_entries = [
+        PoseAngleSignalEntry(
+            captured_at_ms=index * 50,
+            elbow=95 + index * 4,
+            left_elbow=95 + index * 4,
+            right_elbow=95 + index * 4,
+            shoulder=110,
+            left_shoulder=110,
+            right_shoulder=110,
+        )
+        for index in range(12)
+    ]
+    signals = PoseDerivedSignals(
+        angles=angle_entries,
+        orientation=PoseOrientationSignal(
+            body_orientation="upright",
+            torso_slope_deg=4,
+            vector=PoseOrientationVector(x=0, y=1),
+        ),
+        visibility=PoseVisibilitySignal(
+            average_visibility=0.95,
+            feet_visibility=0.8,
+            reliable_frame_count=12,
+            wrist_visibility=0.9,
+            left_arm_visibility=0.9,
+            right_arm_visibility=0.9,
+        ),
+        hip=PoseHipSignal(average_y=0.6, range_y=0.01, stable=True),
+        temporal=PoseTemporalSignal(
+            amplitudes={"elbow": 0.2},
+            oscillating_joints=["elbow"],
+            phase_sync_ms=100,
+        ),
+    )
+    keypoint = PoseKeypoint(x=0.5, y=0.5, z=0, visibility=1)
+    frames = [
+        PoseSequenceFrame(
+            captured_at_ms=index * 50,
+            keypoints=[keypoint for _ in range(33)],
+        )
+        for index in range(12)
+    ]
+    return PoseAnalyzeRequest(
+        pose_session_id="pose-sequence-contracts",
+        landmark_schema="mediapipe_pose_v1",
+        frames=frames,
+        signals=signals,
+    )
 
 
 def test_health_route_returns_ok(client: TestClient) -> None:
@@ -66,6 +129,75 @@ def test_ankle_contract_and_landmark_angle_are_supported() -> None:
     assert contract.dominant_joint == "ankle"
     assert angle_signal.left_ankle == 90
     assert signals == {"left_ankle": 90.0, "right_ankle": 90.0, "ankle": 90.0}
+
+
+def test_seated_cable_row_aliases_are_canonical_and_known() -> None:
+    service = PoseSessionService()
+
+    assert "seated_cable_row" in KNOWN_EXERCISES
+    assert [
+        service._normalize_name(alias)
+        for alias in (
+            "seated cable row",
+            "cable row",
+            "seated row",
+            "row",
+            "seated_cable_row",
+        )
+    ] == ["seated_cable_row"] * 5
+
+
+def test_reviewed_dynamic_and_static_contract_defaults_are_deterministic() -> None:
+    service = PoseSessionService()
+    payload = _build_sequence_payload()
+    dynamic_exercises = (
+        "bench_press",
+        "bicep_curl",
+        "dip",
+        "pull_up",
+        "push_up",
+        "shoulder_press",
+        "squat",
+        "seated_cable_row",
+    )
+
+    for exercise in (*dynamic_exercises, "plank"):
+        generated = service._build_generated_contract(exercise, payload)
+        fallback = service._build_fallback_legacy_contract(exercise)
+        expected = (
+            {"down": {"angle": 165.0, "tolerance": 8.0}, "up": {"angle": 178.0, "tolerance": 8.0}}
+            if exercise == "plank"
+            else {"down": {"angle": 90.0, "tolerance": 15.0}, "up": {"angle": 155.0, "tolerance": 12.0}}
+        )
+
+        assert generated.rep_thresholds.model_dump() == expected
+        assert fallback.rep_thresholds.model_dump() == expected
+
+
+def test_seated_cable_row_sequence_classification_uses_row_contract() -> None:
+    service = PoseSessionService()
+    payload = _build_sequence_payload()
+    state = PoseSessionState(
+        pose_session_id="pose-sequence-contracts",
+        exercise_hint=None,
+        starter_catalog=[],
+        candidate_profiles=[],
+    )
+
+    classification = service._classify_sequence(state, payload, "cable row")
+    contract = classification["movement_contract"]
+
+    assert classification["exercise_class"] == "seated_cable_row"
+    assert classification["needs_confirmation"] is False
+    assert isinstance(contract, PoseMovementContract)
+    assert contract.exercise == "seated_cable_row"
+    assert contract.secondary_check == "seated_row_brace"
+    assert contract.rep_thresholds.model_dump() == {
+        "down": {"angle": 90.0, "tolerance": 15.0},
+        "up": {"angle": 155.0, "tolerance": 12.0},
+    }
+    assert any("torso steady" in item for item in classification["form_feedback"])
+    assert not any("heels" in item for item in classification["form_feedback"])
 
 
 def test_equipment_detect_reports_missing_local_model(

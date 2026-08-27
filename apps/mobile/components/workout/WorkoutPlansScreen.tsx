@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, TextInput, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArrowLeft, Check, Minus, Plus, Trash2 } from "lucide-react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { FitnessGoal, TrainingPlanSummaryRecord } from "@fittrack/types";
@@ -48,6 +49,7 @@ function sourceLabel(plan: TrainingPlanSummaryRecord) {
 export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
   const { user } = useAuth();
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
   const [builderOpen, setBuilderOpen] = useState(false);
@@ -327,7 +329,12 @@ export function WorkoutPlansScreen({ onBack }: { onBack: () => void }) {
   return (
     <View style={{ backgroundColor: colors.base, flex: 1 }}>
       <ScrollView
-        contentContainerStyle={{ gap: 14, padding: 18, paddingBottom: 44 }}
+        contentContainerStyle={{
+          gap: 14,
+          padding: 18,
+          paddingBottom: 44,
+          paddingTop: Math.max(24, insets.top + 8),
+        }}
         showsVerticalScrollIndicator={false}
       >
         <View

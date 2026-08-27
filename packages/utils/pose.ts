@@ -151,6 +151,7 @@ const POSE_BODY_ORIENTATION_BY_EXERCISE: Record<string, PoseBodyOrientation> = {
   plank: "horizontal",
   pull_up: "upright",
   push_up: "horizontal",
+  seated_cable_row: "upright",
   shoulder_press: "upright",
   squat: "upright",
 };
@@ -189,6 +190,11 @@ const POSE_TRACKING_REQUIREMENTS_BY_EXERCISE: Record<
     minReliableFrameLandmarks: 12,
     requiredLandmarks: ["shoulders", "elbows", "wrists", "hips", "ankles"],
   },
+  seated_cable_row: {
+    minConfidence: 0.6,
+    minReliableFrameLandmarks: 12,
+    requiredLandmarks: ["shoulders", "elbows", "wrists", "hips"],
+  },
   shoulder_press: {
     minConfidence: 0.6,
     minReliableFrameLandmarks: 12,
@@ -224,7 +230,7 @@ const FALLBACK_POSE_MOVEMENT_CONTRACTS: Record<
     repThresholds: {
       // A normal camera-visible press arc: a controlled bend and lockout,
       // without requiring the forearm to disappear under the bar path.
-      down: { angle: 100, tolerance: 12 },
+      down: { angle: 90, tolerance: 15 },
       up: { angle: 155, tolerance: 12 },
     },
     requiredSides: "both",
@@ -255,8 +261,8 @@ const FALLBACK_POSE_MOVEMENT_CONTRACTS: Record<
     repThresholds: {
       // Require a recognisable extension-to-curl arc without requiring a
       // fully locked elbow or unnaturally tight curl.
-      down: { angle: 145, tolerance: 10 },
-      up: { angle: 95, tolerance: 10 },
+      down: { angle: 90, tolerance: 15 },
+      up: { angle: 155, tolerance: 12 },
     },
     repModel: "bilateral",
     requiredSides: "both",
@@ -842,8 +848,10 @@ const FALLBACK_POSE_MOVEMENT_CONTRACTS: Record<
     primaryJoints: ["left_elbow", "right_elbow"],
     repModel: "bilateral",
     repThresholds: {
-      down: { angle: 140, tolerance: 10 },
-      up: { angle: 95, tolerance: 10 },
+      // Use the same phase convention as the rig editor: `down` is the
+      // contraction/depth gate and `up` is the return/extension gate.
+      down: { angle: 90, tolerance: 15 },
+      up: { angle: 155, tolerance: 12 },
     },
     requiredSides: "both",
     secondaryCheck: "seated_row_brace",
@@ -878,8 +886,8 @@ const FALLBACK_POSE_MOVEMENT_CONTRACTS: Record<
     primaryJoints: ["left_elbow", "right_elbow"],
     repModel: "bilateral",
     repThresholds: {
-      down: { angle: 112, tolerance: 12 },
-      up: { angle: 150, tolerance: 12 },
+      down: { angle: 90, tolerance: 15 },
+      up: { angle: 155, tolerance: 12 },
     },
     requiredSides: "both",
     secondaryCheck: "vertical_body_travel",
@@ -934,11 +942,11 @@ const FALLBACK_POSE_MOVEMENT_CONTRACTS: Record<
     primaryJoints: ["left_elbow", "right_elbow"],
     repModel: "bilateral",
     repThresholds: {
-      // A moderate elbow bend is enough for a controlled push-up. The
-      // existing bilateral, body-line, travel, and phase guards still reject
-      // shallow jitter and random arm movement.
-      down: { angle: 120, tolerance: 15 },
-      up: { angle: 157, tolerance: 12 },
+      // A right-angle bottom gate plus a separate extension gate requires a
+      // complete press cycle; bilateral, body-line, travel, and phase guards
+      // still reject shallow jitter and random arm movement.
+      down: { angle: 90, tolerance: 15 },
+      up: { angle: 155, tolerance: 12 },
     },
     requiredSides: "both",
     secondaryCheck: "body_line",
@@ -971,8 +979,8 @@ const FALLBACK_POSE_MOVEMENT_CONTRACTS: Record<
     primaryJoints: ["left_elbow", "right_elbow"],
     repModel: "bilateral",
     repThresholds: {
-      down: { angle: 145, tolerance: 10 },
-      up: { angle: 100, tolerance: 10 },
+      down: { angle: 90, tolerance: 15 },
+      up: { angle: 155, tolerance: 12 },
     },
     requiredSides: "either",
     secondaryCheck: "vertical_pull",
@@ -1003,8 +1011,10 @@ const FALLBACK_POSE_MOVEMENT_CONTRACTS: Record<
     primaryJoints: ["left_shoulder", "right_shoulder"],
     repModel: "bilateral",
     repThresholds: {
-      down: { angle: 105, tolerance: 12 },
-      up: { angle: 150, tolerance: 12 },
+      // Shoulder abduction starts around a right angle and finishes overhead;
+      // this is intentionally not treated as elbow flexion.
+      down: { angle: 90, tolerance: 15 },
+      up: { angle: 155, tolerance: 12 },
     },
     requiredSides: "both",
     secondaryCheck: "lockout_control",
@@ -1025,7 +1035,7 @@ const FALLBACK_POSE_MOVEMENT_CONTRACTS: Record<
     primaryJoints: ["left_knee", "right_knee"],
     repModel: "bilateral",
     repThresholds: {
-      down: { angle: 105, tolerance: 12 },
+      down: { angle: 90, tolerance: 15 },
       up: { angle: 155, tolerance: 12 },
     },
     requiredSides: "both",

@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ExerciseCategory } from '@prisma/client';
+import { ExerciseCategory, ProgressionIconKind } from '@prisma/client';
 import { BadRequestException } from '@nestjs/common';
 
 import { ActivityLevelService } from '../../user/activity-level.service';
@@ -34,6 +34,9 @@ describe('ExerciseService', () => {
     body_region: 'arms',
     created_at: new Date('2026-03-26T02:00:00.000Z'),
     id: 'muscle-1',
+    icon_asset_key: null,
+    icon_key: null,
+    icon_kind: null,
     is_active: true,
     is_system: true,
     key: 'biceps',
@@ -240,6 +243,8 @@ describe('ExerciseService', () => {
       makeMuscleDefinition({
         aliases: ['upper arm'],
         body_region: 'upper_body',
+        icon_key: 'dumbbell',
+        icon_kind: ProgressionIconKind.library,
         is_system: false,
         key: 'front_delts',
         name: 'Front Delts',
@@ -250,6 +255,9 @@ describe('ExerciseService', () => {
       service.createMuscleDefinition({
         aliases: ['upper arm'],
         body_region: 'Upper Body',
+        icon_asset_key: null,
+        icon_key: 'dumbbell',
+        icon_kind: ProgressionIconKind.library,
         key: 'Front Delts',
         name: 'Front Delts',
       }),
@@ -257,6 +265,9 @@ describe('ExerciseService', () => {
       expect.objectContaining({
         aliases: ['upper arm'],
         body_region: 'upper_body',
+        icon_asset_key: null,
+        icon_key: 'dumbbell',
+        icon_kind: ProgressionIconKind.library,
         is_system: false,
         key: 'front_delts',
         name: 'Front Delts',
@@ -266,10 +277,43 @@ describe('ExerciseService', () => {
     expect(repo.createMuscleDefinition).toHaveBeenCalledWith({
       aliases: ['upper arm'],
       body_region: 'upper_body',
+      icon_asset_key: null,
+      icon_key: 'dumbbell',
+      icon_kind: ProgressionIconKind.library,
       is_system: false,
       key: 'front_delts',
       name: 'Front Delts',
       sort_order: 500,
+    });
+  });
+
+  it('updates and returns a managed muscle icon descriptor', async () => {
+    repo.updateMuscleDefinition.mockResolvedValue(
+      makeMuscleDefinition({
+        icon_asset_key: 'uploads/muscles/front-delts.png',
+        icon_key: null,
+        icon_kind: ProgressionIconKind.custom,
+      }),
+    );
+
+    await expect(
+      service.updateMuscleDefinition('muscle-1', {
+        icon_asset_key: 'uploads/muscles/front-delts.png',
+        icon_key: null,
+        icon_kind: ProgressionIconKind.custom,
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        icon_asset_key: 'uploads/muscles/front-delts.png',
+        icon_key: null,
+        icon_kind: ProgressionIconKind.custom,
+      }),
+    );
+
+    expect(repo.updateMuscleDefinition).toHaveBeenCalledWith('muscle-1', {
+      icon_asset_key: 'uploads/muscles/front-delts.png',
+      icon_key: null,
+      icon_kind: ProgressionIconKind.custom,
     });
   });
 

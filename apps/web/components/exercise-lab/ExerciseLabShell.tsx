@@ -11,10 +11,12 @@ import { DRAWER_WIDTH } from "./exerciseLabShared";
 
 export function ExerciseLabField({
   children,
+  error,
   hint,
   label,
 }: {
   children: ReactNode;
+  error?: string | null;
   hint?: string;
   label: string;
 }) {
@@ -33,6 +35,15 @@ export function ExerciseLabField({
         {label}
       </FitText>
       {children}
+      {error ? (
+        <FitText
+          aria-live="polite"
+          as="span"
+          style={{ fontSize: 12, color: colors.danger, fontWeight: 700 }}
+        >
+          {error}
+        </FitText>
+      ) : null}
       {hint ? (
         <FitText
           as="span"
