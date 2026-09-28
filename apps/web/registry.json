@@ -1,0 +1,46 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry.json",
+  "name": "fittrack",
+  "homepage": "http://127.0.0.1:8080",
+  "items": [
+    {
+      "name": "fit-button",
+      "type": "registry:ui",
+      "title": "FitButton",
+      "description": "FitTrack action button primitive from the stable web component set.",
+      "categories": ["fittrack", "primitives", "actions"],
+      "files": [
+        {
+          "path": "components/fit/FitButton.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "fit-card",
+      "type": "registry:ui",
+      "title": "FitCard",
+      "description": "FitTrack content and statistic card primitive from the stable web component set.",
+      "categories": ["fittrack", "primitives", "layout"],
+      "files": [
+        {
+          "path": "components/fit/FitCard.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "fit-table",
+      "type": "registry:ui",
+      "title": "FitTable",
+      "description": "FitTrack data table primitive from the stable web component set.",
+      "categories": ["fittrack", "primitives", "data-display"],
+      "files": [
+        {
+          "path": "components/fit/FitTable.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "@fittrack/utils",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "dependencies": {
+    "@fittrack/types": "workspace:*",
+    "date-fns": "^3.6.0"
+  }
+}

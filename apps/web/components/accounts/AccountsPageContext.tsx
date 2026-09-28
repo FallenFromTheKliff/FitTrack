@@ -1,0 +1,1408 @@
+"use client";
+
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type {
+  CoachAppointmentScheduleRecord,
+} from "@fittrack/api-client";
+import {
+  adminDeletionRequestsQueryOptions,
+  approveDeletionRequestMutationOptions,
+  coachClientsQueryOptions,
+  coachScheduleQueryOptions,
+  manualAttendanceCheckInMutationOptions,
+  rejectDeletionRequestMutationOptions,
+  scanAttendanceQrMutationOptions,
+  updateAdminMembershipCardMutationOptions,
+  updateAdminMembershipCardRevocationReasonMutationOptions,
+  verifyNonMemberMutationOptions,
+} from "@fittrack/query";
+import { useDebounce, useLoadingText } from "@fittrack/hooks";
+import type {
+  AttendanceCheckInRecord,
+  MemberDirectoryFilters,
+  MemberRecord,
+  MembershipCardRecord,
+} from "@fittrack/types";
+import type { AdminCreateUserData } from "@fittrack/validators";
+import { fullName } from "@fittrack/utils";
+
+import { useAuth } from "@/contexts/AuthContext";
+import { useMembers } from "@/contexts/MemberContext";
+import {
+  MEMBER_FILTER_OPTIONS,
+  MEMBERSHIP_CARD_REVOCATION_FILTER_OPTIONS,
+  MEMBERSHIP_CARD_REVOCATION_MAX_LENGTH,
+  MEMBERSHIP_CARD_REVOCATION_REASONS,
+  MEMBER_TIER_FILTER_OPTIONS,
+  MEMBER_STATUS_TABS,
+  parseMembershipCardRevocationReasonDraft,
+  type DeletionRequest,
+  type MemberStatusTab,
+} from "@/data/members/members";
+import { webApiClient } from "@/lib/api-client";
+import { getBrowserViewportState } from "@/utils/browserViewport";
+import type { AttendanceScanFeedback } from "@/components/accounts/AttendanceScanModal";
+import {
+  EDIT_MEMBER_EDITABLE_KEYS,
+  GRID_ROWS_PER_PAGE,
+  LIST_ROWS_PER_PAGE,
+  MIN_ACTION_DELAY_MS,
+  filterMembers,
+  formatLastCheckIn,
+  getActionErrorMessage,
+  getDirectoryMemberStatus,
+  getEditDraftValues,
+  getMembershipFieldValue,
+  getPendingRequestsByUserId,
+  normalizeDraftValue,
+  parseOptionalNumber,
+  type ContentMode,
+  type DirectoryViewMode,
+} from "@/components/accounts/accountComponentUtils";
+import {
+  filterCoachClientsByActivityLevel,
+  filterCoachClientsByMembershipStatus,
+  filterCoachClientsBySessionStatus,
+  mapCoachClientsToMembers,
+  retainOrSelectCoachClient,
+} from "@/components/accounts/coachClientDirectory";
+import {
+  buildCoachClientSummary,
+  type CoachClientSummary,
+} from "@/components/accounts/coachClientSummary";
+
+type ToastTone = "success" | "error" | "info" | "warning";
+type SelectOption = { label: string; value: string };
+type NoticeModalState = {
+  description?: string;
+  title: string;
+  tone: ToastTone;
+} | null;
+export type CoachClientPanelMode =
+  | "overview"
+  | "workout"
+  | "schedule"
+  | "feedback";
+
+const MANUAL_VERIFICATION_ROLE_NAMES = new Set(["ADMIN", "STAFF", "USER", "COACH"]);
+
+function canManuallyVerifyAccountTarget(
+  member: MemberRecord | null,
+  options: {
+    canManageAccounts: boolean;
+    canManageAdminAccounts: boolean;
+    currentUserId?: string;
+    pendingRequestsByUserId: Map<string, DeletionRequest>;
+  },
+) {
+  if (!options.canManageAccounts || !member || member.id === options.currentUserId) return false;
+  if (!member.role?.name || !MANUAL_VERIFICATION_ROLE_NAMES.has(member.role.name)) return false;
+  if (member.role.name === "ADMIN" && !options.canManageAdminAccounts) return false;
+  if (member.status !== "pending") return false;
+  if (options.pendingRequestsByUserId.has(member.id)) return false;
+  return getDirectoryMemberStatus(member, options.pendingRequestsByUserId) !== "Archived";
+}
+
+function getManualVerificationFallbackMessage(member: MemberRecord | null) {
+  return member?.role?.name === "USER"
+    ? "Failed to promote this account to verified non-member."
+    : "Failed to verify this account.";
+}
+
+type AccountsPageContextValue = {
+  activeChip: string;
+  activeCoachActivityLevel: string;
+  activeCoachMembershipStatus: string;
+  activeCoachSessionStatus: string;
+  activeRevokeReason: string;
+  activeStatus: MemberStatusTab;
+  activeTier: string;
+  addLoading: boolean;
+  addLoadingLabel: string;
+  approveRequestLoadingLabel: string;
+  archiveLoading: boolean;
+  archiveLoadingLabel: string;
+  archiveTarget: MemberRecord | null;
+  canArchiveEditTarget: boolean;
+  canEditTargetDetails: boolean;
+  canInspectAccounts: boolean;
+  canManageAccounts: boolean;
+  canManageMemberCard: boolean;
+  canManualCheckInTarget: boolean;
+  canRestoreEditTarget: boolean;
+  canVerifyNonMemberTarget: boolean;
+  canTerminateEditTarget: boolean;
+  clearRevokeFlow: () => void;
+  closeInspector: () => void;
+  coachClientPanelMode: CoachClientPanelMode;
+  coachClientSummary: ReadonlyMap<string, CoachClientSummary>;
+  contentMode: ContentMode;
+  deleteTarget: MemberRecord | null;
+  directoryEmptyMessage: string;
+  directoryPageSize: number;
+  editConfirmOpen: boolean;
+  editDraft: Record<string, string>;
+  editInitialValues: Record<string, string>;
+  editLoading: boolean;
+  editLoadingLabel: string;
+  editModalOpen: boolean;
+  editPendingRequest: DeletionRequest | undefined;
+  editTarget: MemberRecord | null;
+  filtered: MemberRecord[];
+  grantCardTarget: MemberRecord | null;
+  handleAdd: (data: AdminCreateUserData) => Promise<void>;
+  handleArchiveMember: () => Promise<void>;
+  handleAttendanceScan: (qrValue: string) => Promise<void>;
+  handleDelete: () => Promise<void>;
+  handleEdit: (data: Record<string, string>) => Promise<void>;
+  handleGrantMembershipCard: () => Promise<void>;
+  handleManualCheckIn: (member: MemberRecord) => Promise<void>;
+  handleMessageMember: (member: MemberRecord) => void;
+  handleRejectDeleteRequest: () => Promise<void>;
+  handleRemoveMembership: () => Promise<void>;
+  handleRestoreMember: () => Promise<void>;
+  handleRevokeMembershipCard: (reason: string) => Promise<void>;
+  handleUpdateRevocationReasons: (reason: string) => Promise<void>;
+  handleVerifyNonMember: () => Promise<void>;
+  isAccountsHamburgerMode: boolean;
+  isAdmin: boolean;
+  isApproveDeletionPending: boolean;
+  isCoach: boolean;
+  isCreateMode: boolean;
+  isEditTargetArchived: boolean;
+  isManualAttendancePending: boolean;
+  isMembershipCardPending: boolean;
+  isRejectDeletionPending: boolean;
+  isScanAttendancePending: boolean;
+  isSelfEdit: boolean;
+  isStaff: boolean;
+  isTerminationRequestsView: boolean;
+  manualCheckInLoadingLabel: string;
+  members: MemberRecord[];
+  membershipCardLoadingLabel: string;
+  mobileInspectorOpen: boolean;
+  noticeModal: NoticeModalState;
+  openEditModal: () => void;
+  openInspector: (member: MemberRecord) => void;
+  page: number;
+  pageLoading: boolean;
+  paginatedRows: MemberRecord[];
+  pendingEditSubmission: Record<string, string> | null;
+  pendingRequestsByUserId: Map<string, DeletionRequest>;
+  q: string;
+  queueEditConfirmation: (data: Record<string, string>) => void;
+  rejectLoadingLabel: string;
+  rejectTerminationTarget: MemberRecord | null;
+  restoreLoading: boolean;
+  restoreLoadingLabel: string;
+  restoreTarget: MemberRecord | null;
+  removeMembershipTarget: MemberRecord | null;
+  revokeConfirmationOpen: boolean;
+  revokeFlowMode: "edit" | "revoke" | null;
+  verifyNonMemberTarget: MemberRecord | null;
+  revokeCardTarget: MemberRecord | null;
+  revokeOtherReason: string;
+  selectedRevokeReasons: string[];
+  revokeReasonFilterOptions: SelectOption[];
+  revokeReasonOptions: SelectOption[];
+  roleSelectOptions: SelectOption[];
+  scanFeedback: AttendanceScanFeedback | null;
+  scanOpen: boolean;
+  setActiveChip: Dispatch<SetStateAction<string>>;
+  setActiveCoachActivityLevel: Dispatch<SetStateAction<string>>;
+  setActiveCoachMembershipStatus: Dispatch<SetStateAction<string>>;
+  setActiveCoachSessionStatus: Dispatch<SetStateAction<string>>;
+  setActiveRevokeReason: Dispatch<SetStateAction<string>>;
+  setActiveStatus: Dispatch<SetStateAction<MemberStatusTab>>;
+  setActiveTier: Dispatch<SetStateAction<string>>;
+  setArchiveTarget: Dispatch<SetStateAction<MemberRecord | null>>;
+  setCoachClientPanelMode: Dispatch<SetStateAction<CoachClientPanelMode>>;
+  setContentMode: Dispatch<SetStateAction<ContentMode>>;
+  setDeleteTarget: Dispatch<SetStateAction<MemberRecord | null>>;
+  setEditConfirmOpen: Dispatch<SetStateAction<boolean>>;
+  setEditDraft: Dispatch<SetStateAction<Record<string, string>>>;
+  setEditModalOpen: Dispatch<SetStateAction<boolean>>;
+  setGrantCardTarget: Dispatch<SetStateAction<MemberRecord | null>>;
+  setNoticeModal: Dispatch<SetStateAction<NoticeModalState>>;
+  setPage: Dispatch<SetStateAction<number>>;
+  setPendingEditSubmission: Dispatch<SetStateAction<Record<string, string> | null>>;
+  setQ: Dispatch<SetStateAction<string>>;
+  setRejectTerminationTarget: Dispatch<SetStateAction<MemberRecord | null>>;
+  setRestoreTarget: Dispatch<SetStateAction<MemberRecord | null>>;
+  setRemoveMembershipTarget: Dispatch<SetStateAction<MemberRecord | null>>;
+  setRevokeConfirmationOpen: Dispatch<SetStateAction<boolean>>;
+  setRevokeOtherReason: Dispatch<SetStateAction<string>>;
+  setSelectedRevokeReasons: Dispatch<SetStateAction<string[]>>;
+  setVerifyNonMemberTarget: Dispatch<SetStateAction<MemberRecord | null>>;
+  setRevokeCardTarget: Dispatch<SetStateAction<MemberRecord | null>>;
+  setScanFeedback: Dispatch<SetStateAction<AttendanceScanFeedback | null>>;
+  setScanOpen: Dispatch<SetStateAction<boolean>>;
+  setViewMode: Dispatch<SetStateAction<DirectoryViewMode>>;
+  statusSelectOptions: SelectOption[];
+  tierSelectOptions: SelectOption[];
+  totalPages: number;
+  viewMode: DirectoryViewMode;
+  openRevokeReasonModal: (target: MemberRecord, mode?: "edit" | "revoke") => void;
+};
+
+const AccountsPageContext = createContext<AccountsPageContextValue | null>(null);
+
+export function AccountsPageProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  const {
+    members,
+    isLoading,
+    error: membersError,
+    fetchMembers,
+    createUser,
+    updateMember,
+    deleteUser,
+    restoreUser,
+    setDirectoryFilters,
+  } = useMembers();
+  const queryClient = useQueryClient();
+  const isAdmin = user?.role === "ADMIN";
+  const isStaff = user?.role === "STAFF";
+  const isCoach = user?.role === "COACH";
+  const canManageAccounts = isAdmin || isStaff;
+  const canInspectAccounts = canManageAccounts || isCoach;
+  const [q, setQ] = useState("");
+  const [noticeModal, setNoticeModal] = useState<NoticeModalState>(null);
+  const debouncedQ = useDebounce(q, 250);
+  const [activeChip, setActiveChip] = useState("all");
+  const [activeStatus, setActiveStatus] = useState<MemberStatusTab>("All");
+  const [activeTier, setActiveTier] = useState("all");
+  const [activeRevokeReason, setActiveRevokeReason] = useState("all");
+  const [activeCoachMembershipStatus, setActiveCoachMembershipStatus] =
+    useState("all");
+  const [activeCoachSessionStatus, setActiveCoachSessionStatus] =
+    useState("all");
+  const [activeCoachActivityLevel, setActiveCoachActivityLevel] =
+    useState("all");
+  const [coachClientPanelMode, setCoachClientPanelMode] =
+    useState<CoachClientPanelMode>("overview");
+  const [viewMode, setViewMode] = useState<DirectoryViewMode>("list");
+  const isTerminationRequestsView = activeStatus === "Termination Requests";
+  const directoryServerFilters = useMemo<MemberDirectoryFilters>(() => {
+    const filters: MemberDirectoryFilters = {};
+    const search = debouncedQ.trim();
+
+    if (search) {
+      filters.search = search;
+    }
+
+    if (activeStatus === "Archived") {
+      filters.archived = true;
+    }
+
+    if (isCoach || activeStatus === "Termination Requests") {
+      filters.role = "member";
+    } else if (activeChip === "Admin") {
+      filters.role = "admin";
+    } else if (activeChip === "Staff") {
+      filters.role = "staff";
+    } else if (activeChip === "Coach") {
+      filters.role = "coach";
+    } else if (activeChip === "Member") {
+      filters.role = "member";
+    }
+
+    if (!isCoach && activeTier !== "all") {
+      filters.tier = activeTier as MemberDirectoryFilters["tier"];
+    }
+
+    if (!isCoach && activeRevokeReason !== "all") {
+      filters.revokeReason = activeRevokeReason;
+    }
+
+    if (isCoach && activeCoachMembershipStatus !== "all") {
+      filters.tier =
+        activeCoachMembershipStatus as MemberDirectoryFilters["tier"];
+    }
+
+    if (isCoach && activeCoachSessionStatus !== "all") {
+      filters.sessionStatus =
+        activeCoachSessionStatus as MemberDirectoryFilters["sessionStatus"];
+    }
+
+    if (isCoach && activeCoachActivityLevel !== "all") {
+      filters.activityLevel = activeCoachActivityLevel;
+    }
+
+    return filters;
+  }, [
+    activeChip,
+    activeCoachActivityLevel,
+    activeCoachMembershipStatus,
+    activeCoachSessionStatus,
+    activeStatus,
+    activeTier,
+    debouncedQ,
+    isCoach,
+    activeRevokeReason,
+  ]);
+  const [addLoading, setAddLoading] = useState(false);
+  const addLoadingLabel = useLoadingText("ADDING USER", addLoading);
+  const [editTarget, setEditTarget] = useState<MemberRecord | null>(null);
+  const [editDraft, setEditDraft] = useState<Record<string, string>>(
+    getEditDraftValues(null),
+  );
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editConfirmOpen, setEditConfirmOpen] = useState(false);
+  const [pendingEditSubmission, setPendingEditSubmission] = useState<Record<string, string> | null>(null);
+  const [editLoading, setEditLoading] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<MemberRecord | null>(null);
+  const [archiveTarget, setArchiveTarget] = useState<MemberRecord | null>(null);
+  const [restoreTarget, setRestoreTarget] = useState<MemberRecord | null>(null);
+  const [rejectTerminationTarget, setRejectTerminationTarget] = useState<MemberRecord | null>(null);
+  const [verifyNonMemberTarget, setVerifyNonMemberTarget] = useState<MemberRecord | null>(null);
+  const [grantCardTarget, setGrantCardTarget] = useState<MemberRecord | null>(null);
+  const [revokeCardTarget, setRevokeCardTarget] = useState<MemberRecord | null>(null);
+  const [selectedRevokeReasons, setSelectedRevokeReasons] = useState<string[]>([]);
+  const [revokeOtherReason, setRevokeOtherReason] = useState("");
+  const [revokeConfirmationOpen, setRevokeConfirmationOpen] = useState(false);
+  const [revokeFlowMode, setRevokeFlowMode] = useState<"edit" | "revoke" | null>(null);
+  const [removeMembershipTarget, setRemoveMembershipTarget] = useState<MemberRecord | null>(null);
+  const [archiveLoading, setArchiveLoading] = useState(false);
+  const [restoreLoading, setRestoreLoading] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
+  const [scanFeedback, setScanFeedback] = useState<AttendanceScanFeedback | null>(null);
+  const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
+  const [isAccountsHamburgerMode, setIsAccountsHamburgerMode] = useState(false);
+  const notify = useCallback((tone: ToastTone, title: string, description?: string) => {
+    setNoticeModal({ description, title, tone });
+  }, []);
+  const notifyActionError = useCallback((title: string, error: unknown, fallback: string) => {
+    notify("error", title, getActionErrorMessage(error, fallback));
+  }, [notify]);
+  const { data: deletionRequests = [], error: deletionRequestsError } = useQuery({
+    ...adminDeletionRequestsQueryOptions<DeletionRequest>(webApiClient),
+    enabled: canManageAccounts,
+  });
+  const { data: coachAppointments = [] } = useQuery({
+    ...coachScheduleQueryOptions<CoachAppointmentScheduleRecord>(
+      webApiClient,
+      user?.id,
+    ),
+    enabled: isCoach && Boolean(user?.id),
+  });
+  const {
+    data: coachClientResult,
+    error: coachClientsError,
+    isLoading: coachClientsLoading,
+  } = useQuery({
+    ...coachClientsQueryOptions(webApiClient, { limit: 100, page: 1 }),
+    enabled: isCoach && Boolean(user?.id),
+    staleTime: 30_000,
+  });
+  const coachDirectoryMembers = useMemo(
+    () => mapCoachClientsToMembers(coachClientResult?.data ?? []),
+    [coachClientResult?.data],
+  );
+  const coachClientSummary = useMemo(
+    () =>
+      buildCoachClientSummary(
+        coachAppointments.filter(
+          (appointment) =>
+            appointment.status === "confirmed" ||
+            appointment.status === "completed",
+        ),
+      ),
+    [coachAppointments],
+  );
+
+  useEffect(() => {
+    if (!canInspectAccounts) return;
+    void fetchMembers().catch((error: unknown) => {
+      notifyActionError("Could not refresh clients", error, "Failed to fetch members.");
+    });
+  }, [canInspectAccounts, fetchMembers, notifyActionError]);
+
+  useEffect(() => {
+    setDirectoryFilters(
+      canInspectAccounts && !isCoach ? directoryServerFilters : {},
+    );
+  }, [canInspectAccounts, directoryServerFilters, isCoach, setDirectoryFilters]);
+
+  useEffect(
+    () => () => {
+      setDirectoryFilters({});
+    },
+    [setDirectoryFilters],
+  );
+
+  useEffect(() => {
+    const evaluateViewportMode = () => {
+      const { isBrowserWindowResized, viewportWidth } = getBrowserViewportState();
+      setIsAccountsHamburgerMode(isBrowserWindowResized || viewportWidth < 1260);
+    };
+
+    evaluateViewportMode();
+    window.addEventListener("resize", evaluateViewportMode);
+    window.visualViewport?.addEventListener("resize", evaluateViewportMode);
+    return () => {
+      window.removeEventListener("resize", evaluateViewportMode);
+      window.visualViewport?.removeEventListener("resize", evaluateViewportMode);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isAccountsHamburgerMode) {
+      setMobileInspectorOpen(false);
+    }
+  }, [isAccountsHamburgerMode]);
+
+  useEffect(() => {
+    if (!membersError || !canInspectAccounts) return;
+    notify("error", "Could not load the account directory", membersError);
+  }, [canInspectAccounts, membersError, notify]);
+
+  useEffect(() => {
+    if (!deletionRequestsError || !canManageAccounts) return;
+    notifyActionError(
+      "Termination requests could not be loaded",
+      deletionRequestsError,
+      "Failed to load pending termination requests.",
+    );
+  }, [canManageAccounts, deletionRequestsError, notifyActionError]);
+
+  useEffect(() => {
+    if (!coachClientsError || !isCoach) return;
+    notifyActionError(
+      "Could not load your client roster",
+      coachClientsError,
+      "The coach client directory could not be loaded.",
+    );
+  }, [coachClientsError, isCoach, notifyActionError]);
+
+  const roleScopedMembers = useMemo(() => {
+    const sourceMembers = isCoach ? coachDirectoryMembers : members;
+    return sourceMembers.filter((member) => {
+      if (isCoach) return member.role?.name === "USER";
+      if (isStaff) return member.role?.name !== "ADMIN";
+      return true;
+    });
+  }, [coachDirectoryMembers, isCoach, isStaff, members]);
+
+  const pendingRequestsByUserId = useMemo(
+    () =>
+      canManageAccounts
+        ? getPendingRequestsByUserId(deletionRequests)
+        : new Map<string, DeletionRequest>(),
+    [canManageAccounts, deletionRequests],
+  );
+  const [contentMode, setContentMode] = useState<ContentMode>("directory");
+
+  useEffect(() => {
+    if (contentMode !== "directory") {
+      setEditTarget(null);
+      setEditModalOpen(false);
+      setEditConfirmOpen(false);
+      setPendingEditSubmission(null);
+    }
+  }, [contentMode]);
+
+  const [page, setPage] = useState(1);
+  const directoryPageSize = viewMode === "grid" ? GRID_ROWS_PER_PAGE : LIST_ROWS_PER_PAGE;
+  const filtered = useMemo(() => {
+    const baseMembers = filterMembers(
+      roleScopedMembers,
+      debouncedQ,
+      activeChip,
+      activeStatus,
+      pendingRequestsByUserId,
+    );
+
+    if (!isCoach) return baseMembers;
+
+    return filterCoachClientsByActivityLevel(
+      filterCoachClientsByMembershipStatus(
+        filterCoachClientsBySessionStatus(
+          baseMembers,
+          activeCoachSessionStatus,
+          coachClientSummary,
+        ),
+        activeCoachMembershipStatus,
+      ),
+      activeCoachActivityLevel,
+    );
+  }, [
+    activeChip,
+    activeCoachActivityLevel,
+    activeCoachMembershipStatus,
+    activeCoachSessionStatus,
+    activeStatus,
+    coachClientSummary,
+    debouncedQ,
+    isCoach,
+    pendingRequestsByUserId,
+    roleScopedMembers,
+  ]);
+
+  useEffect(
+    () => setPage(1),
+    [
+      activeChip,
+      activeCoachSessionStatus,
+      activeRevokeReason,
+      activeStatus,
+      activeTier,
+      debouncedQ,
+      viewMode,
+    ],
+  );
+
+  useEffect(() => {
+    if (activeRevokeReason !== "all" && activeTier !== "revoked") {
+      setActiveRevokeReason("all");
+    }
+  }, [activeRevokeReason, activeTier]);
+
+  useEffect(() => {
+    if (isTerminationRequestsView && activeChip !== "Member") {
+      setActiveChip("Member");
+    }
+  }, [activeChip, isTerminationRequestsView]);
+
+  useEffect(() => {
+    if (isStaff && activeChip === "Admin") {
+      setActiveChip("all");
+    }
+  }, [activeChip, isStaff]);
+
+  useEffect(() => {
+    if (isCoach && activeChip !== "Member") {
+      setActiveChip("Member");
+    }
+  }, [activeChip, isCoach]);
+
+  useEffect(() => {
+    if (contentMode !== "directory" || !editTarget) return;
+    const matchedMember = filtered.find((member) => member.id === editTarget.id);
+    if (!matchedMember) {
+      setEditTarget(null);
+      setEditModalOpen(false);
+      setEditConfirmOpen(false);
+      setPendingEditSubmission(null);
+      return;
+    }
+
+    if (matchedMember !== editTarget) {
+      setEditTarget(matchedMember);
+    }
+  }, [contentMode, editTarget, filtered]);
+
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(filtered.length / directoryPageSize));
+    if (page > maxPage) {
+      setPage(maxPage);
+    }
+  }, [directoryPageSize, filtered.length, page]);
+
+  const paginatedRows = useMemo(() => {
+    const start = (page - 1) * directoryPageSize;
+    return filtered.slice(start, start + directoryPageSize);
+  }, [directoryPageSize, filtered, page]);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / directoryPageSize));
+  const editInitialValues = useMemo(() => getEditDraftValues(editTarget), [editTarget]);
+  const archiveLoadingLabel = useLoadingText("ARCHIVING ACCOUNT", archiveLoading);
+
+  useEffect(() => {
+    setEditDraft(editInitialValues);
+  }, [editInitialValues]);
+
+  useEffect(() => {
+    if (contentMode !== "directory" || editModalOpen || editConfirmOpen) return;
+    if (isCoach) {
+      const nextTarget = retainOrSelectCoachClient(
+        editTarget,
+        filtered,
+        paginatedRows,
+      );
+      if (nextTarget?.id !== editTarget?.id) {
+        setEditTarget(nextTarget);
+      }
+      return;
+    }
+    if (editTarget && paginatedRows.some((member) => member.id === editTarget.id)) return;
+    if (editTarget) setEditTarget(null);
+  }, [contentMode, editConfirmOpen, editModalOpen, editTarget, filtered, isCoach, paginatedRows]);
+
+  useEffect(() => {
+    if (editTarget) return;
+    setEditModalOpen(false);
+    setEditConfirmOpen(false);
+    setPendingEditSubmission(null);
+    setMobileInspectorOpen(false);
+  }, [editTarget]);
+
+  const editPendingRequest = editTarget ? pendingRequestsByUserId.get(editTarget.id) : undefined;
+  const isEditTargetArchived = editTarget
+    ? getDirectoryMemberStatus(editTarget, pendingRequestsByUserId) === "Archived"
+    : false;
+  const isSelfEdit = editTarget?.id === user?.id;
+  const hasEditChanges = useMemo(() => {
+    if (!editTarget) return false;
+    const initialValues = getEditDraftValues(editTarget);
+    return EDIT_MEMBER_EDITABLE_KEYS.some(
+      (key) => normalizeDraftValue(editDraft[key]) !== normalizeDraftValue(initialValues[key]),
+    );
+  }, [editDraft, editTarget]);
+  const canArchiveEditTarget = Boolean(
+    (isAdmin || (isStaff && editTarget?.role?.name === "USER")) &&
+      editTarget &&
+      !isSelfEdit &&
+      editTarget.role?.name !== "ADMIN" &&
+      editTarget.status !== "pending" &&
+      !isEditTargetArchived,
+  );
+  const canVerifyNonMemberTarget = Boolean(
+    canManuallyVerifyAccountTarget(editTarget, {
+      canManageAccounts,
+      canManageAdminAccounts: isAdmin,
+      currentUserId: user?.id,
+      pendingRequestsByUserId,
+    }),
+  );
+  const canTerminateEditTarget = Boolean(canManageAccounts && !isSelfEdit && editPendingRequest);
+  const canRestoreEditTarget = Boolean(
+    editTarget &&
+      !isSelfEdit &&
+      isEditTargetArchived &&
+      editTarget.role?.name !== "ADMIN" &&
+      (isAdmin || (isStaff && editTarget.role?.name === "USER")),
+  );
+  const canEditTargetDetails = Boolean(canManageAccounts && editTarget && !isSelfEdit);
+  const canManualCheckInTarget = Boolean(
+    canManageAccounts &&
+      editTarget &&
+      !isSelfEdit &&
+      editTarget.role?.name === "USER" &&
+      editTarget.status === "active" &&
+      !editPendingRequest &&
+      !isEditTargetArchived,
+  );
+  const canManageMemberCard = Boolean(
+    canManageAccounts &&
+      editTarget &&
+      !isSelfEdit &&
+      editTarget.role?.name === "USER" &&
+      editTarget.status !== "pending",
+  );
+
+  const approveDeletionMutation = useMutation(
+    approveDeletionRequestMutationOptions(webApiClient, queryClient, {
+      reviewNotes: "Approved via account module.",
+    }),
+  );
+  const rejectDeletionMutation = useMutation(
+    rejectDeletionRequestMutationOptions(webApiClient, queryClient, {
+      reviewNotes: "Rejected via account module.",
+    }),
+  );
+  const membershipCardMutation = useMutation(
+    updateAdminMembershipCardMutationOptions(webApiClient, queryClient),
+  );
+  const revocationReasonMutation = useMutation(
+    updateAdminMembershipCardRevocationReasonMutationOptions(webApiClient, queryClient),
+  );
+  const verifyNonMemberMutation = useMutation(
+    verifyNonMemberMutationOptions(webApiClient, queryClient),
+  );
+  const scanAttendanceMutation = useMutation(scanAttendanceQrMutationOptions(webApiClient, queryClient));
+  const manualAttendanceMutation = useMutation(
+    manualAttendanceCheckInMutationOptions(webApiClient, queryClient),
+  );
+  const rejectLoadingLabel = useLoadingText("REJECTING REQUEST", rejectDeletionMutation.isPending);
+  const approveRequestLoadingLabel = useLoadingText(
+    "APPROVING REQUEST",
+    approveDeletionMutation.isPending,
+  );
+  const membershipCardLoadingLabel = useLoadingText(
+    "UPDATING MEMBERSHIP",
+    membershipCardMutation.isPending || revocationReasonMutation.isPending,
+  );
+  const manualCheckInLoadingLabel = useLoadingText(
+    "CHECKING IN",
+    manualAttendanceMutation.isPending,
+  );
+  const editLoadingLabel = useLoadingText("UPDATING MEMBER", editLoading);
+  const restoreLoadingLabel = useLoadingText("RESTORING ACCOUNT", restoreLoading);
+  const pageLoading = isLoading || (isCoach && coachClientsLoading);
+
+  const handleAdd = async (data: AdminCreateUserData) => {
+    setAddLoading(true);
+    await new Promise((resolve) => setTimeout(resolve, MIN_ACTION_DELAY_MS));
+    const role = data.role;
+    const result = await createUser({
+      email: data.email,
+      password: data.password,
+      firstName: data.firstName,
+      lastName: data.lastName,
+      role,
+      phone_no: data.phone_no,
+    });
+    setAddLoading(false);
+    if (result.success) {
+      setContentMode("directory");
+      const roleLabel =
+        role === "admin"
+          ? "Admin"
+          : role === "staff"
+            ? "Staff"
+            : role === "coach"
+              ? "Coach"
+              : "Member";
+      const creationMessage =
+        "Account is not verified yet. The verification OTP sends when they sign in.";
+      notify(
+        "success",
+        `${roleLabel} account created`,
+        creationMessage,
+      );
+      return;
+    }
+    notify("error", "Could not create account", result.error ?? "Check the form details and try again.");
+  };
+
+  const openInspector = (member: MemberRecord) => {
+    const isSelectedAgain = editTarget?.id === member.id;
+    if (isCoach && isSelectedAgain) return;
+    setEditTarget(isSelectedAgain ? null : member);
+    if (isAccountsHamburgerMode) {
+      setMobileInspectorOpen(!isSelectedAgain);
+    }
+  };
+
+  const openEditModal = () => {
+    if (!canEditTargetDetails || !editTarget) return;
+    setEditDraft(getEditDraftValues(editTarget));
+    setPendingEditSubmission(null);
+    setEditConfirmOpen(false);
+    setEditModalOpen(true);
+  };
+
+  const clearRevokeFlow = () => {
+    setRevokeCardTarget(null);
+    setSelectedRevokeReasons([]);
+    setRevokeOtherReason("");
+    setRevokeConfirmationOpen(false);
+    setRevokeFlowMode(null);
+  };
+
+  const openRevokeReasonModal = (
+    target: MemberRecord,
+    mode: "edit" | "revoke" = "revoke",
+  ) => {
+    setRevokeCardTarget(target);
+    const draft =
+      mode === "edit"
+        ? parseMembershipCardRevocationReasonDraft(
+            target.membershipCard?.revokeReason,
+          )
+        : { customOtherReason: "", selectedReasons: [] };
+    setSelectedRevokeReasons(draft.selectedReasons);
+    setRevokeOtherReason(draft.customOtherReason);
+    setRevokeConfirmationOpen(false);
+    setRevokeFlowMode(mode);
+  };
+
+  const closeInspector = () => {
+    setEditModalOpen(false);
+    setEditConfirmOpen(false);
+    setPendingEditSubmission(null);
+    setGrantCardTarget(null);
+    clearRevokeFlow();
+    setRemoveMembershipTarget(null);
+    setArchiveTarget(null);
+    setRestoreTarget(null);
+    setRejectTerminationTarget(null);
+    setVerifyNonMemberTarget(null);
+    setEditTarget(null);
+    setMobileInspectorOpen(false);
+  };
+
+  const patchOpenMember = (memberId: string, patch: Partial<MemberRecord>) => {
+    setEditTarget((current) => (current?.id === memberId ? { ...current, ...patch } : current));
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    const request = pendingRequestsByUserId.get(deleteTarget.id);
+    if (!request) {
+      notify(
+        "warning",
+        "Termination request missing",
+        "Refresh the page if this request was already handled elsewhere.",
+      );
+      setDeleteTarget(null);
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, MIN_ACTION_DELAY_MS));
+    try {
+      await approveDeletionMutation.mutateAsync(request.id);
+      setDeleteTarget(null);
+      closeInspector();
+      notify(
+        "success",
+        "Termination request approved",
+        "The account was soft-deleted and moved to Archived.",
+      );
+    } catch {
+      notify(
+        "error",
+        "Could not approve the request",
+        "Try again after the latest request state has loaded.",
+      );
+    }
+  };
+
+  const handleRejectDeleteRequest = async () => {
+    const target = rejectTerminationTarget ?? editTarget;
+    if (!target) return;
+    const request = pendingRequestsByUserId.get(target.id);
+    if (!request) {
+      notify(
+        "warning",
+        "Termination request missing",
+        "Refresh the page if this request was already handled elsewhere.",
+      );
+      return;
+    }
+    try {
+      await rejectDeletionMutation.mutateAsync(request.id);
+      setRejectTerminationTarget(null);
+      notify("success", "Termination request rejected", "The account stays active with its normal actions restored.");
+    } catch {
+      notify(
+        "error",
+        "Could not deny the request",
+        "Try again after the latest request state has loaded.",
+      );
+    }
+  };
+
+  const handleArchiveMember = async () => {
+    if (!archiveTarget) return;
+    setArchiveLoading(true);
+    await new Promise((resolve) => setTimeout(resolve, MIN_ACTION_DELAY_MS));
+    const memberName = fullName(archiveTarget) || archiveTarget.email;
+    const pendingRequest = pendingRequestsByUserId.get(archiveTarget.id);
+    if (pendingRequest) {
+      try {
+        await approveDeletionMutation.mutateAsync(pendingRequest.id);
+        setArchiveTarget(null);
+        closeInspector();
+        notify(
+          "success",
+          `${memberName} archived`,
+          "The pending termination request was approved and the account was moved to Archived.",
+        );
+      } catch {
+        notify(
+          "error",
+          "Could not archive this person",
+          "Try again after the latest termination request state has loaded.",
+        );
+      } finally {
+        setArchiveLoading(false);
+      }
+      return;
+    }
+    const result = await deleteUser(archiveTarget.id);
+    setArchiveLoading(false);
+    if (result.success) {
+      setArchiveTarget(null);
+      closeInspector();
+      notify("success", `${memberName} archived`, "The account has been moved out of the active directory.");
+      return;
+    }
+    notify("error", "Could not archive this person", result.error ?? "Try again after the directory refreshes.");
+  };
+
+  const handleRestoreMember = async () => {
+    if (!restoreTarget) return;
+    setRestoreLoading(true);
+    await new Promise((resolve) => setTimeout(resolve, MIN_ACTION_DELAY_MS));
+    const memberName = fullName(restoreTarget) || restoreTarget.email;
+    const result = await restoreUser(restoreTarget.id);
+    setRestoreLoading(false);
+    if (result.success) {
+      setRestoreTarget(null);
+      closeInspector();
+      notify("success", `${memberName} restored`, "The account is back in the active directory.");
+      return;
+    }
+    notify("error", "Could not restore this person", result.error ?? "Try again after the directory refreshes.");
+  };
+
+  const handleGrantMembershipCard = async () => {
+    const target = grantCardTarget ?? editTarget;
+    if (!target || target.role?.name !== "USER") return;
+    const cardStatus = getMembershipFieldValue(target);
+
+    try {
+      const result = await membershipCardMutation.mutateAsync({
+        id: target.id,
+        payload: {
+          action: "grant",
+          source: cardStatus === "revoked" ? "admin_repair" : "admin_grant",
+        },
+      });
+
+      patchOpenMember(target.id, {
+        membershipCard: (result.membershipCard ?? null) as MembershipCardRecord | null,
+      });
+      setGrantCardTarget(null);
+      notify("success", "Member access updated", result.message);
+    } catch (error) {
+      notifyActionError("Could not update member access", error, "Failed to update membership-card access.");
+    }
+  };
+
+  const handleRevokeMembershipCard = async (reason: string) => {
+    if (!revokeCardTarget) return;
+    const resolvedReason = reason.trim();
+    if (
+      !resolvedReason ||
+      resolvedReason.length > MEMBERSHIP_CARD_REVOCATION_MAX_LENGTH
+    ) {
+      return;
+    }
+
+    try {
+      const result = await membershipCardMutation.mutateAsync({
+        id: revokeCardTarget.id,
+        payload: {
+          action: "revoke",
+          reason: resolvedReason,
+          source: "admin_repair",
+        },
+      });
+
+      patchOpenMember(revokeCardTarget.id, {
+        membershipCard: (result.membershipCard ?? null) as MembershipCardRecord | null,
+      });
+      clearRevokeFlow();
+      notify("success", "Member access updated", result.message);
+    } catch (error) {
+      notifyActionError("Could not update member access", error, "Failed to revoke membership-card access.");
+    }
+  };
+
+  const handleUpdateRevocationReasons = async (reason: string) => {
+    const target = revokeCardTarget;
+    if (!target || getMembershipFieldValue(target) !== "revoked") return;
+    const resolvedReason = reason.trim();
+    if (
+      !resolvedReason ||
+      resolvedReason.length > MEMBERSHIP_CARD_REVOCATION_MAX_LENGTH
+    ) {
+      return;
+    }
+
+    try {
+      const result = await revocationReasonMutation.mutateAsync({
+        id: target.id,
+        reason: resolvedReason,
+      });
+
+      patchOpenMember(target.id, {
+        membershipCard: (result.membershipCard ?? null) as MembershipCardRecord | null,
+      });
+      clearRevokeFlow();
+      notify("success", "Revocation reasons updated", result.message);
+    } catch (error) {
+      notifyActionError(
+        "Could not update revocation reasons",
+        error,
+        "Failed to update the recorded revocation reasons.",
+      );
+    }
+  };
+
+  const handleRemoveMembership = async () => {
+    const target = removeMembershipTarget ?? editTarget;
+    if (!target || target.role?.name !== "USER" || !canManageMemberCard) return;
+    if (getMembershipFieldValue(target) !== "active") return;
+
+    try {
+      const result = await membershipCardMutation.mutateAsync({
+        id: target.id,
+        payload: {
+          action: "remove",
+          reason: "Removed via account module.",
+        },
+      });
+
+      patchOpenMember(target.id, { membershipCard: null });
+      setRemoveMembershipTarget(null);
+      notify("success", "Membership removed", result.message);
+    } catch (error) {
+      notifyActionError(
+        "Could not remove membership",
+        error,
+        "Failed to return this account to the non-member state.",
+      );
+    }
+  };
+
+  const handleVerifyNonMember = async () => {
+    const target = verifyNonMemberTarget ?? editTarget;
+    if (!target) return;
+    if (
+      !canManuallyVerifyAccountTarget(target, {
+        canManageAccounts,
+        canManageAdminAccounts: isAdmin,
+        currentUserId: user?.id,
+        pendingRequestsByUserId,
+      })
+    ) {
+      return;
+    }
+
+    try {
+      const result = await verifyNonMemberMutation.mutateAsync(target.id);
+      patchOpenMember(target.id, {
+        emailVerified: true,
+        status: result.user.status ?? "active",
+      });
+      setVerifyNonMemberTarget(null);
+      notify("success", "Account verified", result.message);
+    } catch (error) {
+      notifyActionError(
+        "Could not verify this account",
+        error,
+        getManualVerificationFallbackMessage(target),
+      );
+    }
+  };
+
+  const handleManualCheckIn = async (member: MemberRecord) => {
+    try {
+      const result = await manualAttendanceMutation.mutateAsync({ userId: member.id });
+      patchOpenMember(member.id, { lastCheckInAt: result.check_in_at });
+      notify(
+        "success",
+        `${result.member_name} checked in`,
+        `Attendance recorded ${formatLastCheckIn(result.check_in_at)}.`,
+      );
+    } catch (error) {
+      notifyActionError("Could not check in this account", error, "Failed to manually check in this account.");
+    }
+  };
+
+  const handleAttendanceScan = async (qrValue: string) => {
+    const trimmedQrValue = qrValue.trim();
+    if (!trimmedQrValue) {
+      setScanFeedback({
+        tone: "error",
+        title: "Scan failed",
+        detail: "A QR code value is required before attendance can be logged.",
+      });
+      notify("error", "QR code required", "Add or scan a QR value before logging attendance.");
+      return;
+    }
+
+    try {
+      const result: AttendanceCheckInRecord = await scanAttendanceMutation.mutateAsync({
+        qrValue: trimmedQrValue,
+      });
+      setScanFeedback({
+        tone: "success",
+        title: `Checked in ${result.member_name}`,
+        detail: `Attendance recorded ${formatLastCheckIn(result.check_in_at)}.`,
+      });
+      notify(
+        "success",
+        `Checked in ${result.member_name}`,
+        `Attendance recorded ${formatLastCheckIn(result.check_in_at)}.`,
+      );
+    } catch (error) {
+      const detail = getActionErrorMessage(error, "Unable to scan this QR code.");
+      const tone = /already|open attendance/i.test(detail) ? "warning" : "error";
+      setScanFeedback({
+        tone,
+        title: tone === "warning" ? "Already checked in" : "Scan failed",
+        detail,
+      });
+      notify(tone, tone === "warning" ? "Attendance already logged" : "Scan failed", detail);
+    }
+  };
+
+  const queueEditConfirmation = (data: Record<string, string>) => {
+    if (!hasEditChanges) return;
+    setEditDraft(data);
+    setPendingEditSubmission(data);
+    setEditModalOpen(false);
+    setEditConfirmOpen(true);
+  };
+
+  const handleEdit = async (data: Record<string, string>) => {
+    if (!editTarget || !canEditTargetDetails) {
+      setEditModalOpen(false);
+      setEditConfirmOpen(false);
+      setPendingEditSubmission(null);
+      return;
+    }
+    const nextFirstName = normalizeDraftValue(data.firstName);
+    const nextLastName = normalizeDraftValue(data.lastName);
+    const nextDateOfBirth = normalizeDraftValue(data.dateOfBirth);
+    const nextGender = normalizeDraftValue(data.gender);
+    const nextActivityLevel = normalizeDraftValue(data.activityLevel);
+    const nextFitnessGoal = normalizeDraftValue(data.fitnessGoal);
+    const nextWeight = parseOptionalNumber(data.currentWeightKg);
+    const nextHeight = parseOptionalNumber(data.heightCm);
+
+    setEditLoading(true);
+    await new Promise((resolve) => setTimeout(resolve, MIN_ACTION_DELAY_MS));
+    const result = await updateMember({
+      id: editTarget.id,
+      ...(nextFirstName ? { firstName: nextFirstName } : {}),
+      ...(nextLastName ? { lastName: nextLastName } : {}),
+      ...(nextDateOfBirth ? { dateOfBirth: nextDateOfBirth } : {}),
+      ...(nextGender ? { gender: nextGender } : {}),
+      ...(nextActivityLevel ? { activityLevel: nextActivityLevel } : {}),
+      ...(nextFitnessGoal ? { fitnessGoal: nextFitnessGoal } : {}),
+      ...(nextWeight !== undefined ? { currentWeightKg: nextWeight } : {}),
+      ...(nextHeight !== undefined ? { heightCm: nextHeight } : {}),
+    });
+    setEditLoading(false);
+    if (result.success) {
+      patchOpenMember(editTarget.id, {
+        profile: {
+          ...editTarget.profile,
+          firstName: nextFirstName || editTarget.profile?.firstName || "",
+          lastName: nextLastName || editTarget.profile?.lastName || "",
+          dateOfBirth: nextDateOfBirth || editTarget.profile?.dateOfBirth || null,
+          gender: nextGender || editTarget.profile?.gender || null,
+          activityLevel: nextActivityLevel || editTarget.profile?.activityLevel || null,
+          fitnessGoal: nextFitnessGoal || editTarget.profile?.fitnessGoal || null,
+          currentWeightKg: nextWeight ?? editTarget.profile?.currentWeightKg ?? null,
+          heightCm: nextHeight ?? editTarget.profile?.heightCm ?? null,
+        },
+      });
+      setEditModalOpen(false);
+      setEditConfirmOpen(false);
+      setPendingEditSubmission(null);
+      notify("success", "Account details updated", "The account modal now reflects the saved changes.");
+      return;
+    }
+    setEditConfirmOpen(false);
+    setPendingEditSubmission(null);
+    setEditModalOpen(true);
+    notify(
+      "error",
+      "Could not update account details",
+      result.error ?? "Review the highlighted values and try again.",
+    );
+  };
+
+  const handleMessageMember = (member: MemberRecord) => {
+    if (!member.email.trim()) {
+      notify("info", "No email available", "This account cannot be contacted by email yet.");
+      return;
+    }
+
+    window.location.href = `mailto:${member.email}`;
+  };
+
+  const isCreateMode = contentMode === "create";
+  const roleVisibleFilterOptions = isCoach
+    ? MEMBER_FILTER_OPTIONS.filter((option) => option.value === "Member")
+    : isStaff
+      ? MEMBER_FILTER_OPTIONS.filter((option) => option.value !== "Admin")
+      : MEMBER_FILTER_OPTIONS;
+  const roleSelectOptions = roleVisibleFilterOptions.map((option) => ({
+    label: option.label,
+    value: option.value,
+  }));
+  const tierSelectOptions = MEMBER_TIER_FILTER_OPTIONS.map((option) => ({
+    label: option.label,
+    value: option.value,
+  }));
+  const revokeReasonOptions = MEMBERSHIP_CARD_REVOCATION_REASONS.map((reason) => ({
+    label: reason,
+    value: reason,
+  }));
+  const revokeReasonFilterOptions = MEMBERSHIP_CARD_REVOCATION_FILTER_OPTIONS.map(
+    (option) => ({
+      label: option.label,
+      value: option.value,
+    }),
+  );
+  const directoryEmptyMessage = isTerminationRequestsView
+    ? "No termination requests match your current filters."
+    : "No accounts match your current filters.";
+  const coachVisibleStatusTabs = isCoach
+    ? MEMBER_STATUS_TABS.filter((option) => option.key !== "Termination Requests")
+    : MEMBER_STATUS_TABS;
+  const statusSelectOptions = coachVisibleStatusTabs.map((option) => ({
+    label: option.key === "Termination Requests" ? "Requests" : option.label,
+    value: option.key,
+  }));
+
+  return (
+    <AccountsPageContext.Provider
+      value={{
+        activeChip,
+        activeCoachActivityLevel,
+        activeCoachMembershipStatus,
+        activeCoachSessionStatus,
+        activeRevokeReason,
+        activeStatus,
+        activeTier,
+        addLoading,
+        addLoadingLabel,
+        approveRequestLoadingLabel,
+        archiveLoading,
+        archiveLoadingLabel,
+        archiveTarget,
+        canArchiveEditTarget,
+        canEditTargetDetails,
+        canInspectAccounts,
+        canManageAccounts,
+        canManageMemberCard,
+        canManualCheckInTarget,
+        canRestoreEditTarget,
+        canVerifyNonMemberTarget,
+        canTerminateEditTarget,
+        clearRevokeFlow,
+        closeInspector,
+        coachClientPanelMode,
+        coachClientSummary,
+        contentMode,
+        deleteTarget,
+        directoryEmptyMessage,
+        directoryPageSize,
+        editConfirmOpen,
+        editDraft,
+        editInitialValues,
+        editLoading,
+        editLoadingLabel,
+        editModalOpen,
+        editPendingRequest,
+        editTarget,
+        filtered,
+        grantCardTarget,
+        handleAdd,
+        handleArchiveMember,
+        handleAttendanceScan,
+        handleDelete,
+        handleEdit,
+        handleGrantMembershipCard,
+        handleManualCheckIn,
+        handleMessageMember,
+        handleRejectDeleteRequest,
+        handleRemoveMembership,
+        handleRestoreMember,
+        handleRevokeMembershipCard,
+        handleUpdateRevocationReasons,
+        handleVerifyNonMember,
+        isAccountsHamburgerMode,
+        isAdmin,
+        isApproveDeletionPending: approveDeletionMutation.isPending,
+        isCoach,
+        isCreateMode,
+        isEditTargetArchived,
+        isManualAttendancePending: manualAttendanceMutation.isPending,
+        isMembershipCardPending:
+          membershipCardMutation.isPending || revocationReasonMutation.isPending,
+        isRejectDeletionPending: rejectDeletionMutation.isPending,
+        isScanAttendancePending: scanAttendanceMutation.isPending,
+        isSelfEdit,
+        isStaff,
+        isTerminationRequestsView,
+        manualCheckInLoadingLabel,
+        members: isCoach ? coachDirectoryMembers : members,
+        membershipCardLoadingLabel,
+        mobileInspectorOpen,
+        noticeModal,
+        openEditModal,
+        openInspector,
+        page,
+        pageLoading,
+        paginatedRows,
+        pendingEditSubmission,
+        pendingRequestsByUserId,
+        q,
+        queueEditConfirmation,
+        rejectLoadingLabel,
+        rejectTerminationTarget,
+        restoreLoading,
+        restoreLoadingLabel,
+        restoreTarget,
+        removeMembershipTarget,
+        revokeConfirmationOpen,
+        revokeFlowMode,
+        verifyNonMemberTarget,
+        revokeCardTarget,
+        revokeOtherReason,
+        selectedRevokeReasons,
+        revokeReasonFilterOptions,
+        revokeReasonOptions,
+        roleSelectOptions,
+        scanFeedback,
+        scanOpen,
+        setActiveChip,
+        setActiveCoachActivityLevel,
+        setActiveCoachMembershipStatus,
+        setActiveCoachSessionStatus,
+        setActiveRevokeReason,
+        setActiveStatus,
+        setActiveTier,
+        setArchiveTarget,
+        setCoachClientPanelMode,
+        setContentMode,
+        setDeleteTarget,
+        setEditConfirmOpen,
+        setEditDraft,
+        setEditModalOpen,
+        setGrantCardTarget,
+        setNoticeModal,
+        setPage,
+        setPendingEditSubmission,
+        setQ,
+        setRejectTerminationTarget,
+        setRestoreTarget,
+        setRemoveMembershipTarget,
+        setRevokeConfirmationOpen,
+        setRevokeOtherReason,
+        setSelectedRevokeReasons,
+        setVerifyNonMemberTarget,
+        setRevokeCardTarget,
+        setScanFeedback,
+        setScanOpen,
+        setViewMode,
+        statusSelectOptions,
+        tierSelectOptions,
+        totalPages,
+        viewMode,
+        openRevokeReasonModal,
+      }}
+    >
+      {children}
+    </AccountsPageContext.Provider>
+  );
+}
+
+export function useAccountsPage() {
+  const context = useContext(AccountsPageContext);
+
+  if (!context) {
+    throw new Error("useAccountsPage must be used inside AccountsPageProvider");
+  }
+
+  return context;
+}

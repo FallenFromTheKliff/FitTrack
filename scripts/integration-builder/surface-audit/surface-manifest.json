@@ -1,0 +1,631 @@
+[
+  {
+    "id": "web-login",
+    "platform": "web",
+    "route": "/login",
+    "label": "Admin Login",
+    "accessibilityGroup": "public",
+    "currentAllowedRoles": ["PUBLIC"],
+    "conditionalNotes": [
+      "Negative-path requirement: member credentials must be rejected from the management portal."
+    ],
+    "primaryComponents": [
+      "apps/web/app/(auth)/login/page.tsx",
+      "apps/web/components/auth/AdminLoginPage.tsx"
+    ],
+    "paymongoDependent": false,
+    "domainHints": ["auth"],
+    "owningDomain": "auth",
+    "secondaryDomains": [],
+    "parityGroup": "auth-entry",
+    "parityRequired": true,
+    "verificationMode": "cross_surface",
+    "preferredMcp": ["serena", "swagger", "playwright"],
+    "primaryApiTags": ["Auth"],
+    "primaryQueryModules": ["auth"],
+    "roleSensitive": true
+  },
+  {
+    "id": "web-locked",
+    "platform": "web",
+    "route": "/locked",
+    "label": "Portal Locked",
+    "accessibilityGroup": "public",
+    "currentAllowedRoles": ["PUBLIC"],
+    "conditionalNotes": [
+      "Public status page shown when a management account is temporarily locked."
+    ],
+    "primaryComponents": [
+      "apps/web/app/(auth)/locked/page.tsx",
+      "apps/web/components/auth/LockedStatusPage.tsx"
+    ],
+    "paymongoDependent": false,
+    "domainHints": ["auth"],
+    "owningDomain": "auth",
+    "secondaryDomains": [],
+    "parityGroup": null,
+    "parityRequired": false,
+    "verificationMode": "web_only",
+    "preferredMcp": ["serena", "playwright"],
+    "primaryApiTags": ["Auth"],
+    "primaryQueryModules": ["auth"],
+    "roleSensitive": false
+  },
+  {
+    "id": "web-payments-success",
+    "platform": "web",
+    "route": "/payments/success",
+    "label": "PayMongo Return Success",
+    "accessibilityGroup": "public",
+    "currentAllowedRoles": ["PUBLIC"],
+    "conditionalNotes": [
+      "Public browser-return page for local payment redirect verification only.",
+      "When PayMongo is disabled, document the route and keep verification limited to page rendering."
+    ],
+    "primaryComponents": [
+      "apps/web/app/payments/success/page.tsx",
+      "apps/web/components/auth/PaymentReturnPage.tsx"
+    ],
+    "paymongoDependent": true,
+    "domainHints": ["membership", "bookings"],
+    "owningDomain": "membership",
+    "secondaryDomains": ["bookings"],
+    "parityGroup": null,
+    "parityRequired": false,
+    "verificationMode": "web_only",
+    "preferredMcp": ["serena", "playwright"],
+    "primaryApiTags": ["Payments", "Membership"],
+    "primaryQueryModules": ["membership", "bookings"],
+    "roleSensitive": false
+  },
+  {
+    "id": "web-payments-cancel",
+    "platform": "web",
+    "route": "/payments/cancel",
+    "label": "PayMongo Return Cancel",
+    "accessibilityGroup": "public",
+    "currentAllowedRoles": ["PUBLIC"],
+    "conditionalNotes": [
+      "Public browser-return page for cancelled or abandoned payment redirects.",
+      "When PayMongo is disabled, document the route and keep verification limited to page rendering."
+    ],
+    "primaryComponents": [
+      "apps/web/app/payments/cancel/page.tsx",
+      "apps/web/components/auth/PaymentReturnPage.tsx"
+    ],
+    "paymongoDependent": true,
+    "domainHints": ["membership", "bookings"],
+    "owningDomain": "membership",
+    "secondaryDomains": ["bookings"],
+    "parityGroup": null,
+    "parityRequired": false,
+    "verificationMode": "web_only",
+    "preferredMcp": ["serena", "playwright"],
+    "primaryApiTags": ["Payments", "Membership"],
+    "primaryQueryModules": ["membership", "bookings"],
+    "roleSensitive": false
+  },
+  {
+    "id": "web-dashboard",
+    "platform": "web",
+    "route": "/dashboard",
+    "label": "Dashboard",
+    "accessibilityGroup": "admin_staff",
+    "currentAllowedRoles": ["ADMIN", "STAFF"],
+    "conditionalNotes": [
+      "Shared management landing page for ADMIN and STAFF."
+    ],
+    "primaryComponents": [
+      "apps/web/app/(admin)/dashboard/page.tsx"
+    ],
+    "paymongoDependent": false,
+    "domainHints": ["analytics", "notifications"],
+    "owningDomain": "analytics",
+    "secondaryDomains": ["notifications"],
+    "parityGroup": "overview-home",
+    "parityRequired": false,
+    "verificationMode": "web_only",
+    "preferredMcp": ["serena", "prisma", "swagger", "playwright"],
+    "primaryApiTags": ["Analytics", "Business Analytics", "Notifications"],
+    "primaryQueryModules": ["analytics", "notifications"],
+    "roleSensitive": true
+  },
+  {
+    "id": "web-members",
+    "platform": "web",
+    "route": "/members",
+    "label": "Members",
+    "accessibilityGroup": "role_conditioned",
+    "currentAllowedRoles": ["ADMIN", "STAFF"],
+    "conditionalNotes": [
+      "STAFF can browse a read-only directory.",
+      "ADMIN can add staff, edit member records, approve payments, and manage termination actions."
+    ],
+    "primaryComponents": [
+      "apps/web/app/(admin)/members/page.tsx",
+      "apps/web/contexts/MemberContext.tsx"
+    ],
+    "paymongoDependent": false,
+    "domainHints": ["user", "membership", "coaching"],
+    "owningDomain": "user",
+    "secondaryDomains": ["membership", "coaching"],
+    "parityGroup": null,
+    "parityRequired": false,
+    "verificationMode": "web_only",
+    "preferredMcp": ["serena", "prisma", "swagger", "playwright"],
+    "primaryApiTags": ["Users", "Membership", "Coaching", "Staff", "Admin — Users"],
+    "primaryQueryModules": ["users", "membership", "coaches", "staff"],
+    "roleSensitive": true
+  },
+  {
+    "id": "web-schedule",
+    "platform": "web",
+    "route": "/schedule",
+    "label": "Staff Schedule",
+    "accessibilityGroup": "role_conditioned",
+    "currentAllowedRoles": ["ADMIN", "STAFF"],
+    "conditionalNotes": [
+      "STAFF sees the staff schedule mode.",
+      "ADMIN can drag, assign, and manage roster interactions on the same surface."
+    ],
+    "primaryComponents": [
+      "apps/web/app/(admin)/schedule/page.tsx",
+      "apps/web/contexts/ScheduleContext.tsx",
+      "apps/web/components/schedule/RosterPanel.tsx"
+    ],
+    "paymongoDependent": false,
+    "domainHints": ["bookings", "coaching"],
+    "owningDomain": "bookings",
+    "secondaryDomains": ["coaching"],
+    "parityGroup": "booking-management",
+    "parityRequired": false,
+    "verificationMode": "web_only",
+    "preferredMcp": ["serena", "prisma", "swagger", "playwright"],
+    "primaryApiTags": ["Bookings", "Coaching", "Staff", "Admin"],
+    "primaryQueryModules": ["bookings", "appointments", "staff", "coaches"],
+    "roleSensitive": true
+  },
+  {
+    "id": "web-ai",
+    "platform": "web",
+    "route": "/ai",
+    "label": "BrodigyAI",
+    "accessibilityGroup": "admin_staff",
+    "currentAllowedRoles": ["ADMIN", "STAFF"],
+    "conditionalNotes": [
+      "Shared management AI conversation surface for ADMIN and STAFF."
+    ],
+    "primaryComponents": [
+      "apps/web/app/(admin)/ai/page.tsx"
+    ],
+    "paymongoDependent": false,
+    "domainHints": ["ai"],
+    "owningDomain": "ai",
+    "secondaryDomains": [],
+    "parityGroup": "ai-assistant",
+    "parityRequired": true,
+    "verificationMode": "cross_surface",
+    "preferredMcp": ["serena", "prisma", "swagger", "playwright"],
+    "primaryApiTags": ["AI", "Gym Chat", "Gym Chat Knowledge"],
+    "primaryQueryModules": ["ai"],
+    "roleSensitive": true
+  },
+  {
+    "id": "web-settings",
+    "platform": "web",
+    "route": "/settings",
+    "label": "Settings",
+    "accessibilityGroup": "admin_staff",
+    "currentAllowedRoles": ["ADMIN", "STAFF"],
+    "conditionalNotes": [
+      "Shared management settings surface for ADMIN and STAFF."
+    ],
+    "primaryComponents": [
+      "apps/web/app/(admin)/settings/page.tsx",
+      "apps/web/app/(admin)/settings/GymSettingsPageContent.tsx"
+    ],
+    "paymongoDependent": false,
+    "domainHints": ["auth", "notifications"],
+    "owningDomain": "auth",
+    "secondaryDomains": ["notifications"],
+    "parityGroup": "settings",
+    "parityRequired": true,
+    "verificationMode": "cross_surface",
+    "preferredMcp": ["serena", "prisma", "swagger", "playwright"],
+    "primaryApiTags": ["Auth", "Notifications", "Users"],
+    "primaryQueryModules": ["auth", "notifications", "profile"],
+    "roleSensitive": true
+  },
+  {
+    "id": "web-profile",
+    "platform": "web",
+    "route": "/profile",
+    "label": "Profile Settings",
+    "accessibilityGroup": "role_conditioned",
+    "currentAllowedRoles": ["ADMIN", "STAFF"],
+    "conditionalNotes": [
+      "Both ADMIN and STAFF enter the same profile shell.",
+      "The surface includes role-conditioned editability and self-management behavior."
+    ],
+    "primaryComponents": [
+      "apps/web/app/(admin)/profile/page.tsx",
+      "apps/web/hooks/profile/useProfile.ts"
+    ],
+    "paymongoDependent": false,
+    "domainHints": ["user", "files"],
+    "owningDomain": "user",
+    "secondaryDomains": ["files"],
+    "parityGroup": "profile",
+    "parityRequired": true,
+    "verificationMode": "cross_surface",
+    "preferredMcp": ["serena", "prisma", "swagger", "playwright"],
+    "primaryApiTags": ["Users", "Files", "Staff"],
+    "primaryQueryModules": ["profile", "files", "users"],
+    "roleSensitive": true
+  },
+  {
+    "id": "web-facilities",
+    "platform": "web",
+    "route": "/facilities",
+    "label": "Facilities",
+    "accessibilityGroup": "admin_only",
+    "currentAllowedRoles": ["ADMIN"],
+    "conditionalNotes": [
+      "Admin-only management surface for facility and venue layout operations."
+    ],
+    "primaryComponents": [
+      "apps/web/app/(admin)/facilities/page.tsx",
+      "apps/web/components/map/FloorPlanPanel.tsx",
+      "apps/web/components/map/LayoutEditorPanel.tsx"
+    ],
+    "paymongoDependent": false,
+    "domainHints": ["gym-layout", "bookings"],
+    "owningDomain": "gym-layout",
+    "secondaryDomains": ["bookings"],
+    "parityGroup": "facilities",
+    "parityRequired": true,
+    "verificationMode": "cross_surface",
+    "preferredMcp": ["serena", "prisma", "swagger", "playwright"],
+    "primaryApiTags": ["Gym Layout", "Bookings"],
+    "primaryQueryModules": ["gym-layout", "venues", "bookings"],
+    "roleSensitive": true
+  },
+  {
+    "id": "web-inventory",
+    "platform": "web",
+    "route": "/inventory",
+    "label": "Inventory Management",
+    "accessibilityGroup": "admin_only",
+    "currentAllowedRoles": ["ADMIN"],
+    "conditionalNotes": [
+      "Admin-only retail and stock management surface."
+    ],
+    "primaryComponents": [
+      "apps/web/app/(admin)/inventory/page.tsx",
+      "apps/web/components/inventory/InventoryDashboard.tsx",
+      "apps/web/components/inventory/InventoryMainPanel.tsx"
+    ],
+    "paymongoDependent": false,
+    "domainHints": ["inventory"],
+    "owningDomain": "inventory",
+    "secondaryDomains": [],
+    "parityGroup": null,
+    "parityRequired": false,
+    "verificationMode": "web_only",
+    "preferredMcp": ["serena", "prisma", "swagger", "playwright"],
+    "primaryApiTags": ["Inventory"],
+    "primaryQueryModules": ["inventory"],
+    "roleSensitive": true
+  },
+  {
+    "id": "web-analytics",
+    "platform": "web",
+    "route": "/analytics",
+    "label": "Analytics & Reports",
+    "accessibilityGroup": "admin_only",
+    "currentAllowedRoles": ["ADMIN"],
+    "conditionalNotes": [
+      "Admin-only reporting and business insight surface."
+    ],
+    "primaryComponents": [
+      "apps/web/app/(admin)/analytics/page.tsx",
+      "apps/web/components/analytics/AnalyticsDashboard.tsx"
+    ],
+    "paymongoDependent": false,
+    "domainHints": ["analytics", "ai"],
+    "owningDomain": "analytics",
+    "secondaryDomains": ["ai"],
+    "parityGroup": null,
+    "parityRequired": false,
+    "verificationMode": "web_only",
+    "preferredMcp": ["serena", "prisma", "swagger", "playwright"],
+    "primaryApiTags": ["Analytics", "Business Analytics", "AI"],
+    "primaryQueryModules": ["analytics", "ai"],
+    "roleSensitive": true
+  },
+  {
+    "id": "mobile-login",
+    "platform": "mobile_web",
+    "route": "/login",
+    "label": "Member Login",
+    "accessibilityGroup": "public",
+    "currentAllowedRoles": ["PUBLIC"],
+    "conditionalNotes": [
+      "Negative-path requirement: ADMIN and STAFF credentials must be rejected from the mobile app."
+    ],
+    "primaryComponents": [
+      "apps/mobile/app/(auth)/login.tsx"
+    ],
+    "paymongoDependent": false,
+    "domainHints": ["auth"],
+    "owningDomain": "auth",
+    "secondaryDomains": [],
+    "parityGroup": "auth-entry",
+    "parityRequired": true,
+    "verificationMode": "cross_surface",
+    "preferredMcp": ["serena", "swagger", "playwright"],
+    "primaryApiTags": ["Auth"],
+    "primaryQueryModules": ["auth"],
+    "roleSensitive": true
+  },
+  {
+    "id": "mobile-register",
+    "platform": "mobile_web",
+    "route": "/register",
+    "label": "Member Registration",
+    "accessibilityGroup": "public",
+    "currentAllowedRoles": ["PUBLIC"],
+    "conditionalNotes": [
+      "Public registration and OTP entry flow for member onboarding."
+    ],
+    "primaryComponents": [
+      "apps/mobile/app/(auth)/register.tsx"
+    ],
+    "paymongoDependent": false,
+    "domainHints": ["auth"],
+    "owningDomain": "auth",
+    "secondaryDomains": [],
+    "parityGroup": null,
+    "parityRequired": false,
+    "verificationMode": "mobile_only",
+    "preferredMcp": ["serena", "swagger", "playwright"],
+    "primaryApiTags": ["Auth"],
+    "primaryQueryModules": ["auth"],
+    "roleSensitive": false
+  },
+  {
+    "id": "mobile-home",
+    "platform": "mobile_web",
+    "route": "/home",
+    "label": "Home",
+    "accessibilityGroup": "user_coach",
+    "currentAllowedRoles": ["USER", "COACH"],
+    "conditionalNotes": [
+      "Shared authenticated home surface for USER and COACH."
+    ],
+    "primaryComponents": [
+      "apps/mobile/app/(tabs)/home.tsx"
+    ],
+    "paymongoDependent": false,
+    "domainHints": ["analytics", "notifications"],
+    "owningDomain": "analytics",
+    "secondaryDomains": ["notifications"],
+    "parityGroup": "overview-home",
+    "parityRequired": false,
+    "verificationMode": "mobile_only",
+    "preferredMcp": ["serena", "prisma", "swagger", "playwright"],
+    "primaryApiTags": ["Analytics", "Notifications"],
+    "primaryQueryModules": ["analytics", "notifications"],
+    "roleSensitive": true
+  },
+  {
+    "id": "mobile-facilities",
+    "platform": "mobile_web",
+    "route": "/facilities",
+    "label": "Gym Facilities",
+    "accessibilityGroup": "user_coach",
+    "currentAllowedRoles": ["USER", "COACH"],
+    "conditionalNotes": [
+      "Shared facility browsing surface for USER and COACH."
+    ],
+    "primaryComponents": [
+      "apps/mobile/app/(tabs)/facilities.tsx"
+    ],
+    "paymongoDependent": false,
+    "domainHints": ["gym-layout", "bookings"],
+    "owningDomain": "gym-layout",
+    "secondaryDomains": ["bookings"],
+    "parityGroup": "facilities",
+    "parityRequired": true,
+    "verificationMode": "cross_surface",
+    "preferredMcp": ["serena", "prisma", "swagger", "playwright"],
+    "primaryApiTags": ["Gym Layout", "Bookings"],
+    "primaryQueryModules": ["gym-layout", "venues", "bookings"],
+    "roleSensitive": true
+  },
+  {
+    "id": "mobile-bookings",
+    "platform": "mobile_web",
+    "route": "/bookings",
+    "label": "Bookings",
+    "accessibilityGroup": "role_conditioned",
+    "currentAllowedRoles": ["USER", "COACH"],
+    "conditionalNotes": [
+      "USER can create and manage reservations plus appointments.",
+      "COACH sees coach schedule and appointment lifecycle actions instead of the member booking flow."
+    ],
+    "primaryComponents": [
+      "apps/mobile/app/(tabs)/bookings.tsx",
+      "apps/mobile/components/modals/booking/ReservationModal.tsx",
+      "apps/mobile/components/modals/booking/AppointmentModal.tsx"
+    ],
+    "paymongoDependent": true,
+    "domainHints": ["bookings", "coaching"],
+    "owningDomain": "bookings",
+    "secondaryDomains": ["coaching"],
+    "parityGroup": "booking-management",
+    "parityRequired": false,
+    "verificationMode": "mobile_only",
+    "preferredMcp": ["serena", "prisma", "swagger", "playwright"],
+    "primaryApiTags": ["Bookings", "Coaching", "Payments", "Membership"],
+    "primaryQueryModules": ["bookings", "appointments", "membership", "coaches"],
+    "roleSensitive": true
+  },
+  {
+    "id": "mobile-nutrition",
+    "platform": "mobile_web",
+    "route": "/nutrition",
+    "label": "Nutrition",
+    "accessibilityGroup": "user_coach",
+    "currentAllowedRoles": ["USER", "COACH"],
+    "conditionalNotes": [
+      "Shared nutrition logging and planning surface for authenticated mobile roles."
+    ],
+    "primaryComponents": [
+      "apps/mobile/app/(tabs)/nutrition.tsx",
+      "apps/mobile/components/modals/nutrition/GoalsModal.tsx",
+      "apps/mobile/components/modals/nutrition/NutritionLogModal.tsx"
+    ],
+    "paymongoDependent": false,
+    "domainHints": ["nutrition"],
+    "owningDomain": "nutrition",
+    "secondaryDomains": [],
+    "parityGroup": null,
+    "parityRequired": false,
+    "verificationMode": "mobile_only",
+    "preferredMcp": ["serena", "prisma", "swagger", "playwright"],
+    "primaryApiTags": ["Nutrition"],
+    "primaryQueryModules": ["nutrition"],
+    "roleSensitive": true
+  },
+  {
+    "id": "mobile-workout",
+    "platform": "mobile_web",
+    "route": "/workout",
+    "label": "Workout",
+    "accessibilityGroup": "user_coach",
+    "currentAllowedRoles": ["USER", "COACH"],
+    "conditionalNotes": [
+      "Shared workout surface for authenticated mobile roles."
+    ],
+    "primaryComponents": [
+      "apps/mobile/app/(tabs)/workout.tsx",
+      "apps/mobile/components/workout/WorkoutLiveScreen.tsx"
+    ],
+    "paymongoDependent": false,
+    "domainHints": ["fitness"],
+    "owningDomain": "fitness",
+    "secondaryDomains": [],
+    "parityGroup": null,
+    "parityRequired": false,
+    "verificationMode": "mobile_only",
+    "preferredMcp": ["serena", "prisma", "swagger", "playwright"],
+    "primaryApiTags": ["Fitness"],
+    "primaryQueryModules": ["fitness"],
+    "roleSensitive": true
+  },
+  {
+    "id": "mobile-chathistory",
+    "platform": "mobile_web",
+    "route": "/chathistory",
+    "label": "BrodigyAI History",
+    "accessibilityGroup": "user_coach",
+    "currentAllowedRoles": ["USER", "COACH"],
+    "conditionalNotes": [
+      "Shared AI session list surface for authenticated mobile roles."
+    ],
+    "primaryComponents": [
+      "apps/mobile/app/(tabs)/chathistory.tsx"
+    ],
+    "paymongoDependent": false,
+    "domainHints": ["ai"],
+    "owningDomain": "ai",
+    "secondaryDomains": [],
+    "parityGroup": "ai-assistant",
+    "parityRequired": true,
+    "verificationMode": "cross_surface",
+    "preferredMcp": ["serena", "prisma", "swagger", "playwright"],
+    "primaryApiTags": ["AI", "Gym Chat"],
+    "primaryQueryModules": ["ai"],
+    "roleSensitive": true
+  },
+  {
+    "id": "mobile-chatbot",
+    "platform": "mobile_web",
+    "route": "/chatbot",
+    "label": "BrodigyAI Chat",
+    "accessibilityGroup": "user_coach",
+    "currentAllowedRoles": ["USER", "COACH"],
+    "conditionalNotes": [
+      "Shared AI chat surface for authenticated mobile roles."
+    ],
+    "primaryComponents": [
+      "apps/mobile/app/(tabs)/chatbot.tsx"
+    ],
+    "paymongoDependent": false,
+    "domainHints": ["ai"],
+    "owningDomain": "ai",
+    "secondaryDomains": [],
+    "parityGroup": "ai-assistant",
+    "parityRequired": true,
+    "verificationMode": "cross_surface",
+    "preferredMcp": ["serena", "prisma", "swagger", "playwright"],
+    "primaryApiTags": ["AI", "Gym Chat"],
+    "primaryQueryModules": ["ai"],
+    "roleSensitive": true
+  },
+  {
+    "id": "mobile-profile",
+    "platform": "mobile_web",
+    "route": "/profile",
+    "label": "Profile",
+    "accessibilityGroup": "role_conditioned",
+    "currentAllowedRoles": ["USER", "COACH"],
+    "conditionalNotes": [
+      "USER sees membership, payment history, and deletion-request controls.",
+      "COACH sees availability management and coach-profile controls."
+    ],
+    "primaryComponents": [
+      "apps/mobile/app/(tabs)/profile.tsx",
+      "apps/mobile/components/modals/profile/EditProfileModal.tsx"
+    ],
+    "paymongoDependent": false,
+    "domainHints": ["user", "membership", "files", "coaching"],
+    "owningDomain": "user",
+    "secondaryDomains": ["membership", "files", "coaching"],
+    "parityGroup": "profile",
+    "parityRequired": true,
+    "verificationMode": "cross_surface",
+    "preferredMcp": ["serena", "prisma", "swagger", "playwright"],
+    "primaryApiTags": ["Users", "Membership", "Files", "Coaching"],
+    "primaryQueryModules": ["profile", "membership", "files", "coaches"],
+    "roleSensitive": true
+  },
+  {
+    "id": "mobile-settings",
+    "platform": "mobile_web",
+    "route": "/settings",
+    "label": "Settings",
+    "accessibilityGroup": "user_coach",
+    "currentAllowedRoles": ["USER", "COACH"],
+    "conditionalNotes": [
+      "Shared authenticated settings surface for USER and COACH."
+    ],
+    "primaryComponents": [
+      "apps/mobile/app/(tabs)/settings.tsx",
+      "apps/mobile/components/settings/SecurityPanel.tsx",
+      "apps/mobile/components/settings/PreferencesPanel.tsx"
+    ],
+    "paymongoDependent": false,
+    "domainHints": ["auth", "notifications"],
+    "owningDomain": "auth",
+    "secondaryDomains": ["notifications"],
+    "parityGroup": "settings",
+    "parityRequired": true,
+    "verificationMode": "cross_surface",
+    "preferredMcp": ["serena", "prisma", "swagger", "playwright"],
+    "primaryApiTags": ["Auth", "Notifications"],
+    "primaryQueryModules": ["auth", "notifications", "profile"],
+    "roleSensitive": true
+  }
+]

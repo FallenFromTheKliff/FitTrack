@@ -1,0 +1,9 @@
+ALTER TABLE "amenities"
+  ADD COLUMN IF NOT EXISTS "image_url" VARCHAR(500);
+
+CREATE TABLE IF NOT EXISTS "facility_floor_plan_media" (
+  "floor_id" VARCHAR(20) PRIMARY KEY,
+  "image_url" VARCHAR(500),
+  "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

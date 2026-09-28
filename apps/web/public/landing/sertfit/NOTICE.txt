@@ -1,0 +1,11 @@
+SertFit landing reference assets.
+
+Images are source renditions requested from images.unsplash.com using the
+IDs and crop dimensions encoded in each filename. The Yoga Room source URL
+returned a CDN GET 404 for the exact 1100x720 query; the same source image's
+working 1100px rendition is kept as 1683056255281-e52a141924f0-1100xauto.jpg.
+
+Fonts: Archivo (400, 500, 600, 700, 800, 900), Inter (400, 500, 600), and
+JetBrains Mono (400, 500, 600), retrieved from the official Google Fonts CSS2
+API and fonts.gstatic.com on 2026-09-10. They are distributed under the SIL
+Open Font License 1.1: https://scripts.sil.org/OFL

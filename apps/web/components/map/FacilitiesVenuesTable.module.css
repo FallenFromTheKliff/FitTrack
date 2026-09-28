@@ -1,0 +1,37 @@
+.root {
+  container-type: inline-size;
+  display: grid;
+  gap: 10px;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+}
+
+.toolbar {
+  align-items: end;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(190px, 1fr) minmax(180px, 0.8fr) minmax(180px, 0.8fr) auto auto;
+  min-width: 0;
+}
+
+.tableFrame {
+  display: grid;
+  grid-template-rows: auto minmax(min-content, 1fr) auto;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+}
+
+@container (max-width: 1120px) {
+  .toolbar {
+    grid-template-columns: minmax(190px, 1fr) minmax(180px, 1fr);
+  }
+}
+
+@container (max-width: 580px) {
+  .toolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

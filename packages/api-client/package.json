@@ -1,0 +1,12 @@
+{
+  "name": "@fittrack/api-client",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "dependencies": {
+    "@fittrack/types": "workspace:*",
+    "@fittrack/validators": "workspace:*",
+    "axios": "^1.13.6"
+  }
+}

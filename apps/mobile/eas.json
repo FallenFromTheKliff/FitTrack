@@ -1,0 +1,37 @@
+{
+  "cli": {
+    "version": ">= 19.1.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "preview": {
+      "distribution": "internal",
+      "ios": {
+        "image": "sdk-55"
+      }
+    },
+    "production": {
+      "distribution": "store",
+      "environment": "production",
+      "pnpm": "10.30.3",
+      "env": {
+        "EXPO_NO_METRO_WORKSPACE_ROOT": "1"
+      },
+      "ios": {
+        "image": "sdk-55",
+        "buildConfiguration": "Release",
+        "autoIncrement": true
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "ascAppId": "6808966763",
+        "ascApiKeyPath": "../../.artifacts/ios-ipa-credentials/AuthKey_T25JQYL79U.p8",
+        "ascApiKeyId": "T25JQYL79U",
+        "ascApiKeyIssuerId": "a37e0509-2bd4-400b-8b67-b4b285fc0c20"
+      }
+    }
+  }
+}

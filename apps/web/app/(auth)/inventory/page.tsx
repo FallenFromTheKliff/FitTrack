@@ -1,0 +1,1542 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Archive, ImagePlus, Plus, ReceiptText, RefreshCw, Trash2 } from "lucide-react";
+
+import { buildRenderableAssetUrl } from "@fittrack/utils";
+
+import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
+import { useFadeIn } from "@/hooks/animations/useFadeIn";
+import { useThemeTransition } from "@/hooks/animations/useThemeTransition";
+import {
+  EQUIPMENT_STATUS_COLOR,
+  INVENTORY_EQUIPMENT_ARCHIVE_FIELDS,
+  INVENTORY_EQUIPMENT_EDIT_FIELDS,
+  INVENTORY_EQUIPMENT_PRESET_OPTIONS,
+  INVENTORY_EQUIPMENT_STATUS_TRANSITION_FIELDS,
+  INVENTORY_RETAIL_PRODUCT_FIELDS,
+  INVENTORY_RETAIL_RESTOCK_FIELDS,
+  RETAIL_STOCK_STATUS_COLOR,
+  validateInventoryEquipmentDetailForm
+} from "@/data/inventory/inventory";
+import FitButton from "@/components/fit/FitButton";
+import FitPill from "@/components/fit/FitPill";
+import FitSection from "@/components/fit/FitSection";
+import { FitSelect } from "@/components/fit/FitCard";
+import { FitText, FitTextArea, FitTextInput } from "@/components/fit/FitText";
+import { ConfirmModal, DetailsModal } from "@/components/modals";
+import FitModal from "@/components/modals/FitModal";
+import { InventoryMainPanel } from "@/components/inventory/InventoryMainPanel";
+import {
+  useInventoryDashboard,
+  type InventoryRetailSaleInput,
+  type InventoryRetailTableRow
+} from "@/hooks/inventory/useInventoryDashboard";
+import { WEB_API_BASE_URL } from "@/lib/api-client";
+import { getBrowserViewportState } from "@/utils/browserViewport";
+
+export const dynamic = "force-dynamic";
+
+function formatLabel(value: string) {
+  return value
+    .split(/[_-]/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function formatActorName(
+  actor:
+    | {
+        firstName: string | null;
+        lastName: string | null;
+      }
+    | null
+) {
+  if (!actor) return "Staff";
+
+  return `${actor.firstName ?? ""} ${actor.lastName ?? ""}`.trim() || "Staff";
+}
+
+function parseWholeNumber(value: string | undefined) {
+  const normalized = (value ?? "").trim();
+  const parsed = Number(normalized);
+
+  if (!/^\d+$/.test(normalized) || !Number.isFinite(parsed) || !Number.isInteger(parsed)) {
+    return { error: "Value must be a whole number." };
+  }
+
+  return { value: parsed };
+}
+
+function parsePositiveDecimal(value: string | undefined) {
+  const normalized = (value ?? "").trim();
+  const parsed = Number(normalized);
+
+  if (!/^\d+(?:\.\d+)?$/.test(normalized) || !Number.isFinite(parsed)) {
+    return { error: "Value must be a number." };
+  }
+
+  return { value: parsed };
+}
+
+function getImageReferenceLabel(imageUrl: string | null | undefined) {
+  if (!imageUrl) return "No image uploaded";
+
+  try {
+    const url = new URL(imageUrl);
+    const fileName = url.pathname.split("/").filter(Boolean).pop();
+    if (fileName) return fileName.length > 24 ? `${fileName.slice(0, 21)}...` : fileName;
+    return url.hostname;
+  } catch {
+    return imageUrl.length > 24 ? `${imageUrl.slice(0, 21)}...` : imageUrl;
+  }
+}
+
+function validateRetailProductForm(data: Record<string, string>) {
+  const errors: Record<string, string> = {};
+  const price = parsePositiveDecimal(data.price);
+  const cost = parsePositiveDecimal(data.cost);
+  const stockQuantity = parseWholeNumber(data.stockQuantity);
+  const reorderThreshold = parseWholeNumber(data.reorderThreshold);
+
+  if (!data.name?.trim()) {
+    errors.name = "Product Name is required";
+  }
+  if (!data.category?.trim()) {
+    errors.category = "Category is required";
+  }
+  if (price.error) {
+    errors.price = "Price must be a number.";
+  } else if ((price.value ?? 0) <= 0) {
+    errors.price = "Price must be greater than 0.";
+  }
+  if (cost.error) {
+    errors.cost = "Cost must be a number.";
+  } else if ((cost.value ?? 0) <= 0) {
+    errors.cost = "Cost must be greater than 0.";
+  }
+  if (stockQuantity.error) {
+    errors.stockQuantity = "Stock Quantity must be a whole number.";
+  } else if ((stockQuantity.value ?? 0) < 0) {
+    errors.stockQuantity = "Stock Quantity cannot be negative.";
+  }
+  if (reorderThreshold.error) {
+    errors.reorderThreshold = "Reorder Threshold must be a whole number.";
+  } else if ((reorderThreshold.value ?? 0) < 0) {
+    errors.reorderThreshold = "Reorder Threshold cannot be negative.";
+  }
+
+  return errors;
+}
+
+function validateRetailRestockForm(data: Record<string, string>) {
+  const errors: Record<string, string> = {};
+  const quantity = parseWholeNumber(data.quantity);
+
+  if (quantity.error) {
+    errors.quantity = "Quantity Added must be a whole number.";
+  } else if ((quantity.value ?? 0) < 1) {
+    errors.quantity = "Quantity Added must be at least 1.";
+  }
+
+  return errors;
+}
+
+function validateEquipmentCreateForm(
+  data: Record<string, string>,
+  presetSelection: string,
+) {
+  const errors: Record<string, string> = {};
+  const quantity = parseWholeNumber(data.quantity);
+
+  if (!presetSelection.trim()) {
+    errors.presetSelection = "Equipment Option is required";
+  }
+  if (quantity.error) {
+    errors.quantity = "Quantity must be a whole number.";
+  } else if ((quantity.value ?? 0) < 1) {
+    errors.quantity = "Quantity must be at least 1.";
+  }
+  if (presetSelection === "new" && !data.name?.trim()) {
+    errors.name = "Equipment Name is required";
+  }
+
+  return errors;
+}
+
+function validateEquipmentWriteOffForm(
+  data: Record<string, string>,
+  quantityAvailable: number | null,
+  sourceStatus: string | null,
+) {
+  const errors: Record<string, string> = {};
+  const quantity = parseWholeNumber(data.quantity);
+
+  if (quantity.error) {
+    errors.quantity = "Quantity to Move must be a whole number.";
+  } else if ((quantity.value ?? 0) < 1) {
+    errors.quantity = "Quantity to Move must be at least 1.";
+  } else if (
+    quantityAvailable !== null &&
+    (quantity.value ?? 0) > quantityAvailable
+  ) {
+    errors.quantity = "Quantity to Move cannot exceed the selected status quantity.";
+  }
+
+  if (
+    data.destinationStatus !== "Available" &&
+    data.destinationStatus !== "Under Maintenance" &&
+    data.destinationStatus !== "Broken" &&
+    data.destinationStatus !== "Missing"
+  ) {
+    errors.destinationStatus = "Choose a valid destination status.";
+  } else if (data.destinationStatus === sourceStatus) {
+    errors.destinationStatus = "Choose a different destination status.";
+  }
+
+  return errors;
+}
+
+function validateEquipmentArchiveForm(
+  data: Record<string, string>,
+  statusQuantity: number | null,
+) {
+  const errors: Record<string, string> = {};
+  const quantityToArchive = parseWholeNumber(data.quantityToArchive);
+
+  if (quantityToArchive.error) {
+    errors.quantityToArchive = "Quantity to Archive must be a whole number.";
+  } else if ((quantityToArchive.value ?? 0) < 1) {
+    errors.quantityToArchive = "Quantity to Archive must be at least 1.";
+  } else if (
+    statusQuantity !== null &&
+    (quantityToArchive.value ?? 0) > statusQuantity
+  ) {
+    errors.quantityToArchive = "Quantity to Archive cannot exceed the selected status quantity.";
+  }
+  if (!data.reason?.trim()) {
+    errors.reason = "Reason is required";
+  }
+
+  return errors;
+}
+
+const INVENTORY_IMAGE_ACCEPT = "image/jpeg,image/png,image/webp";
+const INVENTORY_IMAGE_MAX_BYTES = 25 * 1024 * 1024;
+const INVENTORY_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+function getInventoryImageValidationError(file: File) {
+  if (!INVENTORY_IMAGE_TYPES.has(file.type.toLowerCase())) {
+    return "Choose a JPEG, PNG, or WebP image.";
+  }
+  if (file.size > INVENTORY_IMAGE_MAX_BYTES) {
+    return "Image must be 25 MB or smaller.";
+  }
+  return null;
+}
+
+type InventoryImageUploadCardProps = {
+  buttonLabel: string;
+  imageUrl: string;
+  onUpload: (file: File) => Promise<boolean>;
+  title: string;
+  uploadPending: boolean;
+};
+
+function InventoryImageUploadCard({
+  buttonLabel,
+  imageUrl,
+  onUpload,
+  title,
+  uploadPending
+}: InventoryImageUploadCardProps) {
+  const { colors } = useTheme();
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const previewUrlRef = useRef<string | null>(null);
+  const mountedRef = useRef(true);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [persistedImageLoadFailed, setPersistedImageLoadFailed] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const renderableImageUrl = buildRenderableAssetUrl({
+    apiBaseUrl: WEB_API_BASE_URL,
+    assetUrl: imageUrl || null
+  });
+  const effectiveUploadPending = uploadPending || isUploading;
+  const visibleImageUrl = previewUrl ?? (persistedImageLoadFailed ? null : renderableImageUrl);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current);
+        previewUrlRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    setPersistedImageLoadFailed(false);
+    if (renderableImageUrl) setUploadError(null);
+  }, [renderableImageUrl]);
+
+  const clearPreview = () => {
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+    }
+    setPreviewUrl(null);
+  };
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.currentTarget.value = "";
+    if (!file || effectiveUploadPending) return;
+
+    const validationError = getInventoryImageValidationError(file);
+    if (validationError) {
+      clearPreview();
+      setUploadError(validationError);
+      return;
+    }
+
+    clearPreview();
+    const nextPreviewUrl = URL.createObjectURL(file);
+    previewUrlRef.current = nextPreviewUrl;
+    setPreviewUrl(nextPreviewUrl);
+    setUploadError(null);
+    setIsUploading(true);
+
+    void onUpload(file)
+      .then((didUpload) => {
+        if (!mountedRef.current) return;
+        if (!didUpload) {
+          clearPreview();
+          setUploadError("Image upload failed. You can still save without an image.");
+          return;
+        }
+        clearPreview();
+      })
+      .catch(() => {
+        if (!mountedRef.current) return;
+        clearPreview();
+        setUploadError("Image upload failed. You can still save without an image.");
+      })
+      .finally(() => {
+        if (mountedRef.current) setIsUploading(false);
+      });
+  };
+
+  return (
+    <div
+      style={{
+        marginTop: 12,
+        padding: 14,
+        borderRadius: 16,
+        border: `1px solid ${colors.border}`,
+        backgroundColor: colors.surface
+      }}
+    >
+      <FitText style={{ fontSize: 12, fontWeight: 700, color: colors.textMuted }}>
+        {title.toUpperCase()}
+      </FitText>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 14,
+          marginTop: 12,
+          flexWrap: "wrap"
+        }}
+      >
+        <div
+          style={{
+            width: 92,
+            height: 92,
+            borderRadius: 18,
+            border: `1px solid ${colors.border}`,
+            overflow: "hidden",
+            display: "grid",
+            placeItems: "center",
+            backgroundColor: colors.surfaceRaised
+          }}
+        >
+          {visibleImageUrl ? (
+            <img
+              src={visibleImageUrl}
+              alt={title}
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              onError={() => {
+                if (previewUrl && visibleImageUrl === previewUrl) {
+                  clearPreview();
+                  setUploadError("Image preview unavailable.");
+                  return;
+                }
+                setPersistedImageLoadFailed(true);
+              }}
+            />
+          ) : (
+            <ImagePlus size={22} color={colors.textMuted} aria-hidden="true" />
+          )}
+        </div>
+        <div style={{ display: "grid", gap: 8 }}>
+          <FitText style={{ fontSize: 13, color: colors.textMuted }}>
+            Optional. Add a JPEG, PNG, or WebP up to 25 MB to keep the item card and details view current.
+          </FitText>
+          <input
+            ref={inputRef}
+            type="file"
+            accept={INVENTORY_IMAGE_ACCEPT}
+            disabled={effectiveUploadPending}
+            style={{ display: "none" }}
+            onChange={handleFileChange}
+          />
+          <FitButton
+            variant="ghost"
+            label={buttonLabel}
+            icon={ImagePlus}
+            loading={effectiveUploadPending}
+            loadingLabel="UPLOADING..."
+            disabled={effectiveUploadPending}
+            onClick={() => inputRef.current?.click()}
+            style={{ alignSelf: "flex-start" }}
+          />
+          {effectiveUploadPending ? (
+            <FitText
+              as="p"
+              role="status"
+              aria-live="polite"
+              style={{ color: colors.textMuted, fontSize: 12, margin: 0 }}
+            >
+              Uploading image…
+            </FitText>
+          ) : uploadError ? (
+            <FitText
+              as="p"
+              role="status"
+              aria-live="polite"
+              style={{ color: colors.danger, fontSize: 12, fontWeight: 700, margin: 0 }}
+            >
+              {uploadError}
+            </FitText>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type RetailSaleLineItem = {
+  key: string;
+  productId: string;
+  quantity: string;
+};
+
+type RetailSaleModalProps = {
+  initialProductId: string | null;
+  isLoading: boolean;
+  isOpen: boolean;
+  onCancel: () => void;
+  onSubmit: (input: InventoryRetailSaleInput) => void;
+  products: InventoryRetailTableRow[];
+};
+
+function createRetailSaleLine(productId = ""): RetailSaleLineItem {
+  return {
+    key: `sale-line-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    productId,
+    quantity: "1"
+  };
+}
+
+function parseSaleQuantity(value: string) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) return null;
+  return parsed;
+}
+
+function RetailSaleModal({
+  initialProductId,
+  isLoading,
+  isOpen,
+  onCancel,
+  onSubmit,
+  products
+}: RetailSaleModalProps) {
+  const { colors } = useTheme();
+  const [lineItems, setLineItems] = useState<RetailSaleLineItem[]>([
+    createRetailSaleLine(initialProductId ?? "")
+  ]);
+  const [notes, setNotes] = useState("");
+  const productsById = useMemo(
+    () => new Map(products.map((product) => [product.id, product])),
+    [products]
+  );
+  const productOptions = useMemo(
+    () =>
+      products.map((product) => ({
+        label: `${product.name} (${product.stockQuantity} in stock)`,
+        value: product.id
+      })),
+    [products]
+  );
+  const selectedProductIds = useMemo(
+    () => lineItems.map((item) => item.productId).filter(Boolean),
+    [lineItems]
+  );
+  const duplicateProductIds = useMemo(() => {
+    const counts = new Map<string, number>();
+    selectedProductIds.forEach((productId) => {
+      counts.set(productId, (counts.get(productId) ?? 0) + 1);
+    });
+    return new Set(
+      [...counts.entries()]
+        .filter(([, count]) => count > 1)
+        .map(([productId]) => productId)
+    );
+  }, [selectedProductIds]);
+  const lineErrors = useMemo(
+    () =>
+      lineItems.map((item) => {
+        if (!item.productId) return "Choose a product.";
+        const product = productsById.get(item.productId);
+        if (!product) return "Choose a valid product.";
+        if (duplicateProductIds.has(item.productId)) {
+          return "Product is already in the sale. Update the existing row instead.";
+        }
+        const quantity = parseSaleQuantity(item.quantity);
+        if (quantity === null) return "Quantity must be a whole number.";
+        if (quantity < 1) return "Quantity must be at least 1.";
+        if (quantity > product.stockQuantity) {
+          return `Only ${product.stockQuantity} item(s) are in stock.`;
+        }
+        return "";
+      }),
+    [duplicateProductIds, lineItems, productsById]
+  );
+  const saleTotal = useMemo(
+    () =>
+      lineItems.reduce((total, item) => {
+        const product = productsById.get(item.productId);
+        const quantity = parseSaleQuantity(item.quantity);
+        if (!product || quantity === null || quantity < 1) return total;
+        return total + product.price * quantity;
+      }, 0),
+    [lineItems, productsById]
+  );
+  const hasValidationErrors =
+    products.length === 0 || lineErrors.some((error) => error.length > 0);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setLineItems([createRetailSaleLine(initialProductId ?? "")]);
+    setNotes("");
+  }, [initialProductId, isOpen]);
+
+  const updateLineItem = (
+    key: string,
+    patch: Partial<Pick<RetailSaleLineItem, "productId" | "quantity">>
+  ) => {
+    setLineItems((current) =>
+      current.map((item) => (item.key === key ? { ...item, ...patch } : item))
+    );
+  };
+
+  const removeLineItem = (key: string) => {
+    setLineItems((current) =>
+      current.length > 1 ? current.filter((item) => item.key !== key) : current
+    );
+  };
+
+  const addLineItem = () => {
+    const nextProduct = products.find(
+      (product) => !selectedProductIds.includes(product.id)
+    );
+    setLineItems((current) => [
+      ...current,
+      createRetailSaleLine(nextProduct?.id ?? "")
+    ]);
+  };
+
+  const submitSale = () => {
+    if (hasValidationErrors) return;
+
+    onSubmit({
+      items: lineItems.map((item) => ({
+        productId: item.productId,
+        quantity: parseSaleQuantity(item.quantity) ?? 1
+      })),
+      ...(notes.trim() ? { notes: notes.trim() } : {})
+    });
+  };
+
+  return (
+    <FitModal
+      isOpen={isOpen}
+      onClose={onCancel}
+      title="Record Manual Sale"
+      subtitle="Build an on-site retail sale. Unit prices come from the live product records."
+      icon={ReceiptText}
+      maxWidth={760}
+      footer={
+        <FitButton
+          variant="primary"
+          label={isLoading ? "CONFIRMING SALE..." : "CONFIRM SALE"}
+          loading={isLoading}
+          disabled={hasValidationErrors}
+          onClick={submitSale}
+          style={{ minWidth: 180 }}
+        />
+      }
+      hideFooterDivider
+    >
+      <div
+        style={{
+          border: `1px solid ${colors.border}`,
+          borderRadius: 16,
+          padding: 14,
+          backgroundColor: colors.surfaceRaised,
+          marginBottom: 12
+        }}
+      >
+        <FitText as="p" style={{ fontSize: 12, color: colors.textMuted }}>
+          Sale total
+        </FitText>
+        <FitText as="p" style={{ fontSize: 22, fontWeight: 800 }}>
+          PHP{" "}
+          {saleTotal.toLocaleString("en-PH", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          })}
+        </FitText>
+      </div>
+      {products.length === 0 ? (
+        <div
+          style={{
+            border: `1px solid ${colors.border}`,
+            borderRadius: 16,
+            padding: 14,
+            backgroundColor: colors.surfaceRaised
+          }}
+        >
+          <FitText style={{ fontSize: 14, color: colors.textMuted }}>
+            No active retail products with available stock can be sold right now.
+          </FitText>
+        </div>
+      ) : null}
+      <div style={{ display: "grid", gap: 12 }}>
+        {lineItems.map((item, index) => {
+          const product = productsById.get(item.productId);
+          const quantity = parseSaleQuantity(item.quantity);
+          const subtotal = product && quantity ? product.price * quantity : 0;
+          const error = lineErrors[index];
+          const productSelectLabel = product
+            ? `Sale product: ${product.name}`
+            : "Sale product: Choose product";
+
+          return (
+            <div
+              key={item.key}
+              style={{
+                display: "grid",
+                gap: 10,
+                padding: 14,
+                border: `1px solid ${error ? colors.danger : colors.border}`,
+                borderRadius: 16,
+                backgroundColor: colors.surface
+              }}
+            >
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "minmax(220px, 1.5fr) minmax(90px, 0.55fr) minmax(120px, 0.8fr) minmax(120px, 0.8fr) auto",
+                  gap: 10,
+                  alignItems: "end"
+                }}
+              >
+                <div style={{ display: "grid", gap: 6 }}>
+                  <FitText as="label" style={{ fontSize: 12, fontWeight: 700, color: colors.textMuted }}>
+                    Product
+                  </FitText>
+                  <FitSelect
+                    aria-label={productSelectLabel}
+                    fullWidth
+                    value={item.productId}
+                    placeholder="Choose product"
+                    options={productOptions}
+                    onChange={(event) =>
+                      updateLineItem(item.key, { productId: event.target.value })
+                    }
+                  />
+                </div>
+                <div style={{ display: "grid", gap: 6 }}>
+                  <FitText as="label" style={{ fontSize: 12, fontWeight: 700, color: colors.textMuted }}>
+                    Qty
+                  </FitText>
+                  <FitTextInput
+                    aria-label={`Quantity for ${product?.name ?? "sale item"}`}
+                    name={`sale-quantity-${index + 1}`}
+                    autoComplete="off"
+                    type="number"
+                    min={1}
+                    max={product?.stockQuantity}
+                    value={item.quantity}
+                    onChange={(event) =>
+                      updateLineItem(item.key, { quantity: event.target.value })
+                    }
+                    style={{
+                      minHeight: 42,
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: 12,
+                      padding: "0 12px",
+                      backgroundColor: colors.surfaceRaised
+                    }}
+                  />
+                </div>
+                <div style={{ display: "grid", gap: 6 }}>
+                  <FitText style={{ fontSize: 12, fontWeight: 700, color: colors.textMuted }}>
+                    Unit Price
+                  </FitText>
+                  <FitText style={{ fontSize: 15, fontWeight: 800 }}>
+                    PHP{" "}
+                    {(product?.price ?? 0).toLocaleString("en-PH", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2
+                    })}
+                  </FitText>
+                </div>
+                <div style={{ display: "grid", gap: 6 }}>
+                  <FitText style={{ fontSize: 12, fontWeight: 700, color: colors.textMuted }}>
+                    Subtotal
+                  </FitText>
+                  <FitText style={{ fontSize: 15, fontWeight: 800 }}>
+                    PHP{" "}
+                    {subtotal.toLocaleString("en-PH", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2
+                    })}
+                  </FitText>
+                </div>
+                <FitButton
+                  variant="ghost"
+                  iconOnly
+                  icon={Trash2}
+                  iconSize={16}
+                  onClick={() => removeLineItem(item.key)}
+                  disabled={lineItems.length === 1}
+                  aria-label="Remove sale item"
+                  style={{ minWidth: 42, minHeight: 42 }}
+                />
+              </div>
+              {product ? (
+                <FitText style={{ fontSize: 12, color: colors.textMuted }}>
+                  Stock after sale: {Math.max(product.stockQuantity - (quantity ?? 0), 0)}
+                </FitText>
+              ) : null}
+              {error ? (
+                <FitText style={{ fontSize: 12, color: colors.danger, fontWeight: 700 }}>
+                  {error}
+                </FitText>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+      <FitButton
+        variant="ghost"
+        label="ADD ANOTHER ITEM"
+        icon={Plus}
+        iconSize={14}
+        onClick={addLineItem}
+        disabled={lineItems.length >= products.length}
+        style={{ marginTop: 12 }}
+      />
+      <div style={{ display: "grid", gap: 6, marginTop: 16 }}>
+        <FitText as="label" style={{ fontSize: 12, fontWeight: 700, color: colors.textMuted }}>
+          Notes
+        </FitText>
+        <FitTextArea
+          value={notes}
+          onChange={(event) => setNotes(event.target.value)}
+          placeholder="Optional cashier or walk-in sale notes"
+          maxLength={500}
+          rows={3}
+          style={{
+            border: `1px solid ${colors.border}`,
+            borderRadius: 14,
+            padding: 12,
+            backgroundColor: colors.surfaceRaised
+          }}
+        />
+      </div>
+    </FitModal>
+  );
+}
+
+export default function InventoryPage() {
+  const { user } = useAuth();
+  const { colors } = useTheme();
+  const fadeIn = useFadeIn();
+  const themeTransition = useThemeTransition();
+  const inventory = useInventoryDashboard();
+  const canManageInventoryCatalog = user?.role === "ADMIN";
+  const canPerformInventoryOperations =
+    user?.role === "ADMIN" || user?.role === "STAFF";
+  const [detailEditorOpen, setDetailEditorOpen] = useState<
+    "retail" | "equipment" | null
+  >(null);
+  const [isCompactDetail, setIsCompactDetail] = useState(false);
+  const [pendingArchiveEquipmentForm, setPendingArchiveEquipmentForm] =
+    useState<Record<string, string> | null>(null);
+  const [createRetailStockQuantity, setCreateRetailStockQuantity] = useState("0");
+
+  const createRetailInitialValues = useMemo(
+    () => ({
+      category: "other",
+      cost: "",
+      description: "",
+      name: "",
+      price: "",
+      reorderThreshold: "10",
+      stockQuantity: "0"
+    }),
+    []
+  );
+  const createEquipmentInitialValues = useMemo(
+    () => ({
+      description: "",
+      name: "",
+      presetSelection: inventory.createEquipmentPreset,
+      quantity: ""
+    }),
+    [inventory.createEquipmentPreset]
+  );
+
+  const createEquipmentFields = [
+    {
+      name: "presetSelection",
+      label: "Equipment Option",
+      type: "select" as const,
+      required: true,
+      options: INVENTORY_EQUIPMENT_PRESET_OPTIONS
+    },
+    ...(inventory.createEquipmentPreset === "new"
+      ? [
+          {
+            name: "name",
+            label: "Equipment Name",
+            type: "text" as const,
+            required: true,
+            placeholder: "e.g., Adjustable Bench"
+          },
+          {
+            name: "description",
+            label: "Description",
+            type: "textarea" as const,
+            placeholder: "What should staff know about this equipment?",
+            maxLength: 240
+          },
+          {
+            name: "quantity",
+            label: "Quantity",
+            type: "text" as const,
+            required: true,
+            placeholder: "e.g., 4"
+          }
+        ]
+      : [
+          {
+            name: "quantity",
+            label: "Quantity",
+            type: "text" as const,
+            required: true,
+            placeholder: "e.g., 2"
+          }
+        ])
+  ];
+
+  const retailDetailValues = useMemo(
+    () =>
+      inventory.selectedRetail
+        ? {
+            cost: String(inventory.selectedRetail.cost),
+            name: inventory.selectedRetail.name,
+            category: inventory.selectedRetail.category,
+            description: inventory.selectedRetail.description ?? "",
+            price: String(inventory.selectedRetail.price),
+            stockQuantity: String(inventory.selectedRetail.stockQuantity),
+            reorderThreshold: String(inventory.selectedRetail.reorderThreshold)
+          }
+        : undefined,
+    [inventory.selectedRetail]
+  );
+
+  const equipmentDetailValues = useMemo(
+    () =>
+      inventory.selectedEquipment
+        ? {
+            name: inventory.selectedEquipment.name,
+            description: inventory.selectedEquipment.description ?? "",
+            unit: inventory.selectedEquipment.unit,
+            status: inventory.selectedEquipment.status
+          }
+        : undefined,
+    [inventory.selectedEquipment]
+  );
+
+  const showZeroStockWarning =
+    createRetailStockQuantity.trim() !== "" &&
+    /^\d+$/.test(createRetailStockQuantity.trim()) &&
+    Number(createRetailStockQuantity) === 0;
+
+  useEffect(() => {
+    if (!inventory.createRetailOpen) {
+      setCreateRetailStockQuantity("0");
+    }
+  }, [inventory.createRetailOpen]);
+
+  useEffect(() => {
+    const evaluateDetailMode = () => {
+      const { isBrowserWindowResized, viewportWidth } = getBrowserViewportState();
+      setIsCompactDetail(isBrowserWindowResized || viewportWidth < 1260);
+    };
+
+    evaluateDetailMode();
+    window.addEventListener("resize", evaluateDetailMode);
+    window.visualViewport?.addEventListener("resize", evaluateDetailMode);
+    return () => {
+      window.removeEventListener("resize", evaluateDetailMode);
+      window.visualViewport?.removeEventListener("resize", evaluateDetailMode);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!inventory.selectedRetail && detailEditorOpen === "retail") {
+      setDetailEditorOpen(null);
+    }
+    if (!inventory.selectedEquipment && detailEditorOpen === "equipment") {
+      setDetailEditorOpen(null);
+    }
+  }, [detailEditorOpen, inventory.selectedEquipment, inventory.selectedRetail]);
+
+  useEffect(() => {
+    if (
+      inventory.equipmentDetailsDeepLinkId &&
+      inventory.selectedEquipment?.id === inventory.equipmentDetailsDeepLinkId
+    ) {
+      setDetailEditorOpen("equipment");
+    }
+  }, [inventory.equipmentDetailsDeepLinkId, inventory.selectedEquipment?.id]);
+
+  return (
+    <FitSection
+      as="section"
+      heading=""
+      hideHeading
+      bare
+      noPadding
+      className={themeTransition}
+      style={fadeIn}
+    >
+      {inventory.message ? (
+        <div style={{ marginBottom: 12, display: "flex", justifyContent: "flex-end" }}>
+          <FitText
+            style={{
+              fontSize: 13,
+              color: /failed|required|must|cannot|choose|upload|only|loading/i.test(
+                inventory.message
+              )
+                ? colors.danger
+                : colors.success,
+              fontWeight: 500
+            }}
+          >
+            {inventory.message}
+          </FitText>
+        </div>
+      ) : null}
+
+      <InventoryMainPanel
+        canManageInventoryCatalog={canManageInventoryCatalog}
+        canPerformInventoryOperations={canPerformInventoryOperations}
+        colors={colors}
+        inventory={inventory}
+        isCompactDetail={isCompactDetail}
+        onOpenDetailEditor={(kind) => {
+          if (!canManageInventoryCatalog) return;
+          setDetailEditorOpen(kind);
+        }}
+      />
+
+      <DetailsModal
+        isOpen={canManageInventoryCatalog && inventory.createRetailOpen}
+        title="Add Retail Product"
+        subtitle="Create a retail item with category and stock thresholds."
+        fields={INVENTORY_RETAIL_PRODUCT_FIELDS}
+        initialValues={createRetailInitialValues}
+        showRequiredIndicators={false}
+        validateOnChange
+        submitLabel={inventory.createRetailPending ? "ADDING PRODUCT..." : "ADD PRODUCT"}
+        isLoading={inventory.createRetailPending}
+        submitDisabled={inventory.inventoryImageUploadPending}
+        validate={validateRetailProductForm}
+        onChange={(data) => setCreateRetailStockQuantity(data.stockQuantity ?? "")}
+        onSubmit={inventory.handleCreateRetail}
+        onCancel={() => inventory.setCreateRetailOpen(false)}
+      >
+        <InventoryImageUploadCard
+          title="Product Image"
+          imageUrl={inventory.createRetailImageUrl}
+          buttonLabel="UPLOAD PRODUCT IMAGE"
+          onUpload={(file) => inventory.handleUploadInventoryImage(file, "create-retail")}
+          uploadPending={inventory.inventoryImageUploadPending}
+        />
+        {showZeroStockWarning ? (
+          <FitText
+            as="p"
+            role="status"
+            style={{
+              color: colors.warning,
+              fontSize: 12,
+              fontWeight: 700,
+              marginTop: 8
+            }}
+          >
+            You are about to create an item with 0 stocks.
+          </FitText>
+        ) : null}
+      </DetailsModal>
+
+      <DetailsModal
+        isOpen={
+          inventory.retailDetailOpen &&
+          (isCompactDetail || detailEditorOpen === "retail")
+        }
+        title="Retail Item Details"
+        subtitle={inventory.selectedRetail?.name ?? "Retail item"}
+        fields={INVENTORY_RETAIL_PRODUCT_FIELDS}
+        initialValues={retailDetailValues}
+        showRequiredIndicators={false}
+        validateOnChange
+        submitLabel={inventory.updateRetailPending ? "SAVING..." : "SAVE CHANGES"}
+        isLoading={inventory.updateRetailPending}
+        validate={validateRetailProductForm}
+        readOnly={!canManageInventoryCatalog}
+        readOnlyBanner="Catalog details are admin-controlled. Operational actions remain available below."
+        dangerLabel={
+          canManageInventoryCatalog
+            ? inventory.selectedRetail?.isActive
+              ? "ARCHIVE ITEM"
+              : "RESTORE ITEM"
+            : undefined
+        }
+        dangerIcon={
+          canManageInventoryCatalog
+            ? inventory.selectedRetail?.isActive
+              ? Archive
+              : RefreshCw
+            : undefined
+        }
+        dangerDisabled={!canManageInventoryCatalog || !inventory.selectedRetail}
+        onDanger={() => {
+          const selectedRetail = inventory.selectedRetail;
+          if (!canManageInventoryCatalog || !selectedRetail) return;
+          if (selectedRetail.isActive) {
+            inventory.closeRetailDetails();
+            inventory.openRetailArchive(selectedRetail.id);
+            return;
+          }
+          void inventory.handleRestoreRetail();
+        }}
+        onSubmit={(data) => {
+          if (!canManageInventoryCatalog) return;
+          void inventory.handleUpdateRetail(data);
+          if (!isCompactDetail) setDetailEditorOpen(null);
+        }}
+        onCancel={() => {
+          if (isCompactDetail) {
+            inventory.closeRetailDetails();
+          } else {
+            setDetailEditorOpen(null);
+          }
+        }}
+      >
+        {inventory.selectedRetail ? (
+          <div
+            style={{
+              marginTop: 12,
+              padding: 14,
+              borderRadius: 16,
+              border: `1px solid ${colors.border}`,
+              backgroundColor: colors.surface
+            }}
+          >
+            {canManageInventoryCatalog ? (
+              <InventoryImageUploadCard
+                title="Product Image"
+                imageUrl={inventory.detailRetailImageUrl}
+                buttonLabel="UPLOAD NEW IMAGE"
+                onUpload={(file) => inventory.handleUploadInventoryImage(file, "detail-retail")}
+                uploadPending={inventory.inventoryImageUploadPending}
+              />
+            ) : null}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <FitPill
+                mode="status"
+                label={inventory.selectedRetail.status}
+                color={RETAIL_STOCK_STATUS_COLOR[inventory.selectedRetail.status]}
+                fontSize={12}
+              />
+              <FitPill
+                mode="status"
+                label={formatLabel(inventory.selectedRetail.category)}
+                color={colors.brand}
+                fontSize={12}
+              />
+            </div>
+            <FitText style={{ fontSize: 13, color: colors.textMuted, marginTop: 10 }}>
+              Only retail items trigger low-stock notifications. Use this flow to manage
+              pricing, stock thresholds, and catalog visibility.
+            </FitText>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+                gap: 10,
+                marginTop: 12
+              }}
+            >
+              <div style={{ padding: 10, borderRadius: 12, backgroundColor: colors.surfaceRaised }}>
+                <FitText style={{ fontSize: 12, color: colors.textMuted }}>Product Code</FitText>
+                <FitText style={{ fontSize: 18, fontWeight: 700 }}>
+                  {inventory.selectedRetail.id.slice(0, 8).toUpperCase()}
+                </FitText>
+              </div>
+              <div style={{ padding: 10, borderRadius: 12, backgroundColor: colors.surfaceRaised }}>
+                <FitText style={{ fontSize: 12, color: colors.textMuted }}>Current Stock</FitText>
+                <FitText style={{ fontSize: 18, fontWeight: 700 }}>
+                  {inventory.selectedRetail.stockQuantity}
+                </FitText>
+              </div>
+              <div style={{ padding: 10, borderRadius: 12, backgroundColor: colors.surfaceRaised }}>
+                <FitText style={{ fontSize: 12, color: colors.textMuted }}>Reorder At</FitText>
+                <FitText style={{ fontSize: 18, fontWeight: 700 }}>
+                  {inventory.selectedRetail.reorderThreshold}
+                </FitText>
+              </div>
+              <div style={{ padding: 10, borderRadius: 12, backgroundColor: colors.surfaceRaised }}>
+                <FitText style={{ fontSize: 12, color: colors.textMuted }}>Cost</FitText>
+                <FitText style={{ fontSize: 18, fontWeight: 700 }}>
+                  PHP{" "}
+                  {inventory.selectedRetail.cost.toLocaleString("en-PH", {
+                    maximumFractionDigits: 2,
+                    minimumFractionDigits: 2
+                  })}
+                </FitText>
+              </div>
+              <div style={{ padding: 10, borderRadius: 12, backgroundColor: colors.surfaceRaised }}>
+                <FitText style={{ fontSize: 12, color: colors.textMuted }}>Inventory Value</FitText>
+                <FitText style={{ fontSize: 18, fontWeight: 700 }}>
+                  PHP{" "}
+                  {inventory.selectedRetail.totalValue.toLocaleString("en-PH", {
+                    maximumFractionDigits: 0
+                  })}
+                </FitText>
+              </div>
+              <div style={{ padding: 10, borderRadius: 12, backgroundColor: colors.surfaceRaised }}>
+                <FitText style={{ fontSize: 12, color: colors.textMuted }}>Image Reference</FitText>
+                <FitText style={{ fontSize: 13, fontWeight: 700, lineHeight: 1.35 }}>
+                  {getImageReferenceLabel(inventory.detailRetailImageUrl || inventory.selectedRetail.imageUrl)}
+                </FitText>
+              </div>
+            </div>
+            {canPerformInventoryOperations ? (
+              <>
+                <FitButton
+                  variant="primary"
+                  label="RECORD SALE"
+                  fullWidth
+                  disabled={inventory.selectedRetail.stockQuantity <= 0}
+                  onClick={() => {
+                    if (!inventory.selectedRetail) return;
+                    inventory.closeRetailDetails();
+                    inventory.openRetailSale(inventory.selectedRetail.id);
+                  }}
+                  style={{ marginTop: 12 }}
+                />
+                <FitButton
+                  variant="ghost"
+                  label="RESTOCK ITEM"
+                  icon={RefreshCw}
+                  fullWidth
+                  onClick={() => {
+                    if (!inventory.selectedRetail) return;
+                    inventory.closeRetailDetails();
+                    inventory.openRetailRestock(inventory.selectedRetail.id);
+                  }}
+                  style={{ marginTop: 10 }}
+                />
+              </>
+            ) : null}
+          </div>
+        ) : inventory.productDetailLoading ? (
+          <FitText style={{ fontSize: 13, color: colors.textMuted, marginTop: 12 }}>
+            Loading retail item details...
+          </FitText>
+        ) : null}
+      </DetailsModal>
+
+      <DetailsModal
+        isOpen={canPerformInventoryOperations && inventory.retailRestockOpen}
+        title="Restock Retail Item"
+        subtitle={
+          inventory.restockRetailTarget?.name ??
+          (inventory.retailRestockLoading ? "Loading retail item..." : "Retail item")
+        }
+        fields={INVENTORY_RETAIL_RESTOCK_FIELDS}
+        initialValues={{ notes: "", quantity: "1" }}
+        showRequiredIndicators={false}
+        validateOnChange
+        submitLabel={
+          inventory.retailRestockLoading
+            ? "LOADING ITEM..."
+            : inventory.retailRestockPending
+              ? "RESTOCKING..."
+              : "RESTOCK ITEM"
+        }
+        isLoading={inventory.retailRestockPending || inventory.retailRestockLoading}
+        validate={validateRetailRestockForm}
+        onSubmit={inventory.handleRestockRetail}
+        onCancel={inventory.closeRetailRestock}
+      />
+
+      <RetailSaleModal
+        isOpen={canPerformInventoryOperations && inventory.retailSaleOpen}
+        initialProductId={inventory.saleRetailTarget?.id ?? null}
+        products={inventory.retailSaleProducts}
+        isLoading={inventory.retailSalePending}
+        onSubmit={inventory.handleRecordRetailSale}
+        onCancel={inventory.closeRetailSale}
+      />
+
+      <ConfirmModal
+        isOpen={canManageInventoryCatalog && inventory.archiveRetailOpen}
+        title="Archive Retail Item"
+        message={`Archive ${inventory.archiveRetailTarget?.name ?? "this retail item"} from the live catalog? Sales history stays intact, but the item will no longer appear as active inventory.`}
+        confirmLabel="ARCHIVE ITEM"
+        loadingLabel="ARCHIVING ITEM"
+        confirmIcon={Archive}
+        isDanger
+        isLoading={inventory.archiveRetailPending}
+        onConfirm={() => {
+          void inventory.handleArchiveRetail();
+        }}
+        onCancel={inventory.closeRetailArchive}
+      />
+
+      <DetailsModal
+        isOpen={canManageInventoryCatalog && inventory.createEquipmentOpen}
+        title="Add Equipment Item"
+        subtitle="Track operational equipment separately from retail stock."
+        fields={createEquipmentFields}
+        initialValues={createEquipmentInitialValues}
+        showRequiredIndicators={false}
+        validateOnChange
+        submitLabel={inventory.createEquipmentPending ? "ADDING EQUIPMENT..." : "ADD EQUIPMENT"}
+        isLoading={inventory.createEquipmentPending}
+        validate={(data) =>
+          validateEquipmentCreateForm(
+            data,
+            data.presetSelection ?? inventory.createEquipmentPreset
+          )
+        }
+        onSubmit={inventory.handleCreateEquipment}
+        onChange={(data) => {
+          const nextPreset = data.presetSelection ?? "new";
+          if (nextPreset !== inventory.createEquipmentPreset) {
+            inventory.setCreateEquipmentPreset(nextPreset);
+          }
+        }}
+        onCancel={() => inventory.setCreateEquipmentOpen(false)}
+      >
+        {inventory.createEquipmentPreset === "new" ? (
+          <InventoryImageUploadCard
+            title="Equipment Picture"
+            imageUrl={inventory.createEquipmentImageUrl}
+            buttonLabel="UPLOAD PICTURE"
+            onUpload={(file) => inventory.handleUploadInventoryImage(file, "create-equipment")}
+            uploadPending={inventory.inventoryImageUploadPending}
+          />
+        ) : null}
+      </DetailsModal>
+
+      <DetailsModal
+        isOpen={
+          inventory.selectedEquipment !== null &&
+          (isCompactDetail || detailEditorOpen === "equipment")
+        }
+        title="Equipment Details"
+        subtitle={inventory.selectedEquipment?.name ?? "Equipment item"}
+        fields={INVENTORY_EQUIPMENT_EDIT_FIELDS}
+        initialValues={equipmentDetailValues}
+        showRequiredIndicators={false}
+        validateOnChange
+        submitLabel={inventory.updateEquipmentPending ? "SAVING..." : "SAVE CHANGES"}
+        isLoading={inventory.updateEquipmentPending}
+        validate={validateInventoryEquipmentDetailForm}
+        readOnly={!canManageInventoryCatalog}
+        readOnlyBanner="Equipment details are admin-controlled. Operational writeoff remains available below."
+        dangerLabel={
+          canManageInventoryCatalog
+            ? inventory.selectedEquipment?.isActive
+              ? "ARCHIVE EQUIPMENT"
+              : "RESTORE EQUIPMENT"
+            : undefined
+        }
+        dangerIcon={
+          canManageInventoryCatalog
+            ? inventory.selectedEquipment?.isActive
+              ? Archive
+              : RefreshCw
+            : undefined
+        }
+        dangerDisabled={!canManageInventoryCatalog || !inventory.selectedEquipment}
+        onDanger={() => {
+          const selectedEquipment = inventory.selectedEquipment;
+          if (!canManageInventoryCatalog || !selectedEquipment) return;
+          if (selectedEquipment.isActive) {
+            inventory.closeEquipmentDetails();
+            inventory.openEquipmentArchive(selectedEquipment.id, selectedEquipment.status);
+            return;
+          }
+          void inventory.handleRestoreEquipment();
+        }}
+        onSubmit={(data) => {
+          if (!canManageInventoryCatalog) return;
+          void inventory.handleUpdateEquipment(data);
+          if (!isCompactDetail) setDetailEditorOpen(null);
+        }}
+        onCancel={() => {
+          if (isCompactDetail) {
+            inventory.closeEquipmentDetails();
+          } else {
+            setDetailEditorOpen(null);
+          }
+        }}
+      >
+        {inventory.selectedEquipment ? (
+          <div style={{ marginTop: 12, display: "grid", gap: 12 }}>
+            <div
+              style={{
+                padding: 14,
+                borderRadius: 16,
+                border: `1px solid ${colors.border}`,
+                backgroundColor: colors.surface
+              }}
+            >
+              {canManageInventoryCatalog ? (
+                <InventoryImageUploadCard
+                  title="Equipment Picture"
+                  imageUrl={inventory.detailEquipmentImageUrl}
+                  buttonLabel="UPLOAD NEW IMAGE"
+                  onUpload={(file) => inventory.handleUploadInventoryImage(file, "detail-equipment")}
+                  uploadPending={inventory.inventoryImageUploadPending}
+                />
+              ) : null}
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <FitPill
+                  mode="status"
+                  label={inventory.selectedEquipment.status}
+                  color={EQUIPMENT_STATUS_COLOR[inventory.selectedEquipment.status]}
+                  fontSize={12}
+                />
+                <FitPill
+                  mode="status"
+                  label={`${inventory.selectedEquipment.quantityCurrent}/${inventory.selectedEquipment.quantityTotal} ${inventory.selectedEquipment.unit}`}
+                  color={colors.brand}
+                  fontSize={12}
+                />
+              </div>
+              <FitText style={{ fontSize: 13, color: colors.textMuted, marginTop: 10 }}>
+                Equipment alerts live in an operational lane, such as maintenance, broken, or missing,
+                instead of retail low-stock notifications.
+              </FitText>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+                  gap: 10,
+                  marginTop: 12
+                }}
+              >
+                <div style={{ padding: 10, borderRadius: 12, backgroundColor: colors.surfaceRaised }}>
+                  <FitText style={{ fontSize: 12, color: colors.textMuted }}>Equipment Code</FitText>
+                  <FitText style={{ fontSize: 18, fontWeight: 700 }}>
+                    {inventory.selectedEquipment.id.slice(0, 8).toUpperCase()}
+                  </FitText>
+                </div>
+                <div style={{ padding: 10, borderRadius: 12, backgroundColor: colors.surfaceRaised }}>
+                  <FitText style={{ fontSize: 12, color: colors.textMuted }}>Current</FitText>
+                  <FitText style={{ fontSize: 18, fontWeight: 700 }}>
+                    {inventory.selectedEquipment.quantityCurrent}
+                  </FitText>
+                </div>
+                <div style={{ padding: 10, borderRadius: 12, backgroundColor: colors.surfaceRaised }}>
+                  <FitText style={{ fontSize: 12, color: colors.textMuted }}>Total</FitText>
+                  <FitText style={{ fontSize: 18, fontWeight: 700 }}>
+                    {inventory.selectedEquipment.quantityTotal}
+                  </FitText>
+                </div>
+                <div style={{ padding: 10, borderRadius: 12, backgroundColor: colors.surfaceRaised }}>
+                  <FitText style={{ fontSize: 12, color: colors.textMuted }}>Missing</FitText>
+                  <FitText style={{ fontSize: 18, fontWeight: 700 }}>
+                    {inventory.selectedEquipment.missingCount}
+                  </FitText>
+                </div>
+                <div style={{ padding: 10, borderRadius: 12, backgroundColor: colors.surfaceRaised }}>
+                  <FitText style={{ fontSize: 12, color: colors.textMuted }}>Status</FitText>
+                  <FitText style={{ fontSize: 18, fontWeight: 700 }}>
+                    {inventory.selectedEquipment.status}
+                  </FitText>
+                </div>
+              </div>
+              {canPerformInventoryOperations ? (
+                <FitButton
+                  variant="ghost"
+                  label="MOVE QUANTITY"
+                  fullWidth
+                  onClick={() => {
+                    if (!inventory.selectedEquipment) return;
+                    inventory.closeEquipmentDetails();
+                    inventory.openEquipmentWriteOff(inventory.selectedEquipment.id);
+                  }}
+                  style={{ marginTop: 12 }}
+                />
+              ) : null}
+            </div>
+
+            <div
+              style={{
+                padding: 14,
+                borderRadius: 16,
+                border: `1px solid ${colors.border}`,
+                backgroundColor: colors.surface
+              }}
+            >
+              <FitText style={{ fontSize: 12, fontWeight: 700, color: colors.textMuted, marginBottom: 10 }}>
+                WRITEOFF HISTORY
+              </FitText>
+              {inventory.equipmentDetailLoading ? (
+                <FitText style={{ fontSize: 13, color: colors.textMuted }}>
+                  Loading equipment history...
+                </FitText>
+              ) : inventory.selectedEquipmentDetail?.writeOffs.length ? (
+                <div style={{ display: "grid", gap: 10 }}>
+                  {inventory.selectedEquipmentDetail.writeOffs.slice(0, 4).map((entry) => (
+                    <div
+                      key={entry.id}
+                      style={{
+                        padding: 10,
+                        borderRadius: 12,
+                        backgroundColor: colors.surfaceRaised
+                      }}
+                    >
+                      <FitText style={{ fontSize: 13, fontWeight: 700 }}>
+                        {entry.quantityBefore} to {entry.quantitySetTo} {inventory.selectedEquipment?.unit}
+                      </FitText>
+                      <FitText style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>
+                        Lost {entry.quantityLost} - {entry.reason}
+                      </FitText>
+                      <FitText style={{ fontSize: 12, color: colors.textMuted, marginTop: 4 }}>
+                        {formatActorName(entry.performer)} - {new Date(entry.createdAt).toLocaleString()}
+                      </FitText>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <FitText style={{ fontSize: 13, color: colors.textMuted }}>
+                  No writeoff history yet for this equipment item.
+                </FitText>
+              )}
+            </div>
+          </div>
+        ) : inventory.equipmentDetailLoading ? (
+          <FitText style={{ fontSize: 13, color: colors.textMuted, marginTop: 12 }}>
+            Loading equipment details...
+          </FitText>
+        ) : null}
+      </DetailsModal>
+
+      <DetailsModal
+        isOpen={canPerformInventoryOperations && inventory.writeOffEquipmentOpen}
+        title="Move Equipment Quantity"
+        subtitle={inventory.writeOffEquipmentTarget?.name ?? "Equipment item"}
+        fields={INVENTORY_EQUIPMENT_STATUS_TRANSITION_FIELDS}
+        initialValues={{
+          quantity: "1",
+          destinationStatus: ""
+        }}
+        showRequiredIndicators={false}
+        validateOnChange
+        submitLabel={inventory.equipmentWriteOffPending ? "MOVING..." : "MOVE QUANTITY"}
+        isLoading={inventory.equipmentWriteOffPending}
+        validate={(data) =>
+          validateEquipmentWriteOffForm(
+            data,
+            inventory.writeOffEquipmentTarget?.statusQuantity ?? null,
+            inventory.writeOffEquipmentTarget?.status ?? null
+          )
+        }
+        onSubmit={inventory.handleWriteOffEquipment}
+        onCancel={inventory.closeEquipmentWriteOff}
+      />
+
+      <DetailsModal
+        isOpen={canManageInventoryCatalog && inventory.archiveEquipmentOpen}
+        title="Archive Equipment"
+        subtitle={inventory.archiveEquipmentTarget?.name ?? "Equipment item"}
+        fields={INVENTORY_EQUIPMENT_ARCHIVE_FIELDS}
+        initialValues={{ quantityToArchive: "1", reason: "" }}
+        showRequiredIndicators={false}
+        validateOnChange
+        submitLabel="CONTINUE"
+        isLoading={false}
+        validate={(data) =>
+          validateEquipmentArchiveForm(
+            data,
+            inventory.archiveEquipmentTarget?.statusQuantity ?? null
+          )
+        }
+        onSubmit={(data) => {
+          setPendingArchiveEquipmentForm(data);
+        }}
+        onCancel={() => {
+          setPendingArchiveEquipmentForm(null);
+          inventory.closeEquipmentArchive();
+        }}
+      />
+
+      <ConfirmModal
+        isOpen={canManageInventoryCatalog && pendingArchiveEquipmentForm !== null}
+        title="Confirm Equipment Archive"
+        message={`Archive ${pendingArchiveEquipmentForm?.quantityToArchive ?? "0"} unit(s) from ${inventory.archiveEquipmentTarget?.name ?? "this equipment item"}? This will remove them from active inventory and record the provided reason.`}
+        confirmLabel="ARCHIVE EQUIPMENT"
+        loadingLabel="ARCHIVING EQUIPMENT"
+        confirmIcon={Archive}
+        isDanger
+        isLoading={inventory.archiveEquipmentPending}
+        onConfirm={() => {
+          if (!pendingArchiveEquipmentForm) return;
+          void inventory.handleArchiveEquipment(pendingArchiveEquipmentForm);
+          setPendingArchiveEquipmentForm(null);
+        }}
+        onCancel={() => {
+          setPendingArchiveEquipmentForm(null);
+        }}
+      />
+    </FitSection>
+  );
+}

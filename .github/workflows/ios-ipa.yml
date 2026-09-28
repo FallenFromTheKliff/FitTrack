@@ -1,0 +1,296 @@
+name: iOS IPA (unsigned)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-ipa-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build unsigned iOS IPA
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+      EXPO_NO_METRO_WORKSPACE_ROOT: "1"
+      RCT_NEW_ARCH_ENABLED: "1"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: "10.30.3"
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Verify Apple and JavaScript toolchains
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_developer_dir="/Applications/Xcode_26.2.app/Contents/Developer"
+          [[ "${DEVELOPER_DIR:-}" == "$expected_developer_dir" ]] \
+            || { echo "Unexpected DEVELOPER_DIR: ${DEVELOPER_DIR:-<unset>}" >&2; exit 1; }
+          test -d "$DEVELOPER_DIR"
+          xcodebuild_path="$(xcrun --find xcodebuild)"
+          [[ "$xcodebuild_path" == "$DEVELOPER_DIR/usr/bin/xcodebuild" ]] \
+            || { echo "xcrun selected an unexpected xcodebuild: $xcodebuild_path" >&2; exit 1; }
+          xcode_version="$(xcodebuild -version | awk 'NR == 1 { print $2; exit }')"
+          xcode_major="${xcode_version%%.*}"
+          xcode_minor="${xcode_version#*.}"
+          xcode_minor="${xcode_minor%%.*}"
+          if (( xcode_major < 26 || (xcode_major == 26 && xcode_minor < 2) )); then
+            echo "Xcode 26.2 or newer is required; selected Xcode $xcode_version" >&2
+            exit 1
+          fi
+          printf 'DEVELOPER_DIR: %s\n' "$DEVELOPER_DIR"
+          printf 'xcodebuild path: %s\n' "$xcodebuild_path"
+          printf 'Xcode version: %s\n' "$xcode_version"
+          node --version
+          pnpm --version
+          ruby --version
+          pod --version
+
+      - name: Install pinned workspace dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate the iOS project with Expo CNG
+        working-directory: apps/mobile
+        run: pnpm exec expo prebuild --platform ios --no-install
+
+      - name: Install CocoaPods dependencies
+        working-directory: apps/mobile/ios
+        run: pod install --repo-update
+
+      - name: Discover generated workspace and application scheme
+        id: xcode
+        working-directory: apps/mobile/ios
+        shell: bash
+        run: |
+          set -euo pipefail
+          export LC_ALL=C
+
+          ios_root="$GITHUB_WORKSPACE/apps/mobile/ios"
+          workspaces=()
+          workspace_candidates=("$ios_root"/*.xcworkspace)
+          for workspace in "${workspace_candidates[@]}"; do
+            [[ -d "$workspace" ]] || continue
+            workspaces+=("$workspace")
+          done
+
+          if (( ${#workspaces[@]} != 1 )); then
+            printf 'Expected exactly one generated Xcode workspace; found %s:\n' "${#workspaces[@]}" >&2
+            printf '  %s\n' "${workspaces[@]}" >&2
+            exit 1
+          fi
+
+          workspace="${workspaces[0]}"
+          expected_scheme="$(basename "$workspace" .xcworkspace)"
+          scheme=""
+
+          if ! scheme="$(xcodebuild -list -json -workspace "$workspace" |
+            ruby -rjson -e '
+              expected = ARGV.fetch(0)
+              data = JSON.parse(STDIN.read)
+              schemes = data.dig("workspace", "schemes") || []
+              matches = schemes.select { |name| name == expected }
+              if matches.length != 1
+                abort("Expected exactly one application scheme #{expected.inspect}; found #{matches.length}. Available schemes: #{schemes.join(", ")}")
+              end
+              puts matches.first
+            ' "$expected_scheme")"; then
+            echo 'Could not list or parse Xcode workspace schemes.' >&2
+            exit 1
+          fi
+
+          if [[ -z "$scheme" ]]; then
+            echo 'Could not discover an application scheme from the generated workspace.' >&2
+            exit 1
+          fi
+
+          printf 'Generated workspace: %s\n' "$workspace"
+          printf 'Application scheme: %s\n' "$scheme"
+          printf 'workspace=%s\n' "$workspace" >> "$GITHUB_OUTPUT"
+          printf 'scheme=%s\n' "$scheme" >> "$GITHUB_OUTPUT"
+
+      - name: Archive Release for a generic physical iOS device without signing
+        env:
+          IOS_WORKSPACE: ${{ steps.xcode.outputs.workspace }}
+          IOS_SCHEME: ${{ steps.xcode.outputs.scheme }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          build_root="$RUNNER_TEMP/fittrack-ios-build"
+          archive_path="$build_root/FitTrack.xcarchive"
+          derived_data="$build_root/DerivedData"
+          mkdir -p "$build_root"
+
+          xcodebuild \
+            -workspace "$IOS_WORKSPACE" \
+            -scheme "$IOS_SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$derived_data" \
+            -archivePath "$archive_path" \
+            archive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY= \
+            DEVELOPMENT_TEAM= \
+            PROVISIONING_PROFILE_SPECIFIER= \
+            | tee "$build_root/xcodebuild-archive.log"
+
+          test -d "$archive_path/Products/Applications" \
+            || { echo 'Xcode archive has no Products/Applications directory.' >&2; exit 1; }
+
+      - name: Package and verify exactly one unsigned IPA
+        env:
+          IOS_WORKSPACE: ${{ steps.xcode.outputs.workspace }}
+          IOS_SCHEME: ${{ steps.xcode.outputs.scheme }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          export LC_ALL=C
+
+          build_root="$RUNNER_TEMP/fittrack-ios-build"
+          archive_path="$build_root/FitTrack.xcarchive"
+          archive_apps="$archive_path/Products/Applications"
+          package_root="$RUNNER_TEMP/fittrack-ipa-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          payload_root="$package_root/Payload"
+          verify_root="$RUNNER_TEMP/fittrack-ipa-verify-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          ipa_path="$GITHUB_WORKSPACE/FitTrack-release-unsigned.ipa"
+          verification_path="$GITHUB_WORKSPACE/FitTrack-release-unsigned-verification.txt"
+
+          apps=()
+          archived_app_candidates=("$archive_apps"/*.app)
+          for app_path in "${archived_app_candidates[@]}"; do
+            [[ -d "$app_path" ]] || continue
+            apps+=("$app_path")
+          done
+
+          if (( ${#apps[@]} != 1 )); then
+            printf 'Expected exactly one archived application bundle; found %s:\n' "${#apps[@]}" >&2
+            printf '  %s\n' "${apps[@]}" >&2
+            exit 1
+          fi
+
+          app_path="${apps[0]}"
+          app_name="$(basename "$app_path")"
+          info_plist="$app_path/Info.plist"
+          test -f "$info_plist"
+
+          bundle_identifier="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$info_plist")"
+          [[ "$bundle_identifier" == "com.fittrack.sertfit" ]] \
+            || { echo "Unexpected bundle identifier: $bundle_identifier" >&2; exit 1; }
+
+          executable_name="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$info_plist")"
+          executable_path="$app_path/$executable_name"
+          test -f "$executable_path"
+          test -x "$executable_path"
+
+          binary_description="$(file "$executable_path")"
+          [[ "$binary_description" == *'Mach-O'* ]] \
+            || { echo "Application executable is not Mach-O: $binary_description" >&2; exit 1; }
+          lipo_description="$(lipo -info "$executable_path")"
+          [[ "$lipo_description" == *'arm64'* ]] \
+            || { echo "Application executable is not an arm64 device binary: $lipo_description" >&2; exit 1; }
+
+          provisioning_profiles="$(find "$app_path" -type f -name 'embedded.mobileprovision' -print | wc -l | tr -d '[:space:]')"
+          (( provisioning_profiles == 0 )) \
+            || { echo "Found $provisioning_profiles embedded provisioning profile(s)." >&2; exit 1; }
+
+          if codesign --display --verbose=4 "$app_path" >/dev/null 2>&1; then
+            echo 'The archived application is code-signed; refusing to label it unsigned.' >&2
+            exit 1
+          fi
+
+          js_bundles="$(find "$app_path" -type f -name '*.jsbundle' -size +0c -print | wc -l | tr -d '[:space:]')"
+          packaged_assets="$(find "$app_path" -type f -path '*/assets/*' -size +0c -print | wc -l | tr -d '[:space:]')"
+          (( js_bundles > 0 || packaged_assets > 0 )) \
+            || { echo 'No non-empty JavaScript bundle or packaged assets found in the app.' >&2; exit 1; }
+
+          mkdir -p "$payload_root"
+          /usr/bin/ditto "$app_path" "$payload_root/$app_name"
+          (cd "$(dirname "$payload_root")" && /usr/bin/zip -qry "$ipa_path" Payload)
+
+          /usr/bin/unzip -t "$ipa_path" >/dev/null
+          mkdir -p "$verify_root"
+          /usr/bin/unzip -q "$ipa_path" -d "$verify_root"
+
+          zip_entries="$(/usr/bin/unzip -Z1 "$ipa_path")"
+          top_level_entries="$(printf '%s\n' "$zip_entries" | awk -F/ 'NF { print $1 }' | sort -u)"
+          [[ "$top_level_entries" == 'Payload' ]] \
+            || { echo "IPA contains unexpected top-level entries: $top_level_entries" >&2; exit 1; }
+
+          packaged_apps=()
+          packaged_app_candidates=("$verify_root/Payload"/*.app)
+          for packaged_app in "${packaged_app_candidates[@]}"; do
+            [[ -d "$packaged_app" ]] || continue
+            packaged_apps+=("$packaged_app")
+          done
+          if (( ${#packaged_apps[@]} != 1 )); then
+            printf 'IPA must contain exactly one Payload/*.app; found %s:\n' "${#packaged_apps[@]}" >&2
+            printf '  %s\n' "${packaged_apps[@]}" >&2
+            exit 1
+          fi
+          [[ "$(basename "${packaged_apps[0]}")" == "$app_name" ]] \
+            || { echo 'Packaged application name differs from the archived application.' >&2; exit 1; }
+
+          packaged_info="$verify_root/Payload/$app_name/Info.plist"
+          packaged_bundle_identifier="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$packaged_info")"
+          [[ "$packaged_bundle_identifier" == "$bundle_identifier" ]] \
+            || { echo 'Bundle identifier changed while packaging the IPA.' >&2; exit 1; }
+          packaged_executable_name="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$packaged_info")"
+          packaged_executable="$verify_root/Payload/$app_name/$packaged_executable_name"
+          test -x "$packaged_executable"
+          if codesign --display --verbose=4 "$verify_root/Payload/$app_name" >/dev/null 2>&1; then
+            echo 'The packaged application is code-signed; refusing to label the IPA unsigned.' >&2
+            exit 1
+          fi
+          packaged_profiles="$(find "$verify_root/Payload/$app_name" -type f -name 'embedded.mobileprovision' -print | wc -l | tr -d '[:space:]')"
+          (( packaged_profiles == 0 )) \
+            || { echo 'Packaged IPA contains an embedded provisioning profile.' >&2; exit 1; }
+
+          packaged_js_bundles="$(find "$verify_root/Payload/$app_name" -type f -name '*.jsbundle' -size +0c -print | wc -l | tr -d '[:space:]')"
+          packaged_assets="$(find "$verify_root/Payload/$app_name" -type f -path '*/assets/*' -size +0c -print | wc -l | tr -d '[:space:]')"
+          (( packaged_js_bundles > 0 || packaged_assets > 0 )) \
+            || { echo 'Packaged IPA lost its JavaScript bundle and packaged assets.' >&2; exit 1; }
+
+          cat > "$verification_path" <<EOF
+          IPA: $(basename "$ipa_path")
+          BundleIdentifier: $bundle_identifier
+          Executable: $executable_name
+          DeviceBinary: $lipo_description
+          PayloadApps: ${#packaged_apps[@]}
+          ProvisioningProfiles: $packaged_profiles
+          JavaScriptBundles: $packaged_js_bundles
+          PackagedAssets: $packaged_assets
+          CodeSigning: absent (codesign display failed as expected)
+          ZipTest: passed
+          EOF
+
+          printf '%s\n' "$verification_path"
+          printf '%s\n' "$ipa_path"
+          ls -lh "$ipa_path" "$verification_path"
+
+      - name: Upload unsigned IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FitTrack-iOS-unsigned
+          if-no-files-found: error
+          path: |
+            FitTrack-release-unsigned.ipa
+            FitTrack-release-unsigned-verification.txt

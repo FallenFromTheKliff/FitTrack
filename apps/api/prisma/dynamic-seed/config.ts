@@ -1,0 +1,316 @@
+import { config as loadEnv } from 'dotenv';
+import { localEnvFilePath } from '../../env-path';
+import type {
+  DynamicSeedConfig,
+  DynamicSeedMode,
+  DynamicSeedScope,
+} from './types';
+
+loadEnv(localEnvFilePath ? { path: localEnvFilePath } : undefined);
+
+export const DEFAULT_USERS = 180;
+export const MINIMUM_SEED_USERS = 12;
+const DEFAULT_SEED = 20260523;
+const DEFAULT_HISTORY_MONTHS = 12;
+const DEFAULT_EXERCISE_HISTORY = 50;
+
+const LOCAL_DATABASE_HOSTS = new Set([
+  'localhost',
+  '127.0.0.1',
+  '::1',
+  'db',
+  'fittrack-db',
+  'fittrack-db-local',
+]);
+const LOCAL_DATABASE_NAMES = new Set(['fittrack', 'fittrackdb']);
+
+function getFlag(argv: readonly string[], name: string) {
+  const inline = argv.find((arg) => arg.startsWith(`--${name}=`));
+  if (inline) {
+    return inline.slice(name.length + 3);
+  }
+
+  const index = argv.indexOf(`--${name}`);
+  return index >= 0 ? argv[index + 1] : undefined;
+}
+
+function hasFlag(argv: readonly string[], name: string) {
+  return argv.some(
+    (arg) => arg === `--${name}` || arg.startsWith(`--${name}=`),
+  );
+}
+
+function parseBooleanFlag(argv: readonly string[], name: string) {
+  const raw = getFlag(argv, name);
+  if (hasFlag(argv, name) && raw !== undefined && !raw.startsWith('--')) {
+    const value = raw.toLowerCase();
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    throw new Error(
+      `[dynamic-seed] Invalid --${name} value. Use true or false.`,
+    );
+  }
+  return hasFlag(argv, name);
+}
+
+function parseMode(value?: string): DynamicSeedMode {
+  return value === 'reset' ? 'reset' : 'additive';
+}
+
+function parseTarget(value?: string) {
+  if (value !== undefined && value !== 'local') {
+    throw new Error('[dynamic-seed] only the local database target is supported.');
+  }
+  return 'local' as const;
+}
+
+function parseScope(value?: string): DynamicSeedScope {
+  if (
+    value === 'body-nutrition' ||
+    value === 'coaching-payments' ||
+    value === 'facilities' ||
+    value === 'exercises'
+  ) {
+    return value;
+  }
+  return 'all';
+}
+
+export type DatabaseUrlInfo = {
+  database: string;
+  host: string;
+  isLocal: boolean;
+};
+
+export function inspectDatabaseUrl(databaseUrl: string): DatabaseUrlInfo {
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(databaseUrl);
+  } catch {
+    throw new Error(
+      '[dynamic-seed] DATABASE_URL must be a valid PostgreSQL connection URL.',
+    );
+  }
+
+  if (
+    parsedUrl.protocol !== 'postgres:' &&
+    parsedUrl.protocol !== 'postgresql:'
+  ) {
+    throw new Error(
+      '[dynamic-seed] DATABASE_URL must use the postgres:// or postgresql:// protocol.',
+    );
+  }
+
+  const host = parsedUrl.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  const database = decodeURIComponent(parsedUrl.pathname.replace(/^\/+/, ''));
+  const normalizedHost = host.endsWith('.') ? host.slice(0, -1) : host;
+
+  return {
+    database,
+    host: normalizedHost,
+    isLocal:
+      LOCAL_DATABASE_HOSTS.has(normalizedHost) &&
+      LOCAL_DATABASE_NAMES.has(database.toLowerCase()),
+  };
+}
+
+type ExerciseScopeConfig = Pick<DynamicSeedConfig, 'mode' | 'target'>;
+
+export function assertExerciseScopeAllowed(
+  config: ExerciseScopeConfig,
+  databaseUrl?: string,
+) {
+  if (config.mode === 'reset') {
+    throw new Error(
+      '[dynamic-seed] exercises scope is additive-only; it refreshes exercise contracts in place and never clears the database.',
+    );
+  }
+  const databaseInfo = inspectDatabaseUrl(databaseUrl ?? getDatabaseUrl());
+  if (!databaseInfo.isLocal) {
+    throw new Error(
+      `[dynamic-seed] Refusing scoped local exercise seed for database "${databaseInfo.database}" on host "${databaseInfo.host}".`,
+    );
+  }
+
+  return databaseInfo;
+}
+
+type FacilitiesScopeConfig = Pick<DynamicSeedConfig, 'mode' | 'target'>;
+
+export function assertFacilitiesScopeAllowed(
+  config: FacilitiesScopeConfig,
+  databaseUrl?: string,
+) {
+  if (config.mode === 'reset') {
+    throw new Error(
+      '[dynamic-seed] facilities scope is additive-only; omit --mode=reset to preserve existing facility layouts.',
+    );
+  }
+  if (config.target !== 'local') {
+    throw new Error(
+      '[dynamic-seed] facilities scope is local-only; use --target=local.',
+    );
+  }
+  const databaseInfo = inspectDatabaseUrl(databaseUrl ?? getDatabaseUrl());
+  if (!databaseInfo.isLocal) {
+    throw new Error(
+      `[dynamic-seed] Refusing scoped local facilities seed for database "${databaseInfo.database}" on host "${databaseInfo.host}".`,
+    );
+  }
+  return databaseInfo;
+}
+
+function parsePositiveInt(value: string | undefined, fallback: number) {
+  const parsed = Number.parseInt(value ?? '', 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function parseNonNegativeInt(value: string | undefined, fallback: number) {
+  const parsed = Number.parseInt(value ?? '', 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function parseRequiredNonNegativeInt(value: string | undefined, flag: string) {
+  if (value === undefined) return 0;
+  if (!/^\d+$/.test(value)) {
+    throw new Error(
+      `[dynamic-seed] Invalid --${flag} value. Use a non-negative integer.`,
+    );
+  }
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    throw new Error(
+      `[dynamic-seed] Invalid --${flag} value. Use a non-negative integer.`,
+    );
+  }
+  return parsed;
+}
+
+function parseRate(value: string | undefined, fallback: number) {
+  const parsed = Number.parseFloat(value ?? '');
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.min(1, Math.max(0, parsed));
+}
+
+function parseDensity(value: string | undefined): 'low' | 'normal' | 'high' {
+  return value === 'low' || value === 'high' ? value : 'normal';
+}
+
+function parseDateFlag(
+  value: string | undefined,
+  fallback: Date,
+  flag: string,
+) {
+  const parsed = value ? new Date(value) : fallback;
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error(`Invalid --${flag} value. Use an ISO date string.`);
+  }
+  return parsed;
+}
+
+function startOfUtcToday() {
+  const now = new Date();
+  return new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 9),
+  );
+}
+
+function monthsBefore(anchor: Date, months: number) {
+  const target = new Date(anchor);
+  target.setUTCMonth(target.getUTCMonth() - months);
+  return target;
+}
+
+export function parseDynamicSeedConfig(
+  argv: readonly string[] = process.argv,
+): DynamicSeedConfig {
+  const users = Math.max(
+    MINIMUM_SEED_USERS,
+    parsePositiveInt(getFlag(argv, 'users'), DEFAULT_USERS),
+  );
+  const seed = parsePositiveInt(getFlag(argv, 'seed'), DEFAULT_SEED);
+  const extraUsers = parseRequiredNonNegativeInt(
+    hasFlag(argv, 'extra-users') ? (getFlag(argv, 'extra-users') ?? '') : undefined,
+    'extra-users',
+  );
+  const historyMonths = parsePositiveInt(
+    getFlag(argv, 'history-months'),
+    DEFAULT_HISTORY_MONTHS,
+  );
+  const configuredAnchorDate =
+    getFlag(argv, 'anchor-date') ??
+    getFlag(argv, 'to') ??
+    process.env.SEED_NOW ??
+    process.env.SEED_BASE_DATE;
+  const anchorDate = parseDateFlag(
+    configuredAnchorDate,
+    startOfUtcToday(),
+    'anchor-date',
+  );
+  const historyEndDate = parseDateFlag(getFlag(argv, 'to'), anchorDate, 'to');
+  const historyStartDate = parseDateFlag(
+    getFlag(argv, 'from'),
+    monthsBefore(historyEndDate, historyMonths),
+    'from',
+  );
+
+  if (historyStartDate > historyEndDate) {
+    throw new Error('--from must be earlier than or equal to --to.');
+  }
+
+  const workoutDensity = parseDensity(getFlag(argv, 'workout-density'));
+  const densityHistoryDefault =
+    workoutDensity === 'low'
+      ? Math.floor(DEFAULT_EXERCISE_HISTORY / 2)
+      : workoutDensity === 'high'
+        ? DEFAULT_EXERCISE_HISTORY * 2
+        : DEFAULT_EXERCISE_HISTORY;
+  const exerciseHistory = Math.min(
+    5_000,
+    parseNonNegativeInt(
+      getFlag(argv, 'exercise-history') ?? getFlag(argv, 'exercise_history'),
+      densityHistoryDefault,
+    ),
+  );
+
+  return {
+    anchorDate,
+    bookingDensity: parseDensity(getFlag(argv, 'booking-density')),
+    // Keep the CLI mirrors aligned with the canonical coach scenario quotas
+    // (active 70%, paused 20%, former 10%).
+    coachActiveRate: parseRate(getFlag(argv, 'coach-active-rate'), 0.7),
+    coachFormerRate: parseRate(getFlag(argv, 'coach-former-rate'), 0.1),
+    coachPausedRate: parseRate(getFlag(argv, 'coach-paused-rate'), 0.2),
+    extraUsers,
+    exerciseHistory,
+    historyEndDate,
+    historyMonths,
+    historyStartDate,
+    mode: parseMode(getFlag(argv, 'mode')),
+    pendingPaymentRate: parseRate(getFlag(argv, 'pending-payment-rate'), 0.12),
+    seed,
+    sessionDensity: parseDensity(getFlag(argv, 'session-density')),
+    scope: parseScope(getFlag(argv, 'scope')),
+    splitPresetsPerMember: Math.min(
+      4,
+      parsePositiveInt(getFlag(argv, 'split-presets-per-member'), 2),
+    ),
+    target: parseTarget(getFlag(argv, 'target')),
+    realUserData: parseBooleanFlag(argv, 'real-user-data'),
+    users,
+    usersExplicitlyConfigured: hasFlag(argv, 'users'),
+    workoutDensity,
+  };
+}
+
+export function getDatabaseUrl() {
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) {
+    throw new Error(
+      'DATABASE_URL is required before running the dynamic seed.',
+    );
+  }
+  return databaseUrl;
+}

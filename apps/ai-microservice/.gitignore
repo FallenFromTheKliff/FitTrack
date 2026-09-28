@@ -1,0 +1,6 @@
+.uv-cache/
+.uv-runtime/
+.venv/
+.matplotlib-cache/
+models/**/*.pt
+models/**/*.onnx

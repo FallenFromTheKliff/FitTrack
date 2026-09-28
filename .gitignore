@@ -1,0 +1,100 @@
+# Main
+node_modules/
+*.log
+tasks.md
+package-lock.json
+apps/mobile/.env
+
+# Environment files
+.env
+.env.*
+
+# Agent prompts and working docs
+agents/
+
+# Build outputs
+# Generated Android outputs
+/apps/mobile/modules/fittrack-multi-pose/android/build/
+/apps/mobile/modules/fittrack-multi-pose/android/.gradle/
+/.cxx/
+.artifacts/
+/scripts/seed-data/*.private.json
+artifacts/
+.agents/
+.ai/
+.codex-local/
+.codex/
+.npm-cache/
+.playwright-mcp/
+.playwright-cli/
+.playwright-mcp.json
+.playwright-fittrack-flow.json
+.broskie/
+.serena/
+.pnpm-store/
+.gradle-user-home/
+.next/
+.expo/
+.turbo/
+.worktrees/
+dist/
+*.tsbuildinfo
+tmp/
+test-results/
+playwright-report/
+graphify-out/
+infodump/
+.screenshots/
+screenshots/
+output/
+playwright-baseline/
+**/*-snapshots/
+/playwright*.config.ts
+/tests/ui/playwright*.config.ts
+/tests/ui/test-results/
+/tests/ui/playwright-report/
+apps/web/test-results/
+apps/web/.next-runtime/
+apps/mobile/dist-web-auth-check/
+apps/web/debug_logs.txt
+apps/web/dom.html
+temp_skill_build/
+members-admin-*.png
+apps/web/dashboard.png
+apps/web/members.png
+check_page.js
+do_replace.js
+do_replace_safe.js
+fix_ui_for_real.js
+refactor.js
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/settings.json
+.history/
+
+# Python
+**/__pycache__/
+.pytest_cache/
+.uv-cache/
+.uv-cache-local/
+.uv-runtime/
+.venv/
+Ultralytics/
+pytest-cache-files-*/
+
+# Task runner scratch data
+tasks/backend-builder/tmp/
+
+# Ignore local editor MCP configuration
+.vscode/mcp.json
+
+# Keep the product logo while ignoring root-level capture images
+/*.png
+/*.jpg
+/*.jpeg
+/*.webp
+!/FitTrackLogo.png

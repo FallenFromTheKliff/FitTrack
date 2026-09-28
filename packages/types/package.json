@@ -1,0 +1,27 @@
+{
+  "name": "@fittrack/types",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "exports": {
+    ".": "./index.ts",
+    "./ai": "./ai.ts",
+    "./analytics": "./analytics.ts",
+    "./auth": "./auth.ts",
+    "./base": "./base.ts",
+    "./booking": "./booking.ts",
+    "./facilities": "./facilities.ts",
+    "./fitness": "./fitness.ts",
+    "./files": "./files.ts",
+    "./gym-layout": "./gym-layout.ts",
+    "./inventory": "./inventory.ts",
+    "./member": "./member.ts",
+    "./membership": "./membership.ts",
+    "./notifications": "./notifications.ts",
+    "./nutrition": "./nutrition.ts",
+    "./theme": "./theme.ts",
+    "./ui": "./ui.ts"
+  }
+}

@@ -1,0 +1,38 @@
+.hydrationScope[data-sertfit-hydrated="false"] :global([data-landing-reveal]) {
+  opacity: 1 !important;
+  transform: none !important;
+  visibility: visible !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hydrationScope :global([data-landing-reveal]) {
+    opacity: 1 !important;
+    transform: none !important;
+    visibility: visible !important;
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+.visitGrid {
+  min-width: 0;
+}
+
+.visitGrid > * {
+  min-width: 0;
+}
+
+.visitGrid :global(.channelLink),
+.visitGrid :global(.channelLink > span:last-child) {
+  min-width: 0;
+}
+
+.visitGrid :global(.channelValue) {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.visitGrid :global(a) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

@@ -1,0 +1,1171 @@
+import {
+  ConflictException,
+  ForbiddenException,
+  GoneException,
+  HttpException,
+  HttpStatus,
+  Injectable,
+} from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import {
+  CommerceCheckoutHoldStatus,
+  PayableType,
+  Prisma,
+  Payment,
+  PaymentProvider,
+  PaymentStatus,
+  UserRole,
+} from '@prisma/client';
+import { randomUUID } from 'crypto';
+
+import { AuditAction, AuditEvent } from '../../audit/audit.service';
+import { PaginatedResult } from '../../common/base-repository/base-repository';
+import { ACCOUNT_ACTIVITY_EVENT } from '../../user/events/account-activity.event';
+import { CoachingCommerceService } from '../../coaching/commerce/coaching-commerce.service';
+import {
+  ManualPaymentDTO,
+  PaymentFilterDTO,
+  PaymentHistoryDTO,
+  PaymentWebhookAckDTO,
+  VerifyPaymentDTO,
+} from './dto/payment.dto';
+import {
+  PAYMENT_COMPLETED_EVENT,
+  PaymentCompletedEvent,
+} from './events/payment-completed.event';
+import {
+  PAYMENT_FAILED_EVENT,
+  type PaymentFailedEvent,
+} from './events/payment-failed.event';
+import {
+  PAYMONGO_CHECKOUT_SESSION_PAID_EVENT,
+  PAYMONGO_PAYMENT_FAILED_EVENT,
+  PaymongoWebhookEvent,
+  PaymongoWebhookService,
+} from './paymongo-webhook.service';
+import {
+  PaymongoCheckoutService,
+  type PaymongoRetrievedCheckoutSession,
+} from './paymongo-checkout.service';
+import {
+  PaymentRepository,
+  PaymongoMembershipCardFailureInput,
+  PaymongoMembershipCardWebhookInput,
+} from './payment.repository';
+
+const PAYMONGO_CHECKOUT_IN_FLIGHT_STATUSES = new Set([
+  'pending',
+  'processing',
+  'awaiting_next_action',
+  'requires_action',
+  'requires_confirmation',
+  'in_progress',
+]);
+const PAYMONGO_CHECKOUT_SUCCEEDED_STATUSES = new Set([
+  'succeeded',
+  'paid',
+  'completed',
+]);
+const PAYMONGO_CHECKOUT_TERMINAL_STATUSES = new Set([
+  'expired',
+  'cancelled',
+  'canceled',
+]);
+const PAYMONGO_CHECKOUT_UNPAID_STATUSES = new Set([
+  'awaiting_payment',
+  'awaiting_payment_method',
+  'requires_payment_method',
+  'failed',
+  'cancelled',
+  'canceled',
+  'expired',
+  'voided',
+]);
+
+function providerStatus(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0
+    ? value.trim().toLowerCase()
+    : null;
+}
+
+function hasPaidProviderPayment(
+  session: PaymongoRetrievedCheckoutSession,
+): boolean {
+  return (session.attributes.payments ?? []).some(
+    (candidate) => providerStatus(candidate.attributes?.status) === 'paid',
+  );
+}
+
+function hasInFlightProviderStatus(
+  session: PaymongoRetrievedCheckoutSession,
+): boolean {
+  const checkoutStatus = providerStatus(session.attributes.status);
+  const paymentIntentStatus = providerStatus(
+    session.attributes.payment_intent?.attributes?.status,
+  );
+  const paymentStatuses = (session.attributes.payments ?? []).map((candidate) =>
+    providerStatus(candidate.attributes?.status),
+  );
+
+  return [checkoutStatus, paymentIntentStatus, ...paymentStatuses].some(
+    (status) => status !== null && PAYMONGO_CHECKOUT_IN_FLIGHT_STATUSES.has(status),
+  );
+}
+
+function hasSucceededProviderStatusWithoutPayment(
+  session: PaymongoRetrievedCheckoutSession,
+): boolean {
+  if (hasPaidProviderPayment(session)) {
+    return false;
+  }
+
+  const checkoutStatus = providerStatus(session.attributes.status);
+  const paymentIntentStatus = providerStatus(
+    session.attributes.payment_intent?.attributes?.status,
+  );
+  return [checkoutStatus, paymentIntentStatus].some(
+    (status) =>
+      status !== null && PAYMONGO_CHECKOUT_SUCCEEDED_STATUSES.has(status),
+  );
+}
+
+function isClosedUnpaidProviderSession(
+  session: PaymongoRetrievedCheckoutSession,
+): boolean {
+  const checkoutStatus = providerStatus(session.attributes.status);
+  const paymentIntentStatus = providerStatus(
+    session.attributes.payment_intent?.attributes?.status,
+  );
+  const paymentStatuses = (session.attributes.payments ?? []).map((candidate) =>
+    providerStatus(candidate.attributes?.status),
+  );
+
+  return (
+    checkoutStatus !== null &&
+    PAYMONGO_CHECKOUT_TERMINAL_STATUSES.has(checkoutStatus) &&
+    (paymentIntentStatus === null ||
+      PAYMONGO_CHECKOUT_UNPAID_STATUSES.has(paymentIntentStatus)) &&
+    paymentStatuses.every(
+      (status) =>
+        status !== null && PAYMONGO_CHECKOUT_UNPAID_STATUSES.has(status),
+    )
+  );
+}
+type PaymentDetails = Awaited<
+  ReturnType<PaymentRepository['findPaymentByIdForStaffOrThrow']>
+>;
+
+function getPaymentUserDisplayName(payment: PaymentDetails) {
+  return [payment.user?.profile?.first_name, payment.user?.profile?.last_name]
+    .filter((value): value is string => Boolean(value?.trim()))
+    .join(' ')
+    .trim();
+}
+
+@Injectable()
+export class PaymentService {
+  constructor(
+    private readonly repo: PaymentRepository,
+    private readonly paymongoWebhookService: PaymongoWebhookService,
+    private readonly eventEmitter: EventEmitter2,
+    private readonly commerceCheckoutService: CoachingCommerceService,
+    private readonly paymongoCheckoutService: PaymongoCheckoutService,
+  ) {}
+
+  async getMyPayments(
+    userId: string,
+    dto: PaymentHistoryDTO,
+  ): Promise<PaginatedResult<Payment>> {
+    await this.repo.completeOpenMembershipCardPaymentsForActiveCards(userId);
+    return this.repo.getMyPayments(userId, dto);
+  }
+
+  getPaymentById(
+    paymentId: string,
+    requesterId: string,
+    role: UserRole,
+  ): Promise<PaymentDetails> {
+    if (role === UserRole.admin || role === UserRole.staff) {
+      return this.repo.findPaymentByIdForStaffOrThrow(paymentId);
+    }
+
+    return this.repo.findPaymentByIdForOwnerOrThrow(paymentId, requesterId);
+  }
+
+  getCheckoutHoldStatus(
+    holdId: string,
+    requesterId: string,
+    requesterRole: UserRole,
+  ) {
+    return this.commerceCheckoutService.getHoldStatusForUser(
+      holdId,
+      requesterId,
+      requesterRole,
+    );
+  }
+
+  async reconcileCheckoutHold(
+    holdId: string,
+    requesterId: string,
+    requesterRole: UserRole,
+  ) {
+    if (requesterRole !== UserRole.member) {
+      throw new ForbiddenException({
+        type: 'FORBIDDEN',
+        title: 'Forbidden',
+        status: 403,
+        detail: 'Only the member who started this checkout can reconcile it.',
+      });
+    }
+
+    const { hold, payment } =
+      await this.repo.findCommerceCheckoutForReconciliationOrThrow(
+        holdId,
+        requesterId,
+      );
+
+    if (
+      hold.status === CommerceCheckoutHoldStatus.consumed ||
+      payment.status === PaymentStatus.completed
+    ) {
+      return this.commerceCheckoutService.getHoldStatusForUser(
+        holdId,
+        requesterId,
+        requesterRole,
+      );
+    }
+
+    if (
+      payment.status === PaymentStatus.failed ||
+      hold.status !== CommerceCheckoutHoldStatus.held
+    ) {
+      return this.commerceCheckoutService.getHoldStatusForUser(
+        holdId,
+        requesterId,
+        requesterRole,
+      );
+    }
+
+    const providerRef = payment.provider_ref?.trim();
+    if (!providerRef) {
+      throw this.reconciliationConflict(
+        'This checkout does not have a PayMongo session to verify.',
+      );
+    }
+
+    const session =
+      await this.paymongoCheckoutService.retrieveCheckoutSession(providerRef);
+    const paidPayment = session.attributes?.payments?.find(
+      (candidate) =>
+        candidate.id && candidate.attributes?.status?.toLowerCase() === 'paid',
+    );
+
+    if (!paidPayment?.id || !paidPayment.attributes) {
+      return this.commerceCheckoutService.getHoldStatusForUser(
+        holdId,
+        requesterId,
+        requesterRole,
+      );
+    }
+
+    this.assertReconciliationMatches({ hold, paidPayment, payment, session });
+
+    const paidAtSeconds =
+      paidPayment.attributes.paid_at ?? session.attributes?.paid_at;
+    if (
+      typeof paidAtSeconds !== 'number' ||
+      !Number.isFinite(paidAtSeconds) ||
+      paidAtSeconds <= 0
+    ) {
+      throw this.reconciliationConflict(
+        'PayMongo did not return a valid paid timestamp for this checkout.',
+      );
+    }
+
+    const gatewayEventId = `reconcile:${session.id}:${paidPayment.id}`;
+    const event = this.toReconciliationEvent(session, gatewayEventId);
+    const transition = await this.repo.completePaymongoCommerceCheckout(
+      payment.id,
+      {
+        gatewayEventId,
+        gatewayMetadata: this.toWebhookGatewayMetadata(payment, event),
+        verifiedAt: new Date(paidAtSeconds * 1000),
+      },
+    );
+
+    if (transition.transitioned && transition.productCreated) {
+      this.emitPaymentCompleted({
+        paymentId: transition.payment.id,
+        userId: transition.payment.user_id,
+        payableType: transition.payment.payable_type,
+        payableId: transition.payment.payable_id,
+        amount: transition.payment.amount.toString(),
+        verifiedBy: null,
+      });
+    }
+
+    return this.commerceCheckoutService.getHoldStatusForUser(
+      holdId,
+      requesterId,
+      requesterRole,
+    );
+  }
+
+  async cancelCheckoutHold(
+    holdId: string,
+    requesterId: string,
+    requesterRole: UserRole,
+  ) {
+    if (requesterRole !== UserRole.member) {
+      throw new ForbiddenException({
+        type: 'FORBIDDEN',
+        title: 'Forbidden',
+        status: 403,
+        detail: 'Only the member who started this checkout can cancel it.',
+      });
+    }
+
+    const { hold, payment } =
+      await this.repo.findCommerceCheckoutForReconciliationOrThrow(
+        holdId,
+        requesterId,
+      );
+
+    const currentStatus = () =>
+      this.commerceCheckoutService.getHoldStatusForUser(
+        holdId,
+        requesterId,
+        requesterRole,
+      );
+
+    if (
+      hold.status === CommerceCheckoutHoldStatus.consumed ||
+      payment.status === PaymentStatus.completed ||
+      payment.status === PaymentStatus.failed ||
+      hold.status !== CommerceCheckoutHoldStatus.held
+    ) {
+      return currentStatus();
+    }
+
+    const providerRef = payment.provider_ref?.trim();
+    if (!providerRef) {
+      throw this.cancellationConflict(
+        'This checkout does not have a PayMongo session to cancel.',
+      );
+    }
+
+    const session =
+      await this.paymongoCheckoutService.retrieveCheckoutSession(providerRef);
+    this.assertCancellationSessionMatches(providerRef, session);
+
+    if (hasPaidProviderPayment(session)) {
+      return this.reconcileCheckoutHold(holdId, requesterId, requesterRole);
+    }
+
+    if (
+      hasInFlightProviderStatus(session) ||
+      hasSucceededProviderStatusWithoutPayment(session)
+    ) {
+      throw this.cancellationConflict(
+        'PayMongo is still processing this checkout. Wait for confirmation before trying again.',
+      );
+    }
+
+    const checkoutStatus = providerStatus(session.attributes.status);
+    if (!checkoutStatus) {
+      throw this.cancellationConflict(
+        'PayMongo did not return a usable checkout status.',
+      );
+    }
+
+    if (!PAYMONGO_CHECKOUT_TERMINAL_STATUSES.has(checkoutStatus)) {
+      if (!['active', 'open'].includes(checkoutStatus)) {
+        throw this.cancellationConflict(
+          'PayMongo returned an indeterminate checkout status. The hold remains reserved.',
+        );
+      }
+      await this.paymongoCheckoutService.expireCheckoutSession(providerRef);
+    }
+
+    const verifiedSession =
+      await this.paymongoCheckoutService.retrieveCheckoutSession(providerRef);
+    this.assertCancellationSessionMatches(providerRef, verifiedSession);
+
+    if (hasPaidProviderPayment(verifiedSession)) {
+      return this.reconcileCheckoutHold(holdId, requesterId, requesterRole);
+    }
+
+    if (
+      hasInFlightProviderStatus(verifiedSession) ||
+      hasSucceededProviderStatusWithoutPayment(verifiedSession)
+    ) {
+      throw this.cancellationConflict(
+        'PayMongo changed this checkout while it was being cancelled. Wait for confirmation before trying again.',
+      );
+    }
+
+    if (!isClosedUnpaidProviderSession(verifiedSession)) {
+      throw this.cancellationConflict(
+        'PayMongo did not confirm that this unpaid checkout was closed. The hold remains reserved.',
+      );
+    }
+
+    await this.repo.cancelPaymongoCommerceCheckout(payment.id, {
+      rejectionReason: 'Checkout cancelled by member before payment completed.',
+    });
+
+    return currentStatus();
+  }
+  getAllPayments(
+    dto: PaymentFilterDTO,
+  ): Promise<PaginatedResult<PaymentDetails>> {
+    return this.repo.getAllPayments(dto);
+  }
+
+  async submitManualPayment(
+    requesterId: string,
+    requesterRole: UserRole,
+    dto: ManualPaymentDTO,
+  ): Promise<Payment> {
+    this.assertLegacyProductPaymentRouteRetired(dto.payable_type);
+    const paymentOwnerId = await this.resolvePaymentOwnerId(dto);
+    const isStaffReviewer = this.isStaffReviewer(requesterRole);
+
+    if (!isStaffReviewer && paymentOwnerId !== requesterId) {
+      throw new ForbiddenException({
+        type: 'FORBIDDEN',
+        title: 'Forbidden',
+        status: 403,
+        detail: 'You can only submit manual payments for your own records.',
+      });
+    }
+
+    return this.repo.createPayment(
+      this.toManualPaymentCreateInput(dto, paymentOwnerId),
+    );
+  }
+
+  async verifyPayment(
+    paymentId: string,
+    dto: VerifyPaymentDTO,
+    adminId: string,
+  ): Promise<void> {
+    const payment = await this.repo.findPaymentByIdForStaffOrThrow(paymentId);
+    this.assertLegacyProductPaymentRouteRetired(payment.payable_type);
+    this.assertRejectionReason(dto);
+    this.assertAwaitingVerification(payment);
+
+    const nextStatus = dto.action === 'approve' ? 'completed' : 'failed';
+    const verifiedAt = new Date();
+
+    await this.repo.updatePayment(
+      paymentId,
+      this.toVerificationUpdateInput(adminId, dto, nextStatus, verifiedAt),
+    );
+
+    this.emitAudit({
+      userId: adminId,
+      action: AuditAction.PAYMENT_VERIFIED,
+      entity: 'Payment',
+      entityId: paymentId,
+      before: { status: payment.status },
+      after: {
+        status: nextStatus,
+        rejection_reason:
+          dto.action === 'reject' ? (dto.rejection_reason ?? null) : null,
+      },
+    });
+
+    if (dto.action === 'approve') {
+      this.emitPaymentCompleted({
+        paymentId,
+        userId: payment.user_id,
+        payableType: payment.payable_type,
+        payableId: payment.payable_id,
+        amount: payment.amount.toString(),
+        verifiedBy: adminId,
+      });
+      this.eventEmitter.emit(ACCOUNT_ACTIVITY_EVENT, {
+        action: 'payment_approved',
+        actorId: adminId,
+        details: {
+          amount: payment.amount.toString(),
+          payable_id: payment.payable_id,
+          payable_type: payment.payable_type,
+          payment_id: paymentId,
+        },
+        occurredAt: verifiedAt.toISOString(),
+        targetName: getPaymentUserDisplayName(payment),
+        targetRole: UserRole.member,
+        targetUserId: payment.user_id,
+      });
+      return;
+    }
+
+    this.emitPaymentFailed({
+      paymentId,
+      userId: payment.user_id,
+      payableType: payment.payable_type,
+      payableId: payment.payable_id,
+      amount: payment.amount.toString(),
+      reason: dto.rejection_reason ?? null,
+      failedAt: verifiedAt.toISOString(),
+    });
+  }
+
+  async handleWebhook(
+    rawBody: Buffer | undefined,
+    signature: string | undefined,
+  ): Promise<PaymentWebhookAckDTO> {
+    const event = this.paymongoWebhookService.parseAndVerify(
+      rawBody,
+      signature,
+    );
+
+    if (event.data.attributes.type === PAYMONGO_CHECKOUT_SESSION_PAID_EVENT) {
+      return this.handleCheckoutSessionPaidWebhook(event);
+    }
+
+    if (event.data.attributes.type === PAYMONGO_PAYMENT_FAILED_EVENT) {
+      return this.handlePaymentFailedWebhook(event);
+    }
+
+    return this.successAck();
+  }
+
+  private async handleCheckoutSessionPaidWebhook(
+    event: PaymongoWebhookEvent,
+  ): Promise<PaymentWebhookAckDTO> {
+    const existingEvent = await this.repo.findPaymentByGatewayEventId(
+      event.data.id,
+    );
+
+    if (existingEvent) {
+      return this.successAck();
+    }
+
+    const checkoutSession = event.data.attributes.data;
+    const payment = await this.repo.findPaymentByProviderRefOrThrow(
+      checkoutSession.id,
+    );
+
+    if (payment.provider !== PaymentProvider.paymongo) {
+      return this.successAck();
+    }
+
+    if (payment.payable_type === PayableType.commerce_checkout_hold) {
+      const verifiedAt = this.extractWebhookPaidAt(event) ?? new Date();
+      const transition = await this.repo.completePaymongoCommerceCheckout(
+        payment.id,
+        {
+          gatewayEventId: event.data.id,
+          gatewayMetadata: this.toWebhookGatewayMetadata(payment, event),
+          verifiedAt,
+        },
+      );
+
+      if (transition.transitioned && transition.productCreated) {
+        this.emitPaymentCompleted({
+          paymentId: transition.payment.id,
+          userId: transition.payment.user_id,
+          payableType: transition.payment.payable_type,
+          payableId: transition.payment.payable_id,
+          amount: transition.payment.amount.toString(),
+          verifiedBy: null,
+        });
+      }
+
+      return this.successAck();
+    }
+
+    if (payment.payable_type === PayableType.membership_card) {
+      const verifiedAt = this.extractWebhookPaidAt(event) ?? new Date();
+      const gatewayMetadata = this.toWebhookGatewayMetadata(payment, event);
+      const transition = await this.repo.completePaymongoMembershipCardPayment(
+        payment.id,
+        {
+          gatewayEventId: event.data.id,
+          gatewayMetadata,
+          verifiedAt,
+        } satisfies PaymongoMembershipCardWebhookInput,
+      );
+
+      if (transition.transitioned) {
+        this.emitPaymentCompleted({
+          paymentId: payment.id,
+          userId: payment.user_id,
+          payableType: payment.payable_type,
+          payableId: payment.payable_id,
+          amount: payment.amount.toString(),
+          verifiedBy: null,
+          membershipCardActivationCommitted:
+            transition.membershipCardStateChanged,
+        });
+      }
+
+      return this.successAck();
+    }
+
+    try {
+      await this.repo.updatePayment(
+        payment.id,
+        this.toWebhookCompletionUpdateInput(payment, event),
+      );
+    } catch (error) {
+      if (this.isDuplicateGatewayEventConflict(error)) {
+        return this.successAck();
+      }
+
+      throw error;
+    }
+
+    if (payment.status !== 'completed') {
+      this.emitPaymentCompleted({
+        paymentId: payment.id,
+        userId: payment.user_id,
+        payableType: payment.payable_type,
+        payableId: payment.payable_id,
+        amount: payment.amount.toString(),
+        verifiedBy: null,
+      });
+    }
+
+    return this.successAck();
+  }
+
+  private async handlePaymentFailedWebhook(
+    event: PaymongoWebhookEvent,
+  ): Promise<PaymentWebhookAckDTO> {
+    const existingEvent = await this.repo.findPaymentByGatewayEventId(
+      event.data.id,
+    );
+
+    if (existingEvent) {
+      return this.successAck();
+    }
+
+    const payment = await this.findWebhookPayment(event);
+
+    if (payment.provider !== PaymentProvider.paymongo) {
+      return this.successAck();
+    }
+
+    if (payment.status === 'completed' || payment.status === 'failed') {
+      return this.successAck();
+    }
+
+    const failedAt = new Date().toISOString();
+    const failureReason =
+      this.extractPaymongoFailureReason(event) ??
+      'PayMongo reported that this payment failed.';
+
+    if (payment.payable_type === PayableType.commerce_checkout_hold) {
+      const transition = await this.repo.failPaymongoCommerceCheckout(
+        payment.id,
+        {
+          gatewayEventId: event.data.id,
+          gatewayMetadata: this.toWebhookGatewayMetadata(payment, event),
+          rejectionReason: failureReason,
+        },
+      );
+
+      if (transition.transitioned) {
+        this.emitPaymentFailed({
+          paymentId: transition.payment.id,
+          userId: transition.payment.user_id,
+          payableType: transition.payment.payable_type,
+          payableId: transition.payment.payable_id,
+          amount: transition.payment.amount.toString(),
+          reason: failureReason,
+          failedAt,
+        });
+      }
+
+      return this.successAck();
+    }
+
+    if (payment.payable_type === PayableType.membership_card) {
+      const transition = await this.repo.failPaymongoMembershipCardPayment(
+        payment.id,
+        {
+          gatewayEventId: event.data.id,
+          gatewayMetadata: this.toWebhookGatewayMetadata(payment, event),
+          rejectionReason: failureReason,
+        } satisfies PaymongoMembershipCardFailureInput,
+      );
+
+      if (transition.transitioned) {
+        this.emitPaymentFailed({
+          paymentId: payment.id,
+          userId: payment.user_id,
+          payableType: payment.payable_type,
+          payableId: payment.payable_id,
+          amount: payment.amount.toString(),
+          reason: failureReason,
+          failedAt,
+        });
+      }
+
+      return this.successAck();
+    }
+
+    try {
+      await this.repo.updatePayment(
+        payment.id,
+        this.toWebhookFailureUpdateInput(payment, event, failureReason),
+      );
+    } catch (error) {
+      if (this.isDuplicateGatewayEventConflict(error)) {
+        return this.successAck();
+      }
+
+      throw error;
+    }
+
+    this.emitPaymentFailed({
+      paymentId: payment.id,
+      userId: payment.user_id,
+      payableType: payment.payable_type,
+      payableId: payment.payable_id,
+      amount: payment.amount.toString(),
+      reason: failureReason,
+      failedAt,
+    });
+
+    return this.successAck();
+  }
+
+  private async resolvePaymentOwnerId(dto: ManualPaymentDTO): Promise<string> {
+    if (dto.payable_type === PayableType.subscription) {
+      const subscription =
+        await this.repo.findSubscriptionPaymentContextOrThrow(dto.payable_id);
+      return subscription.user_id;
+    }
+
+    if (dto.payable_type === PayableType.booking) {
+      const booking = await this.repo.findBookingPaymentContextOrThrow(
+        dto.payable_id,
+      );
+      return booking.user_id;
+    }
+
+    if (dto.payable_type === PayableType.coaching) {
+      const appointment = await this.repo.findCoachingPaymentContextOrThrow(
+        dto.payable_id,
+      );
+      return appointment.user_id;
+    }
+
+    if (dto.payable_type === PayableType.recurring_coaching) {
+      const cycle = await this.repo.findRecurringCoachingPaymentContextOrThrow(
+        dto.payable_id,
+      );
+      return cycle.user_id;
+    }
+
+    throw new HttpException(
+      {
+        type: 'BUSINESS_RULE_VIOLATION',
+        title: 'Unsupported Manual Payment Type',
+        status: 422,
+        detail: `Manual payments for payable_type "${dto.payable_type}" are not available yet.`,
+      },
+      HttpStatus.UNPROCESSABLE_ENTITY,
+    );
+  }
+
+  private isStaffReviewer(role: UserRole): boolean {
+    return role === UserRole.admin || role === UserRole.staff;
+  }
+
+  private toManualPaymentCreateInput(
+    dto: ManualPaymentDTO,
+    paymentOwnerId: string,
+  ): Prisma.PaymentCreateInput {
+    return {
+      user: { connect: { id: paymentOwnerId } },
+      payable_type: dto.payable_type,
+      payable_id: dto.payable_id,
+      payment_stage: dto.payment_stage,
+      amount: dto.amount,
+      provider: PaymentProvider.cash,
+      provider_ref: dto.reference_no,
+      idempotency_key: randomUUID(),
+      status: 'awaiting_verification',
+      screenshot_url: dto.screenshot_url,
+    };
+  }
+
+  private toVerificationUpdateInput(
+    adminId: string,
+    dto: VerifyPaymentDTO,
+    nextStatus: 'completed' | 'failed',
+    verifiedAt: Date,
+  ): Prisma.PaymentUpdateInput {
+    return {
+      status: nextStatus,
+      verifier: { connect: { id: adminId } },
+      verified_at: verifiedAt,
+      rejection_reason: dto.action === 'reject' ? dto.rejection_reason : null,
+    };
+  }
+
+  private assertRejectionReason(dto: VerifyPaymentDTO): void {
+    if (dto.action === 'reject' && !dto.rejection_reason) {
+      throw new HttpException(
+        {
+          type: 'BUSINESS_RULE_VIOLATION',
+          title: 'Rejection Reason Required',
+          status: 422,
+          detail: 'rejection_reason is required when action is reject',
+        },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+  }
+
+  private assertAwaitingVerification(payment: Payment): void {
+    if (payment.status !== 'awaiting_verification') {
+      throw new ForbiddenException({
+        type: 'BUSINESS_RULE_VIOLATION',
+        title: 'Payment Not Awaiting Verification',
+        status: 403,
+        detail:
+          'Only payments awaiting verification can be approved or rejected.',
+      });
+    }
+  }
+
+  private assertLegacyProductPaymentRouteRetired(
+    payableType: PayableType,
+  ): void {
+    if (
+      !(
+        [
+          PayableType.subscription,
+          PayableType.booking,
+          PayableType.coaching,
+          PayableType.recurring_coaching,
+          PayableType.membership_card,
+          PayableType.commerce_checkout_hold,
+        ] as PayableType[]
+      ).includes(payableType)
+    ) {
+      return;
+    }
+
+    throw new GoneException({
+      type: 'GONE',
+      title: 'Partial Payment And Verification Flow Retired',
+      status: 410,
+      detail:
+        'Downpayments, partial balances, product-visible pending payments, and cash verification are retired. Admin/staff must use the atomic full-cash registration endpoints for new records.',
+    });
+  }
+
+  private emitAudit(event: AuditEvent): void {
+    this.eventEmitter.emit('audit.log', event);
+  }
+
+  private emitPaymentCompleted(event: PaymentCompletedEvent): void {
+    this.eventEmitter.emit(PAYMENT_COMPLETED_EVENT, event);
+  }
+
+  private emitPaymentFailed(event: PaymentFailedEvent): void {
+    this.eventEmitter.emit(PAYMENT_FAILED_EVENT, event);
+  }
+
+  private toWebhookCompletionUpdateInput(
+    payment: Payment,
+    event: PaymongoWebhookEvent,
+  ): Prisma.PaymentUpdateInput {
+    return {
+      status: 'completed',
+      verified_at: this.extractWebhookPaidAt(event) ?? new Date(),
+      gateway_event_id: event.data.id,
+      gateway_metadata: this.toWebhookGatewayMetadata(payment, event),
+    };
+  }
+
+  private toWebhookFailureUpdateInput(
+    payment: Payment,
+    event: PaymongoWebhookEvent,
+    failureReason: string,
+  ): Prisma.PaymentUpdateInput {
+    return {
+      status: 'failed',
+      gateway_event_id: event.data.id,
+      gateway_metadata: this.toWebhookGatewayMetadata(payment, event),
+      rejection_reason: failureReason,
+    };
+  }
+
+  private async findWebhookPayment(
+    event: PaymongoWebhookEvent,
+  ): Promise<Payment> {
+    const paymentId = this.extractWebhookMetadataString(event, 'payment_id');
+
+    if (paymentId) {
+      return this.repo.findPaymentByIdOrThrow(paymentId);
+    }
+
+    return this.repo.findPaymentByProviderRefOrThrow(
+      event.data.attributes.data.id,
+    );
+  }
+
+  private extractPaymongoFailureReason(
+    event: PaymongoWebhookEvent,
+  ): string | null {
+    const attributes = event.data.attributes.data.attributes;
+
+    return (
+      attributes.failed_message ??
+      attributes.reason ??
+      attributes.failure_code ??
+      (typeof attributes.status === 'string' ? attributes.status : null)
+    );
+  }
+
+  private assertReconciliationMatches(input: {
+    hold: Awaited<
+      ReturnType<
+        PaymentRepository['findCommerceCheckoutForReconciliationOrThrow']
+      >
+    >['hold'];
+    paidPayment: NonNullable<
+      PaymongoRetrievedCheckoutSession['attributes']['payments']
+    >[number];
+    payment: Payment;
+    session: PaymongoRetrievedCheckoutSession;
+  }): void {
+    const { hold, paidPayment, payment, session } = input;
+    const metadata = session.attributes.metadata;
+    const expectedAmount = Math.round(Number(payment.amount) * 100);
+    const paidAttributes = paidPayment.attributes;
+    const lineItems = session.attributes.line_items ?? [];
+    const lineItemAmount = lineItems.reduce(
+      (total, item) =>
+        total + Number(item.amount ?? 0) * Number(item.quantity ?? 1),
+      0,
+    );
+
+    if (
+      session.id !== payment.provider_ref ||
+      session.type !== 'checkout_session'
+    ) {
+      throw this.reconciliationConflict(
+        'The PayMongo checkout session does not match this payment.',
+      );
+    }
+
+    if (
+      payment.currency.toUpperCase() !== 'PHP' ||
+      hold.currency.toUpperCase() !== 'PHP' ||
+      Number(hold.amount) !== Number(payment.amount) ||
+      paidAttributes?.currency?.toUpperCase() !== 'PHP' ||
+      paidAttributes.amount !== expectedAmount
+    ) {
+      throw this.reconciliationConflict(
+        'The PayMongo payment amount or currency does not match this checkout.',
+      );
+    }
+
+    if (
+      lineItems.length > 0 &&
+      (lineItemAmount !== expectedAmount ||
+        lineItems.some((item) => item.currency?.toUpperCase() !== 'PHP'))
+    ) {
+      throw this.reconciliationConflict(
+        'The PayMongo checkout line items do not match this payment.',
+      );
+    }
+
+    if (
+      !metadata ||
+      metadata.hold_id !== hold.id ||
+      metadata.coaching_checkout_hold_id !== hold.id ||
+      metadata.payment_id !== payment.id ||
+      metadata.kind !== hold.kind
+    ) {
+      throw this.reconciliationConflict(
+        'The PayMongo checkout metadata does not match this hold.',
+      );
+    }
+  }
+
+  private toReconciliationEvent(
+    session: PaymongoRetrievedCheckoutSession,
+    eventId: string,
+  ): PaymongoWebhookEvent {
+    const payments = (session.attributes.payments ?? [])
+      .filter(
+        (
+          candidate,
+        ): candidate is typeof candidate & {
+          id: string;
+          attributes: NonNullable<typeof candidate.attributes>;
+        } => Boolean(candidate.id && candidate.attributes),
+      )
+      .map((candidate) => ({
+        id: candidate.id,
+        type: candidate.type ?? 'payment',
+        attributes: candidate.attributes,
+      }));
+
+    return {
+      data: {
+        id: eventId,
+        type: 'event',
+        attributes: {
+          type: PAYMONGO_CHECKOUT_SESSION_PAID_EVENT,
+          livemode: false,
+          data: {
+            id: session.id,
+            type: session.type,
+            attributes: {
+              checkout_url: session.attributes.checkout_url ?? null,
+              metadata: session.attributes.metadata ?? null,
+              paid_at: session.attributes.paid_at ?? null,
+              payment_method_used:
+                session.attributes.payment_method_used ?? null,
+              payments,
+              reference_number: session.attributes.reference_number ?? null,
+              status: session.attributes.status ?? null,
+            },
+          },
+          previous_data: {},
+        },
+      },
+    };
+  }
+
+  private assertCancellationSessionMatches(
+    providerRef: string,
+    session: PaymongoRetrievedCheckoutSession,
+  ): void {
+    if (session.id !== providerRef || session.type !== 'checkout_session') {
+      throw this.cancellationConflict(
+        'The PayMongo checkout session does not match this payment.',
+      );
+    }
+  }
+
+  private cancellationConflict(detail: string): ConflictException {
+    return new ConflictException({
+      type: 'CONFLICT',
+      title: 'Checkout Cancellation Unavailable',
+      status: 409,
+      detail,
+    });
+  }
+  private reconciliationConflict(detail: string): ConflictException {
+    return new ConflictException({
+      type: 'CONFLICT',
+      title: 'Checkout Verification Mismatch',
+      status: 409,
+      detail,
+    });
+  }
+
+  private extractWebhookPaidAt(event: PaymongoWebhookEvent): Date | null {
+    const attributes = event.data.attributes.data.attributes;
+    const paidAt =
+      attributes.paid_at ??
+      attributes.payments?.find(Boolean)?.attributes.paid_at;
+
+    if (typeof paidAt !== 'number' || !Number.isFinite(paidAt)) {
+      return null;
+    }
+
+    return new Date(paidAt * 1000);
+  }
+
+  private extractWebhookMetadataString(
+    event: PaymongoWebhookEvent,
+    key: string,
+  ): string | null {
+    const value = event.data.attributes.data.attributes.metadata?.[key];
+    return typeof value === 'string' && value.length > 0 ? value : null;
+  }
+
+  private toWebhookGatewayMetadata(
+    payment: Payment,
+    event: PaymongoWebhookEvent,
+  ): Prisma.InputJsonValue {
+    const existingMetadata = this.asJsonObject(payment.gateway_metadata);
+    const gatewayResource = event.data.attributes.data;
+    const gatewayAttributes = gatewayResource.attributes;
+    const firstPayment = gatewayAttributes.payments?.[0];
+    const paymentAttributes =
+      gatewayResource.type === 'payment'
+        ? gatewayAttributes
+        : firstPayment?.attributes;
+    const existingCheckoutSession =
+      existingMetadata.checkout_session &&
+      typeof existingMetadata.checkout_session === 'object' &&
+      !Array.isArray(existingMetadata.checkout_session)
+        ? existingMetadata.checkout_session
+        : null;
+
+    return {
+      ...existingMetadata,
+      checkout_url:
+        gatewayAttributes.checkout_url ??
+        (typeof existingMetadata.checkout_url === 'string'
+          ? existingMetadata.checkout_url
+          : null),
+      checkout_session:
+        gatewayResource.type === 'checkout_session'
+          ? {
+              id: gatewayResource.id,
+              paid_at: gatewayAttributes.paid_at ?? null,
+              payment_method_used:
+                gatewayAttributes.payment_method_used ?? null,
+              reference_number: gatewayAttributes.reference_number ?? null,
+              status: gatewayAttributes.status ?? null,
+            }
+          : existingCheckoutSession,
+      last_webhook: {
+        event_id: event.data.id,
+        event_type: event.data.attributes.type,
+      },
+      payment: paymentAttributes
+        ? {
+            amount: paymentAttributes.amount ?? null,
+            currency: paymentAttributes.currency ?? null,
+            external_reference_number:
+              paymentAttributes.external_reference_number ?? null,
+            id:
+              gatewayResource.type === 'payment'
+                ? gatewayResource.id
+                : (firstPayment?.id ?? null),
+            paid_at: paymentAttributes.paid_at ?? null,
+            status: paymentAttributes.status ?? null,
+          }
+        : null,
+    } as Prisma.InputJsonValue;
+  }
+
+  private asJsonObject(
+    value: Prisma.JsonValue | null,
+  ): Record<string, unknown> {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      return value as Record<string, unknown>;
+    }
+
+    return {};
+  }
+
+  private isDuplicateGatewayEventConflict(error: unknown): boolean {
+    return (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002' &&
+      String(error.message).includes('gateway_event_id')
+    );
+  }
+
+  private successAck(): PaymentWebhookAckDTO {
+    return { message: 'SUCCESS' };
+  }
+}

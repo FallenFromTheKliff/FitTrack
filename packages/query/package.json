@@ -1,0 +1,16 @@
+{
+  "name": "@fittrack/query",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "dependencies": {
+    "@fittrack/api-client": "workspace:*",
+    "@fittrack/types": "workspace:*",
+    "@tanstack/react-query": "^5.90.21",
+    "@types/react": "^19.2.14"
+  },
+  "peerDependencies": {
+    "react": "^19.2.4"
+  }
+}

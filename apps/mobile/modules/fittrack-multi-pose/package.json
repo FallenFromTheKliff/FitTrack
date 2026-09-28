@@ -1,0 +1,12 @@
+{
+  "name": "@fittrack/fittrack-multi-pose",
+  "version": "1.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "files": ["src", "android", "ios", "expo-module.config.json", "FitTrackMultiPose.podspec"],
+  "peerDependencies": {
+    "react-native": "*",
+    "react-native-vision-camera": "4.7.3"
+  }
+}

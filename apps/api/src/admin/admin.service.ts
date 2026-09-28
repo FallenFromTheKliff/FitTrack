@@ -1,0 +1,652 @@
+import {
+  BadRequestException,
+  ConflictException,
+  GoneException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  AccountDeletionRequestStatus,
+  AuthProvider,
+  UserRole,
+} from '@prisma/client';
+import { PrismaService } from 'prisma/prisma.service';
+import * as bcrypt from 'bcrypt';
+import {
+  CreateAdminDto,
+  CreateStaffDto,
+  CreateVenueDto,
+  UpdateVenueDto,
+  UpgradeToCoachDto,
+} from './dto/admin.dto';
+
+function toVenueSlug(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function getIdentityIdentifier(
+  identities: Array<{
+    provider: AuthProvider;
+    identifier: string;
+    verified_at: Date | null;
+  }>,
+  provider: AuthProvider,
+) {
+  return (
+    identities.find((identity) => identity.provider === provider)?.identifier ??
+    null
+  );
+}
+
+function toFrontendRole(role: UserRole) {
+  switch (role) {
+    case UserRole.admin:
+      return 'ADMIN' as const;
+    case UserRole.staff:
+      return 'STAFF' as const;
+    case UserRole.member:
+    default:
+      return 'USER' as const;
+  }
+}
+
+@Injectable()
+export class AdminService {
+  constructor(private prisma: PrismaService) {}
+
+  async createAdmin(dto: CreateAdminDto) {
+    const existing = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
+
+    if (existing) {
+      throw new ConflictException('Email already exists');
+    }
+
+    const adminRole = await this.prisma.role.findUnique({
+      where: { name: 'ADMIN' },
+    });
+
+    if (!adminRole) {
+      throw new NotFoundException('ADMIN role not found');
+    }
+
+    const hashedPassword = await bcrypt.hash(dto.password, 10);
+
+    const admin = await this.prisma.user.create({
+      data: {
+        email: dto.email,
+        password: hashedPassword,
+        roleId: adminRole.id,
+        emailVerified: true,
+        emailVerifiedAt: new Date(),
+        lastOtpVerifiedAt: new Date(),
+      },
+    });
+
+    await this.prisma.userProfile.create({
+      data: { userId: admin.id },
+    });
+
+    const { password, ...adminWithoutPassword } = admin;
+
+    return {
+      message: 'Admin created successfully',
+      admin: adminWithoutPassword,
+    };
+  }
+
+  upgradeUserToCoach(dto: UpgradeToCoachDto) {
+    throw new BadRequestException(
+      `Coach user accounts are no longer supported for user ${dto.userId}. Create standalone coach profiles from Gym Operations instead.`,
+    );
+  }
+
+  async softDeleteUser(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (user.deletedAt) {
+      throw new BadRequestException('User is already deleted');
+    }
+
+    const deleted = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        deletedAt: new Date(),
+      },
+      select: {
+        id: true,
+        email: true,
+        phone_no: true,
+        deletedAt: true,
+      },
+    });
+
+    return {
+      message: 'User soft deleted successfully',
+      user: deleted,
+    };
+  }
+
+  async getAllDeletionRequests(status?: string) {
+    const where = status
+      ? {
+          status: status.toLowerCase() as AccountDeletionRequestStatus,
+        }
+      : {};
+
+    const requests = await this.prisma.accountDeletionRequest.findMany({
+      where,
+      include: {
+        user: {
+          select: {
+            id: true,
+            role: true,
+            deletedAt: true,
+            created_at: true,
+            updated_at: true,
+            email_verified_at: true,
+            phone_verified_at: true,
+            auth_identities: {
+              select: {
+                provider: true,
+                identifier: true,
+                verified_at: true,
+              },
+            },
+            profile: {
+              select: {
+                first_name: true,
+                last_name: true,
+                date_of_birth: true,
+                gender: true,
+                weight_kg: true,
+                height_cm: true,
+                phone: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    return {
+      total: requests.length,
+      requests: requests.map((request) => {
+        const email =
+          getIdentityIdentifier(
+            request.user.auth_identities,
+            AuthProvider.email,
+          ) ?? '';
+        const phone = request.user.profile?.phone ?? null;
+
+        return {
+          ...request,
+          user: {
+            id: request.user.id,
+            email,
+            phone_no: phone,
+            role: {
+              id: 0,
+              name: toFrontendRole(request.user.role),
+            },
+            emailVerified:
+              request.user.email_verified_at !== null ||
+              request.user.auth_identities.some(
+                (identity) =>
+                  identity.provider === AuthProvider.email &&
+                  identity.verified_at !== null,
+              ),
+            phoneVerified: false,
+            deletedAt: request.user.deletedAt?.toISOString() ?? null,
+            createdAt: request.user.created_at.toISOString(),
+            updatedAt: request.user.updated_at.toISOString(),
+            profile: request.user.profile
+              ? {
+                  firstName: request.user.profile.first_name,
+                  lastName: request.user.profile.last_name,
+                  dateOfBirth:
+                    request.user.profile.date_of_birth?.toISOString() ?? null,
+                  gender: request.user.profile.gender ?? null,
+                  currentWeightKg:
+                    request.user.profile.weight_kg === null
+                      ? null
+                      : Number(request.user.profile.weight_kg),
+                  heightCm:
+                    request.user.profile.height_cm === null
+                      ? null
+                      : Number(request.user.profile.height_cm),
+                }
+              : null,
+          },
+        };
+      }),
+    };
+  }
+
+  async approveDeletionRequest(
+    requestId: string,
+    reviewedBy: string,
+    reviewNotes?: string,
+  ) {
+    const request = await this.prisma.accountDeletionRequest.findUnique({
+      where: { id: requestId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            auth_identities: {
+              select: {
+                provider: true,
+                identifier: true,
+                verified_at: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!request) {
+      throw new NotFoundException('Deletion request not found');
+    }
+
+    if (request.status !== AccountDeletionRequestStatus.pending) {
+      throw new BadRequestException('Request already processed');
+    }
+
+    await this.prisma.accountDeletionRequest.update({
+      where: { id: requestId },
+      data: {
+        status: AccountDeletionRequestStatus.approved,
+        reviewedBy,
+        reviewedAt: new Date(),
+        reviewNotes,
+      },
+    });
+
+    await this.prisma.user.update({
+      where: { id: request.userId },
+      data: { deletedAt: new Date() },
+    });
+
+    return {
+      message: 'User account deleted successfully',
+      email: getIdentityIdentifier(
+        request.user.auth_identities,
+        AuthProvider.email,
+      ),
+    };
+  }
+
+  async rejectDeletionRequest(
+    requestId: string,
+    reviewedBy: string,
+    reviewNotes?: string,
+  ) {
+    const request = await this.prisma.accountDeletionRequest.findUnique({
+      where: { id: requestId },
+    });
+
+    if (!request) {
+      throw new NotFoundException('Deletion request not found');
+    }
+
+    if (request.status !== AccountDeletionRequestStatus.pending) {
+      throw new BadRequestException('Request already processed');
+    }
+
+    await this.prisma.accountDeletionRequest.update({
+      where: { id: requestId },
+      data: {
+        status: AccountDeletionRequestStatus.rejected,
+        reviewedBy,
+        reviewedAt: new Date(),
+        reviewNotes: reviewNotes || 'Request rejected',
+      },
+    });
+
+    return {
+      message: 'Deletion request rejected',
+    };
+  }
+
+  async getAllUsers() {
+    const users = await this.prisma.user.findMany({
+      include: {
+        role: true,
+        profile: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return users.map(({ password, ...user }) => user);
+  }
+
+  async getAllCoaches() {
+    return await this.prisma.coach.findMany({
+      include: {
+        user: {
+          include: {
+            profile: true,
+          },
+        },
+        availability: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async getAllStaff() {
+    const staffRole = await this.prisma.role.findUnique({
+      where: { name: 'STAFF' },
+    });
+
+    if (!staffRole) {
+      return { total: 0, staff: [] };
+    }
+
+    const staff = await this.prisma.user.findMany({
+      where: {
+        roleId: staffRole.id,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        email: true,
+        phone_no: true,
+        emailVerified: true,
+        phoneVerified: true,
+        createdAt: true,
+        role: true,
+        profile: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return {
+      total: staff.length,
+      staff,
+    };
+  }
+
+  async createStaff(dto: CreateStaffDto) {
+    const existing = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
+
+    if (existing) {
+      throw new ConflictException('Email already registered');
+    }
+
+    const staffRole = await this.prisma.role.findUnique({
+      where: { name: 'STAFF' },
+    });
+
+    if (!staffRole) {
+      throw new NotFoundException(
+        'STAFF role not found in database. Please run database seeding.',
+      );
+    }
+
+    const hashedPassword = await bcrypt.hash(dto.password, 10);
+
+    const staff = await this.prisma.user.create({
+      data: {
+        email: dto.email,
+        password: hashedPassword,
+        phone_no: dto.phone_no,
+        roleId: staffRole.id,
+        emailVerified: true,
+        emailVerifiedAt: new Date(),
+        lastOtpVerifiedAt: new Date(),
+        phoneVerified: !!dto.phone_no,
+      },
+    });
+
+    await this.prisma.userProfile.upsert({
+      where: { userId: staff.id },
+      update: {
+        ...(dto.firstName && { firstName: dto.firstName }),
+        ...(dto.lastName && { lastName: dto.lastName }),
+      },
+      create: {
+        userId: staff.id,
+        firstName: dto.firstName ?? null,
+        lastName: dto.lastName ?? null,
+      },
+    });
+
+    const staffWithProfile = await this.prisma.user.findUnique({
+      where: { id: staff.id },
+      include: { role: true, profile: true },
+    });
+
+    const { password, ...staffWithoutPassword } = staffWithProfile!;
+
+    return {
+      message: 'Staff account created successfully',
+      staff: staffWithoutPassword,
+    };
+  }
+
+  async upgradeStaffToAdmin(staffId: string) {
+    const staff = await this.prisma.user.findUnique({
+      where: { id: staffId },
+      include: { role: true },
+    });
+
+    if (!staff) {
+      throw new NotFoundException('Staff user not found');
+    }
+
+    if (staff.role.name !== 'STAFF') {
+      throw new BadRequestException('User is not a staff member');
+    }
+
+    const adminRole = await this.prisma.role.findUnique({
+      where: { name: 'ADMIN' },
+    });
+
+    if (!adminRole) {
+      throw new NotFoundException('ADMIN role not found');
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: staffId },
+      data: { roleId: adminRole.id },
+      include: {
+        role: true,
+        profile: true,
+      },
+    });
+
+    const { password, ...userWithoutPassword } = updated;
+
+    return {
+      message: 'Staff upgraded to admin successfully',
+      user: userWithoutPassword,
+    };
+  }
+
+  async downgradeAdminToStaff(adminId: string) {
+    const admin = await this.prisma.user.findUnique({
+      where: { id: adminId },
+      include: { role: true },
+    });
+
+    if (!admin) {
+      throw new NotFoundException('Admin user not found');
+    }
+
+    if (admin.role.name !== 'ADMIN') {
+      throw new BadRequestException('User is not an admin');
+    }
+
+    const staffRole = await this.prisma.role.findUnique({
+      where: { name: 'STAFF' },
+    });
+
+    if (!staffRole) {
+      throw new NotFoundException('STAFF role not found');
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: adminId },
+      data: { roleId: staffRole.id },
+      include: {
+        role: true,
+        profile: true,
+      },
+    });
+
+    const { password, ...userWithoutPassword } = updated;
+
+    return {
+      message: 'Admin downgraded to staff successfully',
+      user: userWithoutPassword,
+    };
+  }
+
+  async createVenue(dto: CreateVenueDto) {
+    const venue = await this.prisma.venue.create({
+      data: {
+        name: dto.name,
+        slug: dto.slug?.trim() || toVenueSlug(dto.name),
+        description: dto.description,
+        capacity: dto.capacity,
+        hourlyRate: dto.hourlyRate,
+        minimumHours: dto.minimumHours || 1,
+        amenities: dto.amenities || [],
+        iconKey: dto.iconKey || 'dumbbell',
+        gridColumn: dto.gridColumn || 1,
+        gridRow: dto.gridRow || 1,
+        gridWidth: dto.gridWidth || 2,
+        gridHeight: dto.gridHeight || 2,
+        isReservable: dto.isReservable ?? true,
+        isSystem: dto.isSystem ?? false,
+        displayOrder: dto.displayOrder || 0,
+      },
+    });
+
+    return {
+      message: 'Venue created successfully',
+      venue,
+    };
+  }
+
+  async updateVenue(id: number, dto: UpdateVenueDto) {
+    const venue = await this.prisma.venue.findUnique({
+      where: { id },
+    });
+
+    if (!venue) {
+      throw new NotFoundException('Venue not found');
+    }
+
+    const updated = await this.prisma.venue.update({
+      where: { id },
+      data: {
+        ...(dto.name && { name: dto.name }),
+        ...(dto.slug && {
+          slug: dto.slug.trim() || toVenueSlug(dto.name ?? venue.name),
+        }),
+        ...(dto.description !== undefined && { description: dto.description }),
+        ...(dto.capacity && { capacity: dto.capacity }),
+        ...(dto.hourlyRate !== undefined && { hourlyRate: dto.hourlyRate }),
+        ...(dto.minimumHours && { minimumHours: dto.minimumHours }),
+        ...(dto.amenities && { amenities: dto.amenities }),
+        ...(dto.iconKey && { iconKey: dto.iconKey }),
+        ...(dto.gridColumn !== undefined && { gridColumn: dto.gridColumn }),
+        ...(dto.gridRow !== undefined && { gridRow: dto.gridRow }),
+        ...(dto.gridWidth !== undefined && { gridWidth: dto.gridWidth }),
+        ...(dto.gridHeight !== undefined && { gridHeight: dto.gridHeight }),
+        ...(dto.isReservable !== undefined && {
+          isReservable: dto.isReservable,
+        }),
+        ...(dto.isSystem !== undefined && { isSystem: dto.isSystem }),
+        ...(dto.displayOrder !== undefined && {
+          displayOrder: dto.displayOrder,
+        }),
+        ...(dto.isActive !== undefined && { isActive: dto.isActive }),
+      },
+    });
+
+    return {
+      message: 'Venue updated successfully',
+      venue: updated,
+    };
+  }
+
+  async deleteVenue(id: number) {
+    const venue = await this.prisma.venue.findUnique({
+      where: { id },
+    });
+
+    if (!venue) {
+      throw new NotFoundException('Venue not found');
+    }
+
+    if (venue.isSystem) {
+      throw new BadRequestException(
+        'This venue is part of the core floor plan and cannot be removed',
+      );
+    }
+
+    await this.prisma.venue.update({
+      where: { id },
+      data: { isActive: false },
+    });
+
+    return {
+      message: 'Venue deleted (marked inactive) successfully',
+    };
+  }
+
+  async getPendingBookings() {
+    return await this.prisma.venueBooking.findMany({
+      where: { status: 'pending' },
+      include: {
+        user: {
+          include: { profile: true },
+        },
+        venue: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  confirmBooking(bookingId: string) {
+    void bookingId;
+    throw new GoneException({
+      type: 'GONE',
+      title: 'Pending Booking Confirmation Retired',
+      status: 410,
+      detail:
+        'Venue bookings are confirmed only by successful full payment or atomic staff cash registration.',
+    });
+  }
+
+  rejectBooking(bookingId: string, reason?: string) {
+    void bookingId;
+    void reason;
+    throw new GoneException({
+      type: 'GONE',
+      title: 'Pending Booking Rejection Retired',
+      status: 410,
+      detail:
+        'Venue bookings are created as confirmed only after full payment or atomic staff cash registration. Pending commercial rejection is retired.',
+    });
+  }
+}
