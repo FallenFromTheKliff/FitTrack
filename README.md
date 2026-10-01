@@ -5,7 +5,7 @@
 ## DEPLOYMENT
 
 - **Website:** [sertfit-fittrack.live](https://sertfit-fittrack.live/)
-- **Mobile Application:** Android APK *(See Latest Release)*
+- **Mobile Application:** Android APK
 
 ---
 
@@ -50,7 +50,7 @@
 
 ---
 
-## Project Structure
+## PROJECT STRUCTURE
 
 ```
 FitTrack/
