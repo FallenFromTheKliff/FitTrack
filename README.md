@@ -2,14 +2,14 @@
 
 > FitTrack is a multi-platform gym management system developed for **Sertfit Athletics Gym and Sports Hub**. The project consists of a web-based Management Information System (MIS) with Performance Analytics and a dedicated mobile Fitness Engagement Application with Workout Tracking and Session Booking.
 
-## Deployment
+## DEPLOYMENT
 
 - **Website:** [sertfit-fittrack.live](https://sertfit-fittrack.live/)
-- **Mobile Application:** *Currently available as Android APK and iOS TestFlight*
+- **Mobile Application:** Android APK *(See Latest Release)*
 
 ---
 
-## Tech Stack
+## TECH STACK
 
 | Category | Technologies |
 |---|---|
@@ -146,7 +146,7 @@ FitTrack/
 
 ---
 
-## Getting Started
+## GETTING STARTED
 
 ### Prerequisites
 
@@ -220,8 +220,8 @@ cp .env.docker.format .env.docker
 docker compose up -d
 ```
 
-## License
+## LICENSE
 
-This project is unlicensed, so don't even think about it.
+This project is unlicensed, so don't even think about trying any funny ideas.
 
 ---
