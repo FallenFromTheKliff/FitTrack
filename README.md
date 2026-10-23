@@ -1,4 +1,10 @@
-<h1 align="center">FitTrack</h1>
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./assets/FitTrackHeaderDark.png">
+    <source media="(prefers-color-scheme: light)" srcset="./assets/FitTrackHeaderLight.png">
+    <img alt="FitTrack" src="./assets/FitTrackHeaderDark.png" width="40%">
+  </picture>
+</h1>
 
 > FitTrack is a multi-platform gym management system developed for **Sertfit Athletics Gym and Sports Hub**. The project consists of a web-based Management Information System (MIS) with Performance Analytics and a dedicated mobile Fitness Engagement Application with Workout Tracking and Session Booking.
 
@@ -35,8 +41,8 @@
 | **ADMIN** | Analytics, Facilities, Ranking Governance, Milestone, BrodigyAI |
 | **STAFF** | Accounts, Gym Operations, Inventory, Gym Actions, Exercise Lab, Membership |
 | **COACH** | Dashboard, Clients, Sessions, Earnings, BrodigyAI |
-| **MEMBER** | Home, Facilities, Bookings, BrodigyAI |
-| **NON-MEMBER** | *Same as MEMBER, except BrodigyAI is disabled* |
+| **MEMBER** | Home, Bookings, Assessments, Facilities, Nutrition, Muscle Mastery, Workout, BrodigyAI |
+| **NON-MEMBER** | *Same as MEMBER except Muscle Mastery, Workout, and BrodigyAI are disabled* |
 
 > **ADMIN** has access to all **STAFF** modules, but **STAFF** does not have access to **ADMIN** modules.
 
