@@ -32,7 +32,7 @@
 ## SYSTEM MODULES
 ### General
 
-> **ALL ROLES** have Login, Profile, Notifications, and Settings.
+> **Note:** All roles have Login, Profile, Notifications, and Settings modules.
 
 ### Website
 
@@ -41,18 +41,18 @@
 | **ADMIN** | Analytics, Facilities, Ranking Governance, Milestone, BrodigyAI |
 | **STAFF** | Accounts, Gym Operations, Inventory, Gym Actions, Exercise Lab, Membership |
 | **COACH** | Dashboard, Clients, Sessions, Earnings, BrodigyAI |
-| **MEMBER** | Home, Bookings, Assessments, Facilities, Nutrition, Muscle Mastery, Workout, BrodigyAI |
-| **NON-MEMBER** | *Same as MEMBER except Muscle Mastery, Workout, and BrodigyAI are disabled* |
+| **MEMBER** | Home, Bookings, Facilities, BrodigyAI |
+| **NON-MEMBER** | *Same as MEMBER but BrodigyAI is disabled* |
 
-> **ADMIN** has access to all **STAFF** modules, but **STAFF** does not have access to **ADMIN** modules.
+> **Note:** ADMIN has access to all STAFF modules, but STAFF does not have access to ADMIN modules.
 
 ### Mobile Application
 
 | Role | Modules |
 |---|---|
-| **COACH** | Clients, Sessions, Earnings |
+| **COACH** | Dashboard, Clients, Sessions, Earnings, BrodigyAI |
 | **MEMBER** | Registration, Home, Bookings, Assessments, Facilities, Nutrition, Muscle Mastery, Workout, BrodigyAI |
-| **NON-MEMBER** | *Same as MEMBER, except Muscle Mastery, Workout, and BrodigyAI are disabled* |
+| **NON-MEMBER** | *Same as MEMBER but Muscle Mastery, Workout, and BrodigyAI are disabled* |
 
 ---
 
